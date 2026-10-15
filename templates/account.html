@@ -7,25 +7,7 @@
   <p class="muted">{{ current_user.email }} · en {{ APP_NAME }} desde {{ current_user.created_at|date }}</p>
 </div>
 
-<div class="account-grid">
-  <section class="card form-stack" id="redes">
-    <div>
-      <h2>Cuentas vinculadas</h2>
-      <p class="muted small" style="margin-top:4px">Las cuentas desde las que publicas. Se añaden solas cuando te unes a una campaña. Una cuenta solo puede estar vinculada a un clipper. Máximo 5 por red, separadas por comas.</p>
-    </div>
-    <form method="post" action="{{ url_for('account', next=request.args.get('next', '')) }}" class="form-stack">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <input type="hidden" name="section" value="redes">
-      {% for key, label in PLATFORMS.items() %}
-      <div class="field">
-        <label for="handles_{{ key }}">{{ icon(key) }} {{ label }}</label>
-        <div class="handle-input"><span>@</span><input id="handles_{{ key }}" name="handles_{{ key }}" value="{{ current_user.handles(key)|join(', ') }}" placeholder="{% if key == 'youtube' %}tu_canal{% else %}tu_usuario{% endif %}" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
-      </div>
-      {% endfor %}
-      <button class="btn block">Guardar cuentas</button>
-    </form>
-  </section>
-
+<div class="account-grid single">
   <section class="card" id="cobro">
     <form method="post" class="form-stack">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

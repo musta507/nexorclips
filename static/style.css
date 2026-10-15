@@ -680,3 +680,4 @@ a,button,label{-webkit-tap-highlight-color:transparent}
 .chat-fab .count{background:#ff3b30;color:#fff}
 @media (max-width:640px){.mn-btn{display:none}.msg-notice{padding:11px 12px}}
 @media (prefers-reduced-motion:reduce){.msg-notice.is-new,.chat-fab.has-unread{animation:none}}
+.account-grid.single{grid-template-columns:minmax(0,560px)}

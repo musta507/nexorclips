@@ -1,16 +1,7 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon, budget %}
 {% block content %}
-{% if not current_user.has_any_handle %}
-<div class="card tight notice">
-  <span class="ico">{{ icon("plus") }}</span>
-  <div class="txt">
-    <h3>Vincula tus cuentas de TikTok, Instagram o YouTube</h3>
-    <p class="small muted">Solo se aceptan vídeos publicados desde tus cuentas. Así nadie puede cobrar por tus clips.</p>
-  </div>
-  <a class="btn sm" href="{{ url_for('account') }}#redes">Vincular</a>
-</div>
-{% elif not current_user.payout_details %}
+{% if not new_user and not current_user.payout_details %}
 <div class="card tight notice">
   <span class="ico">{{ icon("card") }}</span>
   <div class="txt">
@@ -24,7 +15,7 @@
 {% if new_user %}
 <section class="how" aria-label="Cómo funciona">
   <div class="how-step"><b>1</b><div><h3>Elige una campaña</h3><p class="small muted">Mira cuánto paga y sus reglas.</p></div></div>
-  <div class="how-step"><b>2</b><div><h3>Publica tu clip</h3><p class="small muted">Desde tu cuenta vinculada, con el sonido o material oficial.</p></div></div>
+  <div class="how-step"><b>2</b><div><h3>Publica tu clip</h3><p class="small muted">Únete a la campaña con tu cuenta y publica con el sonido o material oficial.</p></div></div>
   <div class="how-step"><b>3</b><div><h3>Pega el enlace</h3><p class="small muted">Lo revisamos y contamos sus vistas automáticamente.</p></div></div>
   <div class="how-step"><b>4</b><div><h3>Cobra</h3><p class="small muted">Retira desde {{ MIN_WITHDRAW|money(0) }} en USDT a tu wallet.</p></div></div>
 </section>
