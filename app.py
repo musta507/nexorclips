@@ -47,7 +47,10 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
     MAX_CONTENT_LENGTH=8 * 1024 * 1024,
 )
-db_url = os.environ.get("DATABASE_URL", "sqlite:///plataforma.db")
+db_url = (os.environ.get("DATABASE_URL") or "").strip() or "sqlite:///plataforma.db"
+if PRODUCTION and not db_url.startswith(("postgres://", "postgresql")):
+    raise RuntimeError("Falta la base de datos. En Railway: añade PostgreSQL (+ Create → Database → PostgreSQL) "
+                       "y en la web pon la variable DATABASE_URL=${{Postgres.DATABASE_URL}}")
 for prefix in ("postgres://", "postgresql://"):   # Railway da "postgresql://"; usamos el conector psycopg2
     if db_url.startswith(prefix):
         db_url = "postgresql+psycopg2://" + db_url[len(prefix):]
