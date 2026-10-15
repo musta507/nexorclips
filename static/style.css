@@ -1,4 +1,5 @@
 /* NexorClips — estilo iPhone en azul medianoche con zafiro: fondo agrupado de iOS, tarjetas blancas sin bordes, cristal esmerilado, controles segmentados y la fuente del sistema (SF Pro; Inter fuera de Apple). */
+@font-face{font-family:"Inter";src:url("fonts/inter.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
 :root{
   color-scheme: light;
   --bg:#f2f2f7; --card:#ffffff; --soft:#ececf1; --soft-2:#e5e5ea; --line:rgba(60,60,67,.12);

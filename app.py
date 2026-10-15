@@ -46,7 +46,13 @@ app.config.update(
     REMEMBER_COOKIE_DURATION=timedelta(days=30),
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
     MAX_CONTENT_LENGTH=8 * 1024 * 1024,
+    SEND_FILE_MAX_AGE_DEFAULT=31536000,          # css, js, fuentes e iconos: el móvil los guarda un año
+    COMPRESS_MIMETYPES=["text/html", "text/css", "application/javascript", "text/javascript", "application/json",
+                        "image/svg+xml", "application/manifest+json"],
+    COMPRESS_MIN_SIZE=600,
 )
+from flask_compress import Compress
+Compress(app)                                     # envía las páginas comprimidas: cargan mucho antes con datos móviles
 db_url = (os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_PRIVATE_URL")
           or os.environ.get("DATABASE_PUBLIC_URL") or "").strip().strip('"').strip("'")
 if not db_url and os.environ.get("PGHOST"):      # también vale si Railway nos da las piezas sueltas
@@ -624,8 +630,8 @@ def before():
     return None
 
 
-CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-       "font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; "
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+       "font-src 'self'; img-src 'self' data: https:; connect-src 'self'; "
        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 
 
@@ -692,9 +698,22 @@ def split_logo(name):
 LOGO_MAIN, LOGO_SUB = split_logo(APP_NAME)
 
 
+_static_versions = {}
+
+
+def static_url(filename):
+    """Dirección del archivo con su versión: si cambia, el móvil descarga el nuevo; si no, usa el guardado."""
+    if filename not in _static_versions:
+        try:
+            _static_versions[filename] = int(os.path.getmtime(os.path.join(app.static_folder, filename)))
+        except OSError:
+            _static_versions[filename] = 0
+    return url_for("static", filename=filename, v=_static_versions[filename])
+
+
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": csrf_token, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
+    return {"csrf_token": csrf_token, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
