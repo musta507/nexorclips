@@ -2,9 +2,10 @@
 <html lang="es">
 <head>
 {% include "_head.html" %}
-  <title>{% block title %}{{ APP_NAME }}{% endblock %}</title>
+  {% set note = notice_data() if current_user.is_authenticated else {"unread": 0} %}
+  <title>{% if note.unread %}({{ note.unread }}) {% endif %}{% block title %}{{ APP_NAME }}{% endblock %}</title>
 </head>
-<body class="has-tabs">
+<body class="has-tabs" data-notices="{{ url_for('notices') }}" data-unread="{{ note.unread }}" data-on-chat="{{ 1 if (request.endpoint or '') in ['support', 'admin_chat', 'admin_inbox'] else 0 }}">
   {% set ep = request.endpoint or "" %}
   <a class="skip" href="#contenido">Saltar al contenido</a>
   <header class="topbar">
@@ -17,7 +18,7 @@
       </nav>
       {% set unread = unread_messages() %}
       <details class="user-menu">
-        <summary class="avatar" aria-label="Tu cuenta{% if unread %} · {{ unread }} mensajes sin leer{% endif %}">{% if unread %}<span class="dot" aria-hidden="true"></span>{% endif %}
+        <summary class="avatar" aria-label="Tu cuenta{% if unread %} · {{ unread }} mensajes sin leer{% endif %}"><span class="dot" id="avatar-dot" aria-hidden="true"{% if not unread %} hidden{% endif %}></span>
           {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}
         </summary>
         <div class="menu">
@@ -36,6 +37,15 @@
     </div>
   </header>
   <main class="wrap" id="contenido">
+    <div id="msg-notice" class="msg-notice-slot">
+    {% if note.unread and ep not in ["support", "admin_chat", "admin_inbox"] %}
+      <a class="msg-notice" href="{{ note.url }}" role="status">
+        <span class="mn-ico"><span class="logo-mark"></span></span>
+        <span class="mn-txt"><span class="mn-top"><b>{{ note.title }}</b><span>{{ note.ago }}</span></span><span class="mn-body">{{ note.body }}</span></span>
+        <span class="mn-btn">{{ "Abrir" if current_user.is_admin else "Responder" }}</span>
+      </a>
+    {% endif %}
+    </div>
     {% with msgs = get_flashed_messages(with_categories=true) %}
       {% if msgs %}<div class="flashes">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}</div>{% endif %}
     {% endwith %}
@@ -43,9 +53,9 @@
   </main>
   {% include "_footer.html" %}
   {% if ep not in ["support", "admin_chat", "admin_inbox"] %}
-  <a class="chat-fab" href="{{ url_for('admin_inbox') if current_user.is_admin else url_for('support') }}"
+  <a class="chat-fab{% if unread %} has-unread{% endif %}" id="chat-fab" href="{{ url_for('admin_inbox') if current_user.is_admin else url_for('support') }}"
      aria-label="{{ 'Mensajes' if current_user.is_admin else 'Chat de soporte' }}{% if unread %} · {{ unread }} sin leer{% endif %}">
-    {{ icon("chat") }}<span>{{ "Mensajes" if current_user.is_admin else "Chat de soporte" }}</span>{% if unread %}<span class="count">{{ unread }}</span>{% endif %}
+    {{ icon("chat") }}<span>{{ "Mensajes" if current_user.is_admin else "Chat de soporte" }}</span><span class="count" id="fab-count"{% if not unread %} hidden{% endif %}>{{ unread }}</span>
   </a>
   {% endif %}
 </body>

@@ -632,7 +632,7 @@ def before():
             current_user.last_seen_at = now
             db.session.commit()
         if current_user.is_banned and request.endpoint not in ("logout", "static", "terms", "privacy", "health",
-                                                               "support", "support_poll"):
+                                                               "support", "support_poll", "notices"):
             return render_template("banned.html"), 403
     return None
 
@@ -725,7 +725,7 @@ def inject_globals():
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year,
-            "REFRESH_DAYS": REFRESH_DAYS, "unread_messages": unread_messages, "new_leads": new_leads}
+            "REFRESH_DAYS": REFRESH_DAYS, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads}
 
 
 @app.template_filter("money")
@@ -1425,6 +1425,31 @@ def unread_messages():
     if current_user.is_admin:
         return Message.query.filter_by(from_admin=False, read_by_admin=False).count()
     return Message.query.filter_by(user_id=current_user.id, from_admin=True, read_by_user=False).count()
+
+
+def notice_data():
+    """Aviso de mensajes nuevos para el usuario actual: cuántos hay, de quién y el último texto."""
+    n = unread_messages()
+    if not n:
+        return {"unread": 0}
+    if current_user.is_admin:
+        last = (Message.query.filter_by(from_admin=False, read_by_admin=False).order_by(Message.id.desc()).first())
+        who, url = last.user.name, url_for("admin_chat", uid=last.user_id)
+        title = f"{n} mensaje{'s' if n > 1 else ''} nuevo{'s' if n > 1 else ''}" if n > 1 else f"Mensaje de {who}"
+    else:
+        last = (Message.query.filter_by(user_id=current_user.id, from_admin=True, read_by_user=False)
+                .order_by(Message.id.desc()).first())
+        who, url = f"Equipo {APP_NAME}", url_for("support")
+        title = f"Equipo {APP_NAME} te ha escrito" if n == 1 else f"Tienes {n} mensajes del equipo {APP_NAME}"
+    body = last.body if len(last.body) <= 140 else last.body[:137].rstrip() + "…"
+    return {"unread": n, "id": last.id, "title": title, "who": who, "body": body, "url": url,
+            "ago": ago(last.created_at)}
+
+
+@app.route("/avisos")
+@login_required
+def notices():
+    return notice_data()
 
 
 def message_json(m, viewer_is_admin):

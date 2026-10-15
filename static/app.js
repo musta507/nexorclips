@@ -96,3 +96,59 @@ document.addEventListener("click", function (e) {
   setInterval(poll, 8000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });
 })();
+
+// ---------------------------------------------------------------- avisos de mensajes nuevos
+// Cada 20 segundos mira si el equipo (o un clipper, si eres admin) te ha escrito y lo muestra al momento:
+// un aviso arriba de la página, el número en el botón del chat, un punto en tu avatar y el número en la pestaña.
+(function () {
+  var body = document.body;
+  var url = body.getAttribute("data-notices");
+  if (!url || body.getAttribute("data-on-chat") === "1") return;
+  var shown = parseInt(body.getAttribute("data-unread") || "0", 10);
+  var baseTitle = document.title.replace(/^\(\d+\)\s*/, "");
+
+  function paint(d) {
+    var n = d.unread || 0;
+    document.title = (n ? "(" + n + ") " : "") + baseTitle;
+    var count = document.getElementById("fab-count");
+    var fab = document.getElementById("chat-fab");
+    var dot = document.getElementById("avatar-dot");
+    if (count) { count.textContent = n; count.hidden = !n; }
+    if (fab) fab.classList.toggle("has-unread", !!n);
+    if (dot) dot.hidden = !n;
+    var slot = document.getElementById("msg-notice");
+    if (!slot) return;
+    if (!n) { slot.innerHTML = ""; return; }
+    var a = document.createElement("a");
+    a.className = "msg-notice is-new";
+    a.href = d.url;
+    a.setAttribute("role", "status");
+    a.innerHTML = '<span class="mn-ico"><span class="logo-mark"></span></span>' +
+      '<span class="mn-txt"><span class="mn-top"><b></b><span></span></span><span class="mn-body"></span></span>' +
+      '<span class="mn-btn"></span>';
+    a.querySelector(".mn-top b").textContent = d.title;
+    a.querySelector(".mn-top span").textContent = d.ago;
+    a.querySelector(".mn-body").textContent = d.body;
+    a.querySelector(".mn-btn").textContent = d.url.indexOf("/admin") === 0 ? "Abrir" : "Responder";
+    slot.innerHTML = "";
+    slot.appendChild(a);
+  }
+
+  function check() {
+    if (document.hidden) return;
+    fetch(url, { headers: { "X-Requested-With": "fetch" }, credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        if ((d.unread || 0) !== shown) {
+          var more = (d.unread || 0) > shown;
+          shown = d.unread || 0;
+          paint(d);
+          if (more && navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
+        }
+      })
+      .catch(function () {});
+  }
+  setInterval(check, 20000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) check(); });
+})();

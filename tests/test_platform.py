@@ -446,10 +446,14 @@ def test_support_chat_flow():
     assert r.get_json()["ok"] and r.get_json()["message"]["mine"]
     assert 'class="count"' not in admin.get("/admin/mensajes").get_data(as_text=True)   # leído al abrirlo
     home = a.get("/").get_data(as_text=True)
-    assert 'class="dot"' in home                                                    # aviso de no leído
+    assert 'class="msg-notice"' in home and "te ha escrito" in home and "<title>(1)" in home   # aviso visible
+    n = a.get("/avisos").get_json()
+    assert n["unread"] == 1 and n["url"] == "/soporte" and "7 días" in n["body"]
     page = a.get("/soporte").get_data(as_text=True)
     assert "En 7 días hábiles &lt;b&gt;ok&lt;/b&gt;" in page                        # sin HTML inyectado
-    assert 'class="dot"' not in a.get("/").get_data(as_text=True)
+    home = a.get("/").get_data(as_text=True)
+    assert 'class="msg-notice"' not in home and "<title>(" not in home
+    assert a.get("/avisos").get_json() == {"unread": 0}
     data = a.get("/soporte/mensajes?after=0").get_json()["messages"]
     assert [m["mine"] for m in data] == [True, False]
     assert "cuándo pagáis" not in b.get("/soporte").get_data(as_text=True)          # conversaciones privadas
