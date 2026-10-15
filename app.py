@@ -47,10 +47,18 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
     MAX_CONTENT_LENGTH=8 * 1024 * 1024,
 )
-db_url = (os.environ.get("DATABASE_URL") or "").strip() or "sqlite:///plataforma.db"
+db_url = (os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_PRIVATE_URL")
+          or os.environ.get("DATABASE_PUBLIC_URL") or "").strip().strip('"').strip("'")
+if not db_url and os.environ.get("PGHOST"):      # también vale si Railway nos da las piezas sueltas
+    from urllib.parse import quote
+    db_url = "postgresql://{}:{}@{}:{}/{}".format(quote(os.environ.get("PGUSER", "postgres")), quote(os.environ.get("PGPASSWORD", "")),
+                                                   os.environ["PGHOST"], os.environ.get("PGPORT", "5432"), os.environ.get("PGDATABASE", "railway"))
+db_url = db_url or "sqlite:///plataforma.db"
 if PRODUCTION and not db_url.startswith(("postgres://", "postgresql")):
-    raise RuntimeError("Falta la base de datos. En Railway: añade PostgreSQL (+ Create → Database → PostgreSQL) "
-                       "y en la web pon la variable DATABASE_URL=${{Postgres.DATABASE_URL}}")
+    seen = sorted(k for k in os.environ if "DATABASE" in k or k.startswith("PG"))
+    raise RuntimeError("Falta la base de datos. En Railway: añade PostgreSQL y en la web la variable "
+                       "DATABASE_URL=${{Postgres.DATABASE_URL}}. Variables de base de datos que veo: "
+                       + (", ".join(f"{k}={'(vacía)' if not os.environ.get(k) else os.environ[k][:11] + '…'}" for k in seen) or "ninguna"))
 for prefix in ("postgres://", "postgresql://"):   # Railway da "postgresql://"; usamos el conector psycopg2
     if db_url.startswith(prefix):
         db_url = "postgresql+psycopg2://" + db_url[len(prefix):]
