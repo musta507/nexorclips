@@ -1,0 +1,52 @@
+{% from "_icons.html" import icon, logo with context %}<!doctype html>
+<html lang="es">
+<head>
+{% include "_head.html" %}
+  <title>{% block title %}{{ APP_NAME }}{% endblock %}</title>
+</head>
+<body class="has-tabs">
+  {% set ep = request.endpoint or "" %}
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <header class="topbar">
+    <div class="wrap">
+      <a href="{{ url_for('index') }}" aria-label="Inicio">{{ logo() }}</a>
+      <nav class="tabs" aria-label="Secciones">
+        <a class="tab {% if ep in ['index', 'campaign'] %}on{% endif %}" href="{{ url_for('index') }}" {% if ep in ['index', 'campaign'] %}aria-current="page"{% endif %}>{{ icon("home") }}Home</a>
+        <a class="tab {% if ep == 'submit' %}on{% endif %}" href="{{ url_for('submit') }}" {% if ep == 'submit' %}aria-current="page"{% endif %}>{{ icon("plus") }}Enviar clips</a>
+        <a class="tab {% if ep in ['earnings', 'account'] %}on{% endif %}" href="{{ url_for('earnings') }}" {% if ep in ['earnings', 'account'] %}aria-current="page"{% endif %}>{{ icon("wallet") }}Ganancias</a>
+      </nav>
+      {% set unread = unread_messages() %}
+      <details class="user-menu">
+        <summary class="avatar" aria-label="Tu cuenta{% if unread %} · {{ unread }} mensajes sin leer{% endif %}">{% if unread %}<span class="dot" aria-hidden="true"></span>{% endif %}
+          {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}
+        </summary>
+        <div class="menu">
+          <div class="who"><b>{{ current_user.name }}</b><div class="small muted">{{ current_user.email }}</div></div>
+          <a href="{{ url_for('account') }}">Mi cuenta</a>
+          {% if current_user.is_admin %}
+            <a href="{{ url_for('admin_home') }}">Panel de admin</a>
+            <a href="{{ url_for('admin_inbox') }}">Mensajes{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
+          {% else %}
+            <a href="{{ url_for('support') }}">Soporte{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
+          {% endif %}
+          <a href="{{ url_for('terms') }}">Términos</a>
+          <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+        </div>
+      </details>
+    </div>
+  </header>
+  <main class="wrap" id="contenido">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% if msgs %}<div class="flashes">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}</div>{% endif %}
+    {% endwith %}
+    <div class="page">{% block content %}{% endblock %}</div>
+  </main>
+  {% include "_footer.html" %}
+  {% if ep not in ["support", "admin_chat", "admin_inbox"] %}
+  <a class="chat-fab" href="{{ url_for('admin_inbox') if current_user.is_admin else url_for('support') }}"
+     aria-label="{{ 'Mensajes' if current_user.is_admin else 'Chat de soporte' }}{% if unread %} · {{ unread }} sin leer{% endif %}">
+    {{ icon("chat") }}<span>{{ "Mensajes" if current_user.is_admin else "Chat de soporte" }}</span>{% if unread %}<span class="count">{{ unread }}</span>{% endif %}
+  </a>
+  {% endif %}
+</body>
+</html>

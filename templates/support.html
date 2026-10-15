@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Soporte · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="section-head" style="margin:0">
+  <h1>Soporte</h1>
+  <p class="muted">Escríbenos aquí cualquier duda sobre campañas, clips o pagos. Te respondemos en este mismo chat.</p>
+</div>
+<div class="chat-wrap card">
+  <div class="chat-head">
+    <span class="avatar team" aria-hidden="true"><span class="logo-mark"></span></span>
+    <div><b>Equipo de {{ APP_NAME }}</b><div class="small muted">Solemos responder en menos de 24 horas</div></div>
+  </div>
+  {% with viewer_admin=false, post_url=url_for('support'), poll_url=url_for('support_poll'),
+          empty_text="Aún no hay mensajes. Cuéntanos en qué podemos ayudarte." %}
+    {% include "_chat.html" %}
+  {% endwith %}
+</div>
+{% endblock %}

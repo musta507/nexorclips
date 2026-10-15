@@ -1,0 +1,3 @@
+{% if s.author %}<div class="small"><span class="muted">Cuenta:</span> <b>@{{ s.author }}</b>{% if s.likes is not none %} <span class="muted">· {{ s.likes|short }} likes</span>{% endif %}</div>{% endif %}
+{% if not account_verified(s) %}<a class="flag unverified" href="{{ url_for('admin_chat', uid=s.user_id) }}">Cuenta sin verificar · verificar en el chat</a>{% endif %}
+{% for f in s.flag_list %}<span class="flag{% if f in ("cuenta_de_otro", "subida_rapida", "pocos_likes") %} serious{% endif %}">⚠ {{ FLAG_LABELS.get(f, f) }}</span>{% endfor %}

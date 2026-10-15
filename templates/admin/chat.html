@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ user.name }} · Mensajes{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_inbox') }}">← Mensajes</a>
+<div class="chat-layout">
+  <div class="chat-wrap card">
+    <div class="chat-head">
+      <span class="avatar">{% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ user.initial }}{% endif %}</span>
+      <div><b>{{ user.name }}</b><div class="small muted">{{ user.email }}</div></div>
+    </div>
+    {% with viewer_admin=true, post_url=url_for('admin_chat', uid=user.id), poll_url=url_for('admin_chat_poll', uid=user.id),
+            empty_text="Aún no habéis hablado. Escríbele el primer mensaje." %}
+      {% include "_chat.html" %}
+    {% endwith %}
+  </div>
+  <aside class="card form-stack chat-side">
+    <h3>Sobre este clipper</h3>
+    {% if user.is_banned %}<div class="flash error">Bloqueado: {{ user.ban_reason }}</div>{% endif %}
+    <div class="facts" style="grid-template-columns:1fr 1fr">
+      <div class="fact"><b>{{ m.earned|money(0) }}</b><span>ganado</span></div>
+      <div class="fact"><b>{{ m.available|money(0) }}</b><span>disponible</span></div>
+      <div class="fact"><b>{{ m.paid|money(0) }}</b><span>pagado</span></div>
+      <div class="fact"><b>{{ user.submissions|length }}</b><span>clips</span></div>
+    </div>
+    <div class="small side-handles">
+      <div class="label">Cuentas vinculadas</div>
+      {% for p in PLATFORMS %}{% for h in user.handles(p) %}
+      {% set ok = user.is_verified(p, h) %}
+      <div class="side-handle">
+        <div class="top">{{ icon(p) }} <a class="link" href="{{ profile_url(p, h) }}" target="_blank" rel="noopener nofollow">@{{ h }}</a>
+          <span class="status {{ 'aprobado' if ok else 'pendiente' }}">{{ "Verificada" if ok else "Sin verificar" }}</span></div>
+        <form method="post" action="{{ url_for('admin_verify_handle', uid=user.id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="platform" value="{{ p }}"><input type="hidden" name="handle" value="{{ h }}">
+          {% if ok %}
+            <button class="btn sm soft" name="accion" value="quitar" data-confirm="¿Quitar la verificación de @{{ h }}? Sus clips nuevos no se podrán aprobar hasta verificarla otra vez.">Quitar verificación</button>
+          {% else %}
+            <button class="btn sm green" name="accion" value="verificar">Verificar</button>
+            <button class="btn sm red" name="accion" value="rechazar" data-confirm="Se quitará @{{ h }} de sus cuentas y le avisaremos por el chat. ¿Seguir?">Rechazar</button>
+          {% endif %}
+        </form>
+      </div>
+      {% endfor %}{% endfor %}
+      {% if not user.has_any_handle %}<span class="muted">Sin cuentas</span>{% else %}<p class="hint">Comprueba en el chat que la cuenta es suya y pulsa Verificar. Le avisamos por este mismo chat.</p>{% endif %}
+    </div>
+    <div class="small"><div class="label" style="margin-bottom:6px">Cobro</div>{% if user.payout_details %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% else %}<span class="muted">Sin cuenta de cobro</span>{% endif %}</div>
+    {% if m.open_payout %}<div class="flash ok">Retiro pendiente de {{ m.open_payout.amount|money }}</div>{% endif %}
+    <a class="btn soft" href="{{ url_for('admin_clippers', q=user.email) }}">Ver en Clippers y retiros</a>
+  </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% from "_icons.html" import icon, logo with context %}<!doctype html>
+<html lang="es">
+<head>
+{% include "_head.html" %}
+  <title>{% block title %}{{ APP_NAME }}{% endblock %}</title>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="plain">
+  <header class="plain-top"><div class="wrap"><a href="{{ url_for('index') }}" aria-label="Inicio">{{ logo() }}</a>{% block top_right %}{% endblock %}</div></header>
+  <main class="wrap page" id="contenido">{% block content %}{% endblock %}</main>
+  {% include "_footer.html" %}
+</body>
+</html>

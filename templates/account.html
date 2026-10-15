@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Mi cuenta · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="section-head" style="margin:0">
+  <h1>Mi cuenta</h1>
+  <p class="muted">{{ current_user.email }} · en {{ APP_NAME }} desde {{ current_user.created_at|date }}</p>
+</div>
+
+<div class="account-grid">
+  <section class="card form-stack" id="redes">
+    <div>
+      <h2>Cuentas vinculadas</h2>
+      <p class="muted small" style="margin-top:4px">Solo se aceptan clips publicados desde estas cuentas. Una cuenta solo puede estar vinculada a un clipper. Máximo 5 por red, separadas por comas.</p>
+    </div>
+    {% if current_user.has_any_handle %}
+    <ul class="handle-list">
+      {% for p in PLATFORMS %}{% for h in current_user.handles(p) %}
+      <li>{{ icon(p) }} <b>@{{ h }}</b>
+        {% if current_user.is_verified(p, h) %}<span class="status aprobado">Verificada</span>{% else %}<span class="status pendiente">Pendiente de verificar</span>{% endif %}</li>
+      {% endfor %}{% endfor %}
+    </ul>
+    {% if current_user.pending_handles %}
+    <div class="verify-box">
+      <div>
+        <b>Verifica tus cuentas con soporte</b>
+        <p class="small" style="margin-top:6px;color:var(--ink-2)">Para verificar tu cuenta tienes que hablar con soporte. Escríbenos por el chat y te guiamos; normalmente lo dejamos listo en unas horas.</p>
+        <p class="hint" style="margin-top:6px">Puedes enviar clips mientras tanto, pero no los aprobaremos hasta verificar la cuenta.</p>
+      </div>
+      <a class="btn accent block" href="{{ url_for('support', verificar=1) }}">{{ icon("chat") }} Verificar por el chat</a>
+    </div>
+    {% endif %}
+    {% endif %}
+    <form method="post" action="{{ url_for('account', next=request.args.get('next', '')) }}" class="form-stack">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="section" value="redes">
+      {% for key, label in PLATFORMS.items() %}
+      <div class="field">
+        <label for="handles_{{ key }}">{{ icon(key) }} {{ label }}</label>
+        <div class="handle-input"><span>@</span><input id="handles_{{ key }}" name="handles_{{ key }}" value="{{ current_user.handles(key)|join(', ') }}" placeholder="{% if key == 'youtube' %}tu_canal{% else %}tu_usuario{% endif %}" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+      </div>
+      {% endfor %}
+      <button class="btn block">Guardar cuentas</button>
+    </form>
+  </section>
+
+  <section class="card" id="cobro">
+    <form method="post" class="form-stack">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="section" value="cobro">
+      <div>
+        <h2>Cuenta de cobro</h2>
+        <p class="muted small" style="margin-top:4px">Aquí te enviaremos el dinero cuando pidas un retiro. Revisa bien la dirección: un pago enviado a una wallet equivocada no se puede recuperar.</p>
+      </div>
+      {% set has_usdt = current_user.payout_details and current_user.payout_method in PAYOUT_AVAILABLE %}
+      <div class="field">
+        <label for="method">Método</label>
+        <select id="method" name="payout_method">
+          {% for mth in PAYOUT_METHODS %}<option value="{{ mth }}" {% if mth == USDT_METHOD %}selected{% endif %}>{{ mth }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="details">Dirección de tu wallet (red TRC20)</label>
+        <input id="details" name="payout_details" value="{{ current_user.payout_details if has_usdt else '' }}" maxlength="255"
+               placeholder="Empieza por T… (34 caracteres)" autocomplete="off" autocapitalize="none" spellcheck="false">
+        <span class="hint">Cópiala desde tu wallet o exchange (Binance, Trust Wallet…) eligiendo USDT en la red TRC20.</span>
+      </div>
+      <button class="btn block">{{ "Guardar cuenta" if has_usdt else "Agregar cuenta" }}</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon, budget %}
+{% block content %}
+{% if not current_user.has_any_handle %}
+<div class="card tight notice">
+  <span class="ico">{{ icon("plus") }}</span>
+  <div class="txt">
+    <h3>Vincula tus cuentas de TikTok, Instagram o YouTube</h3>
+    <p class="small muted">Solo se aceptan vídeos publicados desde tus cuentas. Así nadie puede cobrar por tus clips.</p>
+  </div>
+  <a class="btn sm" href="{{ url_for('account') }}#redes">Vincular</a>
+</div>
+{% elif current_user.pending_handles %}
+<div class="card tight notice">
+  <span class="ico">{{ icon("chat") }}</span>
+  <div class="txt">
+    <h3>Verifica tus cuentas para que podamos aprobar tus clips</h3>
+    <p class="small muted">Para verificar tu cuenta tienes que hablar con soporte. Escríbenos por el chat y te guiamos.</p>
+  </div>
+  <a class="btn sm" href="{{ url_for('support', verificar=1) }}">Verificar por el chat</a>
+</div>
+{% elif not current_user.payout_details %}
+<div class="card tight notice">
+  <span class="ico">{{ icon("card") }}</span>
+  <div class="txt">
+    <h3>Agrega tu cuenta para poder pagarte</h3>
+    <p class="small muted">Tu wallet de USDT (red TRC20). La necesitas para retirar tus ganancias.</p>
+  </div>
+  <a class="btn sm" href="{{ url_for('account') }}#cobro">Agregar</a>
+</div>
+{% endif %}
+
+{% if new_user %}
+<section class="how" aria-label="Cómo funciona">
+  <div class="how-step"><b>1</b><div><h3>Elige una campaña</h3><p class="small muted">Mira cuánto paga y sus reglas.</p></div></div>
+  <div class="how-step"><b>2</b><div><h3>Publica tu clip</h3><p class="small muted">Desde tu cuenta vinculada, con el sonido o material oficial.</p></div></div>
+  <div class="how-step"><b>3</b><div><h3>Pega el enlace</h3><p class="small muted">Lo revisamos y contamos sus vistas automáticamente.</p></div></div>
+  <div class="how-step"><b>4</b><div><h3>Cobra</h3><p class="small muted">Retira desde {{ MIN_WITHDRAW|money(0) }} en USDT a tu wallet.</p></div></div>
+</section>
+{% endif %}
+
+{% if featured %}
+{% set c, st = featured %}
+<a class="featured" href="{{ url_for('campaign', cid=c.id) }}">
+  <div class="art">{% if cover_src(c) %}<img src="{{ cover_src(c) }}" alt="Portada de {{ c.song }}">{% else %}<span class="cover-fallback">{{ c.song[:1] }}</span>{% endif %}</div>
+  <div class="info">
+    <span class="eyebrow">Campaña destacada de {{ CATEGORY_ONE[c.category]|lower }}</span>
+    <div>
+      <h2>{{ c.song }} {{ icon("check") }}</h2>
+      <p class="artist">{{ c.artist }}</p>
+    </div>
+    <div class="f-stats tnum">
+      <div><b class="hot">{{ c.rate|money(0) }}</b><span>por 1M vistas</span></div>
+      <div><b>{{ st.views|short }}</b><span>vistas generadas</span></div>
+      <div><b>{{ st.remaining|money(0) }}</b><span>por repartir</span></div>
+    </div>
+    {{ budget(c, st) }}
+    <span class="btn accent">Ver campaña {{ icon("arrow") }}</span>
+  </div>
+</a>
+{% endif %}
+
+<section>
+  <div class="section-head">
+    <h2>Campañas activas</h2>
+    <p class="muted">Elige una campaña, haz clips y cobra por cada vista</p>
+  </div>
+  <nav class="filters" aria-label="Tipo de campaña">
+    <a class="{% if not cat %}on{% endif %}" href="{{ url_for('index') }}">Todas <span>{{ total }}</span></a>
+    {% for key, label in CATEGORIES.items() %}{% if counts[key] %}
+    <a class="{% if cat == key %}on{% endif %}" href="{{ url_for('index', cat=key) }}">{{ label }} <span>{{ counts[key] }}</span></a>
+    {% endif %}{% endfor %}
+  </nav>
+  {% if cards %}
+    <div class="grid">{% for c, st in cards %}{% include "_camp_card.html" %}{% endfor %}</div>
+  {% else %}
+    <div class="table-card"><div class="empty"><h3>No hay campañas aquí ahora mismo</h3><p class="muted">Vuelve pronto: aquí aparecerán las nuevas campañas.</p></div></div>
+  {% endif %}
+</section>
+{% endblock %}

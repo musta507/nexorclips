@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Solicitudes · Admin{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_home') }}">← Panel de control</a>
+<div>
+  <span class="admin-tag">Admin</span>
+  <h1 style="margin-top:8px">Solicitudes de campaña</h1>
+  <p class="muted" style="margin-top:6px">Artistas y marcas que han rellenado «Lanzar una campaña». Respóndeles por correo y, cuando cerréis el trato, crea la campaña con sus datos ya puestos.</p>
+</div>
+<div class="leads">
+  {% for l in leads %}
+  <article class="card lead{% if l.status == 'nueva' %} is-new{% endif %}">
+    <div class="lead-top">
+      <div>
+        <span class="status {{ 'pendiente' if l.status == 'nueva' else ('aprobado' if l.status in ['contactada', 'convertida'] else 'rechazado') }}">{{ statuses[l.status] }}</span>
+        <h3 style="margin-top:8px">{{ l.brand }} <span class="muted small">· {{ CATEGORY_ONE.get(l.category, l.category) }}</span></h3>
+        <p class="small muted">{{ l.name }} · <span class="selectable">{{ l.email }}</span> · {{ l.created_at|ago }}</p>
+      </div>
+      {% if l.budget %}<div class="lead-budget"><span class="small muted">Presupuesto</span><b>{{ l.budget }}</b></div>{% endif %}
+    </div>
+    {% if l.link %}<p class="small"><span class="muted">Enlace:</span> <a class="link" href="{{ l.link if l.link.startswith('http') else 'https://' ~ l.link }}" target="_blank" rel="noopener nofollow">{{ l.link|truncate(70) }}</a></p>{% endif %}
+    {% if l.message %}<p class="rules">{{ l.message }}</p>{% endif %}
+    <div class="inline" style="flex-wrap:wrap">
+      <a class="btn sm accent" href="{{ url_for('admin_campaign_form', solicitud=l.id) }}">Crear campaña</a>
+      <form class="inline" method="post">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="lead_id" value="{{ l.id }}">
+        {% for key, label in statuses.items() if key != l.status and key != 'convertida' %}
+          <button class="btn sm soft" name="status" value="{{ key }}">Marcar {{ label|lower }}</button>
+        {% endfor %}
+      </form>
+    </div>
+  </article>
+  {% else %}
+  <div class="table-card"><div class="empty"><h3>Aún no hay solicitudes</h3><p class="muted">Cuando un artista o marca rellene el formulario de la portada, aparecerá aquí.</p></div></div>
+  {% endfor %}
+</div>
+{% endblock %}

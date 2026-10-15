@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon, budget %}
+{% block title %}{{ camp.song }} - {{ camp.artist }} · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('index') }}">← Campañas</a>
+<div class="detail">
+  <div class="form-stack" style="gap:24px">
+    <header class="album">
+      <div class="art">{% if cover_src(camp) %}<img src="{{ cover_src(camp) }}" alt="Portada de {{ camp.song }}">{% else %}<span class="cover-fallback">{{ camp.song[:1] }}</span>{% endif %}</div>
+      <div class="album-info">
+        <span class="eyebrow muted">{{ CATEGORY_ONE[camp.category] }} · publicada {{ camp.created_at|ago }}</span>
+        <h1>{{ camp.song }} {{ icon("check") }}</h1>
+        <p class="artist">{{ camp.artist }}</p>
+        <div class="chips">{% for p in camp.platform_list %}<span class="chip">{{ icon(p) }} {{ PLATFORMS[p] }}</span>{% endfor %}</div>
+      </div>
+    </header>
+
+    <div class="facts">
+      <div class="fact"><b>{{ camp.min_views|short }}</b><span>vistas mínimas por clip</span></div>
+      <div class="fact"><b>{% if camp.max_per_video %}{{ camp.max_per_video|money(0) }}{% else %}Sin tope{% endif %}</b><span>máximo por clip</span></div>
+      <div class="fact"><b>{{ st.views|short }}</b><span>vistas generadas</span></div>
+    </div>
+
+    <div class="card form-stack">
+      <h3>Cómo participar</h3>
+      <div class="rules">{{ camp.rules or "Sigue las indicaciones del creador en tus clips." }}</div>
+      <div class="calc">
+        <h3>Cómo se calcula tu pago</h3>
+        <p class="small">Vistas ÷ 1.000.000 × {{ camp.rate|money(0) }}. {% if camp.min_views %}Un clip empieza a cobrar a partir de {{ camp.min_views|num }} vistas. {% endif %}{% if camp.max_per_video %}Cada clip cobra como máximo {{ camp.max_per_video|money(0) }}. {% endif %}Contamos las vistas de los primeros {{ REFRESH_DAYS }} días y el presupuesto se reparte por orden hasta agotarse. Lo que ya has ganado no baja.</p>
+        <p class="small muted">Ejemplo: un clip con 250.000 vistas gana {{ ([250000 / 1000000 * camp.rate, camp.max_per_video or 999999999]|min if 250000 >= (camp.min_views or 0) else 0)|money }}.</p>
+      </div>
+      {% if camp.sound_url %}<a class="btn soft" href="{{ camp.sound_url }}" target="_blank" rel="noopener">{{ icon("music") }} {% if camp.category == "musica" %}Abrir el sonido oficial{% else %}Abrir el material oficial{% endif %}</a>{% endif %}
+    </div>
+  </div>
+
+  <aside class="sticky">
+    <div class="pay-panel form-stack">
+      <div>
+        <span class="eyebrow">Pagamos</span>
+        <div class="big tnum">{{ camp.rate|money(0) }} <span>{{ CUR_CODE }}</span></div>
+        <span class="sub">por cada millón de vistas</span>
+      </div>
+      {{ budget(camp, st) }}
+      {% if camp.status == 'finalizada' or st.exhausted %}
+        <p class="sub"><b style="color:#fff">Campaña completada.</b> Se ha repartido todo el presupuesto y ya no acepta clips nuevos.</p>
+      {% elif camp.status != 'activa' %}
+        <p class="sub">Esta campaña está en pausa y no acepta clips ahora mismo.</p>
+      {% elif not current_user.has_any_handle %}
+        <p class="sub">Para enviar clips, primero vincula tus cuentas de redes.</p>
+        <a class="btn accent block" href="{{ url_for('account', next=request.path) }}#redes">Vincular mis cuentas</a>
+      {% else %}
+        <form method="post" class="form-stack">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <div class="field">
+            <label for="clip-url">Enlace de tu clip</label>
+            <input id="clip-url" name="url" placeholder="https://www.tiktok.com/@tu_cuenta/video/…" required>
+            <span class="hint">El enlace del vídeo, no del perfil. Las vistas se cuentan solas.</span>
+          </div>
+          <button class="btn accent block">Enviar clip {{ icon("arrow") }}</button>
+        </form>
+      {% endif %}
+    </div>
+
+    {% if mine %}
+    <div class="card">
+      <h3>Tus clips aquí</h3>
+      <div class="clip-list">
+        {% for s in mine %}
+        <div class="clip">
+          <span class="pi">{{ icon(s.platform) }}</span>
+          <div class="meta"><a href="{{ s.url }}" target="_blank" rel="noopener">{{ PLATFORMS[s.platform] }}</a><span class="small muted">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</span></div>
+          <div><div class="views tnum">{{ s.views|short }}{% if s.status == "aprobado" %} · {{ s.earned|money }}{% endif %}</div><span class="status {{ s.status }}">{{ s.status|capitalize }}</span></div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

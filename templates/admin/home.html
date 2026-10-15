@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Admin · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <div><span class="admin-tag">Admin</span><h1 style="margin-top:8px">Panel de control</h1></div>
+  <div class="inline" style="flex-wrap:wrap">
+    {% set unread = unread_messages() %}
+    <a class="btn soft" href="{{ url_for('admin_inbox') }}">Mensajes{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
+    {% set leads_n = new_leads() %}
+    <a class="btn soft" href="{{ url_for('admin_leads') }}">Solicitudes{% if leads_n %} <span class="count">{{ leads_n }}</span>{% endif %}</a>
+    <a class="btn soft" href="{{ url_for('admin_activity') }}">Actividad</a>
+    <a class="btn soft" href="{{ url_for('admin_clippers') }}">Clippers y retiros{% if kpis.open_payouts_n %} · {{ kpis.open_payouts_n }}{% endif %}</a>
+    <a class="btn accent" href="{{ url_for('admin_campaign_form') }}">+ Nueva campaña</a>
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><span>Presupuesto en campañas activas</span><b class="tnum">{{ kpis.budget_live|money(0) }}</b></div>
+  <div class="kpi"><span>Repartido a clips</span><b class="tnum">{{ kpis.spent|money(0) }}</b></div>
+  <div class="kpi"><span>Pagado a clippers</span><b class="tnum">{{ kpis.paid|money(0) }}</b></div>
+  <div class="kpi{% if kpis.open_payouts_n %} warn{% endif %}"><span>Retiros por pagar</span><b class="tnum">{{ kpis.open_payouts|money(0) }}</b>{% if kpis.open_payouts_n %}<a href="{{ url_for('admin_clippers') }}">{{ kpis.open_payouts_n }} {{ "pendiente" if kpis.open_payouts_n == 1 else "pendientes" }} →</a>{% endif %}</div>
+  <div class="kpi"><span>Vistas aprobadas</span><b class="tnum">{{ kpis.views|short }}</b></div>
+  <div class="kpi"><span>Clippers con clips</span><b class="tnum">{{ kpis.clippers }}</b></div>
+</div>
+
+<div class="card tight toolbar">
+  <div>
+    <h3>Contador de vistas</h3>
+    <p class="small muted">Última actualización: {{ last_refresh }}</p>
+    <p class="small muted">Se actualizan los clips de los últimos {{ REFRESH_DAYS }} días de campañas activas con presupuesto.</p>
+    {% if not has_token %}<p class="small" style="color:var(--red)">Falta APIFY_TOKEN en las variables de Railway.</p>{% endif %}
+  </div>
+  <div class="inline" style="flex-wrap:wrap">
+    <form method="post" action="{{ url_for('admin_refresh') }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn soft">↻ Actualizar vistas ahora</button>
+    </form>
+    <a class="btn soft" href="{{ url_for('admin_probe') }}">Probar Apify con un enlace</a>
+  </div>
+</div>
+
+<section>
+  <div class="section-head"><h2>Clips por revisar ({{ kpis.pending }}){% if kpis.flagged %} · <span style="color:var(--amber)">{{ kpis.flagged }} con avisos</span>{% endif %}</h2></div>
+  <div class="table-card">
+  {% if pending %}
+    <div class="table-scroll"><table>
+      <thead><tr><th>Clipper</th><th>Campaña</th><th>Clip</th><th class="r">Vistas</th><th>Acción</th></tr></thead>
+      <tbody>
+      {% for s in pending %}
+      <tr{% if s.flag_list %} class="row-flag"{% endif %}>
+        <td><b>{{ s.user.name }}</b><div class="small muted">{{ s.user.email }}</div></td>
+        <td>{{ s.campaign.song }}</td>
+        <td><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver en {{ PLATFORMS[s.platform] }}</a><div class="small muted">{{ s.created_at|ago }}</div>{% include "admin/_flags.html" %}</td>
+        <td class="r tnum">{{ s.views|num }}<div class="small {% if s.views_error %}" style="color:var(--amber){% else %} muted{% endif %}">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</div></td>
+        <td>{% include "admin/_review_buttons.html" %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% else %}
+    <div class="empty"><h3>Todo revisado</h3><p class="muted">No hay clips pendientes.</p></div>
+  {% endif %}
+  </div>
+</section>
+
+<section>
+  <div class="section-head"><h2>Campañas</h2></div>
+  <div class="table-card">
+    <div class="table-scroll"><table>
+      <thead><tr><th>Campaña</th><th>Estado</th><th class="r">Pago / 1M</th><th>Repartido</th><th class="r">Vistas</th><th class="r">Clips</th><th></th></tr></thead>
+      <tbody>
+      {% for c, st in cards %}
+      <tr>
+        <td><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<div class="small muted">{{ c.artist }} · {{ CATEGORY_ONE[c.category] }}</div></td>
+        <td><span class="status {{ c.status }}">{{ c.status|capitalize }}</span></td>
+        <td class="r tnum">{{ c.rate|money(0) }}</td>
+        <td class="tnum"><span class="small">{{ st.spent|money(0) }} / {{ c.budget|money(0) }}</span><div class="bar mini-bar" style="margin-top:6px"><span style="width:{{ st.pct }}%"></span></div></td>
+        <td class="r tnum">{{ st.views|short }}</td>
+        <td class="r tnum">{{ st.clips }}{% if st.pending %} <span class="small" style="color:var(--amber)">+{{ st.pending }}</span>{% endif %}</td>
+        <td class="r"><a class="btn sm soft" href="{{ url_for('admin_campaign', cid=c.id) }}">Abrir</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7"><div class="empty"><h3>Aún no hay campañas</h3><p class="muted">Crea la primera con «+ Nueva campaña».</p></div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+</section>
+{% endblock %}

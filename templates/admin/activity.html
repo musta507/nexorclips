@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Actividad · Admin{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_home') }}">← Panel de control</a>
+<div>
+  <span class="admin-tag">Admin</span>
+  <h1 style="margin-top:8px">Registro de actividad</h1>
+  <p class="muted" style="margin-top:6px">Cada aprobación, rechazo, corrección de vistas, pago y bloqueo queda apuntado aquí con la fecha y quién lo hizo. Se muestran los 300 últimos.</p>
+</div>
+<div class="table-card">
+  {% if logs %}
+  <div class="table-scroll"><table>
+    <thead><tr><th>Fecha (UTC)</th><th>Quién</th><th>Acción</th><th>Detalle</th></tr></thead>
+    <tbody>
+    {% for l in logs %}
+    <tr>
+      <td class="small muted tnum">{{ l.created_at|datetime }}</td>
+      <td class="small">{{ l.admin.name if l.admin else "Sistema" }}</td>
+      <td><span class="chip">{{ l.action|replace("_", " ")|capitalize }}</span></td>
+      <td class="small">{{ l.detail }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="empty"><h3>Todavía no hay actividad</h3><p class="muted">Las acciones del panel de admin aparecerán aquí.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

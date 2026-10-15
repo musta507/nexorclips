@@ -1,0 +1,19 @@
+<div class="inline" style="flex-wrap:wrap">
+  {% if s.status != 'aprobado' %}
+  <form class="inline" method="post" action="{{ url_for('admin_review', sid=s.id, accion='aprobar') }}"{% if s.flag_list %} data-confirm="Este clip tiene avisos ({{ s.flag_list|map('replace', '_', ' ')|join(', ') }}). ¿Aprobarlo igualmente?"{% endif %}>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green"{% if not account_verified(s) %} disabled title="Verifica primero la cuenta del clipper"{% endif %}>Aprobar</button>
+  </form>
+  {% endif %}
+  {% if s.status != 'rechazado' %}
+  <form class="inline" method="post" action="{{ url_for('admin_review', sid=s.id, accion='rechazar') }}"{% if s.status == 'aprobado' %} data-confirm="Este clip ya está aprobado y tiene {{ s.earned|money }} asignados. Si lo rechazas, se le quitarán. ¿Seguir?"{% endif %}>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input id="reason-{{ s.id }}" name="reason" placeholder="Motivo" style="width:130px" aria-label="Motivo del rechazo">
+    <button class="btn sm red">Rechazar</button>
+  </form>
+  {% endif %}
+  {% if s.flag_list %}
+  <form class="inline" method="post" action="{{ url_for('admin_review', sid=s.id, accion='quitar_avisos') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft" title="Quitar los avisos de este clip">Quitar avisos</button>
+  </form>
+  {% endif %}
+</div>

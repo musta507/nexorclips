@@ -1,0 +1,21 @@
+{# Conversación reutilizable. Variables: msgs, viewer_admin (bool), post_url, poll_url, empty_text #}
+<div class="chat" data-chat data-poll="{{ poll_url }}" data-after="{{ msgs[-1].id if msgs else 0 }}">
+  <div class="chat-log" id="chat-log" aria-live="polite">
+    {% for m in msgs %}
+      {% set mine = (m.from_admin == viewer_admin) %}
+      <div class="msg {{ 'mine' if mine else 'theirs' }}" data-id="{{ m.id }}">
+        <div class="bubble">{{ m.body }}</div>
+        <div class="meta">{% if not mine %}{{ ("Equipo " ~ APP_NAME) if m.from_admin else m.user.name }} · {% endif %}{% if viewer_admin and mine and m.sender %}{{ m.sender.name }} · {% endif %}<span title="{{ m.created_at|datetime }} UTC">{{ m.created_at|ago }}</span></div>
+      </div>
+    {% else %}
+      <div class="chat-empty" id="chat-empty">{{ empty_text }}</div>
+    {% endfor %}
+  </div>
+  <form class="chat-form" method="post" action="{{ post_url }}" data-chat-form>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <label class="sr-only" for="chat-body">Mensaje</label>
+    <textarea id="chat-body" name="body" rows="1" maxlength="2000" placeholder="Escribe un mensaje…" required>{{ prefill or "" }}</textarea>
+    <button class="btn accent" aria-label="Enviar mensaje">Enviar</button>
+  </form>
+  <p class="chat-error" id="chat-error" role="alert" hidden></p>
+</div>

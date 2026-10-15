@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Ganancias · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="stats">
+  <div class="card stat hero">
+    <span class="l">Balance disponible</span>
+    <div class="row">
+      <span class="v">{{ m.available|amount }}</span>
+      {% if not current_user.payout_details %}
+        <a class="btn sm" href="{{ url_for('account') }}">Agregar cuenta</a>
+      {% elif m.open_payout %}
+        <span class="status solicitado">Retiro en curso</span>
+      {% else %}
+        <form method="post" action="{{ url_for('withdraw') }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button class="btn sm" {% if m.available < MIN_WITHDRAW %}disabled title="Retiro mínimo {{ MIN_WITHDRAW|money(0) }}"{% endif %}>Retirar</button>
+        </form>
+      {% endif %}
+    </div>
+    {% if m.open_payout %}
+    <p class="small" style="color:rgba(255,255,255,.75)">Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo pagamos en un plazo de {{ PAYOUT_DAYS }} días hábiles.</p>
+    {% elif m.available < MIN_WITHDRAW %}
+    <div class="withdraw-goal">
+      <div class="budget-row tnum"><span>Te faltan <b>{{ (MIN_WITHDRAW - m.available)|money }}</b> para poder retirar</span><span>Mín. {{ MIN_WITHDRAW|money(0) }}</span></div>
+      <div class="budget-bar"><span style="width:{{ (m.available / MIN_WITHDRAW * 100)|round|int }}%"></span></div>
+    </div>
+    {% endif %}
+    <span class="small muted">{% if current_user.payout_details %}Cobras por {{ current_user.payout_method }} · <a href="{{ url_for('account') }}" style="text-decoration:underline">cambiar</a> · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% else %}Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}</span>
+  </div>
+  <div class="card stat">
+    <span class="l">Balance pendiente</span>
+    <span class="v">{{ m.pending|amount }}</span>
+    <span class="small muted">Estimación de clips que aún estamos revisando</span>
+  </div>
+  <div class="card stat">
+    <span class="l">Ganancias totales</span>
+    <span class="v">{{ m.earned|amount }}</span>
+    <span class="small muted">Todo lo que has ganado ({{ CUR_CODE }})</span>
+  </div>
+</div>
+
+<div class="form-stack">
+  <nav class="seg" aria-label="Tipo de movimiento">
+    <a class="{% if tab == 'disponible' %}on{% endif %}" href="{{ url_for('earnings', tab='disponible') }}">Disponible</a>
+    <a class="{% if tab == 'pendiente' %}on{% endif %}" href="{{ url_for('earnings', tab='pendiente') }}">Pendiente</a>
+    <a class="{% if tab == 'retiros' %}on{% endif %}" href="{{ url_for('earnings', tab='retiros') }}">Retiros</a>
+  </nav>
+
+  <div class="table-card">
+  {% if tab in ['disponible', 'pendiente'] %}
+    {% set rows = m.earned_rows if tab == 'disponible' else m.pending_rows %}
+    {% if rows %}
+    <div class="table-scroll"><table>
+      <thead><tr><th>Fecha</th><th>Clip</th><th>Campaña</th><th class="r">Vistas</th><th class="r">Monto</th></tr></thead>
+      <tbody>
+      {% for s, a in rows %}
+      <tr>
+        <td class="small muted">{{ s.created_at|date }}</td>
+        <td><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a></td>
+        <td>{{ s.campaign.song }}<div class="small muted">{{ s.campaign.artist }}</div></td>
+        <td class="r tnum">{{ s.views|num }}</td>
+        <td class="r tnum"><b>{{ a|money }}</b>{% if tab == 'pendiente' %}<div class="small muted">estimado</div>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% elif tab == 'disponible' %}
+    <div class="empty"><h3>Aún no tienes ganancias disponibles</h3><p class="muted">¡Envía clips a las campañas y empieza a ganar!</p></div>
+    {% else %}
+    <div class="empty"><h3>No tienes clips en revisión</h3><p class="muted">Cuando envíes un clip aparecerá aquí hasta que lo aprobemos.</p></div>
+    {% endif %}
+  {% else %}
+    {% if payouts %}
+    <div class="table-scroll"><table>
+      <thead><tr><th>Fecha</th><th>Método</th><th>Estado</th><th>Nota</th><th class="r">Monto</th></tr></thead>
+      <tbody>
+      {% for p in payouts %}
+      <tr>
+        <td class="small muted">{{ p.created_at|date }}</td>
+        <td>{{ p.method }}</td>
+        <td><span class="status {{ p.status }}">{{ p.status|capitalize }}</span></td>
+        <td class="small muted">{% if p.status == "pagado" %}Pagado el {{ p.paid_at|date }}{% if p.note %} · {{ p.note }}{% endif %}{% else %}{{ p.note }}{% endif %}</td>
+        <td class="r tnum"><b>{{ p.amount|money }}</b></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+    <div class="empty"><h3>Todavía no has hecho retiros</h3><p class="muted">Cuando tengas saldo disponible, pulsa «Retirar».</p></div>
+    {% endif %}
+  {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Enviar clips · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="section-head" style="margin:0">
+  <h1>Enviar clips</h1>
+  <p class="muted">Pega el enlace de tu vídeo y elige para qué campaña es.</p>
+</div>
+
+<div class="card">
+  {% if not current_user.has_any_handle %}
+  <div class="form-stack" style="align-items:flex-start">
+    <p>Para enviar clips, primero vincula las cuentas de TikTok, Instagram o YouTube desde las que publicas.</p>
+    <a class="btn accent" href="{{ url_for('account', next=request.path) }}#redes">Vincular mis cuentas</a>
+  </div>
+  {% elif camps %}
+  <form method="post" class="form-grid" style="align-items:end;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) auto">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="field">
+      <label for="campaign">Campaña</label>
+      <select id="campaign" name="campaign_id" required>
+        <option value="">Elige una campaña</option>
+        {% for c in camps %}<option value="{{ c.id }}" {% if selected == c.id %}selected{% endif %}>{{ c.song }} - {{ c.artist }} · {{ c.rate|money(0) }}/1M</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="url">Enlace del vídeo</label>
+      <input id="url" name="url" placeholder="TikTok, Instagram Reels o YouTube Shorts" required>
+    </div>
+    <button class="btn accent">Enviar {{ icon("arrow") }}</button>
+  </form>
+  {% else %}
+  <p class="muted">Ahora mismo no hay campañas activas.</p>
+  {% endif %}
+</div>
+
+<section>
+  <div class="section-head"><h2>Tus clips</h2></div>
+  <div class="table-card">
+    {% if subs %}
+    <div class="table-scroll"><table>
+      <thead><tr><th>Fecha</th><th>Clip</th><th>Campaña</th><th class="r">Vistas</th><th>Estado</th><th class="r">Ganado</th></tr></thead>
+      <tbody>
+      {% for s in subs %}
+      <tr>
+        <td class="small muted">{{ s.created_at|date }}</td>
+        <td><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a></td>
+        <td>{{ s.campaign.song }}<div class="small muted">{{ s.campaign.artist }}</div></td>
+        <td class="r tnum"><b>{{ s.views|num }}</b>{% if s.views < s.campaign.min_views %}<div class="small muted">mín. {{ s.campaign.min_views|short }}</div>{% endif %}{% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}</td>
+        <td><span class="status {{ s.status }}">{{ s.status|capitalize }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
+        <td class="r tnum">{% if s.status == 'aprobado' %}<b>{{ s.earned|money }}</b>{% else %}<span class="muted">—</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+    <div class="empty"><h3>Aún no has enviado clips</h3><p class="muted">Elige una campaña, publica tu vídeo y pega aquí el enlace.</p></div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

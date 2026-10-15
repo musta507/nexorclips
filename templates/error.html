@@ -1,0 +1,10 @@
+{% extends "_plain.html" %}
+{% block title %}{{ title }} · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="error-box">
+  <span class="error-code tnum">{{ code }}</span>
+  <h1>{{ title }}</h1>
+  <p class="muted">{{ body }}</p>
+  <a class="btn accent" href="{{ url_for('index') }}">Volver al inicio</a>
+</div>
+{% endblock %}

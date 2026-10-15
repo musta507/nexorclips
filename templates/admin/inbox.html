@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Mensajes · Admin{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_home') }}">← Panel de control</a>
+<div class="toolbar">
+  <div><span class="admin-tag">Admin</span><h1 style="margin-top:8px">Mensajes</h1></div>
+  <a class="btn soft" href="{{ url_for('admin_clippers') }}">Escribir a un clipper</a>
+</div>
+<div class="table-card inbox">
+  {% for t in threads %}
+  <a class="thread{% if t.unread %} unread{% endif %}" href="{{ url_for('admin_chat', uid=t.user.id) }}">
+    <span class="avatar">{% if t.user.avatar_url %}<img src="{{ t.user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ t.user.initial }}{% endif %}</span>
+    <div class="thread-main">
+      <div class="thread-top"><b>{{ t.user.name }}</b>{% if t.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<span class="small muted">{{ t.last.created_at|ago }}</span></div>
+      <div class="thread-preview small">{% if t.last.from_admin %}<span class="muted">Tú: </span>{% endif %}{{ t.last.body|truncate(110) }}</div>
+    </div>
+    {% if t.unread %}<span class="count" aria-label="{{ t.unread }} sin leer">{{ t.unread }}</span>{% endif %}
+  </a>
+  {% else %}
+  <div class="empty"><h3>No hay conversaciones todavía</h3><p class="muted">Cuando un clipper te escriba desde «Soporte», aparecerá aquí. También puedes escribirle tú desde «Clippers y retiros».</p></div>
+  {% endfor %}
+</div>
+{% endblock %}

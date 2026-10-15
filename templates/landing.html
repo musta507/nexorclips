@@ -1,0 +1,42 @@
+{% from "_icons.html" import icon, logo with context %}<!doctype html>
+<html lang="es">
+<head>
+{% include "_head.html" %}
+  <title>{{ APP_NAME }} · Cobra por cada vista de tus clips</title>
+</head>
+<body class="landing">
+  <header class="lp-top">
+    <div class="wrap">
+      <a href="{{ url_for('index') }}" aria-label="Inicio">{{ logo() }}</a>
+      <a class="btn sm soft" href="{{ url_for('login') }}">Iniciar sesión</a>
+    </div>
+  </header>
+
+  <main class="lp" id="contenido">
+    <h1>Cobra por cada vista de tus clips.</h1>
+    <p class="lp-sub">Campañas de música, streamers y marcas. Publica en TikTok, Instagram o YouTube Shorts y cobra en dólares.</p>
+
+    <form class="lp-pick" method="get" action="{{ url_for('start') }}">
+      <fieldset>
+        <legend>¿Qué quieres hacer?</legend>
+        <label class="opt">
+          <input type="radio" name="rol" value="clipper" required>
+          <span class="opt-ico">{{ icon("plus") }}</span>
+          <b>Empezar a clipear</b>
+          <span>Elige una campaña, publica clips y cobra por vistas.</span>
+          <i class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></i>
+        </label>
+        <label class="opt">
+          <input type="radio" name="rol" value="campana">
+          <span class="opt-ico alt">{{ icon("music") }}</span>
+          <b>Lanzar una campaña</b>
+          <span>Para artistas, marcas y creadores que quieren vistas.</span>
+          <i class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></i>
+        </label>
+      </fieldset>
+      <button class="btn lp-next">Siguiente {{ icon("arrow") }}</button>
+    </form>
+  </main>
+  {% include "_footer.html" %}
+</body>
+</html>

@@ -1,0 +1,31 @@
+{% extends "_plain.html" %}
+{% block title %}Política de privacidad · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<article class="legal-doc">
+  <h1>Política de privacidad</h1>
+  <p class="muted">Última actualización: {{ YEAR }}</p>
+
+  <h2>Qué datos guardamos</h2>
+  <ul>
+    <li><b>De tu cuenta de Google:</b> nombre, correo y foto de perfil. No recibimos tu contraseña.</li>
+    <li><b>Cuentas vinculadas:</b> los nombres de usuario de TikTok, Instagram y YouTube que añadas.</li>
+    <li><b>Clips:</b> los enlaces que envías y sus estadísticas públicas (vistas, likes y autor).</li>
+    <li><b>Cobros:</b> el método y los datos de pago que indiques (la dirección de tu wallet de USDT) y el historial de retiros.</li>
+  </ul>
+
+  <h2>Para qué los usamos</h2>
+  <p>Para gestionar tu cuenta, contar las vistas de tus clips, calcular y pagar tus ganancias, prevenir el fraude y enviar a los artistas y marcas informes agregados de sus campañas. En esos informes aparecen los nombres de usuario públicos de los vídeos, nunca tu correo ni tus datos de pago.</p>
+
+  <h2>Con quién se comparten</h2>
+  <p>Solo con los servicios necesarios para que la plataforma funcione: Google (inicio de sesión), nuestro proveedor de servidores y base de datos, el servicio que lee las estadísticas públicas de los vídeos y el método de pago que elijas para cobrar. No vendemos tus datos.</p>
+
+  <h2>Cuánto tiempo</h2>
+  <p>Mientras tengas cuenta y, después, el tiempo que exijan las obligaciones legales y fiscales relacionadas con los pagos.</p>
+
+  <h2>Tus derechos</h2>
+  <p>Puedes pedir acceder a tus datos, corregirlos, llevártelos o borrar tu cuenta.{% if SUPPORT_EMAIL %} Escríbenos a <span class="selectable">{{ SUPPORT_EMAIL }}</span>.{% endif %} Si estás en la Unión Europea, también puedes reclamar ante la autoridad de protección de datos de tu país.</p>
+
+  <h2>Cookies</h2>
+  <p>Usamos solo las cookies necesarias para mantener tu sesión iniciada y proteger los formularios. No usamos cookies de publicidad.</p>
+</article>
+{% endblock %}

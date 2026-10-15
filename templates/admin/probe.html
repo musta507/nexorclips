@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Probar Apify · Admin{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_home') }}">← Panel de control</a>
+<div>
+  <span class="admin-tag">Admin</span>
+  <h1 style="margin-top:8px">Probar el conteo de vistas</h1>
+  <p class="muted" style="margin-top:6px">Pega el enlace de un vídeo real. La web se lo pide a Apify y te enseña qué vistas lee. No se guarda nada.</p>
+</div>
+{% if not has_token %}<div class="flash error">Falta APIFY_TOKEN en las variables de Railway. Sin él no se puede probar.</div>{% endif %}
+<div class="card">
+  <form method="post" class="form-grid" style="grid-template-columns:minmax(0,1fr) auto;align-items:end">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="field"><label for="probe-url">Enlace del vídeo</label>
+      <input id="probe-url" name="url" value="{{ result.url if result else '' }}" placeholder="https://www.tiktok.com/@cuenta/video/…" required></div>
+    <button class="btn accent">Probar</button>
+  </form>
+  <p class="hint" style="margin-top:10px">Puede tardar entre 10 segundos y 2 minutos. Cada prueba gasta una consulta de Apify (menos de 1 céntimo).</p>
+</div>
+{% if result %}
+<div class="card form-stack">
+  {% if result.views is not none %}
+    <div class="flash ok">Funciona: este vídeo tiene <b>&nbsp;{{ result.views|num }}&nbsp;</b> vistas.</div>
+  {% else %}
+    <div class="flash error">{{ result.error }}</div>
+  {% endif %}
+  <div class="facts">
+    <div class="fact"><b>{{ PLATFORMS.get(result.platform, "—") }}</b><span>red detectada</span></div>
+    <div class="fact"><b style="font-size:15px;word-break:break-all">{{ result.video_id or "—" }}</b><span>ID del vídeo</span></div>
+    <div class="fact"><b>{{ result.items }}</b><span>resultados de Apify</span></div>
+  </div>
+  {% if result.views is not none %}
+  <div class="facts">
+    <div class="fact"><b>{% if result.author %}@{{ result.author }}{% else %}—{% endif %}</b><span>cuenta que publicó el vídeo</span></div>
+    <div class="fact"><b>{% if result.likes is not none %}{{ result.likes|num }}{% else %}—{% endif %}</b><span>likes</span></div>
+    <div class="fact"><b>{% if result.author %}Sí{% else %}No{% endif %}</b><span>se puede comprobar la autoría</span></div>
+  </div>
+  {% endif %}
+  {% if result.actor %}<p class="small muted">Actor usado: {{ result.actor }}</p>{% endif %}
+  {% if result.sample %}
+  <details>
+    <summary class="small" style="cursor:pointer;font-weight:600">Ver lo que devolvió Apify</summary>
+    <pre style="white-space:pre-wrap;word-break:break-all;background:var(--soft);padding:14px;border-radius:12px;font-size:12px;max-height:420px;overflow:auto">{{ result.sample }}</pre>
+  </details>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

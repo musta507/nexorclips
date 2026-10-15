@@ -1,0 +1,32 @@
+{% from "_icons.html" import icon, logo with context %}<!doctype html>
+<html lang="es">
+<head>
+{% include "_head.html" %}
+  <title>Entrar · {{ APP_NAME }}</title>
+</head>
+<body class="auth-bg">
+  <main class="auth">
+    {{ logo() }}
+    <div class="auth-card">
+      <div>
+        <h1>Empieza ahora</h1>
+        <p class="muted" style="margin-top:6px">Haz clips de música, streamers y marcas, y cobra por cada vista. Solo necesitas tu cuenta de Google.</p>
+      </div>
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}
+      {% endwith %}
+      <a class="btn google block" href="{{ url_for('login_google', next=request.args.get('next', '')) }}">{{ icon("google") }} Continuar con Google</a>
+      {% if dev_login %}
+        <div class="or">solo en pruebas</div>
+        <form method="post" action="{{ url_for('login_dev') }}" class="form-stack">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input id="dev-email" name="email" type="email" placeholder="correo@prueba.com" required>
+          <button class="btn soft block">Entrar sin Google</button>
+        </form>
+      {% endif %}
+      <p class="small muted">¿Eres artista o marca? <a href="{{ url_for('launch') }}" style="text-decoration:underline;color:var(--ink-2)">Lanza una campaña</a></p>
+      <p class="legal">Al continuar, confirmas que eres mayor de 18 años y que aceptas los <a href="{{ url_for('terms') }}">términos del servicio</a> y la <a href="{{ url_for('privacy') }}">política de privacidad</a>.</p>
+    </div>
+  </main>
+</body>
+</html>

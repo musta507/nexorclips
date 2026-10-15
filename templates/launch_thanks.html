@@ -1,0 +1,10 @@
+{% extends "_plain.html" %}
+{% block title %}Solicitud enviada · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="error-box">
+  <span class="error-code">✓</span>
+  <h1>¡Solicitud recibida!</h1>
+  <p class="muted">Te escribiremos al correo que nos has dado en menos de 48 horas con una propuesta para tu campaña.</p>
+  <a class="btn soft" href="{{ url_for('index') }}">Volver al inicio</a>
+</div>
+{% endblock %}

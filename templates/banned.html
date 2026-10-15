@@ -1,0 +1,11 @@
+{% extends "_plain.html" %}
+{% block title %}Cuenta suspendida · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="error-box">
+  <span class="error-code">⏸</span>
+  <h1>Tu cuenta está suspendida</h1>
+  <p class="muted">Motivo: {{ current_user.ban_reason or "incumplimiento de los términos" }}.</p>
+  <p class="muted">Si crees que es un error, escríbenos{% if SUPPORT_EMAIL %} a <span class="selectable">{{ SUPPORT_EMAIL }}</span>{% endif %} y lo revisamos.</p>
+  <div class="inline"><a class="btn accent" href="{{ url_for('support') }}">Escribir a soporte</a><a class="btn soft" href="{{ url_for('logout') }}">Cerrar sesión</a></div>
+</div>
+{% endblock %}

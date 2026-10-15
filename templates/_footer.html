@@ -1,0 +1,11 @@
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© {{ YEAR }} {{ APP_NAME }}</span>
+    <nav aria-label="Legal">
+      <a href="{{ url_for('terms') }}">Términos</a>
+      <a href="{{ url_for('privacy') }}">Privacidad</a>
+      {% if current_user.is_authenticated and not current_user.is_admin %}<a href="{{ url_for('support') }}">Soporte</a>{% endif %}
+      {% if SUPPORT_EMAIL %}<span>Soporte: <span class="selectable">{{ SUPPORT_EMAIL }}</span></span>{% endif %}
+    </nav>
+  </div>
+</footer>

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Clippers y retiros · Admin{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_home') }}">← Panel de control</a>
+<div class="toolbar">
+  <div><span class="admin-tag">Admin</span><h1 style="margin-top:8px">Clippers y retiros</h1></div>
+  <a class="btn soft" href="{{ url_for('admin_payouts_csv') }}">Descargar retiros (CSV)</a>
+</div>
+
+<section>
+  <div class="section-head">
+    <h2>Retiros solicitados ({{ open_requests|length }})</h2>
+    <p class="muted">Envía el dinero por el método del clipper, apunta el ID de la transacción y márcalo como pagado.</p>
+  </div>
+  <div class="table-card">
+  {% if open_requests %}
+    <div class="table-scroll"><table>
+      <thead><tr><th>Clipper</th><th>Enviar a</th><th class="r">Monto</th><th>Acción</th></tr></thead>
+      <tbody>
+      {% for p in open_requests %}
+      <tr{% if p.user.is_banned %} class="row-flag"{% endif %}>
+        <td><b>{{ p.user.name }}</b>{% if p.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">{{ p.user.email }} · {{ p.created_at|ago }}</div></td>
+        <td><b>{{ p.method }}</b><div class="small selectable" style="word-break:break-all">{{ p.details }}</div></td>
+        <td class="r tnum"><b>{{ p.amount|money }}</b></td>
+        <td>
+          <form class="inline" method="post" style="flex-wrap:wrap" data-confirm="¿Confirmas esta acción sobre el retiro de {{ p.amount|money }}?">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="payout_id" value="{{ p.id }}">
+            <input id="note-{{ p.id }}" name="note" placeholder="ID de transacción o motivo" style="width:200px" aria-label="Nota">
+            <button class="btn sm green" name="action" value="pagar">Marcar pagado</button>
+            <button class="btn sm red" name="action" value="rechazar">Rechazar</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% else %}
+    <div class="empty"><h3>No hay retiros pendientes</h3><p class="muted">Cuando un clipper pida su dinero, aparecerá aquí.</p></div>
+  {% endif %}
+  </div>
+</section>
+
+<section>
+  <div class="toolbar" style="margin-bottom:18px">
+    <h2>Todos los clippers ({{ rows|length }})</h2>
+    <form method="get" class="inline">
+      <input name="q" value="{{ q }}" placeholder="Buscar por nombre, correo o @cuenta" aria-label="Buscar clipper" style="width:280px">
+      <button class="btn sm soft">Buscar</button>
+    </form>
+  </div>
+  <div class="table-card">
+    <div class="table-scroll"><table>
+      <thead><tr><th>Clipper</th><th>Cuentas</th><th>Cobra por</th><th class="r">Clips</th><th class="r">Ganado</th><th class="r">Pagado</th><th class="r">Disponible</th><th></th></tr></thead>
+      <tbody>
+      {% for u, m, n in rows %}
+      <tr{% if u.is_banned %} class="row-flag"{% endif %}>
+        <td><b>{{ u.name }}</b>{% if u.is_admin %} <span class="admin-tag" style="font-size:10px">Admin</span>{% endif %}{% if u.is_banned %} <span class="flag">Bloqueado</span>{% endif %}
+          <div class="small muted">{{ u.email }} · desde {{ u.created_at|date }}</div>
+          {% if u.is_banned and u.ban_reason %}<div class="small" style="color:var(--red)">{{ u.ban_reason }}</div>{% endif %}</td>
+        <td class="small">{% for p in PLATFORMS %}{% for h in u.handles(p) %}<div class="hl">{{ icon(p) }} @{{ h }}</div>{% endfor %}{% endfor %}{% if not u.has_any_handle %}<span class="muted">Sin cuentas</span>{% endif %}</td>
+        <td class="small">{% if u.payout_details %}{{ u.payout_method }}{% else %}<span class="muted">Sin cuenta</span>{% endif %}</td>
+        <td class="r tnum">{{ n }}</td>
+        <td class="r tnum">{{ m.earned|money }}</td>
+        <td class="r tnum">{{ m.paid|money }}</td>
+        <td class="r tnum"><b>{{ m.available|money }}</b>{% if m.debt %}<div class="small" style="color:var(--red)">Debe {{ m.debt|money }}</div>{% endif %}</td>
+        <td class="r">
+          {% if not u.is_admin %}
+            <a class="btn sm soft" href="{{ url_for('admin_chat', uid=u.id) }}" style="margin-bottom:6px">Escribir</a>
+            {% if u.is_banned %}
+            <form method="post" action="{{ url_for('admin_ban', uid=u.id, accion='desbloquear') }}">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Desbloquear</button>
+            </form>
+            {% else %}
+            <form class="inline" method="post" action="{{ url_for('admin_ban', uid=u.id, accion='bloquear') }}" data-confirm="¿Bloquear a {{ u.name }}? No podrá enviar clips ni retirar dinero.">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input name="reason" placeholder="Motivo" style="width:120px" aria-label="Motivo del bloqueo">
+              <button class="btn sm red">Bloquear</button>
+            </form>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8"><div class="empty"><h3>{% if q %}Ningún clipper coincide con «{{ q }}»{% else %}Aún no hay clippers{% endif %}</h3></div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+</section>
+{% endblock %}
