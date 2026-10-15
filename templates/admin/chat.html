@@ -24,24 +24,21 @@
       <div class="fact"><b>{{ user.submissions|length }}</b><span>clips</span></div>
     </div>
     <div class="small side-handles">
-      <div class="label">Cuentas vinculadas</div>
-      {% for p in PLATFORMS %}{% for h in user.handles(p) %}
-      {% set ok = user.is_verified(p, h) %}
+      <div class="label">Campañas en las que quiere participar</div>
+      {% for a in accounts %}
       <div class="side-handle">
-        <div class="top">{{ icon(p) }} <a class="link" href="{{ profile_url(p, h) }}" target="_blank" rel="noopener nofollow">@{{ h }}</a>
-          <span class="status {{ 'aprobado' if ok else 'pendiente' }}">{{ "Verificada" if ok else "Sin verificar" }}</span></div>
-        <form method="post" action="{{ url_for('admin_verify_handle', uid=user.id) }}">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="platform" value="{{ p }}"><input type="hidden" name="handle" value="{{ h }}">
-          {% if ok %}
-            <button class="btn sm soft" name="accion" value="quitar" data-confirm="¿Quitar la verificación de @{{ h }}? Sus clips nuevos no se podrán aprobar hasta verificarla otra vez.">Quitar verificación</button>
-          {% else %}
-            <button class="btn sm green" name="accion" value="verificar">Verificar</button>
-            <button class="btn sm red" name="accion" value="rechazar" data-confirm="Se quitará @{{ h }} de sus cuentas y le avisaremos por el chat. ¿Seguir?">Rechazar</button>
-          {% endif %}
-        </form>
+        <div class="top">{{ icon(a.platform) }} <a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a>
+          <span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></div>
+        <span class="muted">en «{{ a.campaign.song }}»</span>
+        {% if a.status == 'pendiente' %}
+        <div class="inline" style="gap:6px">
+          <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
+          <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='rechazar') }}" data-confirm="¿Rechazar @{{ a.handle }} en «{{ a.campaign.song }}»? Le avisaremos por el chat."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>
+        </div>
+        {% endif %}
       </div>
-      {% endfor %}{% endfor %}
-      {% if not user.has_any_handle %}<span class="muted">Sin cuentas</span>{% else %}<p class="hint">Comprueba en el chat que la cuenta es suya y pulsa Verificar. Le avisamos por este mismo chat.</p>{% endif %}
+      {% else %}<span class="muted">Aún no se ha unido a ninguna campaña.</span>{% endfor %}
+      {% if accounts %}<p class="hint">Comprueba en el chat que la cuenta es suya y pulsa Aceptar. Le avisamos por este mismo chat.</p>{% endif %}
     </div>
     <div class="small"><div class="label" style="margin-bottom:6px">Cobro</div>{% if user.payout_details %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% else %}<span class="muted">Sin cuenta de cobro</span>{% endif %}</div>
     {% if m.open_payout %}<div class="flash ok">Retiro pendiente de {{ m.open_payout.amount|money }}</div>{% endif %}

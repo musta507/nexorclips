@@ -10,15 +10,6 @@
   </div>
   <a class="btn sm" href="{{ url_for('account') }}#redes">Vincular</a>
 </div>
-{% elif current_user.pending_handles %}
-<div class="card tight notice">
-  <span class="ico">{{ icon("chat") }}</span>
-  <div class="txt">
-    <h3>Verifica tus cuentas para que podamos aprobar tus clips</h3>
-    <p class="small muted">Para verificar tu cuenta tienes que hablar con soporte. Escríbenos por el chat y te guiamos.</p>
-  </div>
-  <a class="btn sm" href="{{ url_for('support', verificar=1) }}">Verificar por el chat</a>
-</div>
 {% elif not current_user.payout_details %}
 <div class="card tight notice">
   <span class="ico">{{ icon("card") }}</span>

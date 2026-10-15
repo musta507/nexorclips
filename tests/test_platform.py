@@ -24,6 +24,7 @@ def clean_db():
     with A.app.app_context():
         A.db.drop_all()
         A.ensure_schema()
+    AUTO_ACCEPT.clear()
     yield
 
 
@@ -38,14 +39,25 @@ def client_for(email, verify=True, **handles):
         data = {"_csrf": "t", "section": "redes"}
         data.update({f"handles_{k}": v for k, v in handles.items()})
         c.post("/cuenta", data=data)
-        if verify:                                   # en la mayoría de pruebas, cuentas ya verificadas por el admin
-            with A.app.app_context():
-                u = A.User.query.filter_by(email=email).one()
+    if verify:                                       # en la mayoría de pruebas, el clipper ya está aceptado en las campañas
+        AUTO_ACCEPT.add(email)
+    return c
+
+
+AUTO_ACCEPT = set()
+
+
+def _auto_accept():
+    """Acepta en todas las campañas las cuentas de los clippers de prueba marcados (simula al admin)."""
+    with A.app.app_context():
+        for u in A.User.query.filter(A.User.email.in_(AUTO_ACCEPT)).all():
+            for camp in A.Campaign.query.all():
                 for p in A.PLATFORMS:
                     for h in u.handles(p):
-                        u.set_verified(p, h)
-                A.db.session.commit()
-    return c
+                        if not A.CampaignAccount.query.filter_by(campaign_id=camp.id, platform=p, handle=h).first():
+                            A.db.session.add(A.CampaignAccount(user_id=u.id, campaign_id=camp.id, platform=p,
+                                                               handle=h, status="aceptada"))
+        A.db.session.commit()
 
 
 WALLET = "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE"
@@ -53,6 +65,8 @@ WALLET = "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE"
 
 def post(c, path, **data):
     data.setdefault("_csrf", "t")
+    if "url" in data and AUTO_ACCEPT:
+        _auto_accept()
     return c.post(path, data=data, follow_redirects=True)
 
 
@@ -134,9 +148,9 @@ def test_submission_rules():
     cid = make_campaign(platforms="tiktok,instagram")
     c = client_for("a@test.com")
     r = post(c, f"/campana/{cid}", url=tt("ana", 1))
-    assert "vincula tu cuenta de TikTok" in flashes(r)[0][1]
+    assert "únete a la campaña" in flashes(r)[0][1]
     post(c, "/cuenta", section="redes", handles_tiktok="@Ana")
-    assert "no está entre tus cuentas" in flashes(post(c, f"/campana/{cid}", url=tt("otra", 1)))[0][1]
+    assert "no es una de tus cuentas aceptadas" in flashes(post(c, f"/campana/{cid}", url=tt("otra", 1)))[0][1]
     assert flashes(post(c, f"/campana/{cid}", url=tt("ana", 1) + "?is_from_webapp=1"))[0][0] == "ok"
     assert "ya se envió" in flashes(post(c, f"/campana/{cid}", url=tt("ana", 1)))[0][1]
     assert "no es válido" in flashes(post(c, f"/campana/{cid}", url="https://www.tiktok.com/@ana"))[0][1]
@@ -514,38 +528,44 @@ def test_only_usdt_payouts():
     assert 'value="Cripto (USDT · TRC20)" selected' in client_for("nuevo@test.com").get("/cuenta").get_data(as_text=True)
 
 
-def test_account_verification_by_admin():
+def test_join_campaign_and_admin_accepts():
     cid = make_campaign()
     admin = client_for("admin@test.com")
-    a = client_for("a@test.com", verify=False, tiktok="ana")
-    html = a.get("/cuenta").get_data(as_text=True)
-    assert "Pendiente de verificar" in html and "hablar con soporte" in html and "bio" not in html
-    assert "quiero verificar mis cuentas: @ana (TikTok)" in a.get("/soporte?verificar=1").get_data(as_text=True)
+    a = client_for("a@test.com", verify=False)
+    page = a.get(f"/campana/{cid}").get_data(as_text=True)
+    assert "Unirme a la campaña" in page and "Enlace de tu clip" not in page
+    assert "Aún no estás aceptado" in a.get("/enviar").get_data(as_text=True)
+    r = post(a, f"/campana/{cid}/unirme", platform="tiktok", handle="@Ana")
+    html = r.get_data(as_text=True)
+    assert "Solicitud enviada" in html and "Enlace de tu clip" not in html
+    assert "He solicitado unirme" in a.get("/soporte").get_data(as_text=True)
+    with A.app.app_context():
+        acc = A.CampaignAccount.query.one()
+        assert (acc.handle, acc.status) == ("ana", "pendiente")
+        assert "ana" in get(A.User, acc.user_id).handles("tiktok")      # se vincula sola
+        aid = acc.id
+    assert "Pendiente de verificar" in a.get("/").get_data(as_text=True)
     r = post(a, f"/campana/{cid}", url=tt("ana", 1))
-    assert "aún no está verificada" in r.get_data(as_text=True)
+    assert "pendiente de verificar" in r.get_data(as_text=True)
+    assert "Clippers por verificar (1)" in admin.get("/admin").get_data(as_text=True)
+    # otro clipper no puede usar la misma cuenta
+    b = client_for("b@test.com")
+    assert "ya está vinculada a otro clipper" in post(b, f"/campana/{cid}/unirme", platform="tiktok", handle="ana").get_data(as_text=True)
+    post(admin, f"/admin/cuenta-campana/{aid}/aceptar")
+    assert "Te hemos aceptado" in a.get("/soporte").get_data(as_text=True)
+    assert "Enlace de tu clip" in a.get(f"/campana/{cid}").get_data(as_text=True)
+    r = post(a, f"/campana/{cid}", url=tt("ana", 2))
+    assert "Clip enviado" in r.get_data(as_text=True)
+    assert "no es una de tus cuentas aceptadas" in post(a, f"/campana/{cid}", url=tt("otra", 3)).get_data(as_text=True)
     with A.app.app_context():
         sid = A.Submission.query.one().id
-        uid = A.User.query.filter_by(email="a@test.com").one().id
-    r = post(admin, f"/admin/envio/{sid}/aprobar")
-    assert "no puedes aprobar" in r.get_data(as_text=True).lower()
-    with A.app.app_context():
-        assert get(A.Submission, sid).status == "pendiente"
-    post(admin, f"/admin/clipper/{uid}/cuenta", platform="tiktok", handle="ana", accion="verificar")
-    assert "ya está verificada" in a.get("/soporte").get_data(as_text=True)
     post(admin, f"/admin/envio/{sid}/aprobar")
     with A.app.app_context():
         assert get(A.Submission, sid).status == "aprobado"
-    # rechazar una cuenta la quita y avisa al clipper
-    post(admin, f"/admin/clipper/{uid}/cuenta", platform="tiktok", handle="ana", accion="rechazar")
-    with A.app.app_context():
-        u = get(A.User, uid)
-        assert u.handles("tiktok") == [] and not u.verified_set
-    # al quitar una cuenta y volver a añadirla, hay que verificarla otra vez
-    post(a, "/cuenta", section="redes", handles_tiktok="ana")
-    with A.app.app_context():
-        assert not get(A.User, uid).is_verified("tiktok", "ana")
-    assert A.app.test_client().post(f"/admin/clipper/{uid}/cuenta").status_code in (302, 400)
-
+    # en otra campaña hay que unirse de nuevo
+    cid2 = make_campaign(song="Otra")
+    assert "únete a la campaña" in post(a, f"/campana/{cid2}", url=tt("ana", 4)).get_data(as_text=True)
+    assert A.app.test_client().post(f"/admin/cuenta-campana/{aid}/aceptar").status_code in (302, 400)
 
 def test_landing_next_step():
     c = A.app.test_client()

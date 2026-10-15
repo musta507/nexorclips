@@ -10,7 +10,7 @@
     <div class="camp-title">
       <h3>{{ c.song }} {{ icon("check") }}</h3>
       <span class="muted">{{ c.artist }} · {{ c.created_at|ago }}</span>
-      <span class="cat cat-{{ c.category }}">{{ CATEGORY_ONE[c.category] }}</span>
+      <span class="inline" style="gap:6px;flex-wrap:wrap"><span class="cat cat-{{ c.category }}">{{ CATEGORY_ONE[c.category] }}</span>{% if my_join is defined and my_join.get(c.id) == 'aceptada' %}<span class="cat joined">Ya participas</span>{% elif my_join is defined and my_join.get(c.id) == 'pendiente' %}<span class="cat waiting">Pendiente de verificar</span>{% endif %}</span>
     </div>
     {{ budget(c, st) }}
     <div class="meta-row tnum"><span>{{ st.views|short }} vistas generadas</span><span>{{ st.clips }} {{ "clip" if st.clips == 1 else "clips" }}</span></div>

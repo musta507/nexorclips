@@ -1,7 +1,7 @@
 <div class="inline" style="flex-wrap:wrap">
   {% if s.status != 'aprobado' %}
   <form class="inline" method="post" action="{{ url_for('admin_review', sid=s.id, accion='aprobar') }}"{% if s.flag_list %} data-confirm="Este clip tiene avisos ({{ s.flag_list|map('replace', '_', ' ')|join(', ') }}). ¿Aprobarlo igualmente?"{% endif %}>
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green"{% if not account_verified(s) %} disabled title="Verifica primero la cuenta del clipper"{% endif %}>Aprobar</button>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green"{% if not account_verified(s) %} disabled title="Acepta primero la cuenta del clipper en esta campaña"{% endif %}>Aprobar</button>
   </form>
   {% endif %}
   {% if s.status != 'rechazado' %}

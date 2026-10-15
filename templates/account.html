@@ -11,26 +11,8 @@
   <section class="card form-stack" id="redes">
     <div>
       <h2>Cuentas vinculadas</h2>
-      <p class="muted small" style="margin-top:4px">Solo se aceptan clips publicados desde estas cuentas. Una cuenta solo puede estar vinculada a un clipper. Máximo 5 por red, separadas por comas.</p>
+      <p class="muted small" style="margin-top:4px">Las cuentas desde las que publicas. Se añaden solas cuando te unes a una campaña. Una cuenta solo puede estar vinculada a un clipper. Máximo 5 por red, separadas por comas.</p>
     </div>
-    {% if current_user.has_any_handle %}
-    <ul class="handle-list">
-      {% for p in PLATFORMS %}{% for h in current_user.handles(p) %}
-      <li>{{ icon(p) }} <b>@{{ h }}</b>
-        {% if current_user.is_verified(p, h) %}<span class="status aprobado">Verificada</span>{% else %}<span class="status pendiente">Pendiente de verificar</span>{% endif %}</li>
-      {% endfor %}{% endfor %}
-    </ul>
-    {% if current_user.pending_handles %}
-    <div class="verify-box">
-      <div>
-        <b>Verifica tus cuentas con soporte</b>
-        <p class="small" style="margin-top:6px;color:var(--ink-2)">Para verificar tu cuenta tienes que hablar con soporte. Escríbenos por el chat y te guiamos; normalmente lo dejamos listo en unas horas.</p>
-        <p class="hint" style="margin-top:6px">Puedes enviar clips mientras tanto, pero no los aprobaremos hasta verificar la cuenta.</p>
-      </div>
-      <a class="btn accent block" href="{{ url_for('support', verificar=1) }}">{{ icon("chat") }} Verificar por el chat</a>
-    </div>
-    {% endif %}
-    {% endif %}
     <form method="post" action="{{ url_for('account', next=request.args.get('next', '')) }}" class="form-stack">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <input type="hidden" name="section" value="redes">

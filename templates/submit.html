@@ -8,12 +8,7 @@
 </div>
 
 <div class="card">
-  {% if not current_user.has_any_handle %}
-  <div class="form-stack" style="align-items:flex-start">
-    <p>Para enviar clips, primero vincula las cuentas de TikTok, Instagram o YouTube desde las que publicas.</p>
-    <a class="btn accent" href="{{ url_for('account', next=request.path) }}#redes">Vincular mis cuentas</a>
-  </div>
-  {% elif camps %}
+  {% if camps %}
   <form method="post" class="form-grid send-form" style="align-items:end;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) auto">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <div class="field">
@@ -30,7 +25,10 @@
     <button class="btn accent">Enviar {{ icon("arrow") }}</button>
   </form>
   {% else %}
-  <p class="muted">Ahora mismo no hay campañas activas.</p>
+  <div class="form-stack" style="align-items:flex-start">
+    <p>Aún no estás aceptado en ninguna campaña. Entra en una, pulsa <b>Unirme a la campaña</b> con la cuenta con la que vas a publicar y te escribiremos para verificarla.</p>
+    <a class="btn accent" href="{{ url_for('index') }}">Ver campañas</a>
+  </div>
   {% endif %}
 </div>
 

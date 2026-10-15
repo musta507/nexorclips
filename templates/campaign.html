@@ -45,9 +45,16 @@
         <p class="sub"><b style="color:#fff">Campaña completada.</b> Se ha repartido todo el presupuesto y ya no acepta clips nuevos.</p>
       {% elif camp.status != 'activa' %}
         <p class="sub">Esta campaña está en pausa y no acepta clips ahora mismo.</p>
-      {% elif not current_user.has_any_handle %}
-        <p class="sub">Para enviar clips, primero vincula tus cuentas de redes.</p>
-        <a class="btn accent block" href="{{ url_for('account', next=request.path) }}#redes">Vincular mis cuentas</a>
+      {% elif not accepted %}
+        {% if accounts %}
+          <div class="join-wait">
+            <b>Solicitud enviada</b>
+            <p>Nuestro equipo te escribirá por el chat de soporte para verificar tu cuenta. Cuando te aceptemos, aquí podrás subir tus vídeos.</p>
+            <a class="btn white block" href="{{ url_for('support') }}">{{ icon("chat") }} Abrir el chat</a>
+          </div>
+        {% else %}
+          <p class="sub">Para participar, únete con la cuenta desde la que vas a publicar. Te escribiremos por el chat para verificarla.</p>
+        {% endif %}
       {% else %}
         <form method="post" class="form-stack">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -60,6 +67,34 @@
         </form>
       {% endif %}
     </div>
+
+    {% if camp.status == 'activa' and not st.exhausted %}
+    <div class="card form-stack join-card">
+      <div>
+        <h3>{% if accounts %}Tus cuentas en esta campaña{% else %}Unirme a la campaña{% endif %}</h3>
+        {% if not accounts %}<p class="small muted" style="margin-top:4px">Añade la cuenta con la que vas a publicar los clips.</p>{% endif %}
+      </div>
+      {% if accounts %}
+      <ul class="handle-list">
+        {% for a in accounts %}
+        <li>{{ icon(a.platform) }} <b>@{{ a.handle }}</b><span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if accounts|length < 5 %}
+      <form method="post" action="{{ url_for('join_campaign', cid=camp.id) }}" class="form-stack">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="join-row">
+          <select name="platform" aria-label="Red social">
+            {% for p in camp.platform_list %}<option value="{{ p }}">{{ PLATFORMS[p] }}</option>{% endfor %}
+          </select>
+          <div class="handle-input"><span>@</span><input name="handle" placeholder="tu_usuario" required autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Usuario"></div>
+        </div>
+        <button class="btn {{ 'soft' if accounts else 'accent' }} block">{{ "Añadir otra cuenta" if accounts else "Unirme a la campaña" }}</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
 
     {% if mine %}
     <div class="card">

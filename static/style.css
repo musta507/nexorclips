@@ -652,3 +652,8 @@ td a.link{color:var(--sapphire)}
 }
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 a,button,label{-webkit-tap-highlight-color:transparent}
+.join-wait{display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,.08);border-radius:14px;padding:14px}
+.join-wait p{font-size:13px;color:rgba(255,255,255,.75);line-height:1.45}
+.join-row{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.4fr);gap:8px}
+.cat.joined{background:var(--green-soft);color:#1d7a3a}
+.cat.waiting{background:var(--coral-soft);color:var(--sapphire)}

@@ -126,8 +126,8 @@ class User(UserMixin, db.Model):
     tiktok_handles = db.Column(db.String(400), default="")
     instagram_handles = db.Column(db.String(400), default="")
     youtube_handles = db.Column(db.String(400), default="")
-    verified_handles = db.Column(db.String(1200), default="")   # "tiktok:usuario,instagram:otro" verificadas por el admin
-    verify_code = db.Column(db.String(12), default="")
+    verified_handles = db.Column(db.String(1200), default="")   # sin uso: la verificación ahora es por campaña
+    verify_code = db.Column(db.String(12), default="")           # sin uso
     accepted_terms_at = db.Column(db.DateTime, nullable=True)
     last_seen_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -144,26 +144,6 @@ class User(UserMixin, db.Model):
     def has_any_handle(self):
         return any(self.handles(p) for p in PLATFORMS)
 
-    @property
-    def verified_set(self):
-        return {x for x in (self.verified_handles or "").split(",") if x}
-
-    def is_verified(self, platform, handle):
-        return f"{platform}:{handle}" in self.verified_set
-
-    def set_verified(self, platform, handle, on=True):
-        v = self.verified_set
-        (v.add if on else v.discard)(f"{platform}:{handle}")
-        self.verified_handles = ",".join(sorted(v))
-
-    @property
-    def pending_handles(self):
-        return [(p, h) for p in PLATFORMS for h in self.handles(p) if not self.is_verified(p, h)]
-
-    def ensure_code(self):
-        if not self.verify_code:
-            self.verify_code = "NX-" + "".join(secrets.choice("23456789") for _ in range(4))
-        return self.verify_code
 
 
 class Campaign(db.Model):
@@ -277,6 +257,34 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     user = db.relationship("User", foreign_keys=[user_id])
     sender = db.relationship("User", foreign_keys=[sender_id])
+
+
+class CampaignAccount(db.Model):
+    """Cuenta con la que un clipper se une a una campaña. Solo puede subir vídeos cuando el equipo la acepta."""
+    __table_args__ = (db.UniqueConstraint("campaign_id", "platform", "handle", name="uq_campaign_account"),)
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
+    platform = db.Column(db.String(20), nullable=False)
+    handle = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(20), default="pendiente", index=True)    # pendiente · aceptada · rechazada
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    decided_at = db.Column(db.DateTime, nullable=True)
+    user = db.relationship("User")
+    campaign = db.relationship("Campaign")
+
+
+JOIN_STATUSES = {"pendiente": "Pendiente de verificar", "aceptada": "Aceptada", "rechazada": "Rechazada"}
+MAX_JOIN_ACCOUNTS = 5
+
+
+def campaign_accounts(user_id, campaign_id, status=None, platform=None):
+    q = CampaignAccount.query.filter_by(user_id=user_id, campaign_id=campaign_id)
+    if status:
+        q = q.filter_by(status=status)
+    if platform:
+        q = q.filter_by(platform=platform)
+    return q.order_by(CampaignAccount.created_at).all()
 
 
 class CampaignLead(db.Model):
@@ -494,12 +502,11 @@ def profile_url(platform, handle):
 
 
 def account_verified(sub):
-    """¿El clip viene de una cuenta que el admin ya ha verificado?"""
-    u = sub.user
+    """¿El clip viene de una cuenta aceptada por el equipo en esta campaña?"""
+    ok = {a.handle for a in campaign_accounts(sub.user_id, sub.campaign_id, "aceptada", sub.platform)}
     if sub.author:
-        return u.is_verified(sub.platform, sub.author)
-    mine = u.handles(sub.platform)                     # aún no sabemos el autor: vale si todas sus cuentas están verificadas
-    return bool(mine) and all(u.is_verified(sub.platform, h) for h in mine)
+        return sub.author in ok
+    return bool(ok)
 
 
 def check_growth(sub, new_views, likes):
@@ -933,8 +940,12 @@ def index():
     cat = request.args.get("cat", "")
     cards = [x for x in all_cards if not cat or x[0].category == cat]
     counts = {k: sum(1 for c, _ in all_cards if c.category == k) for k in CATEGORIES}
+    my_join = {}
+    for a in CampaignAccount.query.filter_by(user_id=current_user.id).all():
+        if my_join.get(a.campaign_id) != "aceptada":
+            my_join[a.campaign_id] = a.status
     return render_template("home.html", cards=cards, featured=featured, cat=cat, counts=counts,
-                           total=len(all_cards), new_user=not current_user.submissions)
+                           total=len(all_cards), new_user=not current_user.submissions, my_join=my_join)
 
 
 def submit_clip(camp, raw_url):
@@ -950,23 +961,21 @@ def submit_clip(camp, raw_url):
         return False, "Ese enlace no es válido. Pega el enlace directo al vídeo, no al perfil."
     if platform not in camp.platform_list:
         return False, f"Esta campaña no acepta vídeos de {PLATFORMS[platform]}."
-    mine = current_user.handles(platform)
+    mine = [a.handle for a in campaign_accounts(current_user.id, camp.id, "aceptada", platform)]
     if not mine:
-        return False, f"Antes de enviar, vincula tu cuenta de {PLATFORMS[platform]} en «Cuenta»."
+        if campaign_accounts(current_user.id, camp.id, "pendiente"):
+            return False, "Tu cuenta aún está pendiente de verificar en esta campaña. Te escribiremos por el chat."
+        return False, f"Para subir vídeos de {PLATFORMS[platform]} aquí, primero únete a la campaña con esa cuenta."
     author = viewcounter.tiktok_handle_from_url(url) if platform == "tiktok" else ""
     if author and author not in mine:
         if handle_owner(platform, author, exclude_user_id=current_user.id):
             return False, f"Ese vídeo es de @{author}, una cuenta vinculada a otro clipper."
-        return False, f"Ese vídeo es de @{author}, que no está entre tus cuentas. Añádela en «Cuenta» si es tuya."
+        return False, f"Ese vídeo es de @{author}, que no es una de tus cuentas aceptadas en esta campaña."
     if Submission.query.filter_by(video_key=f"{platform}:{vid}").first():
         return False, "Ese vídeo ya se envió antes."
     db.session.add(Submission(user_id=current_user.id, campaign_id=camp.id, url=url, platform=platform,
                               video_key=f"{platform}:{vid}", author=author))
     db.session.commit()
-    unverified = [h for h in ([author] if author else mine) if not current_user.is_verified(platform, h)]
-    if unverified:
-        return True, (f"¡Clip enviado! Ojo: tu cuenta @{unverified[0]} aún no está verificada. "
-                      "Verifícala por el chat de soporte para que podamos aprobar tus clips.")
     return True, "¡Clip enviado! Lo revisaremos y empezará a sumar vistas."
 
 
@@ -983,13 +992,61 @@ def campaign(cid):
     st = campaign_stats(camp)
     mine = sorted([s for s in camp.submissions if s.user_id == current_user.id],
                   key=lambda s: s.created_at, reverse=True)
-    return render_template("campaign.html", camp=camp, st=st, mine=mine)
+    accounts = campaign_accounts(current_user.id, camp.id)
+    accepted = [a for a in accounts if a.status == "aceptada"]
+    return render_template("campaign.html", camp=camp, st=st, mine=mine, accounts=accounts, accepted=accepted,
+                           join_statuses=JOIN_STATUSES)
+
+
+@app.route("/campana/<int:cid>/unirme", methods=["POST"])
+@login_required
+def join_campaign(cid):
+    camp = db.session.get(Campaign, cid) or abort(404)
+    back = redirect(url_for("campaign", cid=cid))
+    if camp.status != "activa" or camp.exhausted:
+        flash("Esta campaña ya no acepta clippers nuevos.", "error")
+        return back
+    platform = request.form.get("platform", "")
+    handle = viewcounter.clean_handle(request.form.get("handle", ""))
+    if platform not in camp.platform_list:
+        flash("Elige una red de las que acepta la campaña.", "error")
+        return back
+    if not handle:
+        flash("Escribe el usuario de la cuenta con la que vas a publicar.", "error")
+        return back
+    owner = handle_owner(platform, handle, exclude_user_id=current_user.id)
+    if owner:
+        flash(f"La cuenta @{handle} ya está vinculada a otro clipper. Si es tuya, escríbenos por el chat.", "error")
+        return back
+    existing = CampaignAccount.query.filter_by(campaign_id=cid, platform=platform, handle=handle).first()
+    if existing:
+        flash("Ya has añadido esa cuenta a esta campaña." if existing.user_id == current_user.id
+              else f"La cuenta @{handle} ya está en esta campaña con otro clipper.", "error")
+        return back
+    if len(campaign_accounts(current_user.id, cid)) >= MAX_JOIN_ACCOUNTS:
+        flash(f"Puedes añadir como máximo {MAX_JOIN_ACCOUNTS} cuentas por campaña.", "error")
+        return back
+    linked = current_user.handles(platform)
+    if handle not in linked:
+        if len(linked) >= MAX_HANDLES:
+            flash(f"Ya tienes {MAX_HANDLES} cuentas de {PLATFORMS[platform]} vinculadas. Quita alguna en «Mi cuenta».", "error")
+            return back
+        setattr(current_user, f"{platform}_handles", ",".join(linked + [handle]))
+    db.session.add(CampaignAccount(user_id=current_user.id, campaign_id=cid, platform=platform, handle=handle))
+    db.session.add(Message(user_id=current_user.id, from_admin=False, sender_id=current_user.id,
+                           body=f"He solicitado unirme a «{camp.song}» con @{handle} ({PLATFORMS[platform]}).",
+                           read_by_admin=False, read_by_user=True))
+    db.session.commit()
+    flash("¡Solicitud enviada! Nuestro equipo te escribirá por el chat de soporte para verificar tu cuenta. "
+          "Cuando te aceptemos, podrás subir vídeos en esta campaña.", "ok")
+    return back
 
 
 @app.route("/enviar", methods=["GET", "POST"])
 @login_required
 def submit():
-    camps = active_campaigns()
+    joined = {a.campaign_id for a in CampaignAccount.query.filter_by(user_id=current_user.id, status="aceptada")}
+    camps = [c for c in active_campaigns() if c.id in joined]
     if request.method == "POST":
         camp = db.session.get(Campaign, request.form.get("campaign_id", type=int) or 0)
         if not camp:
@@ -1070,13 +1127,8 @@ def account():
                               f"Si es tuya, escríbenos{(' a ' + SUPPORT_EMAIL) if SUPPORT_EMAIL else ''}.", "error")
                         return redirect(url_for("account"))
                 setattr(current_user, f"{p}_handles", ",".join(handles))
-            keep = {f"{p}:{h}" for p in PLATFORMS for h in current_user.handles(p)}
-            current_user.verified_handles = ",".join(sorted(current_user.verified_set & keep))
             db.session.commit()
-            if current_user.pending_handles:
-                flash("Cuentas guardadas. Para verificarlas tienes que hablar con soporte: escríbenos por el chat.", "ok")
-            else:
-                flash("Cuentas guardadas.", "ok")
+            flash("Cuentas guardadas.", "ok")
         return redirect(request.args.get("next") and safe_next(request.args.get("next")) or url_for("account"))
     return render_template("account.html")
 
@@ -1100,7 +1152,8 @@ def admin_home():
         "pending": len(pending),
         "flagged": sum(1 for s in pending if s.flag_list),
     }
-    return render_template("admin/home.html", cards=cards, pending=pending, kpis=kpis,
+    joins = CampaignAccount.query.filter_by(status="pendiente").order_by(CampaignAccount.created_at).all()
+    return render_template("admin/home.html", cards=cards, pending=pending, kpis=kpis, joins=joins,
                            last_refresh=get_setting("last_refresh", "Nunca"),
                            has_token=bool(viewcounter.APIFY_TOKEN))
 
@@ -1432,9 +1485,6 @@ def support():
     msgs = conversation(current_user.id)
     mark_read(current_user.id, by_admin=False)
     prefill = ""
-    if request.args.get("verificar") and current_user.pending_handles:
-        accounts = ", ".join(f"@{h} ({PLATFORMS[p]})" for p, h in current_user.pending_handles)
-        prefill = f"Hola, quiero verificar mis cuentas: {accounts}."
     return render_template("support.html", msgs=msgs, prefill=prefill)
 
 
@@ -1477,7 +1527,9 @@ def admin_chat(uid):
         return redirect(url_for("admin_chat", uid=uid))
     msgs = conversation(user.id)
     mark_read(user.id, by_admin=True)
-    return render_template("admin/chat.html", user=user, msgs=msgs, m=user_money(user))
+    accounts = CampaignAccount.query.filter_by(user_id=user.id).order_by(CampaignAccount.created_at.desc()).all()
+    return render_template("admin/chat.html", user=user, msgs=msgs, m=user_money(user), accounts=accounts,
+                           join_statuses=JOIN_STATUSES)
 
 
 @app.route("/admin/mensajes/<int:uid>/nuevos")
@@ -1489,33 +1541,27 @@ def admin_chat_poll(uid):
     return {"messages": [message_json(m, True) for m in msgs]}
 
 
-@app.route("/admin/clipper/<int:uid>/cuenta", methods=["POST"])
+@app.route("/admin/cuenta-campana/<int:aid>/<accion>", methods=["POST"])
 @admin_required
-def admin_verify_handle(uid):
-    user = db.session.get(User, uid) or abort(404)
-    platform, handle, accion = request.form.get("platform"), request.form.get("handle", ""), request.form.get("accion")
-    if platform not in PLATFORMS or handle not in user.handles(platform) or accion not in ("verificar", "quitar", "rechazar"):
+def admin_campaign_account(aid, accion):
+    acc = db.session.get(CampaignAccount, aid) or abort(404)
+    if accion not in ("aceptar", "rechazar"):
         abort(400)
-    label = f"@{handle} de {PLATFORMS[platform]}"
-    if accion == "verificar":
-        user.set_verified(platform, handle, True)
-        note = f"Tu cuenta {label} ya está verificada ✓ Ya podemos aprobar los clips que publiques desde ella."
-        audit("cuenta_verificada", f"{user.email} · {label}")
-    elif accion == "quitar":
-        user.set_verified(platform, handle, False)
-        note = None
-        audit("verificacion_quitada", f"{user.email} · {label}")
+    label = f"@{acc.handle} ({PLATFORMS.get(acc.platform, acc.platform)})"
+    acc.status = "aceptada" if accion == "aceptar" else "rechazada"
+    acc.decided_at = datetime.utcnow()
+    if accion == "aceptar":
+        note = f"¡Te hemos aceptado en «{acc.campaign.song}» con {label}! Ya puedes subir tus vídeos desde la página de la campaña."
     else:
-        user.set_verified(platform, handle, False)
-        setattr(user, f"{platform}_handles", ",".join(h for h in user.handles(platform) if h != handle))
-        note = (f"No hemos podido verificar que {label} sea tuya, así que la hemos quitado de tus cuentas. "
-                "Si es tuya, vuelve a añadirla y escríbenos por aquí.")
-        audit("cuenta_rechazada", f"{user.email} · {label}")
-    if note:
-        db.session.add(Message(user_id=user.id, from_admin=True, sender_id=current_user.id, body=note,
-                               read_by_admin=True, read_by_user=False))
+        note = (f"No hemos podido aceptar {label} en «{acc.campaign.song}». "
+                "Si crees que es un error, respóndenos por aquí.")
+    db.session.add(Message(user_id=acc.user_id, from_admin=True, sender_id=current_user.id, body=note,
+                           read_by_admin=True, read_by_user=False))
+    audit("clipper_" + ("aceptado" if accion == "aceptar" else "rechazado"),
+          f"{acc.user.email} · {label} · «{acc.campaign.song}»")
     db.session.commit()
-    return redirect(url_for("admin_chat", uid=uid))
+    flash(f"{acc.user.name} {'aceptado' if accion == 'aceptar' else 'rechazado'} en «{acc.campaign.song}».", "ok")
+    return redirect(request.referrer or url_for("admin_home"))
 
 
 # ---------------------------------------------------------------- portada y solicitudes de campaña
