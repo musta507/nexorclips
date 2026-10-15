@@ -14,7 +14,7 @@
     <a class="btn accent" href="{{ url_for('account', next=request.path) }}#redes">Vincular mis cuentas</a>
   </div>
   {% elif camps %}
-  <form method="post" class="form-grid" style="align-items:end;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) auto">
+  <form method="post" class="form-grid send-form" style="align-items:end;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) auto">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <div class="field">
       <label for="campaign">Campaña</label>
@@ -38,17 +38,17 @@
   <div class="section-head"><h2>Tus clips</h2></div>
   <div class="table-card">
     {% if subs %}
-    <div class="table-scroll"><table>
+    <div class="table-scroll"><table class="rt">
       <thead><tr><th>Fecha</th><th>Clip</th><th>Campaña</th><th class="r">Vistas</th><th>Estado</th><th class="r">Ganado</th></tr></thead>
       <tbody>
       {% for s in subs %}
       <tr>
-        <td class="small muted">{{ s.created_at|date }}</td>
-        <td><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a></td>
-        <td>{{ s.campaign.song }}<div class="small muted">{{ s.campaign.artist }}</div></td>
-        <td class="r tnum"><b>{{ s.views|num }}</b>{% if s.views < s.campaign.min_views %}<div class="small muted">mín. {{ s.campaign.min_views|short }}</div>{% endif %}{% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}</td>
-        <td><span class="status {{ s.status }}">{{ s.status|capitalize }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
-        <td class="r tnum">{% if s.status == 'aprobado' %}<b>{{ s.earned|money }}</b>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td data-label="Fecha" class="small muted">{{ s.created_at|date }}</td>
+        <td data-label="Clip"><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a></td>
+        <td data-label="Campaña">{{ s.campaign.song }}<div class="small muted">{{ s.campaign.artist }}</div></td>
+        <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b>{% if s.views < s.campaign.min_views %}<div class="small muted">mín. {{ s.campaign.min_views|short }}</div>{% endif %}{% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}</td>
+        <td data-label="Estado"><span class="status {{ s.status }}">{{ s.status|capitalize }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
+        <td data-label="Ganado" class="r tnum">{% if s.status == 'aprobado' %}<b>{{ s.earned|money }}</b>{% else %}<span class="muted">—</span>{% endif %}</td>
       </tr>
       {% endfor %}
       </tbody>

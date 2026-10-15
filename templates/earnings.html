@@ -51,16 +51,16 @@
   {% if tab in ['disponible', 'pendiente'] %}
     {% set rows = m.earned_rows if tab == 'disponible' else m.pending_rows %}
     {% if rows %}
-    <div class="table-scroll"><table>
+    <div class="table-scroll"><table class="rt">
       <thead><tr><th>Fecha</th><th>Clip</th><th>Campaña</th><th class="r">Vistas</th><th class="r">Monto</th></tr></thead>
       <tbody>
       {% for s, a in rows %}
       <tr>
-        <td class="small muted">{{ s.created_at|date }}</td>
-        <td><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a></td>
-        <td>{{ s.campaign.song }}<div class="small muted">{{ s.campaign.artist }}</div></td>
-        <td class="r tnum">{{ s.views|num }}</td>
-        <td class="r tnum"><b>{{ a|money }}</b>{% if tab == 'pendiente' %}<div class="small muted">estimado</div>{% endif %}</td>
+        <td data-label="Fecha" class="small muted">{{ s.created_at|date }}</td>
+        <td data-label="Clip"><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a></td>
+        <td data-label="Campaña">{{ s.campaign.song }}<div class="small muted">{{ s.campaign.artist }}</div></td>
+        <td data-label="Vistas" class="r tnum">{{ s.views|num }}</td>
+        <td data-label="Monto" class="r tnum"><b>{{ a|money }}</b>{% if tab == 'pendiente' %}<div class="small muted">estimado</div>{% endif %}</td>
       </tr>
       {% endfor %}
       </tbody>
@@ -72,16 +72,16 @@
     {% endif %}
   {% else %}
     {% if payouts %}
-    <div class="table-scroll"><table>
+    <div class="table-scroll"><table class="rt">
       <thead><tr><th>Fecha</th><th>Método</th><th>Estado</th><th>Nota</th><th class="r">Monto</th></tr></thead>
       <tbody>
       {% for p in payouts %}
       <tr>
-        <td class="small muted">{{ p.created_at|date }}</td>
-        <td>{{ p.method }}</td>
-        <td><span class="status {{ p.status }}">{{ p.status|capitalize }}</span></td>
-        <td class="small muted">{% if p.status == "pagado" %}Pagado el {{ p.paid_at|date }}{% if p.note %} · {{ p.note }}{% endif %}{% else %}{{ p.note }}{% endif %}</td>
-        <td class="r tnum"><b>{{ p.amount|money }}</b></td>
+        <td data-label="Fecha" class="small muted">{{ p.created_at|date }}</td>
+        <td data-label="Método">{{ p.method }}</td>
+        <td data-label="Estado"><span class="status {{ p.status }}">{{ p.status|capitalize }}</span></td>
+        <td data-label="Nota" class="small muted">{% if p.status == "pagado" %}Pagado el {{ p.paid_at|date }}{% if p.note %} · {{ p.note }}{% endif %}{% else %}{{ p.note }}{% endif %}</td>
+        <td data-label="Monto" class="r tnum"><b>{{ p.amount|money }}</b></td>
       </tr>
       {% endfor %}
       </tbody>

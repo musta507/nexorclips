@@ -35,17 +35,17 @@
   <div class="section-head"><h2>Clips con más vistas</h2><p class="muted">Enlaces directos a cada vídeo publicado.</p></div>
   <div class="table-card">
     {% if top %}
-    <div class="table-scroll"><table>
+    <div class="table-scroll"><table class="rt">
       <thead><tr><th>#</th><th>Cuenta</th><th>Red</th><th>Publicado</th><th class="r">Vistas</th><th></th></tr></thead>
       <tbody>
       {% for s in top %}
       <tr>
-        <td class="tnum muted">{{ loop.index }}</td>
-        <td><b>{% if s.author %}@{{ s.author }}{% else %}—{% endif %}</b></td>
-        <td>{{ PLATFORMS[s.platform] }}</td>
-        <td class="small muted">{{ s.created_at|date }}</td>
-        <td class="r tnum"><b>{{ s.views|num }}</b></td>
-        <td class="r"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver vídeo</a></td>
+        <td data-label="#" class="tnum muted">{{ loop.index }}</td>
+        <td data-label="Cuenta"><b>{% if s.author %}@{{ s.author }}{% else %}—{% endif %}</b></td>
+        <td data-label="Red">{{ PLATFORMS[s.platform] }}</td>
+        <td data-label="Publicado" class="small muted">{{ s.created_at|date }}</td>
+        <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b></td>
+        <td data-label="" class="r"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver vídeo</a></td>
       </tr>
       {% endfor %}
       </tbody>

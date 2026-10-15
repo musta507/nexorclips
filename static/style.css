@@ -604,3 +604,50 @@ td a.link{color:var(--sapphire)}
 
 .landing > .wrap{width:100%}
 .landing{overflow-x:clip}
+
+/* ---------- móvil: las tablas se convierten en tarjetas, una por fila ---------- */
+@media (max-width:640px){
+  table.rt{min-width:0}
+  table.rt thead{display:none}
+  table.rt,table.rt tbody,table.rt tr,table.rt td{display:block;width:100%}
+  table.rt tr{padding:14px 16px;border-bottom:.5px solid rgba(60,60,67,.14)}
+  table.rt tr:last-child{border-bottom:0}
+  table.rt td{position:relative;padding:5px 0 5px 38%;border:0;text-align:right;min-height:30px;overflow-wrap:anywhere}
+  table.rt td::before{content:attr(data-label);position:absolute;left:0;top:6px;max-width:36%;font-size:13px;color:var(--muted);text-align:left}
+  table.rt td .flag{margin-left:4px}
+  table.rt td[data-label=""]::before{display:none}
+  table.rt td:first-child{text-align:left;padding:0 0 6px;font-size:15px}
+  table.rt td:first-child::before{display:none}
+  table.rt td:not([data-label]){text-align:center;padding:16px 0}
+  table.rt td .inline{justify-content:flex-end;flex-wrap:wrap}
+  table.rt td[data-label="Acción"],table.rt td[data-label=""]{text-align:left;padding:10px 0 0}
+  table.rt td[data-label="Acción"]::before{display:none}
+  table.rt td[data-label="Acción"] .inline{justify-content:flex-start}
+  table.rt td[data-label="Acción"] input{flex:1;min-width:120px;width:auto!important}
+  table.rt td.r,table.rt th.r{text-align:right}
+  table.rt tr.row-flag{background:#f5f7ff}
+  table.rt tr.row-flag td{background:transparent}
+  .chat-fab{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+}
+@media (max-width:640px){
+  .send-form{grid-template-columns:1fr!important}
+  .send-form .btn{width:100%}
+  .album{grid-template-columns:1fr;gap:18px;justify-items:center;text-align:center}
+  .album .art{width:min(240px,70%)}
+  .album-info{align-items:center}
+  .album-info .chips{justify-content:center}
+  .album-info .status{align-self:center}
+  .facts{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px}
+  .fact{padding:12px}
+  .fact b{font-size:20px}
+  .fact span{font-size:11px}
+}
+@media (max-width:640px){
+  input,textarea,select{font-size:16px}          /* evita que el iPhone haga zoom al tocar un campo */
+  .chat-form textarea{font-size:16px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .btn{min-height:44px}                           /* tamaño mínimo cómodo para el dedo */
+  .btn.sm{min-height:36px}
+}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+a,button,label{-webkit-tap-highlight-color:transparent}

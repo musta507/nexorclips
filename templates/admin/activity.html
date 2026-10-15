@@ -9,15 +9,15 @@
 </div>
 <div class="table-card">
   {% if logs %}
-  <div class="table-scroll"><table>
+  <div class="table-scroll"><table class="rt">
     <thead><tr><th>Fecha (UTC)</th><th>Quién</th><th>Acción</th><th>Detalle</th></tr></thead>
     <tbody>
     {% for l in logs %}
     <tr>
-      <td class="small muted tnum">{{ l.created_at|datetime }}</td>
-      <td class="small">{{ l.admin.name if l.admin else "Sistema" }}</td>
-      <td><span class="chip">{{ l.action|replace("_", " ")|capitalize }}</span></td>
-      <td class="small">{{ l.detail }}</td>
+      <td data-label="Fecha (UTC)" class="small muted tnum">{{ l.created_at|datetime }}</td>
+      <td data-label="Quién" class="small">{{ l.admin.name if l.admin else "Sistema" }}</td>
+      <td data-label="Acción"><span class="chip">{{ l.action|replace("_", " ")|capitalize }}</span></td>
+      <td data-label="Detalle" class="small">{{ l.detail }}</td>
     </tr>
     {% endfor %}
     </tbody>

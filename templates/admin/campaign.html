@@ -41,14 +41,14 @@
   </nav>
   <div class="table-card">
     {% if subs %}
-    <div class="table-scroll"><table>
+    <div class="table-scroll"><table class="rt">
       <thead><tr><th>Clipper</th><th>Clip</th><th>Vistas</th><th class="r">Gana</th><th>Estado</th><th>Acción</th></tr></thead>
       <tbody>
       {% for s in subs %}
       <tr{% if s.flag_list %} class="row-flag"{% endif %}>
-        <td><b>{{ s.user.name }}</b>{% if s.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">{{ s.created_at|ago }}</div></td>
-        <td><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">{{ PLATFORMS[s.platform] }}</a>{% include "admin/_flags.html" %}</td>
-        <td>
+        <td data-label="Clipper"><b>{{ s.user.name }}</b>{% if s.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">{{ s.created_at|ago }}</div></td>
+        <td data-label="Clip"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">{{ PLATFORMS[s.platform] }}</a>{% include "admin/_flags.html" %}</td>
+        <td data-label="Vistas">
           <form class="inline" method="post" action="{{ url_for('admin_review', sid=s.id, accion='visitas') }}" data-confirm="¿Corregir las vistas de este clip a mano? Su dinero se recalculará.">
             <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <input id="views-{{ s.id }}" name="views" value="{{ s.views }}" style="width:110px" inputmode="numeric" aria-label="Vistas" title="Puedes corregir las vistas a mano">
@@ -56,9 +56,9 @@
           </form>
           {% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}
         </td>
-        <td class="r tnum">{% if s.status == 'aprobado' %}{{ s.earned|money }}{% elif s.status == 'pendiente' %}<span class="muted">~{{ st.estimates.get(s.id, 0)|money }}</span>{% else %}—{% endif %}</td>
-        <td><span class="status {{ s.status }}">{{ s.status|capitalize }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
-        <td>{% include "admin/_review_buttons.html" %}</td>
+        <td data-label="Gana" class="r tnum">{% if s.status == 'aprobado' %}{{ s.earned|money }}{% elif s.status == 'pendiente' %}<span class="muted">~{{ st.estimates.get(s.id, 0)|money }}</span>{% else %}—{% endif %}</td>
+        <td data-label="Estado"><span class="status {{ s.status }}">{{ s.status|capitalize }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
+        <td data-label="Acción">{% include "admin/_review_buttons.html" %}</td>
       </tr>
       {% endfor %}
       </tbody>

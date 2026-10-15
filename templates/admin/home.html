@@ -43,16 +43,16 @@
   <div class="section-head"><h2>Clips por revisar ({{ kpis.pending }}){% if kpis.flagged %} · <span style="color:var(--amber)">{{ kpis.flagged }} con avisos</span>{% endif %}</h2></div>
   <div class="table-card">
   {% if pending %}
-    <div class="table-scroll"><table>
+    <div class="table-scroll"><table class="rt">
       <thead><tr><th>Clipper</th><th>Campaña</th><th>Clip</th><th class="r">Vistas</th><th>Acción</th></tr></thead>
       <tbody>
       {% for s in pending %}
       <tr{% if s.flag_list %} class="row-flag"{% endif %}>
-        <td><b>{{ s.user.name }}</b><div class="small muted">{{ s.user.email }}</div></td>
-        <td>{{ s.campaign.song }}</td>
-        <td><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver en {{ PLATFORMS[s.platform] }}</a><div class="small muted">{{ s.created_at|ago }}</div>{% include "admin/_flags.html" %}</td>
-        <td class="r tnum">{{ s.views|num }}<div class="small {% if s.views_error %}" style="color:var(--amber){% else %} muted{% endif %}">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</div></td>
-        <td>{% include "admin/_review_buttons.html" %}</td>
+        <td data-label="Clipper"><b>{{ s.user.name }}</b><div class="small muted">{{ s.user.email }}</div></td>
+        <td data-label="Campaña">{{ s.campaign.song }}</td>
+        <td data-label="Clip"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver en {{ PLATFORMS[s.platform] }}</a><div class="small muted">{{ s.created_at|ago }}</div>{% include "admin/_flags.html" %}</td>
+        <td data-label="Vistas" class="r tnum">{{ s.views|num }}<div class="small {% if s.views_error %}" style="color:var(--amber){% else %} muted{% endif %}">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</div></td>
+        <td data-label="Acción">{% include "admin/_review_buttons.html" %}</td>
       </tr>
       {% endfor %}
       </tbody>
@@ -66,18 +66,18 @@
 <section>
   <div class="section-head"><h2>Campañas</h2></div>
   <div class="table-card">
-    <div class="table-scroll"><table>
+    <div class="table-scroll"><table class="rt">
       <thead><tr><th>Campaña</th><th>Estado</th><th class="r">Pago / 1M</th><th>Repartido</th><th class="r">Vistas</th><th class="r">Clips</th><th></th></tr></thead>
       <tbody>
       {% for c, st in cards %}
       <tr>
-        <td><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<div class="small muted">{{ c.artist }} · {{ CATEGORY_ONE[c.category] }}</div></td>
-        <td><span class="status {{ c.status }}">{{ c.status|capitalize }}</span></td>
-        <td class="r tnum">{{ c.rate|money(0) }}</td>
-        <td class="tnum"><span class="small">{{ st.spent|money(0) }} / {{ c.budget|money(0) }}</span><div class="bar mini-bar" style="margin-top:6px"><span style="width:{{ st.pct }}%"></span></div></td>
-        <td class="r tnum">{{ st.views|short }}</td>
-        <td class="r tnum">{{ st.clips }}{% if st.pending %} <span class="small" style="color:var(--amber)">+{{ st.pending }}</span>{% endif %}</td>
-        <td class="r"><a class="btn sm soft" href="{{ url_for('admin_campaign', cid=c.id) }}">Abrir</a></td>
+        <td data-label="Campaña"><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<div class="small muted">{{ c.artist }} · {{ CATEGORY_ONE[c.category] }}</div></td>
+        <td data-label="Estado"><span class="status {{ c.status }}">{{ c.status|capitalize }}</span></td>
+        <td data-label="Pago / 1M" class="r tnum">{{ c.rate|money(0) }}</td>
+        <td data-label="Repartido" class="tnum"><span class="small">{{ st.spent|money(0) }} / {{ c.budget|money(0) }}</span><div class="bar mini-bar" style="margin-top:6px"><span style="width:{{ st.pct }}%"></span></div></td>
+        <td data-label="Vistas" class="r tnum">{{ st.views|short }}</td>
+        <td data-label="Clips" class="r tnum">{{ st.clips }}{% if st.pending %} <span class="small" style="color:var(--amber)">+{{ st.pending }}</span>{% endif %}</td>
+        <td data-label="" class="r"><a class="btn sm soft" href="{{ url_for('admin_campaign', cid=c.id) }}">Abrir</a></td>
       </tr>
       {% else %}
       <tr><td colspan="7"><div class="empty"><h3>Aún no hay campañas</h3><p class="muted">Crea la primera con «+ Nueva campaña».</p></div></td></tr>
