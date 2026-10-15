@@ -874,9 +874,11 @@ def login_dev():
 
 @app.route("/salir")
 def logout():
-    logout_user()
     session.clear()
-    return redirect(url_for("login"))
+    logout_user()        # después de vaciar la sesión: así también borra la cookie de «recordarme»
+    resp = redirect(url_for("index"))
+    resp.delete_cookie(app.config.get("REMEMBER_COOKIE_NAME", "remember_token"))
+    return resp
 
 
 # ---------------------------------------------------------------- páginas públicas

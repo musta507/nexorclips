@@ -553,3 +553,16 @@ def test_landing_next_step():
     assert c.get("/empezar?rol=clipper").headers["Location"].endswith("/login")
     assert c.get("/empezar?rol=campana").headers["Location"].endswith("/lanzar-campana")
     assert c.get("/empezar").headers["Location"].endswith("/")
+
+
+def test_logout_really_logs_out():
+    c = client_for("x@test.com")
+    with A.app.app_context():
+        pass
+    c.post("/login/dev", data={"email": "x@test.com", "_csrf": "t"})
+    assert c.get("/ganancias").status_code == 200
+    r = c.get("/salir")
+    assert r.status_code == 302
+    assert any("remember_token=;" in h for h in r.headers.getlist("Set-Cookie"))
+    assert c.get("/ganancias").status_code == 302          # ya no entra
+    assert "Siguiente" in c.get("/").get_data(as_text=True)
