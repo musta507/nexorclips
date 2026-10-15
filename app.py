@@ -83,6 +83,8 @@ ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").spl
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()           # avisos al móvil del admin con la app ntfy
+NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 BASE_URL = os.environ.get("BASE_URL", "").strip().strip('"').rstrip("/")
 if BASE_URL and not BASE_URL.startswith("http"):
     BASE_URL = "https://" + BASE_URL
@@ -1037,6 +1039,8 @@ def join_campaign(cid):
                            body=f"He solicitado unirme a «{camp.song}» con @{handle} ({PLATFORMS[platform]}).",
                            read_by_admin=False, read_by_user=True))
     db.session.commit()
+    notify_phone(f"🙋 {current_user.name} quiere unirse", f"«{camp.song}» con @{handle} ({PLATFORMS[platform]}). "
+                 "Escríbele para verificar la cuenta.", url_for("admin_chat", uid=current_user.id), tags="raising_hand")
     flash("¡Solicitud enviada! Nuestro equipo te escribirá por el chat de soporte para verificar tu cuenta. "
           "Cuando te aceptemos, podrás subir vídeos en esta campaña.", "ok")
     return back
@@ -1086,6 +1090,8 @@ def withdraw():
                               details=current_user.payout_details))
         db.session.commit()
         log.info("Retiro solicitado: user=%s amount=%s", current_user.id, m["available"])
+        notify_phone(f"💸 Retiro de {money(m['available'])}", f"{current_user.name} quiere cobrar en {current_user.payout_method}.",
+                     url_for("admin_clippers"), tags="money_with_wings")
         flash(f"Retiro de {money(m['available'])} solicitado. Lo pagaremos en un plazo de {PAYOUT_DAYS} días hábiles.", "ok")
     return redirect(url_for("earnings", tab="retiros"))
 
@@ -1427,6 +1433,23 @@ def unread_messages():
     return Message.query.filter_by(user_id=current_user.id, from_admin=True, read_by_user=False).count()
 
 
+def notify_phone(title, message, path="", tags="speech_balloon"):
+    """Manda un aviso al móvil del admin (app ntfy). Va en segundo plano: nunca frena ni rompe la web."""
+    if not NTFY_TOPIC:
+        return
+    base = BASE_URL or (request.host_url.rstrip("/") if request else "")
+    payload = {"topic": NTFY_TOPIC, "title": title[:120], "message": message[:400], "tags": [tags]}
+    if path and base:
+        payload["click"] = base + path
+
+    def send():
+        try:
+            requests.post(NTFY_SERVER, json=payload, timeout=8)
+        except Exception as e:                              # sin conexión o ntfy caído: solo se anota
+            log.warning("No se pudo enviar el aviso al móvil: %s", e)
+    threading.Thread(target=send, daemon=True).start()
+
+
 def notice_data():
     """Aviso de mensajes nuevos para el usuario actual: cuántos hay, de quién y el último texto."""
     n = unread_messages()
@@ -1479,6 +1502,8 @@ def post_message(owner_id, from_admin):
                 read_by_admin=from_admin, read_by_user=not from_admin)
     db.session.add(m)
     db.session.commit()
+    if not from_admin:
+        notify_phone(f"💬 {current_user.name}", body, url_for("admin_chat", uid=owner_id))
     return m, None
 
 
@@ -1652,6 +1677,8 @@ def launch():
                 message=form["message"][:3000], ip=ip))
             db.session.commit()
             log.info("Nueva solicitud de campaña: %s", form["brand"])
+            notify_phone(f"🎵 Nueva campaña: {form['brand']}", f"{form['name']} · {form['email']} · {form['budget'] or 'sin presupuesto'}",
+                         url_for("admin_leads"), tags="moneybag")
             return redirect(url_for("launch_thanks"))
     return render_template("launch.html", form=form, budgets=BUDGETS)
 

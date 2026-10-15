@@ -30,6 +30,7 @@ Artistas, streamers y marcas lanzan campañas. Los clippers entran con Google, p
 - **Mensajes:** chat privado con cada clipper. Ellos escriben desde «Soporte» (menú del avatar) y tú respondes desde tu bandeja, con avisos de no leídos y mensajes que llegan solos sin recargar. Tus respuestas salen firmadas como «Equipo NexorClips».
 - **Cobros:** de momento solo en USDT por la red TRC20. Si un clipper elige PayPal o transferencia y pulsa «Agregar cuenta», se le avisa de que solo está disponible cripto. La dirección se valida (empieza por T, 34 caracteres).
 - **Verificación de cuentas:** cada cuenta de redes que añade un clipper queda «Pendiente de verificar». Él pone su código (NX-XXXX) en la bio y te avisa por el chat de soporte; tú abres su chat en Mensajes y pulsas «Verificar» o «Rechazar». Sus clips se pueden enviar, pero no se pueden aprobar ni pagar hasta que la cuenta esté verificada.
+- **Avisos al móvil:** con la app gratuita ntfy y la variable `NTFY_TOPIC`, te llega una notificación cuando un clipper te escribe, pide unirse a una campaña o solicita un retiro, y cuando una marca pide lanzar campaña.
 - **Portada y solicitudes:** quien entra sin sesión ve una portada corta con dos caminos: «Empezar a clipear» (login con Google) o «Lanzar una campaña» (formulario para artistas y marcas, con protección anti-spam). Las solicitudes llegan a Admin → Solicitudes; desde ahí respondes por correo y pulsas «Crear campaña» con los datos ya rellenados.
 
 **Seguridad**

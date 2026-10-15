@@ -590,3 +590,28 @@ def test_logout_really_logs_out():
     assert any("remember_token=;" in h for h in r.headers.getlist("Set-Cookie"))
     assert c.get("/ganancias").status_code == 302          # ya no entra
     assert "Siguiente" in c.get("/").get_data(as_text=True)
+
+
+def test_phone_notifications(monkeypatch):
+    sent = []
+    monkeypatch.setattr(A, "NTFY_TOPIC", "prueba-topic")
+    monkeypatch.setattr(A.requests, "post", lambda url, json=None, timeout=None: sent.append((url, json)))
+
+    class NowThread:
+        def __init__(self, target, daemon=None): self.target = target
+        def start(self): self.target()
+    monkeypatch.setattr(A.threading, "Thread", NowThread)
+    cid = make_campaign(song="Neón")
+    a = client_for("a@test.com", verify=False)
+    post(a, "/soporte", body="Hola, ¿cuándo pagáis?")
+    post(a, f"/campana/{cid}/unirme", platform="tiktok", handle="ana")
+    admin = client_for("admin@test.com")
+    with A.app.app_context():
+        uid = A.User.query.filter_by(email="a@test.com").one().id
+    post(admin, f"/admin/mensajes/{uid}", body="Respuesta del admin")      # lo que escribe el admin no avisa
+    assert [j["topic"] for _, j in sent] == ["prueba-topic", "prueba-topic"]
+    assert "cuándo pagáis" in sent[0][1]["message"] and sent[0][1]["click"].endswith(f"/admin/mensajes/{uid}")
+    assert "quiere unirse" in sent[1][1]["title"] and "Neón" in sent[1][1]["message"]
+    monkeypatch.setattr(A, "NTFY_TOPIC", "")
+    post(a, "/soporte", body="otro")
+    assert len(sent) == 2                                                   # sin tema configurado, no se envía nada
