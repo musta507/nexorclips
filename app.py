@@ -77,7 +77,9 @@ ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").spl
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
+BASE_URL = os.environ.get("BASE_URL", "").strip().strip('"').rstrip("/")
+if BASE_URL and not BASE_URL.startswith("http"):
+    BASE_URL = "https://" + BASE_URL
 DEV_LOGIN = os.environ.get("DEV_LOGIN") == "1" and not PRODUCTION   # nunca disponible en producción
 
 PLATFORMS = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube Shorts"}
@@ -763,8 +765,12 @@ def active_campaigns():
 # ---------------------------------------------------------------- acceso con Google
 def redirect_uri():
     if BASE_URL:
-        return BASE_URL + url_for("google_callback")
-    return url_for("google_callback", _external=True)
+        uri = BASE_URL + url_for("google_callback")
+    else:
+        uri = url_for("google_callback", _external=True, _scheme="https" if PRODUCTION else None)
+    if PRODUCTION and uri.startswith("http://"):          # Google solo acepta https en producción
+        uri = "https://" + uri[len("http://"):]
+    return uri
 
 
 def sign_in(email, name, avatar="", sub=None):
