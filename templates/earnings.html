@@ -2,7 +2,7 @@
 {% from "_icons.html" import icon %}
 {% block title %}Ganancias · {{ APP_NAME }}{% endblock %}
 {% block content %}
-<div class="stats">
+<div class="stats four">
   <div class="card stat hero">
     <span class="l">Balance disponible</span>
     <div class="row">
@@ -14,22 +14,27 @@
       {% else %}
         <form method="post" action="{{ url_for('withdraw') }}">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <button class="btn sm" {% if m.available < MIN_WITHDRAW %}disabled title="Retiro mínimo {{ MIN_WITHDRAW|money(0) }}"{% endif %}>Retirar</button>
+          <button class="btn sm" {% if m.available < 0.01 or m.available < MIN_WITHDRAW %}disabled{% endif %}>Retirar</button>
         </form>
       {% endif %}
     </div>
     {% if m.open_payout %}
     <p class="small" style="color:rgba(255,255,255,.75)">{% if m.open_payout.status == "procesando" %}Enviando {{ m.open_payout.amount|money }} a tu cuenta de Whop. Llegará en unos minutos.{% elif m.open_payout.method == WHOP_METHOD %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo revisamos y te llega a tu Whop.{% else %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo pagamos en un plazo de {{ PAYOUT_DAYS }} días hábiles.{% endif %}</p>
-    {% elif m.available < MIN_WITHDRAW %}
+    {% elif MIN_WITHDRAW and m.available < MIN_WITHDRAW and m.available > 0 %}
     <div class="withdraw-goal">
       <div class="budget-row tnum"><span>Te faltan <b>{{ (MIN_WITHDRAW - m.available)|money }}</b> para poder retirar</span><span>Mín. {{ MIN_WITHDRAW|money(0) }}</span></div>
       <div class="budget-bar"><span style="width:{{ (m.available / MIN_WITHDRAW * 100)|round|int }}%"></span></div>
     </div>
     {% endif %}
-    <span class="small muted">{% if current_user.payout_ready %}Cobras por {{ current_user.payout_label }}{% if current_user.payout_method == WHOP_METHOD %} (al instante){% endif %} · <a href="{{ url_for('account') }}#cobro" style="text-decoration:underline">cambiar</a> · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% else %}Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}</span>
+    <span class="small muted">{% if current_user.payout_ready %}Cobras por {{ current_user.payout_label }}{% if current_user.payout_method == WHOP_METHOD %} (al instante){% endif %} · <a href="{{ url_for('account') }}#cobro" style="text-decoration:underline">cambiar</a>{% if MIN_WITHDRAW %} · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}{% else %}Conecta tu cuenta de cobro para retirar{% endif %}</span>
   </div>
   <div class="card stat">
-    <span class="l">Balance pendiente</span>
+    <span class="l">En campañas abiertas</span>
+    <span class="v">{{ m.live|amount }}</span>
+    <span class="small muted">Ya ganado. Podrás retirarlo cuando termine cada campaña</span>
+  </div>
+  <div class="card stat">
+    <span class="l">En revisión</span>
     <span class="v">{{ m.pending|amount }}</span>
     <span class="small muted">Estimación de clips que aún estamos revisando</span>
   </div>
@@ -43,13 +48,14 @@
 <div class="form-stack">
   <nav class="seg" aria-label="Tipo de movimiento">
     <a class="{% if tab == 'disponible' %}on{% endif %}" href="{{ url_for('earnings', tab='disponible') }}">Disponible</a>
-    <a class="{% if tab == 'pendiente' %}on{% endif %}" href="{{ url_for('earnings', tab='pendiente') }}">Pendiente</a>
+    <a class="{% if tab == 'curso' %}on{% endif %}" href="{{ url_for('earnings', tab='curso') }}">En curso</a>
+    <a class="{% if tab == 'pendiente' %}on{% endif %}" href="{{ url_for('earnings', tab='pendiente') }}">En revisión</a>
     <a class="{% if tab == 'retiros' %}on{% endif %}" href="{{ url_for('earnings', tab='retiros') }}">Retiros</a>
   </nav>
 
   <div class="table-card">
-  {% if tab in ['disponible', 'pendiente'] %}
-    {% set rows = m.earned_rows if tab == 'disponible' else m.pending_rows %}
+  {% if tab in ['disponible', 'curso', 'pendiente'] %}
+    {% set rows = m.earned_rows if tab == 'disponible' else (m.live_rows if tab == 'curso' else m.pending_rows) %}
     {% if rows %}
     <div class="table-scroll"><table class="rt">
       <thead><tr><th>Fecha</th><th>Clip</th><th>Campaña</th><th class="r">Vistas</th><th class="r">Monto</th></tr></thead>
@@ -66,7 +72,9 @@
       </tbody>
     </table></div>
     {% elif tab == 'disponible' %}
-    <div class="empty"><h3>Aún no tienes ganancias disponibles</h3><p class="muted">¡Envía clips a las campañas y empieza a ganar!</p></div>
+    <div class="empty"><h3>Aún no tienes ganancias disponibles</h3><p class="muted">Lo que ganas en una campaña pasa aquí cuando la campaña termina.</p></div>
+    {% elif tab == 'curso' %}
+    <div class="empty"><h3>Nada en campañas abiertas</h3><p class="muted">Cuando aprobemos tus clips, lo que ganen aparecerá aquí hasta que termine la campaña.</p></div>
     {% else %}
     <div class="empty"><h3>No tienes clips en revisión</h3><p class="muted">Cuando envíes un clip aparecerá aquí hasta que lo aprobemos.</p></div>
     {% endif %}

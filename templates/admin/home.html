@@ -41,15 +41,18 @@
 </div>
 
 <section id="unirse">
-  <div class="section-head"><h2>Clippers por verificar ({{ joins|length }})</h2><p class="muted">Quieren unirse a una campaña. Escríbeles por el chat para comprobar que la cuenta es suya y acéptalos.</p></div>
+  <div class="section-head"><h2>Clippers por verificar ({{ joins|length }})</h2><p class="muted">Quieren unirse a una campaña. Mira sus respuestas, escríbeles por el chat para comprobar que la cuenta es suya y acéptalos.</p></div>
   <div class="table-card">
     <div class="table-scroll"><table class="rt">
       <thead><tr><th>Clipper</th><th>Campaña</th><th>Cuenta</th><th>Pidió</th><th>Acción</th></tr></thead>
       <tbody>
       {% for a in joins %}
       <tr>
-        <td data-label="Clipper"><b>{{ a.user.name }}</b><div class="small muted">{{ a.user.email }}</div></td>
-        <td data-label="Campaña">{{ a.campaign.song }}</td>
+        <td data-label="Clipper"><a class="link" href="{{ url_for('admin_clipper', uid=a.user_id) }}"><b>{{ a.user.name }}</b></a><div class="small muted">{{ a.user.email }}</div></td>
+        <td data-label="Campaña">{{ a.campaign.song }}{% if a.answer_list %}
+          <details class="answers"><summary>Ver respuestas ({{ a.answer_list|length }})</summary>
+            {% for q, ans in a.answer_list %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}
+          </details>{% endif %}</td>
         <td data-label="Cuenta"><a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a><div class="small muted">{{ PLATFORMS[a.platform] }}</div></td>
         <td data-label="Pidió" class="small muted">{{ a.created_at|ago }}</td>
         <td data-label="Acción">
@@ -77,7 +80,7 @@
       <tbody>
       {% for s in pending %}
       <tr{% if s.flag_list %} class="row-flag"{% endif %}>
-        <td data-label="Clipper"><b>{{ s.user.name }}</b><div class="small muted">{{ s.user.email }}</div></td>
+        <td data-label="Clipper"><a class="link" href="{{ url_for('admin_clipper', uid=s.user_id) }}"><b>{{ s.user.name }}</b></a><div class="small muted">{{ s.user.email }}</div></td>
         <td data-label="Campaña">{{ s.campaign.song }}</td>
         <td data-label="Clip"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver en {{ PLATFORMS[s.platform] }}</a><div class="small muted">{{ s.created_at|ago }}</div>{% include "admin/_flags.html" %}</td>
         <td data-label="Vistas" class="r tnum">{{ s.views|num }}<div class="small {% if s.views_error %}" style="color:var(--amber){% else %} muted{% endif %}">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</div></td>

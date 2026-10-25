@@ -20,7 +20,7 @@
       <tbody>
       {% for p in open_requests %}
       <tr{% if p.user.is_banned %} class="row-flag"{% endif %}>
-        <td data-label="Clipper"><b>{{ p.user.name }}</b>{% if p.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">{{ p.user.email }} · {{ p.created_at|ago }}</div></td>
+        <td data-label="Clipper"><a class="link" href="{{ url_for('admin_clipper', uid=p.user_id) }}"><b>{{ p.user.name }}</b></a>{% if p.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">{{ p.user.email }} · {{ p.created_at|ago }}</div></td>
         <td data-label="Enviar a"><b>{{ p.method }}</b><div class="small selectable" style="word-break:break-all">{{ p.details }}</div></td>
         <td data-label="Monto" class="r tnum"><b>{{ p.amount|money }}</b></td>
         <td data-label="Acción">
@@ -62,7 +62,7 @@
       <tbody>
       {% for u, m, n in rows %}
       <tr{% if u.is_banned %} class="row-flag"{% endif %}>
-        <td data-label="Clipper"><b>{{ u.name }}</b>{% if u.is_admin %} <span class="admin-tag" style="font-size:10px">Admin</span>{% endif %}{% if u.is_banned %} <span class="flag">Bloqueado</span>{% endif %}
+        <td data-label="Clipper"><a class="link" href="{{ url_for('admin_clipper', uid=u.id) }}"><b>{{ u.name }}</b></a>{% if u.is_admin %} <span class="admin-tag" style="font-size:10px">Admin</span>{% endif %}{% if u.is_banned %} <span class="flag">Bloqueado</span>{% endif %}
           <div class="small muted">{{ u.email }} · desde {{ u.created_at|date }}</div>
           {% if u.is_banned and u.ban_reason %}<div class="small" style="color:var(--red)">{{ u.ban_reason }}</div>{% endif %}</td>
         <td data-label="Cuentas" class="small">{% for p in PLATFORMS %}{% for h in u.handles(p) %}<div class="hl">{{ icon(p) }} @{{ h }}</div>{% endfor %}{% endfor %}{% if not u.has_any_handle %}<span class="muted">Sin cuentas</span>{% endif %}</td>
@@ -73,6 +73,7 @@
         <td data-label="Disponible" class="r tnum"><b>{{ m.available|money }}</b>{% if m.debt %}<div class="small" style="color:var(--red)">Debe {{ m.debt|money }}</div>{% endif %}</td>
         <td data-label="" class="r">
           {% if not u.is_admin %}
+            <a class="btn sm" href="{{ url_for('admin_clipper', uid=u.id) }}" style="margin-bottom:6px">Ficha</a>
             <a class="btn sm soft" href="{{ url_for('admin_chat', uid=u.id) }}" style="margin-bottom:6px">Escribir</a>
             {% if u.is_banned %}
             <form method="post" action="{{ url_for('admin_ban', uid=u.id, accion='desbloquear') }}">

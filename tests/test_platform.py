@@ -314,10 +314,14 @@ def test_withdrawals(monkeypatch):
     with A.app.app_context():
         A.refresh_views()
     post(a, "/cuenta", section="cobro", payout_method=A.USDT_METHOD, payout_details=WALLET)
-    assert "mínimo" in flashes(post(a, "/ganancias/retirar"))[0][1]
+    assert "cuando la campaña termina" in flashes(post(a, "/ganancias/retirar"))[0][1]   # campaña abierta: aún no
     set_views(monkeypatch, {str(7300000000000000001): 450_000})     # 45 $
     with A.app.app_context():
         A.refresh_views()
+        u = A.User.query.filter_by(email="a@test.com").one()
+        assert A.user_money(u)["live"] == 45.0 and A.user_money(u)["available"] == 0
+    post(admin, f"/admin/campana/{cid}/cerrar")
+    assert "ha terminado" in a.get("/soporte").get_data(as_text=True)     # aviso por el chat
     assert flashes(post(a, "/ganancias/retirar"))[0][0] == "ok"
     assert "en curso" in flashes(post(a, "/ganancias/retirar"))[0][1]
     with A.app.app_context():
@@ -655,6 +659,7 @@ def _clipper_with_balance(monkeypatch, email="w@test.com", views=450_000):
     set_views(monkeypatch, {str(7300000000000000001): views})
     with A.app.app_context():
         A.refresh_views()
+    post(admin, f"/admin/campana/{cid}/cerrar")       # lo ganado se puede retirar al cerrar la campaña
     return c, admin
 
 
@@ -750,3 +755,72 @@ def test_admin_wipe_all_test_data(monkeypatch):
     with A.app.app_context():
         assert A.Campaign.query.count() == 0 and A.Submission.query.count() == 0 and A.Message.query.count() == 0
         assert [u.email for u in A.User.query.all()] == ["admin@test.com"]
+
+
+def test_email_register_and_login():
+    c = A.app.test_client()
+    with c.session_transaction() as s:
+        s["_csrf"] = "t"
+    r = c.post("/registro", data={"_csrf": "t", "name": "Lu", "email": "lu@test.com", "password": "corta"}, follow_redirects=True)
+    assert "8 caracteres" in r.get_data(as_text=True)
+    r = c.post("/registro", data={"_csrf": "t", "name": "Lu", "email": "admin@test.com", "password": "12345678"}, follow_redirects=True)
+    assert "se entra con Google" in r.get_data(as_text=True)
+    r = c.post("/registro", data={"_csrf": "t", "name": "Lu", "email": "Lu@Test.com", "password": "12345678"}, follow_redirects=True)
+    assert "Bienvenido, Lu" in r.get_data(as_text=True)
+    c.get("/salir")
+    c2 = A.app.test_client()
+    with c2.session_transaction() as s:
+        s["_csrf"] = "t"
+    r = c2.post("/login/correo", data={"_csrf": "t", "email": "lu@test.com", "password": "mala1234"}, follow_redirects=True)
+    assert "incorrectos" in r.get_data(as_text=True)
+    with c2.session_transaction() as s:
+        s["_csrf"] = "t"
+    r = c2.post("/login/correo", data={"_csrf": "t", "email": "lu@test.com", "password": "12345678"})
+    assert r.status_code == 302 and c2.get("/ganancias").status_code == 200
+    with A.app.app_context():                     # si luego entra con Google ese correo, la contraseña deja de valer
+        with A.app.test_request_context():
+            A.sign_in("lu@test.com", "Lu", sub="g-123")
+        u = A.User.query.filter_by(email="lu@test.com").one()
+        assert u.google_sub == "g-123" and u.password_hash == "" and not u.is_admin
+
+
+def test_join_questions_answers_and_clipper_page():
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/campana/nueva", song="Preguntas", artist="Rafa", rate_k="1", budget="100", pf_tiktok="on",
+         pf_instagram="on", status="activa", join_questions="¿Cuánto llevas clipeando?\n\n¿Clips al día?")
+    with A.app.app_context():
+        camp = A.Campaign.query.filter_by(song="Preguntas").one()
+        cid = camp.id
+        assert camp.question_list == ["¿Cuánto llevas clipeando?", "¿Clips al día?"] and camp.platform_list == ["tiktok", "instagram"]
+    c = client_for("q@test.com", verify=False)
+    assert "¿Clips al día?" in c.get(f"/campana/{cid}").get_data(as_text=True)
+    r = post(c, f"/campana/{cid}/unirme", platform="tiktok", handle="qq", q_0="2 años")
+    assert "todas las preguntas" in r.get_data(as_text=True)
+    post(c, f"/campana/{cid}/unirme", platform="tiktok", handle="qq", q_0="2 años", q_1="5")
+    post(c, f"/campana/{cid}/unirme", platform="instagram", handle="qq2")      # segunda cuenta: no repite preguntas
+    with A.app.app_context():
+        accs = A.CampaignAccount.query.filter_by(campaign_id=cid).order_by(A.CampaignAccount.id).all()
+        assert accs[0].answer_list == [("¿Cuánto llevas clipeando?", "2 años"), ("¿Clips al día?", "5")] and len(accs) == 2
+        uid = accs[0].user_id
+    assert "2 años" in admin.get("/admin").get_data(as_text=True)
+    html = admin.get(f"/admin/clipper/{uid}").get_data(as_text=True)
+    assert "2 años" in html and "@qq" in html and "Preguntas" in html
+    assert c.get(f"/admin/clipper/{uid}").status_code == 403
+
+
+def test_chat_photo():
+    from PIL import Image
+    img = io.BytesIO()
+    Image.new("RGB", (40, 30), (200, 10, 10)).save(img, "PNG")
+    img.seek(0)
+    c = client_for("f@test.com", verify=False)
+    r = c.post("/soporte", data={"_csrf": "t", "body": "", "image": (img, "cap.png", "image/png")},
+               content_type="multipart/form-data", headers={"X-Requested-With": "fetch"})
+    d = r.get_json()
+    assert d["ok"] and d["message"]["image"]
+    assert c.get(d["message"]["image"]).mimetype == "image/jpeg"
+    assert client_for("otro@test.com").get(d["message"]["image"]).status_code == 404
+    assert client_for("admin@test.com").get(d["message"]["image"]).status_code == 200
+    r = c.post("/soporte", data={"_csrf": "t", "body": "", "image": (io.BytesIO(b"nada"), "x.png", "image/png")},
+               content_type="multipart/form-data", headers={"X-Requested-With": "fetch"})
+    assert r.status_code == 400 and "no se puede abrir" in r.get_json()["error"]

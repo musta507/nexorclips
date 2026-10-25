@@ -20,6 +20,7 @@
     <div class="facts" style="grid-template-columns:1fr 1fr">
       <div class="fact"><b>{{ m.earned|money(0) }}</b><span>ganado</span></div>
       <div class="fact"><b>{{ m.available|money(0) }}</b><span>disponible</span></div>
+      <div class="fact"><b>{{ m.live|money(0) }}</b><span>en campañas abiertas</span></div>
       <div class="fact"><b>{{ m.paid|money(0) }}</b><span>pagado</span></div>
       <div class="fact"><b>{{ user.submissions|length }}</b><span>clips</span></div>
     </div>
@@ -30,6 +31,7 @@
         <div class="top">{{ icon(a.platform) }} <a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a>
           <span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></div>
         <span class="muted">en «{{ a.campaign.song }}»</span>
+        {% if a.answer_list %}<details class="answers"><summary>Sus respuestas</summary>{% for q, ans in a.answer_list %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}</details>{% endif %}
         {% if a.status == 'pendiente' %}
         <div class="inline" style="gap:6px">
           <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
@@ -42,7 +44,7 @@
     </div>
     <div class="small"><div class="label" style="margin-bottom:6px">Cobro</div>{% if user.payout_ready %}{% if user.payout_method == WHOP_METHOD %}Whop · <span class="selectable">@{{ user.whop_username }}</span>{% else %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% endif %}{% else %}<span class="muted">Sin cuenta de cobro</span>{% endif %}</div>
     {% if m.open_payout %}<div class="flash ok">Retiro pendiente de {{ m.open_payout.amount|money }}</div>{% endif %}
-    <a class="btn soft" href="{{ url_for('admin_clippers', q=user.email) }}">Ver en Clippers y retiros</a>
+    <a class="btn soft" href="{{ url_for('admin_clipper', uid=user.id) }}">Ver ficha del clipper</a>
   </aside>
 </div>
 {% endblock %}

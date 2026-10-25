@@ -43,6 +43,15 @@ document.addEventListener("click", function (e) {
   var form = chat.querySelector("[data-chat-form]");
   var box = form.querySelector("textarea");
   var errorBox = chat.querySelector(".chat-error");
+  var fileIn = form.querySelector("[data-chat-file]");
+  var fileBadge = form.querySelector(".chat-attach-n");
+  var fileName = chat.querySelector("[data-chat-file-name]");
+  function showFile() {
+    var f = fileIn && fileIn.files && fileIn.files[0];
+    if (fileBadge) fileBadge.hidden = !f;
+    if (fileName) { fileName.hidden = !f; fileName.textContent = f ? "📷 " + f.name + " · pulsa Enviar" : ""; }
+  }
+  if (fileIn) fileIn.addEventListener("change", showFile);
   var after = parseInt(chat.getAttribute("data-after") || "0", 10);
   var sending = false;
 
@@ -54,14 +63,21 @@ document.addEventListener("click", function (e) {
     var row = document.createElement("div");
     row.className = "msg " + (m.mine ? "mine" : "theirs");
     row.setAttribute("data-id", m.id);
-    var bubble = document.createElement("div");
-    bubble.className = "bubble";
-    bubble.textContent = m.body;
+    if (m.image) {
+      var a = document.createElement("a");
+      a.className = "chat-photo"; a.href = m.image; a.target = "_blank"; a.rel = "noopener";
+      var img = document.createElement("img"); img.src = m.image; img.alt = "Foto";
+      img.addEventListener("load", scrollDown);
+      a.appendChild(img); row.appendChild(a);
+    }
+    var bubble = null;
+    if (m.body) { bubble = document.createElement("div"); bubble.className = "bubble"; bubble.textContent = m.body; }
     var meta = document.createElement("div");
     meta.className = "meta";
     meta.textContent = (m.mine ? "" : m.who + " · ") + m.ago;
     meta.title = m.at + " UTC";
-    row.appendChild(bubble); row.appendChild(meta);
+    if (bubble) row.appendChild(bubble);
+    row.appendChild(meta);
     log.appendChild(row);
     after = Math.max(after, m.id);
     scrollDown();
@@ -81,12 +97,16 @@ document.addEventListener("click", function (e) {
   });
   form.addEventListener("submit", function (e) {
     e.preventDefault();
-    if (sending || !box.value.trim()) return;
+    var hasFile = fileIn && fileIn.files && fileIn.files.length;
+    if (sending || (!box.value.trim() && !hasFile)) return;
     sending = true; errorBox.hidden = true;
     fetch(form.action, { method: "POST", body: new FormData(form), headers: { "X-Requested-With": "fetch" }, credentials: "same-origin" })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (r) {
+        if (r.status === 413) return { ok: false, d: { error: "La foto es demasiado grande (máximo 8 MB)." } };
+        return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+      })
       .then(function (res) {
-        if (res.ok && res.d.ok) { add(res.d.message); box.value = ""; grow(); }
+        if (res.ok && res.d.ok) { add(res.d.message); box.value = ""; if (fileIn) fileIn.value = ""; showFile(); grow(); }
         else { errorBox.textContent = res.d.error || "No se pudo enviar. Inténtalo otra vez."; errorBox.hidden = false; }
       })
       .catch(function () { errorBox.textContent = "Sin conexión. Inténtalo otra vez."; errorBox.hidden = false; })

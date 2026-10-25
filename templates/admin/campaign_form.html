@@ -36,6 +36,10 @@
       <div class="field"><label for="max_per_video">Pago máximo por clip ({{ CUR_CODE }}, vacío = sin tope)</label><input id="max_per_video" name="max_per_video" value="{{ '%g'|format(camp.max_per_video) if camp.max_per_video else '' }}" inputmode="decimal"></div>
     </div>
 
+    <div class="field"><label for="join_questions">Preguntas para unirse (una por línea)</label>
+      <textarea id="join_questions" name="join_questions" rows="4" placeholder="¿Cuánto tiempo llevas haciendo clips?&#10;Pásanos un clip tuyo que haya funcionado bien&#10;¿Cuántos clips puedes publicar al día?">{{ camp.join_questions or '' }}</textarea>
+      <span class="hint">El clipper las responde al pedir entrar y tú ves sus respuestas antes de aceptarlo. Déjalo vacío si no quieres preguntar nada.</span></div>
+
     <div class="field">
       <span class="label">Redes aceptadas</span>
       <div class="inline" style="gap:18px;flex-wrap:wrap">

@@ -4,18 +4,25 @@
     {% for m in msgs %}
       {% set mine = (m.from_admin == viewer_admin) %}
       <div class="msg {{ 'mine' if mine else 'theirs' }}" data-id="{{ m.id }}">
-        <div class="bubble">{{ m.body }}</div>
+        {% if m.image_mime %}<a class="chat-photo" href="{{ url_for('chat_image', mid=m.id) }}" target="_blank" rel="noopener"><img src="{{ url_for('chat_image', mid=m.id) }}" alt="Foto" loading="lazy"></a>{% endif %}
+        {% if m.body %}<div class="bubble">{{ m.body }}</div>{% endif %}
         <div class="meta">{% if not mine %}{{ ("Equipo " ~ APP_NAME) if m.from_admin else m.user.name }} · {% endif %}{% if viewer_admin and mine and m.sender %}{{ m.sender.name }} · {% endif %}<span title="{{ m.created_at|datetime }} UTC">{{ m.created_at|ago }}</span></div>
       </div>
     {% else %}
       <div class="chat-empty" id="chat-empty">{{ empty_text }}</div>
     {% endfor %}
   </div>
-  <form class="chat-form" method="post" action="{{ post_url }}" data-chat-form>
+  <form class="chat-form" method="post" action="{{ post_url }}" enctype="multipart/form-data" data-chat-form>
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <label class="sr-only" for="chat-body">Mensaje</label>
-    <textarea id="chat-body" name="body" rows="1" maxlength="2000" placeholder="Escribe un mensaje…" required>{{ prefill or "" }}</textarea>
+    <label class="chat-attach" title="Enviar una foto o captura" aria-label="Adjuntar foto">
+      <input type="file" name="image" accept="image/*" hidden data-chat-file>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>
+      <span class="chat-attach-n" hidden>1</span>
+    </label>
+    <textarea id="chat-body" name="body" rows="1" maxlength="2000" placeholder="Escribe un mensaje…">{{ prefill or "" }}</textarea>
     <button class="btn accent" aria-label="Enviar mensaje">Enviar</button>
   </form>
+  <p class="chat-file-name small muted" hidden data-chat-file-name></p>
   <p class="chat-error" id="chat-error" role="alert" hidden></p>
 </div>

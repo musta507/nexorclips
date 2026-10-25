@@ -22,6 +22,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect as sa_inspect, text
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
 
 import views as viewcounter
 
@@ -79,7 +80,7 @@ SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "")
 CURRENCY = os.environ.get("CURRENCY", "$")
 CURRENCY_CODE = os.environ.get("CURRENCY_CODE", "USD")
 REFRESH_DAYS = int(os.environ.get("REFRESH_DAYS", "14"))       # dejar de actualizar clips más antiguos
-MIN_WITHDRAW = float(os.environ.get("MIN_WITHDRAW", "30"))
+MIN_WITHDRAW = float(os.environ.get("MIN_WITHDRAW", "0"))           # 0 = sin mínimo
 MAX_CLIPS_DAY = int(os.environ.get("MAX_CLIPS_DAY", "30"))     # límite de clips por clipper y día
 PAYOUT_DAYS = int(os.environ.get("PAYOUT_DAYS", "7"))          # plazo de pago que se promete al clipper
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").split(",") if e.strip()}
@@ -91,7 +92,7 @@ NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 WHOP_API_KEY = os.environ.get("WHOP_API_KEY", "").strip()
 WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
 WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip("/")
-WHOP_AUTO_MAX = float(os.environ.get("WHOP_AUTO_MAX", "500"))   # por encima, el retiro espera a que lo apruebe un admin
+WHOP_AUTO_MAX = float(os.environ.get("WHOP_AUTO_MAX", "0"))     # 0 = siempre automático; si se pone, por encima lo aprueba un admin
 WHOP_USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,40}$")
 BASE_URL = os.environ.get("BASE_URL", "").strip().strip('"').rstrip("/")
 if BASE_URL and not BASE_URL.startswith("http"):
@@ -115,6 +116,7 @@ FLAG_LABELS = {
     "pocos_likes": "Muy pocos likes para sus vistas",
 }
 MAX_HANDLES = 5
+MAX_QUESTIONS = 10
 CENT = 0.005
 
 db = SQLAlchemy(app)
@@ -130,6 +132,7 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(120), nullable=False)
     avatar_url = db.Column(db.String(500), default="")
     google_sub = db.Column(db.String(64), unique=True, nullable=True)
+    password_hash = db.Column(db.String(255), default="")      # solo si se registró con correo y contraseña
     is_admin = db.Column(db.Boolean, default=False)
     is_banned = db.Column(db.Boolean, default=False)
     ban_reason = db.Column(db.String(255), default="")
@@ -195,10 +198,15 @@ class Campaign(db.Model):
     status = db.Column(db.String(20), default="activa")     # activa / pausada / finalizada
     featured = db.Column(db.Boolean, default=False)
     category = db.Column(db.String(20), default="musica")
+    join_questions = db.Column(db.Text, default="")         # preguntas para unirse, una por línea
     report_token = db.Column(db.String(40), unique=True, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     submissions = db.relationship("Submission", backref="campaign", lazy=True)
+
+    @property
+    def question_list(self):
+        return [q.strip() for q in (self.join_questions or "").splitlines() if q.strip()][:MAX_QUESTIONS]
 
     @property
     def platform_list(self):
@@ -283,6 +291,8 @@ class Message(db.Model):
     from_admin = db.Column(db.Boolean, default=False)
     sender_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     body = db.Column(db.Text, nullable=False)
+    image_data = db.deferred(db.Column(db.LargeBinary, nullable=True))     # foto adjunta (captura, etc.)
+    image_mime = db.Column(db.String(40), default="")
     read_by_admin = db.Column(db.Boolean, default=False)
     read_by_user = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
@@ -299,10 +309,18 @@ class CampaignAccount(db.Model):
     platform = db.Column(db.String(20), nullable=False)
     handle = db.Column(db.String(100), nullable=False)
     status = db.Column(db.String(20), default="pendiente", index=True)    # pendiente · aceptada · rechazada
+    answers = db.Column(db.Text, default="")                              # respuestas al formulario (JSON)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime, nullable=True)
     user = db.relationship("User")
     campaign = db.relationship("Campaign")
+
+    @property
+    def answer_list(self):
+        try:
+            return [(str(q), str(a)) for q, a in json.loads(self.answers or "[]")]
+        except (ValueError, TypeError):
+            return []
 
 
 JOIN_STATUSES = {"pendiente": "Pendiente de verificar", "aceptada": "Aceptada", "rechazada": "Rechazada"}
@@ -420,8 +438,21 @@ def raw_earning(sub, camp):
 
 def finalize_if_exhausted(camp):
     if camp.exhausted and camp.status == "activa":
-        camp.status, camp.ended_at = "finalizada", datetime.utcnow()
+        close_campaign(camp)
         log.info("Campaña %s agotada y finalizada", camp.id)
+
+
+def close_campaign(camp, sender_id=None):
+    """Cierra la campaña y avisa por el chat a cada clipper de lo que ya puede retirar."""
+    camp.status, camp.ended_at = "finalizada", datetime.utcnow()
+    totals = {}
+    for s in camp.submissions:
+        if s.status == "aprobado" and (s.earned or 0) > 0:
+            totals[s.user_id] = totals.get(s.user_id, 0) + s.earned
+    for uid, amount in totals.items():
+        db.session.add(Message(user_id=uid, from_admin=True, sender_id=sender_id, read_by_admin=True, read_by_user=False,
+                               body=f"La campaña «{camp.song}» ha terminado. Ya puedes retirar lo que ganaste en ella: "
+                                    f"{money(amount)}. Ve a Ganancias y pulsa «Retirar»."))
 
 
 def accrue(sub, allow_decrease=False):
@@ -479,26 +510,31 @@ def campaign_stats(camp):
 
 
 def user_money(user):
-    """Disponible = ganado en clips aprobados − retirado. Pendiente = estimación de clips en revisión."""
-    earned_rows, pending_rows, stats = [], [], {}
+    """Disponible = ganado en clips aprobados de campañas ya cerradas − retirado.
+    En curso = ganado en campañas que siguen abiertas (se libera al cerrarse). Pendiente = clips en revisión."""
+    earned_rows, live_rows, pending_rows, stats = [], [], [], {}
     for s in user.submissions:
         if s.status == "aprobado":
-            earned_rows.append((s, cents(s.earned)))
+            (earned_rows if s.campaign.status == "finalizada" else live_rows).append((s, cents(s.earned)))
         elif s.status == "pendiente":
             st = stats.setdefault(s.campaign_id, campaign_stats(s.campaign))
             pending_rows.append((s, st["estimates"].get(s.id, 0)))
-    earned = cents(sum(a for _, a in earned_rows))
+    closed = cents(sum(a for _, a in earned_rows))
+    live = cents(sum(a for _, a in live_rows))
+    earned = cents(closed + live)
     withdrawn = cents(sum(p.amount for p in user.payouts if p.status in PAYOUT_OPEN + ("pagado",)))
     paid = cents(sum(p.amount for p in user.payouts if p.status == "pagado"))
-    balance = cents(earned - withdrawn)
+    balance = cents(closed - withdrawn)
     return {
         "earned": earned,
+        "live": live,
         "pending": cents(sum(a for _, a in pending_rows)),
         "available": max(balance, 0.0),
         "debt": max(-balance, 0.0),
         "paid": paid,
         "open_payout": next((p for p in user.payouts if p.status in PAYOUT_OPEN), None),
         "earned_rows": sorted(earned_rows, key=lambda r: r[0].created_at, reverse=True),
+        "live_rows": sorted(live_rows, key=lambda r: r[0].created_at, reverse=True),
         "pending_rows": sorted(pending_rows, key=lambda r: r[0].created_at, reverse=True),
     }
 
@@ -867,18 +903,20 @@ def redirect_uri():
     return uri
 
 
-def sign_in(email, name, avatar="", sub=None):
+def sign_in(email, name, avatar="", sub=None, password_user=None):
     email = email.lower()
-    user = (User.query.filter_by(google_sub=sub).first() if sub else None) or User.query.filter_by(email=email).first()
+    user = password_user or (User.query.filter_by(google_sub=sub).first() if sub else None) or User.query.filter_by(email=email).first()
     if not user:
         user = User(email=email, name=(name or email.split("@")[0])[:120], accepted_terms_at=datetime.utcnow())
         db.session.add(user)
         log.info("Nuevo usuario: %s", email)
+    if sub and not user.google_sub and user.password_hash:
+        user.password_hash = ""      # Google confirma que el correo es suyo: la contraseña puesta por otro deja de valer
     user.google_sub = sub or user.google_sub
     user.avatar_url = (avatar or user.avatar_url or "")[:500]
     if not user.accepted_terms_at:
         user.accepted_terms_at = datetime.utcnow()
-    if email in ADMIN_EMAILS:
+    if email in ADMIN_EMAILS and password_user is None:   # el admin solo se activa entrando con Google, nunca con contraseña
         user.is_admin = True
     db.session.commit()
     session.pop("_csrf", None)            # código de seguridad nuevo en cada inicio de sesión
@@ -895,7 +933,78 @@ def safe_next(nxt):
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("index"))
-    return render_template("login.html", google_ready=bool(GOOGLE_CLIENT_ID), dev_login=DEV_LOGIN)
+    mode = "registro" if request.args.get("modo") == "registro" else "entrar"
+    return render_template("login.html", google_ready=bool(GOOGLE_CLIENT_ID), dev_login=DEV_LOGIN, mode=mode,
+                           form_email=session.pop("form_email", ""), form_name=session.pop("form_name", ""))
+
+
+EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
+_login_fails = {}
+
+
+def too_many_fails(key):
+    now = time.time()
+    tries = [t for t in _login_fails.get(key, []) if now - t < 900]
+    _login_fails[key] = tries
+    return len(tries) >= 10
+
+
+@app.route("/login/correo", methods=["POST"])
+def login_email():
+    email = (request.form.get("email") or "").strip().lower()
+    password = request.form.get("password") or ""
+    ip = request.remote_addr or ""
+    if too_many_fails(ip):
+        flash("Demasiados intentos. Espera unos minutos y vuelve a probar.", "error")
+        return redirect(url_for("login"))
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.password_hash or not check_password_hash(user.password_hash, password):
+        _login_fails.setdefault(ip, []).append(time.time())
+        session["form_email"] = email[:255]
+        if user and not user.password_hash:
+            flash("Esa cuenta se creó con Google. Pulsa «Continuar con Google».", "error")
+        else:
+            flash("Correo o contraseña incorrectos.", "error")
+        return redirect(url_for("login"))
+    sign_in(user.email, user.name, password_user=user)
+    return redirect(url_for("index"))
+
+
+@app.route("/registro", methods=["POST"])
+def register():
+    name = (request.form.get("name") or "").strip()[:120]
+    email = (request.form.get("email") or "").strip().lower()[:255]
+    password = request.form.get("password") or ""
+    back = redirect(url_for("login", modo="registro"))
+    session["form_email"], session["form_name"] = email, name
+    if too_many_fails("reg:" + (request.remote_addr or "")):
+        flash("Has creado varias cuentas seguidas. Inténtalo más tarde.", "error")
+        return back
+    if not name:
+        flash("Escribe tu nombre.", "error")
+        return back
+    if not EMAIL_RE.match(email):
+        flash("Escribe un correo válido.", "error")
+        return back
+    if len(password) < 8:
+        flash("La contraseña tiene que tener al menos 8 caracteres.", "error")
+        return back
+    if email in ADMIN_EMAILS:
+        flash("Con este correo se entra con Google.", "error")
+        return back
+    if User.query.filter_by(email=email).first():
+        flash("Ya hay una cuenta con ese correo. Entra con ella.", "error")
+        return redirect(url_for("login"))
+    user = User(email=email, name=name, password_hash=generate_password_hash(password), accepted_terms_at=datetime.utcnow())
+    db.session.add(user)
+    db.session.commit()
+    _login_fails.setdefault("reg:" + (request.remote_addr or ""), []).append(time.time())
+    session.pop("form_email", None)
+    session.pop("form_name", None)
+    log.info("Nuevo usuario con correo: %s", email)
+    sign_in(email, name, password_user=user)
+    flash(f"¡Bienvenido, {name}! Elige una campaña y pide unirte.", "ok")
+    return redirect(url_for("index"))
 
 
 @app.route("/login/google")
@@ -1091,6 +1200,15 @@ def join_campaign(cid):
         flash("Ya has añadido esa cuenta a esta campaña." if existing.user_id == current_user.id
               else f"La cuenta @{handle} ya está en esta campaña con otro clipper.", "error")
         return back
+    first_join = not campaign_accounts(current_user.id, cid)
+    answers = []
+    if first_join:
+        for i, q in enumerate(camp.question_list):
+            a = (request.form.get(f"q_{i}") or "").strip()[:1500]
+            if not a:
+                flash("Responde a todas las preguntas para enviar tu solicitud.", "error")
+                return back
+            answers.append([q, a])
     if len(campaign_accounts(current_user.id, cid)) >= MAX_JOIN_ACCOUNTS:
         flash(f"Puedes añadir como máximo {MAX_JOIN_ACCOUNTS} cuentas por campaña.", "error")
         return back
@@ -1100,14 +1218,15 @@ def join_campaign(cid):
             flash(f"Ya tienes {MAX_HANDLES} cuentas de {PLATFORMS[platform]} vinculadas. Quita alguna en «Mi cuenta».", "error")
             return back
         setattr(current_user, f"{platform}_handles", ",".join(linked + [handle]))
-    db.session.add(CampaignAccount(user_id=current_user.id, campaign_id=cid, platform=platform, handle=handle))
+    db.session.add(CampaignAccount(user_id=current_user.id, campaign_id=cid, platform=platform, handle=handle,
+                                   answers=json.dumps(answers, ensure_ascii=False) if answers else ""))
     db.session.add(Message(user_id=current_user.id, from_admin=False, sender_id=current_user.id,
                            body=f"He solicitado unirme a «{camp.song}» con @{handle} ({PLATFORMS[platform]}).",
                            read_by_admin=False, read_by_user=True))
     db.session.commit()
     notify_phone(f"🙋 {current_user.name} quiere unirse", f"«{camp.song}» con @{handle} ({PLATFORMS[platform]}). "
                  "Escríbele para verificar la cuenta.", url_for("admin_chat", uid=current_user.id), tags="raising_hand")
-    flash("¡Solicitud enviada! Nuestro equipo te escribirá por el chat de soporte para verificar tu cuenta. "
+    flash("¡Solicitud enviada! El equipo revisará tus respuestas y te escribirá por el chat para verificar tu cuenta. "
           "Cuando te aceptemos, podrás subir vídeos en esta campaña.", "ok")
     return back
 
@@ -1133,7 +1252,7 @@ def submit():
 @login_required
 def earnings():
     tab = request.args.get("tab", "disponible")
-    if tab not in ("disponible", "pendiente", "retiros"):
+    if tab not in ("disponible", "curso", "pendiente", "retiros"):
         tab = "disponible"
     whop_sync([p for p in current_user.payouts if p.status == "procesando"])
     m = user_money(current_user)
@@ -1156,12 +1275,15 @@ def withdraw():
                                                    Payout.status.in_(PAYOUT_OPEN)).first():
             flash("Ya tienes un retiro en curso. Podrás pedir otro cuando termine.", "error")
             return redirect(url_for("earnings", tab="retiros"))
+        if m["available"] < CENT:
+            flash("Aún no tienes saldo para retirar. Lo que ganas en una campaña se puede retirar cuando la campaña termina.", "error")
+            return redirect(url_for("earnings"))
         if m["available"] < MIN_WITHDRAW:
             flash(f"El retiro mínimo es {money(MIN_WITHDRAW)}.", "error")
             return redirect(url_for("earnings", tab="retiros"))
         amount = m["available"]
         is_whop = current_user.payout_method == WHOP_METHOD
-        auto = is_whop and amount <= WHOP_AUTO_MAX
+        auto = is_whop and whop_enabled() and (WHOP_AUTO_MAX <= 0 or amount <= WHOP_AUTO_MAX)
         payout = Payout(user_id=current_user.id, amount=amount, method=current_user.payout_method,
                         status="procesando" if auto else "solicitado",
                         details=(f"@{current_user.whop_username} ({current_user.whop_user_id})" if is_whop
@@ -1316,6 +1438,8 @@ def _campaign_from_form(camp):
     sound_url = request.form.get("sound_url", "").strip()[:500]
     camp.sound_url = sound_url if sound_url.startswith(("https://", "http://")) else ""
     camp.rules = request.form.get("rules", "").strip()[:5000]
+    qs = [q.strip()[:300] for q in (request.form.get("join_questions") or "").splitlines() if q.strip()]
+    camp.join_questions = "\n".join(qs[:MAX_QUESTIONS])
     if request.form.get("rate_k") is not None:          # el formulario pide el pago por cada 1.000 vistas
         camp.rate = round((parse_float(request.form.get("rate_k"), 0) or 0) * 1000, 4)
     else:
@@ -1330,7 +1454,10 @@ def _campaign_from_form(camp):
     camp.max_per_video = max_pv if max_pv and max_pv > 0 else None
     camp.platforms = ",".join(p for p in PLATFORMS if request.form.get(f"pf_{p}")) or "tiktok"
     status = request.form.get("status", "activa")
-    camp.status = status if status in ("activa", "pausada", "finalizada") else "activa"
+    status = status if status in ("activa", "pausada", "finalizada") else "activa"
+    if status == "finalizada" and camp.id and camp.status != "finalizada":
+        close_campaign(camp, current_user.id)          # al cerrarla, los clippers ya pueden retirar
+    camp.status = status
     camp.featured = bool(request.form.get("featured"))
     cat = request.form.get("category", "musica")
     camp.category = cat if cat in CATEGORIES else "otro"
@@ -1483,6 +1610,50 @@ def admin_probe():
     if request.method == "POST":
         result = viewcounter.probe(request.form.get("url", ""))
     return render_template("admin/probe.html", result=result, has_token=bool(viewcounter.APIFY_TOKEN))
+
+
+@app.route("/admin/campana/<int:cid>/cerrar", methods=["POST"])
+@admin_required
+def admin_campaign_close(cid):
+    camp = db.session.get(Campaign, cid) or abort(404)
+    if camp.status == "finalizada":
+        flash("La campaña ya estaba cerrada.", "info")
+    else:
+        close_campaign(camp, current_user.id)
+        audit("campaña_cerrada", f"#{camp.id} {camp.song} · repartido {money(camp.spent)}")
+        db.session.commit()
+        flash("Campaña cerrada. Los clippers ya pueden retirar lo que ganaron y les hemos avisado por el chat.", "ok")
+    return redirect(url_for("admin_campaign", cid=cid))
+
+
+@app.route("/admin/clipper/<int:uid>")
+@admin_required
+def admin_clipper(uid):
+    user = db.session.get(User, uid) or abort(404)
+    m = user_money(user)
+    subs = sorted(user.submissions, key=lambda s: s.created_at, reverse=True)
+    accounts = CampaignAccount.query.filter_by(user_id=uid).order_by(CampaignAccount.created_at).all()
+    per_camp = {}
+    for a in accounts:
+        row = per_camp.setdefault(a.campaign_id, {"camp": a.campaign, "accounts": [], "answers": [], "clips": 0,
+                                                 "views": 0, "earned": 0.0, "pending": 0})
+        row["accounts"].append(a)
+        if a.answer_list and not row["answers"]:
+            row["answers"] = a.answer_list
+    for s in subs:
+        row = per_camp.setdefault(s.campaign_id, {"camp": s.campaign, "accounts": [], "answers": [], "clips": 0,
+                                                 "views": 0, "earned": 0.0, "pending": 0})
+        if s.status == "aprobado":
+            row["clips"] += 1
+            row["views"] += s.views or 0
+            row["earned"] = cents(row["earned"] + (s.earned or 0))
+        elif s.status == "pendiente":
+            row["pending"] += 1
+    payouts = sorted(user.payouts, key=lambda p: p.created_at, reverse=True)
+    views = sum(s.views or 0 for s in subs if s.status == "aprobado")
+    return render_template("admin/clipper.html", user=user, m=m, subs=subs, camps=list(per_camp.values()),
+                           payouts=payouts, views=views, join_statuses=JOIN_STATUSES,
+                           unread=Message.query.filter_by(user_id=uid, from_admin=False, read_by_admin=False).count())
 
 
 def whop_call(method, path, **kw):
@@ -1714,7 +1885,8 @@ def notice_data():
                 .order_by(Message.id.desc()).first())
         who, url = f"Equipo {APP_NAME}", url_for("support")
         title = f"Equipo {APP_NAME} te ha escrito" if n == 1 else f"Tienes {n} mensajes del equipo {APP_NAME}"
-    body = last.body if len(last.body) <= 140 else last.body[:137].rstrip() + "…"
+    text_ = last.body or ("📷 Foto" if last.image_mime else "")
+    body = text_ if len(text_) <= 140 else text_[:137].rstrip() + "…"
     return {"unread": n, "id": last.id, "title": title, "who": who, "body": body, "url": url,
             "ago": ago(last.created_at)}
 
@@ -1728,7 +1900,8 @@ def notices():
 def message_json(m, viewer_is_admin):
     mine = m.from_admin == viewer_is_admin
     who = f"Equipo {APP_NAME}" if m.from_admin else m.user.name
-    return {"id": m.id, "body": m.body, "mine": mine, "who": who if not mine else "Tú",
+    return {"id": m.id, "body": m.body, "mine": mine,
+            "image": url_for("chat_image", mid=m.id) if m.image_mime else "", "who": who if not mine else "Tú",
             "from_admin": m.from_admin, "ago": ago(m.created_at), "at": m.created_at.strftime("%d/%m/%Y %H:%M")}
 
 
@@ -1736,9 +1909,31 @@ def wants_json():
     return request.headers.get("X-Requested-With") == "fetch"
 
 
+def process_photo(file):
+    """Foto del chat: se comprueba que sea una imagen y se guarda limpia y a un tamaño razonable."""
+    from PIL import Image, ImageOps, UnidentifiedImageError
+    try:
+        img = Image.open(file.stream)
+        img.verify()
+        file.stream.seek(0)
+        img = ImageOps.exif_transpose(Image.open(file.stream)).convert("RGB")
+    except (UnidentifiedImageError, OSError, ValueError):
+        return None
+    img.thumbnail((1600, 1600))
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=82, optimize=True)
+    return out.getvalue()
+
+
 def post_message(owner_id, from_admin):
     body = (request.form.get("body") or "").strip()
-    if not body:
+    file = request.files.get("image")
+    photo = None
+    if file and file.filename:
+        photo = process_photo(file)
+        if not photo:
+            return None, "Esa foto no se puede abrir. Prueba con una captura en JPG o PNG."
+    if not body and not photo:
         return None, "Escribe un mensaje."
     if len(body) > MAX_MESSAGE_LEN:
         return None, f"El mensaje es demasiado largo (máximo {MAX_MESSAGE_LEN} caracteres)."
@@ -1750,10 +1945,12 @@ def post_message(owner_id, from_admin):
             return None, "Has enviado muchos mensajes seguidos. Espera un poco y vuelve a escribir."
     m = Message(user_id=owner_id, from_admin=from_admin, sender_id=current_user.id, body=body,
                 read_by_admin=from_admin, read_by_user=not from_admin)
+    if photo:
+        m.image_data, m.image_mime = photo, "image/jpeg"
     db.session.add(m)
     db.session.commit()
     if not from_admin:
-        notify_phone(f"💬 {current_user.name}", body, url_for("admin_chat", uid=owner_id))
+        notify_phone(f"💬 {current_user.name}", body or "📷 Ha enviado una foto", url_for("admin_chat", uid=owner_id))
     return m, None
 
 
@@ -1786,6 +1983,17 @@ def support():
     mark_read(current_user.id, by_admin=False)
     prefill = ""
     return render_template("support.html", msgs=msgs, prefill=prefill)
+
+
+@app.route("/chat/foto/<int:mid>")
+@login_required
+def chat_image(mid):
+    m = db.session.get(Message, mid)
+    if not m or not m.image_mime or (m.user_id != current_user.id and not current_user.is_admin):
+        abort(404)
+    resp = Response(m.image_data, mimetype=m.image_mime)
+    resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+    return resp
 
 
 @app.route("/soporte/mensajes")

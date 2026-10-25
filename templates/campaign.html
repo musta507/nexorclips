@@ -72,7 +72,7 @@
     <div class="card form-stack join-card">
       <div>
         <h3>{% if accounts %}Tus cuentas en esta campaña{% else %}Unirme a la campaña{% endif %}</h3>
-        {% if not accounts %}<p class="small muted" style="margin-top:4px">Añade la cuenta con la que vas a publicar los clips.</p>{% endif %}
+        {% if not accounts %}<p class="small muted" style="margin-top:4px">Añade la cuenta con la que vas a publicar los clips{% if camp.question_list %} y responde a las preguntas del equipo{% endif %}.</p>{% endif %}
       </div>
       {% if accounts %}
       <ul class="handle-list">
@@ -90,7 +90,14 @@
           </select>
           <div class="handle-input"><span>@</span><input name="handle" placeholder="tu_usuario" required autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Usuario"></div>
         </div>
-        <button class="btn {{ 'soft' if accounts else 'accent' }} block">{{ "Añadir otra cuenta" if accounts else "Unirme a la campaña" }}</button>
+        {% if not accounts and camp.question_list %}
+        <div class="join-qs">
+          {% for q in camp.question_list %}
+          <div class="field"><label for="q{{ loop.index0 }}">{{ q }}</label><textarea id="q{{ loop.index0 }}" name="q_{{ loop.index0 }}" rows="2" maxlength="1500" required></textarea></div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <button class="btn {{ 'soft' if accounts else 'accent' }} block">{{ "Añadir otra cuenta" if accounts else "Enviar solicitud" }}</button>
       </form>
       {% endif %}
     </div>

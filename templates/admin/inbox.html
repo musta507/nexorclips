@@ -12,7 +12,7 @@
     <span class="avatar">{% if t.user.avatar_url %}<img src="{{ t.user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ t.user.initial }}{% endif %}</span>
     <div class="thread-main">
       <div class="thread-top"><b>{{ t.user.name }}</b>{% if t.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<span class="small muted">{{ t.last.created_at|ago }}</span></div>
-      <div class="thread-preview small">{% if t.last.from_admin %}<span class="muted">Tú: </span>{% endif %}{{ t.last.body|truncate(110) }}</div>
+      <div class="thread-preview small">{% if t.last.from_admin %}<span class="muted">Tú: </span>{% endif %}{{ (t.last.body or "📷 Foto")|truncate(110) }}</div>
     </div>
     {% if t.unread %}<span class="count" aria-label="{{ t.unread }} sin leer">{{ t.unread }}</span>{% endif %}
   </a>

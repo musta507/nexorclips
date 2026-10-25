@@ -9,13 +9,32 @@
     {{ logo() }}
     <div class="auth-card">
       <div>
-        <h1>Empieza ahora</h1>
-        <p class="muted" style="margin-top:6px">Clipea a los creadores hispanos más grandes y cobra por cada 1.000 visitas. Solo necesitas tu cuenta de Google.</p>
+        <h1>{{ "Crea tu cuenta" if mode == "registro" else "Empieza ahora" }}</h1>
+        <p class="muted" style="margin-top:6px">Clipea a los creadores hispanos más grandes y cobra por cada 1.000 visitas.</p>
       </div>
       {% with msgs = get_flashed_messages(with_categories=true) %}
         {% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}
       {% endwith %}
       <a class="btn google block" href="{{ url_for('login_google', next=request.args.get('next', '')) }}">{{ icon("google") }} Continuar con Google</a>
+      <div class="or">o con tu correo</div>
+      {% if mode == "registro" %}
+      <form method="post" action="{{ url_for('register') }}" class="form-stack">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="field"><label for="r-name">Nombre</label><input id="r-name" name="name" value="{{ form_name }}" autocomplete="name" required maxlength="120"></div>
+        <div class="field"><label for="r-email">Correo</label><input id="r-email" name="email" type="email" value="{{ form_email }}" autocomplete="email" required></div>
+        <div class="field"><label for="r-pass">Contraseña</label><input id="r-pass" name="password" type="password" autocomplete="new-password" minlength="8" required><span class="hint">Mínimo 8 caracteres.</span></div>
+        <button class="btn accent block">Crear cuenta</button>
+      </form>
+      <p class="small muted" style="text-align:center">¿Ya tienes cuenta? <a href="{{ url_for('login') }}" style="text-decoration:underline;color:var(--ink)">Entra</a></p>
+      {% else %}
+      <form method="post" action="{{ url_for('login_email') }}" class="form-stack">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="field"><label for="l-email">Correo</label><input id="l-email" name="email" type="email" value="{{ form_email }}" autocomplete="email" required></div>
+        <div class="field"><label for="l-pass">Contraseña</label><input id="l-pass" name="password" type="password" autocomplete="current-password" required></div>
+        <button class="btn accent block">Entrar</button>
+      </form>
+      <p class="small muted" style="text-align:center">¿No tienes cuenta? <a href="{{ url_for('login', modo='registro') }}" style="text-decoration:underline;color:var(--ink)">Créala con tu correo</a></p>
+      {% endif %}
       {% if dev_login %}
         <div class="or">solo en pruebas</div>
         <form method="post" action="{{ url_for('login_dev') }}" class="form-stack">

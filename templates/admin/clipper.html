@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ user.name }} · Ficha del clipper{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_clippers') }}">← Clippers y retiros</a>
+<div class="toolbar">
+  <div class="inline" style="gap:14px">
+    <span class="avatar lg">{% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ user.initial }}{% endif %}</span>
+    <div>
+      <h1>{{ user.name }}{% if user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}</h1>
+      <p class="small muted"><span class="selectable">{{ user.email }}</span> · entra con {{ "Google" if user.google_sub else "correo" }} · desde {{ user.created_at|date }}{% if user.last_seen_at %} · visto {{ user.last_seen_at|ago }}{% endif %}</p>
+    </div>
+  </div>
+  {% if not user.is_admin %}
+  <div class="inline" style="flex-wrap:wrap">
+    <a class="btn accent" href="{{ url_for('admin_chat', uid=user.id) }}">{{ icon("chat") }} Chat{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
+    {% if user.is_banned %}
+    <form method="post" action="{{ url_for('admin_ban', uid=user.id, accion='desbloquear') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">Desbloquear</button></form>
+    {% else %}
+    <form method="post" action="{{ url_for('admin_ban', uid=user.id, accion='bloquear') }}" data-confirm="¿Bloquear a {{ user.name }}? No podrá enviar clips ni retirar dinero."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">Bloquear</button></form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% if user.is_banned and user.ban_reason %}<div class="flash error">Bloqueado: {{ user.ban_reason }}</div>{% endif %}
+
+<div class="kpis">
+  <div class="kpi"><span>Ganado en total</span><b class="tnum">{{ m.earned|money }}</b></div>
+  <div class="kpi"><span>En campañas abiertas</span><b class="tnum">{{ m.live|money }}</b></div>
+  <div class="kpi"><span>Disponible para retirar</span><b class="tnum">{{ m.available|money }}</b></div>
+  <div class="kpi"><span>Pagado</span><b class="tnum">{{ m.paid|money }}</b></div>
+  <div class="kpi"><span>Vistas aprobadas</span><b class="tnum">{{ views|short }}</b></div>
+  <div class="kpi"><span>Clips enviados</span><b class="tnum">{{ subs|length }}</b></div>
+</div>
+
+<div class="card tight toolbar">
+  <div><h3>Cobro</h3>
+    <p class="small">{% if user.payout_ready %}{% if user.payout_method == WHOP_METHOD %}Whop · <span class="selectable">@{{ user.whop_username }}</span>{% else %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% endif %}{% else %}<span class="muted">Aún no ha conectado una forma de cobro</span>{% endif %}</p>
+  </div>
+  {% if m.open_payout %}<span class="status solicitado">Retiro en curso: {{ m.open_payout.amount|money }}</span>{% endif %}
+</div>
+
+<section>
+  <div class="section-head"><h2>Campañas ({{ camps|length }})</h2></div>
+  {% for c in camps %}
+  <div class="card camp-row">
+    <div class="toolbar" style="margin:0">
+      <div><a class="link" href="{{ url_for('admin_campaign', cid=c.camp.id) }}"><b>{{ c.camp.song }}</b></a> <span class="status {{ c.camp.status }}">{{ c.camp.status|capitalize }}</span>
+        <div class="small muted">{{ c.camp.artist }}</div></div>
+      <div class="facts" style="grid-template-columns:repeat(3,auto);gap:18px">
+        <div class="fact"><b class="tnum">{{ c.clips }}</b><span>clips{% if c.pending %} (+{{ c.pending }} por revisar){% endif %}</span></div>
+        <div class="fact"><b class="tnum">{{ c.views|short }}</b><span>vistas</span></div>
+        <div class="fact"><b class="tnum">{{ c.earned|money }}</b><span>ganado</span></div>
+      </div>
+    </div>
+    {% if c.accounts %}
+    <div class="inline small" style="flex-wrap:wrap;gap:8px;margin-top:10px">
+      {% for a in c.accounts %}
+      <span class="chip-acc">{{ icon(a.platform) }} <a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a>
+        <span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></span>
+      {% if a.status == 'pendiente' %}
+        <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
+        <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='rechazar') }}" data-confirm="¿Rechazar @{{ a.handle }}?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if c.answers %}
+    <details class="answers"><summary>Respuestas al pedir entrar</summary>
+      {% for q, ans in c.answers %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}
+    </details>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="card empty"><p class="muted">Aún no ha pedido entrar en ninguna campaña.</p></div>
+  {% endfor %}
+</section>
+
+<section>
+  <div class="section-head"><h2>Clips ({{ subs|length }})</h2></div>
+  <div class="table-card">
+  {% if subs %}
+    <div class="table-scroll"><table class="rt">
+      <thead><tr><th>Fecha</th><th>Campaña</th><th>Clip</th><th class="r">Vistas</th><th>Estado</th><th class="r">Gana</th><th></th></tr></thead>
+      <tbody>
+      {% for s in subs %}
+      <tr{% if s.flag_list %} class="row-flag"{% endif %}>
+        <td data-label="Fecha" class="small muted">{{ s.created_at|date }}</td>
+        <td data-label="Campaña">{{ s.campaign.song }}</td>
+        <td data-label="Clip"><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener">{{ icon(s.platform) }} {% if s.author %}@{{ s.author }}{% else %}Ver clip{% endif %}</a>{% include "admin/_flags.html" %}</td>
+        <td data-label="Vistas" class="r tnum">{{ s.views|num }}</td>
+        <td data-label="Estado"><span class="status {{ s.status }}">{{ s.status|capitalize }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
+        <td data-label="Gana" class="r tnum">{% if s.status == 'aprobado' %}{{ s.earned|money }}{% else %}—{% endif %}</td>
+        <td data-label="">{% if s.status == 'pendiente' %}{% include "admin/_review_buttons.html" %}{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% else %}
+    <div class="empty"><p class="muted">Todavía no ha enviado clips.</p></div>
+  {% endif %}
+  </div>
+</section>
+
+<section>
+  <div class="section-head"><h2>Retiros ({{ payouts|length }})</h2></div>
+  <div class="table-card">
+  {% if payouts %}
+    <div class="table-scroll"><table class="rt">
+      <thead><tr><th>Fecha</th><th>Método</th><th>Estado</th><th>Nota</th><th class="r">Monto</th></tr></thead>
+      <tbody>
+      {% for p in payouts %}
+      <tr>
+        <td data-label="Fecha" class="small muted">{{ p.created_at|datetime }}</td>
+        <td data-label="Método">{{ p.method }}<div class="small muted selectable">{{ p.details }}</div></td>
+        <td data-label="Estado"><span class="status {{ p.status }}">{{ "Enviando" if p.status == "procesando" else p.status|capitalize }}</span></td>
+        <td data-label="Nota" class="small muted">{{ p.note }}{% if p.ext_id %}<div class="selectable">{{ p.ext_id }}</div>{% endif %}</td>
+        <td data-label="Monto" class="r tnum"><b>{{ p.amount|money }}</b></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% else %}
+    <div class="empty"><p class="muted">Aún no ha retirado dinero.</p></div>
+  {% endif %}
+  </div>
+</section>
+{% endblock %}

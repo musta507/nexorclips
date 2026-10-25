@@ -893,3 +893,30 @@ td .link{color:var(--ink)}
 .dmeta .dj{font-weight:600;color:var(--ink)}.dmeta .dj.ok{color:#067647}
 .seg{overflow-x:auto;scrollbar-width:none;max-width:100%}.seg::-webkit-scrollbar{display:none}.seg a{white-space:nowrap;flex:none}
 .wipe summary{cursor:pointer;list-style:none}.wipe summary::-webkit-details-marker{display:none}
+
+/* ---- ganancias en 4 tarjetas, preguntas para unirse, ficha del clipper y fotos del chat */
+.stats.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:980px){.stats.four{grid-template-columns:repeat(2,minmax(0,1fr))}.stats.four .hero{grid-column:1/-1}}
+@media (max-width:640px){.stats.four{grid-template-columns:1fr}}
+.join-qs{display:flex;flex-direction:column;gap:12px}
+.join-qs textarea{min-height:64px;resize:vertical}
+details.answers{margin-top:8px;font-size:13px}
+details.answers summary{cursor:pointer;color:var(--ink-2);font-weight:600;list-style:none}
+details.answers summary::-webkit-details-marker{display:none}
+details.answers summary::before{content:"▸ ";color:var(--muted)}
+details.answers[open] summary::before{content:"▾ "}
+.qa{margin-top:8px;padding:10px 12px;border-radius:12px;background:var(--soft)}
+.qa span{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.qa p{margin:3px 0 0;white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+.avatar.lg{width:56px;height:56px;font-size:20px;flex:none}
+.camp-row{margin-bottom:12px}
+.chip-acc{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--soft)}
+.chip-acc svg{width:14px;height:14px}
+.chat-attach{flex:none;width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:var(--soft);color:var(--ink-2);cursor:pointer;position:relative}
+.chat-attach:hover{color:var(--ink)}
+.chat-attach-n{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--ink);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center}
+.chat-attach-n[hidden]{display:none}
+.chat-file-name{padding:0 16px 10px}
+.chat-photo{display:block;max-width:min(260px,70vw);border-radius:16px;overflow:hidden;margin-bottom:4px;border:1px solid var(--line)}
+.chat-photo{max-width:min(240px,62vw)}.chat-photo img{display:block;width:100%;height:auto;max-height:300px;object-fit:cover}
+.msg.mine .chat-photo{margin-left:auto}
