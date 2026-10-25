@@ -57,6 +57,7 @@ p{margin:0}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;cursor:pointer;font:700 14px/1 var(--font);
   padding:13px 20px;border-radius:12px;background:var(--ink);color:#fff;transition:transform .15s,background .15s,filter .15s;white-space:nowrap}
 .btn:hover{filter:brightness(1.3)}
+.btn:active{transform:scale(.98)}
 .btn.accent{background:var(--coral-ink)}
 .btn.accent:hover{filter:none;background:var(--coral)}
 .btn.white{background:var(--card);color:var(--ink)}
@@ -505,7 +506,7 @@ h2,h3{font-weight:600;letter-spacing:-.02em}
 .btn{border-radius:14px;font-weight:600;font-size:15px;padding:13px 22px}
 .btn.sm{border-radius:10px;font-size:13px}
 .btn:hover{filter:brightness(1.12)}
-.btn:active{filter:brightness(.92)}
+.btn:active{transform:scale(.97);filter:brightness(.92)}
 .btn.soft{background:rgba(118,118,128,.12);color:var(--coral-ink)}
 .btn.soft:hover{background:rgba(118,118,128,.18)}
 .btn.google{background:#000}
@@ -716,16 +717,18 @@ a,button,label{-webkit-tap-highlight-color:transparent}
 ::view-transition-old(root){animation:vt-out .14s ease-in both}
 ::view-transition-new(root){animation:vt-in .22s cubic-bezier(.2,.8,.2,1) both}
 @keyframes vt-out{to{opacity:0}}
-@keyframes vt-in{from{opacity:0}}
+@keyframes vt-in{from{opacity:0;transform:translateY(6px)}}
 #nav-progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:1000;background:linear-gradient(90deg,var(--sapphire),#7b98ff);border-radius:0 3px 3px 0;box-shadow:0 0 10px rgba(36,70,216,.45);opacity:0;pointer-events:none}
 #nav-progress.go{opacity:1;animation:nav-go 8s cubic-bezier(.08,.8,.2,1) forwards}
 #nav-progress.done{opacity:0;width:100%;transition:opacity .25s .1s,width .15s}
 @keyframes nav-go{0%{width:0}10%{width:35%}40%{width:70%}100%{width:92%}}
-.btn:active,.tab:active,.camp:active{transform:none}
-.btn:active{opacity:.85}
+.tab,.camp,.paym,.card a,.fact,.kpi a,.link{transition:transform .14s ease,background .15s,box-shadow .2s}
+.tab:active,.camp:active,a.card:active{transform:scale(.97)}
+.btn:active{transform:scale(.96)}
 .tab.on{transition:background .12s,color .12s,box-shadow .12s}
 a,button,.btn,.tab,label,summary{touch-action:manipulation}
 @media (prefers-reduced-motion:reduce){
   ::view-transition-old(root),::view-transition-new(root){animation:none}
   #nav-progress.go{animation:none;width:60%}
+  .tab:active,.camp:active,a.card:active,.btn:active{transform:none}
 }
