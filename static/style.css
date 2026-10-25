@@ -709,3 +709,26 @@ a,button,label{-webkit-tap-highlight-color:transparent}
   .paym-top .btn{width:100%}
   .paym-row{flex-direction:column;align-items:flex-start}
 }
+
+/* ---- sensación de rapidez: transición entre páginas, barra de carga y respuesta al tocar */
+@view-transition{navigation:auto}
+.topbar{view-transition-name:topbar}
+::view-transition-group(root){animation-duration:.22s}
+::view-transition-old(root){animation:vt-out .14s ease-in both}
+::view-transition-new(root){animation:vt-in .22s cubic-bezier(.2,.8,.2,1) both}
+@keyframes vt-out{to{opacity:0}}
+@keyframes vt-in{from{opacity:0;transform:translateY(6px)}}
+#nav-progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:1000;background:linear-gradient(90deg,var(--sapphire),#7b98ff);border-radius:0 3px 3px 0;box-shadow:0 0 10px rgba(36,70,216,.45);opacity:0;pointer-events:none}
+#nav-progress.go{opacity:1;animation:nav-go 8s cubic-bezier(.08,.8,.2,1) forwards}
+#nav-progress.done{opacity:0;width:100%;transition:opacity .25s .1s,width .15s}
+@keyframes nav-go{0%{width:0}10%{width:35%}40%{width:70%}100%{width:92%}}
+.tab,.camp,.paym,.card a,.fact,.kpi a,.link{transition:transform .14s ease,background .15s,box-shadow .2s}
+.tab:active,.camp:active,a.card:active{transform:scale(.97)}
+.btn:active{transform:scale(.96)}
+.tab.on{transition:background .12s,color .12s,box-shadow .12s}
+a,button,.btn,.tab,label,summary{touch-action:manipulation}
+@media (prefers-reduced-motion:reduce){
+  ::view-transition-old(root),::view-transition-new(root){animation:none}
+  #nav-progress.go{animation:none;width:60%}
+  .tab:active,.camp:active,a.card:active,.btn:active{transform:none}
+}

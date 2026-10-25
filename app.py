@@ -1,6 +1,7 @@
 """NexorClips — plataforma de clipping: campañas, clips, vistas y pagos."""
 import csv
 import io
+import json
 import logging
 import os
 import re
@@ -677,8 +678,27 @@ def security_headers(resp):
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     resp.headers.setdefault("Content-Security-Policy", CSP)
+    if resp.mimetype == "text/html":
+        # Chrome/Android: prepara la página siguiente en cuanto el dedo o el ratón van hacia un enlace
+        resp.headers.setdefault("Speculation-Rules", '"/reglas-precarga.json"')
     if PRODUCTION:
         resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return resp
+
+
+# Páginas que NO se deben precargar: cierran sesión, marcan mensajes como leídos o hacen acciones.
+NO_PRELOAD = ["/salir", "/auth/*", "/login*", "/empezar*", "/cron/*", "/soporte*", "/admin/mensajes*",
+              "/avisos", "/static/*", "/admin/*csv*"]
+
+
+@app.route("/reglas-precarga.json")
+def speculation_rules():
+    rules = {"prerender": [{
+        "where": {"and": [{"href_matches": "/*"}, {"not": {"href_matches": NO_PRELOAD}},
+                          {"not": {"selector_matches": "[data-no-preload], [target=_blank], [download]"}}]},
+        "eagerness": "moderate"}]}
+    resp = app.response_class(json.dumps(rules), mimetype="application/speculationrules+json")
+    resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp
 
 

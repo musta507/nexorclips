@@ -152,3 +152,52 @@ document.addEventListener("click", function (e) {
   setInterval(check, 20000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) check(); });
 })();
+
+// ---------------------------------------------------------------- respuesta inmediata al tocar
+// Barra de carga arriba, pestaña marcada al momento y nada de esperar «a ciegas».
+(function () {
+  var bar = document.createElement("div");
+  bar.id = "nav-progress";
+  bar.setAttribute("aria-hidden", "true");
+  document.body.appendChild(bar);
+  var timer = null;
+
+  function start() {
+    clearTimeout(timer);
+    bar.className = "";
+    void bar.offsetWidth;            // reinicia la animación
+    bar.className = "go";
+    // Si a los 12 s no ha cambiado de página (p. ej. descarga), se quita
+    timer = setTimeout(stop, 12000);
+  }
+  function stop() { clearTimeout(timer); bar.className = bar.className ? "done" : ""; setTimeout(function () { bar.className = ""; }, 300); }
+
+  document.addEventListener("click", function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest("a[href]");
+    if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+    var url = new URL(a.href, location.href);
+    if (url.origin !== location.origin) return;
+    if (url.pathname === location.pathname && url.search === location.search && url.hash) return;  // ancla en la misma página
+    // Pestañas: se marcan al instante
+    var nav = a.closest(".tabs");
+    if (nav) {
+      nav.querySelectorAll(".tab.on").forEach(function (t) { t.classList.remove("on"); t.removeAttribute("aria-current"); });
+      a.classList.add("on");
+    }
+    start();
+  });
+  // Formularios normales (no el chat, que va por su cuenta)
+  document.addEventListener("submit", function (e) {
+    if (e.defaultPrevented || e.target.hasAttribute("data-chat-form")) return;
+    start();
+  });
+  // Al volver atrás con el botón del móvil, la página sale de la caché: se limpia todo
+  window.addEventListener("pageshow", function (ev) {
+    stop();
+    if (ev.persisted) {
+      document.querySelectorAll("form[data-sending='1']").forEach(function (f) { f.dataset.sending = ""; });
+      document.querySelectorAll(".btn.busy").forEach(function (b) { b.classList.remove("busy"); b.removeAttribute("aria-busy"); });
+    }
+  });
+})();
