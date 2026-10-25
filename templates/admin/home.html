@@ -40,6 +40,17 @@
   </div>
 </div>
 
+<div class="card tight toolbar">
+  <div>
+    <h3>Pagos por Whop</h3>
+    {% if not whop.key %}<p class="small" style="color:var(--red)">Falta WHOP_API_KEY en las variables de Railway.</p>
+    {% elif whop.company %}<p class="small" style="color:#067647">✓ Conectado con la empresa <span class="selectable">{{ whop.company }}</span>. Los clippers ya pueden conectar su Whop y retirar.</p>
+    {% else %}<p class="small" style="color:var(--red)">La clave está puesta, pero no sabemos cuál es tu empresa. Añade en Railway la variable WHOP_COMPANY_ID con el código biz_… de tu empresa.</p>
+      {% if whop.error %}<p class="small muted selectable" style="word-break:break-all">{{ whop.error }}</p>{% endif %}
+    {% endif %}
+  </div>
+</div>
+
 <section id="unirse">
   <div class="section-head"><h2>Clippers por verificar ({{ joins|length }})</h2><p class="muted">Quieren unirse a una campaña. El clipper verifica que la cuenta es suya poniendo un código en su bio. Mira sus respuestas y acéptalo.</p></div>
   <div class="table-card">

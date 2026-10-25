@@ -1470,7 +1470,9 @@ def admin_home():
         "flagged": sum(1 for s in pending if s.flag_list),
     }
     joins = CampaignAccount.query.filter_by(status="pendiente").order_by(CampaignAccount.created_at).all()
-    return render_template("admin/home.html", cards=cards, pending=pending, kpis=kpis, joins=joins,
+    whop = {"key": bool(WHOP_API_KEY), "company": whop_company_id() if WHOP_API_KEY else "",
+            "error": _whop_company.get("error", ""), "from_env": bool(WHOP_COMPANY_ID)}
+    return render_template("admin/home.html", whop=whop, cards=cards, pending=pending, kpis=kpis, joins=joins,
                            last_refresh=get_setting("last_refresh", "Nunca"),
                            has_token=bool(viewcounter.APIFY_TOKEN))
 
@@ -1736,14 +1738,14 @@ def whop_call(method, path, **kw):
     return r.ok, r.status_code, data
 
 
-_whop_company = {"id": "", "tried": 0.0}
+_whop_company = {"id": "", "tried": 0.0, "error": ""}
 
 
 def whop_company_id():
     """El biz_ de la empresa: el de Railway, o si no está, se lo preguntamos a Whop con la clave."""
     if WHOP_COMPANY_ID:
         return WHOP_COMPANY_ID
-    if not _whop_company["id"] and WHOP_API_KEY and time.time() - _whop_company["tried"] > 600:
+    if not _whop_company["id"] and WHOP_API_KEY and time.time() - _whop_company["tried"] > 60:
         _whop_company["tried"] = time.time()
         ok, code, data = whop_call("GET", "/accounts/me")
         cid = str((data or {}).get("id", "")) if isinstance(data, dict) else ""
@@ -1751,6 +1753,7 @@ def whop_company_id():
             _whop_company["id"] = cid
             log.info("Whop: empresa detectada %s", cid)
         else:
+            _whop_company["error"] = f"Whop respondió {code}: {str(data)[:300]}"
             log.warning("Whop: no se pudo saber la empresa (%s) %s", code, str(data)[:200])
     return _whop_company["id"]
 
