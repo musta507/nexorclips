@@ -688,7 +688,7 @@ def test_whop_connect_and_instant_withdraw(monkeypatch):
         u = A.User.query.filter_by(email="w@test.com").one()
         assert A.user_money(u)["available"] == 0
     body, headers = calls[-1][2], calls[-1][3]
-    assert body["destination_id"] == "user_ana" and body["origin_id"] == "biz_1" and body["amount"] == 45.0
+    assert body["destination_id"] == "user_ana" and body["origin_id"] == "biz_1" and body["amount"] == 45.0 and body["type"] == "balance"
     assert headers["Idempotency-Key"] == body["idempotence_key"]
 
 

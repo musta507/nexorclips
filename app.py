@@ -1824,7 +1824,7 @@ def _whop_apply(payout, ok, code, data):
 def whop_pay(payout):
     """Manda el retiro al saldo de Whop del clipper. Es seguro repetirlo: la clave evita pagar dos veces."""
     key = f"{APP_NAME.lower().replace(' ', '')}-payout-{payout.id}"
-    body = {"amount": round(payout.amount, 2), "currency": "usd", "origin_id": whop_company_id(),
+    body = {"type": "balance", "amount": round(payout.amount, 2), "currency": "usd", "origin_id": whop_company_id(),
             "destination_id": payout.user.whop_user_id, "notes": f"Retiro #{payout.id} · {APP_NAME}"[:50],
             "idempotence_key": key, "metadata": {"payout_id": str(payout.id)}}
     ok, code, data = whop_call("POST", "/transfers", json=body, headers={"Idempotency-Key": key})
