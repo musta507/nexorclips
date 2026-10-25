@@ -866,3 +866,12 @@ def test_reject_needs_reason():
     with A.app.app_context():
         s = get(A.Submission, sid)
         assert s.status == "rechazado" and s.reject_reason == "Sin subtítulos"
+
+
+def test_whop_company_detected_from_key(monkeypatch):
+    monkeypatch.setattr(A, "WHOP_API_KEY", "k")
+    monkeypatch.setattr(A, "WHOP_COMPANY_ID", "")
+    monkeypatch.setattr(A, "_whop_company", {"id": "", "tried": 0.0})
+    monkeypatch.setattr(A.requests, "request", lambda m, url, **kw: _R(200, {"id": "biz_auto"}) if url.endswith("/accounts/me") else _R(404, {}))
+    with A.app.app_context():
+        assert A.whop_enabled() and A.whop_company_id() == "biz_auto"

@@ -1736,8 +1736,27 @@ def whop_call(method, path, **kw):
     return r.ok, r.status_code, data
 
 
+_whop_company = {"id": "", "tried": 0.0}
+
+
+def whop_company_id():
+    """El biz_ de la empresa: el de Railway, o si no está, se lo preguntamos a Whop con la clave."""
+    if WHOP_COMPANY_ID:
+        return WHOP_COMPANY_ID
+    if not _whop_company["id"] and WHOP_API_KEY and time.time() - _whop_company["tried"] > 600:
+        _whop_company["tried"] = time.time()
+        ok, code, data = whop_call("GET", "/accounts/me")
+        cid = str((data or {}).get("id", "")) if isinstance(data, dict) else ""
+        if ok and cid.startswith("biz_"):
+            _whop_company["id"] = cid
+            log.info("Whop: empresa detectada %s", cid)
+        else:
+            log.warning("Whop: no se pudo saber la empresa (%s) %s", code, str(data)[:200])
+    return _whop_company["id"]
+
+
 def whop_enabled():
-    return bool(WHOP_API_KEY and WHOP_COMPANY_ID)
+    return bool(WHOP_API_KEY and whop_company_id())
 
 
 def whop_find_user(username):
@@ -1774,7 +1793,7 @@ def _whop_apply(payout, ok, code, data):
 def whop_pay(payout):
     """Manda el retiro al saldo de Whop del clipper. Es seguro repetirlo: la clave evita pagar dos veces."""
     key = f"{APP_NAME.lower().replace(' ', '')}-payout-{payout.id}"
-    body = {"amount": round(payout.amount, 2), "currency": "usd", "origin_id": WHOP_COMPANY_ID,
+    body = {"amount": round(payout.amount, 2), "currency": "usd", "origin_id": whop_company_id(),
             "destination_id": payout.user.whop_user_id, "notes": f"Retiro #{payout.id} · {APP_NAME}"[:50],
             "idempotence_key": key, "metadata": {"payout_id": str(payout.id)}}
     ok, code, data = whop_call("POST", "/transfers", json=body, headers={"Idempotency-Key": key})
