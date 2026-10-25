@@ -7,13 +7,14 @@ import os
 import re
 import secrets
 import threading
+import time
 from datetime import datetime, timedelta
 from functools import wraps
 from urllib.parse import urlencode
 
 import requests
 from flask import (Flask, Response, abort, flash, redirect, render_template,
-                   request, session, url_for)
+                   g, request, session, url_for)
 from flask_login import (LoginManager, UserMixin, current_user, login_required,
                          login_user, logout_user)
 from flask_sqlalchemy import SQLAlchemy
@@ -650,6 +651,11 @@ def csrf_token():
 
 
 @app.before_request
+def _start_timer():
+    g._t0 = time.perf_counter()
+
+
+@app.before_request
 def before():
     if request.method == "POST":
         sent, expected = request.form.get("_csrf", ""), session.get("_csrf", "")
@@ -678,6 +684,8 @@ def security_headers(resp):
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     resp.headers.setdefault("Content-Security-Policy", CSP)
+    if getattr(g, "_t0", None):     # cuánto tarda el servidor en preparar la página (sin contar internet)
+        resp.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - g._t0) * 1000:.0f}"
     if resp.mimetype == "text/html":
         # Chrome/Android: prepara la página siguiente en cuanto el dedo o el ratón van hacia un enlace
         resp.headers.setdefault("Speculation-Rules", '"/reglas-precarga.json"')
