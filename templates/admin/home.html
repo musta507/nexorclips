@@ -100,7 +100,7 @@
       <tbody>
       {% for c, st in cards %}
       <tr>
-        <td data-label="Campaña"><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<div class="small muted">{{ c.artist }} · {{ CATEGORY_ONE[c.category] }}</div></td>
+        <td data-label="Campaña"><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<div class="small muted">{{ c.artist }}</div></td>
         <td data-label="Estado"><span class="status {{ c.status }}">{{ c.status|capitalize }}</span></td>
         <td data-label="Pago / 1.000" class="r tnum">{{ c.rate|rate_k }}</td>
         <td data-label="Repartido" class="tnum"><span class="small">{{ st.spent|money(0) }} / {{ c.budget|money(0) }}</span><div class="bar mini-bar" style="margin-top:6px"><span style="width:{{ st.pct }}%"></span></div></td>
@@ -114,5 +114,17 @@
       </tbody>
     </table></div>
   </div>
+</section>
+
+<section>
+  <details class="card wipe">
+    <summary><b>Empezar de cero</b> <span class="small muted">· borrar todos los datos de prueba</span></summary>
+    <p class="small muted" style="margin:10px 0 14px">Borra todas las campañas, clips, retiros, mensajes, solicitudes, el registro de actividad y las cuentas de los clippers. Los administradores se quedan. <b>No se puede deshacer.</b></p>
+    <form method="post" action="{{ url_for('admin_wipe') }}" class="inline" style="flex-wrap:wrap;gap:10px" data-confirm="¿Seguro? Se borrará todo y no se puede deshacer.">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input name="confirm" placeholder="Escribe BORRAR" autocomplete="off" style="max-width:220px" aria-label="Confirmación">
+      <button class="btn red">Borrar todo</button>
+    </form>
+  </details>
 </section>
 {% endblock %}

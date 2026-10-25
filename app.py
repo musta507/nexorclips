@@ -1,4 +1,4 @@
-"""NexorClips — plataforma de clipping: campañas, clips, vistas y pagos."""
+"""ClipProfit Hispano — plataforma de clipping: campañas, clips, vistas y pagos."""
 import csv
 import io
 import json
@@ -26,7 +26,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import views as viewcounter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-log = logging.getLogger("nexorclips")
+log = logging.getLogger("clipprofit")
 
 # ---------------------------------------------------------------- configuración
 PRODUCTION = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PRODUCTION") == "1")
@@ -752,7 +752,7 @@ def cover_src(camp):
 
 
 def split_logo(name):
-    """'NexorClips' -> ('NEXOR', 'CLIPS'): la parte final 'clips' va en otro color."""
+    """Separa el nombre para el logo antiguo (ya no se usa en las plantillas)."""
     flat = name.replace(" ", "")
     if len(flat) > 5 and flat.lower().endswith("clips"):
         return flat[:-5].upper(), "CLIPS"
@@ -1561,6 +1561,29 @@ def whop_sync(payouts):
             changed = True
     if changed:
         db.session.commit()
+
+
+@app.route("/admin/borrar-datos", methods=["POST"])
+@admin_required
+def admin_wipe():
+    """Borra todos los datos de prueba (campañas, clips, retiros, mensajes, clippers…). Solo quedan los admins."""
+    if (request.form.get("confirm") or "").strip().upper() != "BORRAR":
+        flash("Para borrar todo, escribe BORRAR en la casilla.", "error")
+        return redirect(url_for("admin_home"))
+    admin_ids = [u.id for u in User.query.filter_by(is_admin=True).all()]
+    if current_user.id not in admin_ids:
+        admin_ids.append(current_user.id)
+    for model in (ViewSnapshot, Submission, Payout, CampaignAccount, Message, CampaignLead, Campaign, AuditLog, Setting):
+        model.query.delete(synchronize_session=False)
+    User.query.filter(~User.id.in_(admin_ids)).delete(synchronize_session=False)
+    for u in User.query.all():   # los admins se quedan, pero sin cuentas ni datos de cobro de prueba
+        u.payout_method = u.payout_details = u.whop_user_id = u.whop_username = ""
+        for p in PLATFORMS:
+            setattr(u, f"{p}_handles", "")
+    db.session.commit()
+    log.warning("Datos de prueba borrados por %s", current_user.email)
+    flash("Listo: se han borrado todas las campañas, clips, retiros, mensajes y clippers de prueba.", "ok")
+    return redirect(url_for("admin_home"))
 
 
 @app.route("/admin/clippers", methods=["GET", "POST"])

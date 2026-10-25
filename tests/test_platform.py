@@ -1,4 +1,4 @@
-"""Pruebas automáticas de NexorClips. Ejecutar con:  python -m pytest -q"""
+"""Pruebas automáticas de ClipProfit Hispano. Ejecutar con:  python -m pytest -q"""
 import io
 import os
 import sys
@@ -735,3 +735,18 @@ def test_campaign_form_per_thousand_and_min_pay():
         assert camp.rate == 1200 and camp.min_views == 5000 and A.min_pay(camp) == 6.0
     html = client_for("c@test.com").get("/").get_data(as_text=True)
     assert "$1.20" in html and "POR 1.000 VISTAS" in html and "Mín. $6.00 por clip" in html
+
+
+def test_admin_wipe_all_test_data(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    post(c, "/soporte", body="hola")
+    r = post(admin, "/admin/borrar-datos", confirm="no")
+    assert "escribe BORRAR" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.Campaign.query.count() == 1
+    assert client_for("w2@test.com").post("/admin/borrar-datos", data={"confirm": "BORRAR", "_csrf": "t"}).status_code in (302, 403, 404)
+    r = post(admin, "/admin/borrar-datos", confirm="BORRAR")
+    assert "se han borrado" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.Campaign.query.count() == 0 and A.Submission.query.count() == 0 and A.Message.query.count() == 0
+        assert [u.email for u in A.User.query.all()] == ["admin@test.com"]

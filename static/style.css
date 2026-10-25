@@ -1,4 +1,4 @@
-/* NexorClips — estilo iPhone en azul medianoche con zafiro: fondo agrupado de iOS, tarjetas blancas sin bordes, cristal esmerilado, controles segmentados y la fuente del sistema (SF Pro; Inter fuera de Apple). */
+/* ClipProfit Hispano — base: estilo iPhone en azul medianoche con zafiro: fondo agrupado de iOS, tarjetas blancas sin bordes, cristal esmerilado, controles segmentados y la fuente del sistema (SF Pro; Inter fuera de Apple). */
 @font-face{font-family:"Inter";src:url("fonts/inter.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
 :root{
   color-scheme: light;
@@ -278,7 +278,7 @@ td a.link{color:var(--coral-ink);font-weight:600}
 .cat-musica{background:var(--coral-soft);color:var(--coral-ink)}
 @media (max-width:640px){.filters{flex-wrap:nowrap;overflow-x:auto;margin-inline:-20px;padding-inline:20px;scrollbar-width:none}.filters a{flex:none}}
 
-/* ---------- logo: NEXOR en tinta, CLIPS en coral ---------- */
+/* ---------- logo ---------- */
 .logo{gap:9px;font-size:21px;letter-spacing:.01em}
 .logo-main{font-weight:800}
 .logo-sub{font-weight:500;color:var(--muted);margin-left:-6px}
@@ -540,7 +540,7 @@ td,th{border-color:rgba(60,60,67,.1)}
   .seg{display:flex;align-self:stretch}.seg a{flex:1;text-align:center;padding:7px 6px}
 }
 
-/* ================= color Nexor: negro + lima ================= */
+/* ================= capa de color ================= */
 :focus-visible{outline-color:var(--ink)}
 .btn.accent:hover,.chat-fab:hover{background:#13285a;filter:none}
 .stat.hero .btn,.featured .btn.accent,.pay-panel .btn.accent{background:var(--lime);color:#000}
@@ -892,3 +892,4 @@ td .link{color:var(--ink)}
 .pay-panel .sub + .sub{display:block;margin-top:6px;color:#fff;font-weight:600}
 .dmeta .dj{font-weight:600;color:var(--ink)}.dmeta .dj.ok{color:#067647}
 .seg{overflow-x:auto;scrollbar-width:none;max-width:100%}.seg::-webkit-scrollbar{display:none}.seg a{white-space:nowrap;flex:none}
+.wipe summary{cursor:pointer;list-style:none}.wipe summary::-webkit-details-marker{display:none}

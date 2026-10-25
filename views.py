@@ -6,7 +6,7 @@ import re
 
 import requests
 
-log = logging.getLogger("nexorclips.views")
+log = logging.getLogger("clipprofit.views")
 
 APIFY_TOKEN = os.environ.get("APIFY_TOKEN", "")
 
@@ -69,7 +69,7 @@ def normalize_url(url, resolve=True):
     if resolve and SHORT_TIKTOK.search(url):
         try:
             r = requests.get(url, allow_redirects=True, timeout=8,
-                             headers={"User-Agent": "Mozilla/5.0 (compatible; NexorClips/1.0)"})
+                             headers={"User-Agent": "Mozilla/5.0 (compatible; ClipProfit/1.0)"})
             if video_id(r.url):
                 url = r.url
         except requests.RequestException as exc:

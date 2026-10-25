@@ -1,4 +1,4 @@
-# NexorClips — Plataforma de clipping
+# ClipProfit Hispano — Plataforma de clipping
 
 Artistas, streamers y marcas lanzan campañas. Los clippers entran con Google, publican clips desde sus cuentas y cobran por cada vista.
 
@@ -27,7 +27,7 @@ Artistas, streamers y marcas lanzan campañas. Los clippers entran con Google, p
 - **Informe para el artista:** cada campaña tiene un enlace privado con sus resultados en directo, sin correos ni datos de pago.
 - Exportación a CSV (Excel) de clips por campaña y de retiros.
 - **Probar Apify con un enlace:** comprueba en un minuto si se leen bien las vistas.
-- **Mensajes:** chat privado con cada clipper. Ellos escriben desde «Soporte» (menú del avatar) y tú respondes desde tu bandeja, con avisos de no leídos y mensajes que llegan solos sin recargar. Tus respuestas salen firmadas como «Equipo NexorClips».
+- **Mensajes:** chat privado con cada clipper. Ellos escriben desde «Soporte» (menú del avatar) y tú respondes desde tu bandeja, con avisos de no leídos y mensajes que llegan solos sin recargar. Tus respuestas salen firmadas como «Equipo ClipProfit Hispano».
 - **Cobros:** de momento solo en USDT por la red TRC20. Si un clipper elige PayPal o transferencia y pulsa «Agregar cuenta», se le avisa de que solo está disponible cripto. La dirección se valida (empieza por T, 34 caracteres).
 - **Verificación de cuentas:** cada cuenta de redes que añade un clipper queda «Pendiente de verificar». Él pone su código (NX-XXXX) en la bio y te avisa por el chat de soporte; tú abres su chat en Mensajes y pulsas «Verificar» o «Rechazar». Sus clips se pueden enviar, pero no se pueden aprobar ni pagar hasta que la cuenta esté verificada.
 - **Avisos al móvil:** con la app gratuita ntfy y la variable `NTFY_TOPIC`, te llega una notificación cuando un clipper te escribe, pide unirse a una campaña o solicita un retiro, y cuando una marca pide lanzar campaña.
@@ -41,25 +41,25 @@ Artistas, streamers y marcas lanzan campañas. Los clippers entran con Google, p
 ## Cómo ponerla en internet
 
 ### 1. Subir el código a GitHub
-1. En github.com → **+** → **New repository** → nombre `nexorclips` → **Private** → **Create repository**.
-2. Pulsa **uploading an existing file** y arrastra **todo lo que hay dentro** de la carpeta `nexorclips`.
+1. En github.com → **+** → **New repository** → nombre `clipprofit` → **Private** → **Create repository**.
+2. Pulsa **uploading an existing file** y arrastra **todo lo que hay dentro** de la carpeta `clipprofit`.
 3. Pulsa **Commit changes**.
 
 ### 2. Crear el proyecto en Railway
 Puedes usar la misma cuenta y suscripción que en ClipLinks.
-1. **New Project** → **Deploy from GitHub repo** → `nexorclips`.
+1. **New Project** → **Deploy from GitHub repo** → `clipprofit`.
 2. En el mismo proyecto: **+ New** → **Database** → **PostgreSQL**.
-3. Servicio `nexorclips` → **Settings** → **Networking** → **Generate Domain**. Copia la dirección.
+3. Servicio `clipprofit` → **Settings** → **Networking** → **Generate Domain**. Copia la dirección.
 
 ### 3. Activar "Continuar con Google"
-1. Entra en **console.cloud.google.com** → **Proyecto nuevo** → `nexorclips`.
-2. **APIs y servicios** → **Pantalla de consentimiento de OAuth** → **Externo** → nombre `NexorClips` y tu correo → guardar hasta el final → **Publicar aplicación**.
+1. Entra en **console.cloud.google.com** → **Proyecto nuevo** → `clipprofit`.
+2. **APIs y servicios** → **Pantalla de consentimiento de OAuth** → **Externo** → nombre `ClipProfit Hispano` y tu correo → guardar hasta el final → **Publicar aplicación**.
 3. **APIs y servicios** → **Credenciales** → **Crear credenciales** → **ID de cliente de OAuth** → **Aplicación web**.
 4. En **URIs de redireccionamiento autorizados** añade: `https://TU-DOMINIO/auth/google/callback`
 5. **Crear** y copia el **ID de cliente** y el **Secreto**.
 
 ### 4. Variables en Railway
-Servicio `nexorclips` → **Variables**:
+Servicio `clipprofit` → **Variables**:
 
 | Variable | Valor |
 |---|---|
@@ -73,7 +73,7 @@ Servicio `nexorclips` → **Variables**:
 | `APIFY_TOKEN` | tu token de Apify |
 | `CRON_SECRET` | otra palabra secreta inventada |
 
-Opcionales: `MIN_WITHDRAW` (30), `MAX_CLIPS_DAY` (30), `PAYOUT_DAYS` (7), `REFRESH_DAYS` (14), `APP_NAME` (NexorClips).
+Opcionales: `MIN_WITHDRAW` (30), `MAX_CLIPS_DAY` (30), `PAYOUT_DAYS` (7), `REFRESH_DAYS` (14), `APP_NAME` (ClipProfit Hispano).
 
 ### 5. Primer uso
 1. Abre tu web y entra con el Gmail de `ADMIN_EMAIL`.
