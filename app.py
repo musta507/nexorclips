@@ -85,6 +85,10 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()           # avisos al móvil del admin con la app ntfy
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+WHOP_API_KEY = os.environ.get("WHOP_API_KEY", "").strip()
+WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
+WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip("/")
+WHOP_TEST_MAX = 5.0  # tope de seguridad para las transferencias de prueba
 BASE_URL = os.environ.get("BASE_URL", "").strip().strip('"').rstrip("/")
 if BASE_URL and not BASE_URL.startswith("http"):
     BASE_URL = "https://" + BASE_URL
@@ -1349,6 +1353,71 @@ def admin_probe():
     if request.method == "POST":
         result = viewcounter.probe(request.form.get("url", ""))
     return render_template("admin/probe.html", result=result, has_token=bool(viewcounter.APIFY_TOKEN))
+
+
+def whop_call(method, path, **kw):
+    """Llama a la API de Whop y devuelve (ok, código, datos)."""
+    headers = {"Authorization": f"Bearer {WHOP_API_KEY}", "Content-Type": "application/json"}
+    headers.update(kw.pop("headers", {}))
+    try:
+        r = requests.request(method, f"{WHOP_API}{path}", headers=headers, timeout=30, **kw)
+    except requests.RequestException as e:
+        return False, 0, {"error": f"No se pudo conectar con Whop: {e}"}
+    try:
+        data = r.json()
+    except ValueError:
+        data = {"respuesta": r.text[:2000]}
+    return r.ok, r.status_code, data
+
+
+@app.route("/admin/probar-whop", methods=["GET", "POST"])
+@admin_required
+def admin_whop_test():
+    result, form = None, {"dest": "", "amount": "1"}
+    if request.method == "POST":
+        action = request.form.get("action", "send")
+        if action == "check":
+            tid = (request.form.get("transfer_id") or "").strip()
+            if re.fullmatch(r"[A-Za-z0-9_]{3,80}", tid):
+                ok, code, data = whop_call("GET", f"/transfers/{tid}")
+                result = {"ok": ok, "code": code, "data": data, "check": True}
+        else:
+            form = {"dest": (request.form.get("dest") or "").strip().lstrip("@"),
+                    "amount": (request.form.get("amount") or "").strip()}
+            amount = parse_float(form["amount"], 0) or 0
+            if not (WHOP_API_KEY and WHOP_COMPANY_ID):
+                flash("Faltan WHOP_API_KEY o WHOP_COMPANY_ID en las variables de Railway.", "error")
+            elif not request.form.get("confirm"):
+                flash("Marca la casilla para confirmar que quieres mandar dinero real.", "error")
+            elif not (0 < amount <= WHOP_TEST_MAX):
+                flash(f"Para probar, pon una cantidad entre 0,01 y {WHOP_TEST_MAX:.0f} $.", "error")
+            elif not re.fullmatch(r"[A-Za-z0-9_.\-]{2,80}", form["dest"]):
+                flash("Escribe el ID (user_…) o el nombre de usuario de Whop del destinatario.", "error")
+            else:
+                dest = form["dest"]
+                if not dest.startswith(("user_", "biz_", "ldgr_")):
+                    ok, code, data = whop_call("GET", f"/users/{dest}")
+                    if ok and isinstance(data, dict) and str(data.get("id", "")).startswith("user_"):
+                        dest = data["id"]
+                    else:
+                        result = {"ok": False, "code": code, "data": data,
+                                  "lookup": f"No he encontrado el usuario «{form['dest']}» en Whop. Prueba con su ID (empieza por user_)."}
+                if result is None:
+                    key = secrets.token_hex(16)
+                    body = {"amount": round(amount, 2), "currency": "usd", "origin_id": WHOP_COMPANY_ID,
+                            "destination_id": dest, "notes": "Prueba de retiro", "idempotence_key": key}
+                    ok, code, data = whop_call("POST", "/transfers", json=body, headers={"Idempotency-Key": key})
+                    if not ok and code == 400 and "type" in str(data).lower():
+                        ok, code, data = whop_call("POST", "/transfers", json={**body, "type": "balance"},
+                                                   headers={"Idempotency-Key": key})
+                    result = {"ok": ok, "code": code, "data": data, "dest": dest, "amount": amount}
+                    audit("whop_prueba", f"{amount:.2f} $ a {dest} · {'ok' if ok else 'error ' + str(code)}")
+    pretty = None
+    if result:
+        import json as _json
+        pretty = _json.dumps(result["data"], indent=2, ensure_ascii=False)[:6000]
+    return render_template("admin/whop_test.html", result=result, pretty=pretty, form=form,
+                           has_key=bool(WHOP_API_KEY), company=WHOP_COMPANY_ID, max_amount=WHOP_TEST_MAX)
 
 
 @app.route("/admin/clippers", methods=["GET", "POST"])

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Probar pagos con Whop · Admin{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_home') }}">← Panel de control</a>
+<div>
+  <span class="admin-tag">Admin</span>
+  <h1 style="margin-top:8px">Probar un retiro con Whop</h1>
+  <p class="muted" style="margin-top:6px">Manda una cantidad pequeña de <b>dinero real</b> del saldo de Whop de la empresa al saldo de Whop de un usuario. Sirve para comprobar que funciona y ver la comisión.</p>
+</div>
+{% if not has_key or not company %}
+<div class="flash error">Faltan variables en Railway: {% if not has_key %}<b>WHOP_API_KEY</b> {% endif %}{% if not company %}<b>WHOP_COMPANY_ID</b>{% endif %}</div>
+{% else %}
+<div class="flash ok">Conectado a la empresa de Whop <b>&nbsp;{{ company }}</b></div>
+{% endif %}
+<div class="card">
+  <form method="post" class="form-stack">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="send">
+    <div class="field"><label for="w-dest">Usuario de Whop que recibe</label>
+      <input id="w-dest" name="dest" value="{{ form.dest }}" placeholder="user_XXXXXXXX o nombre de usuario" required></div>
+    <div class="field"><label for="w-amount">Cantidad en dólares (máximo {{ max_amount|int }} $)</label>
+      <input id="w-amount" name="amount" inputmode="decimal" value="{{ form.amount }}" required></div>
+    <label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="confirm" value="1"> Entiendo que es dinero real y que no se puede deshacer</label>
+    <button class="btn accent">Mandar transferencia</button>
+  </form>
+</div>
+{% if result %}
+<div class="card form-stack">
+  {% if result.lookup %}
+    <div class="flash error">{{ result.lookup }}</div>
+  {% elif result.ok %}
+    {% set d = result.data %}
+    <div class="flash ok">{% if result.check %}Estado de la transferencia{% else %}¡Transferencia enviada!{% endif %}&nbsp;Estado: <b>&nbsp;{{ d.status or "—" }}</b></div>
+    <div class="facts">
+      <div class="fact"><b>{{ d.amount if d.amount is not none else "—" }} {{ (d.currency or "usd")|upper }}</b><span>cantidad</span></div>
+      <div class="fact"><b>{% if d.fee is mapping %}{{ d.fee.amount }}{% else %}{{ d.fee if d.fee is not none else (d.fee_amount if d.fee_amount is not none else "0") }}{% endif %}</b><span>comisión de Whop</span></div>
+      <div class="fact"><b style="font-size:14px;word-break:break-all">{{ d.id or "—" }}</b><span>ID de la transferencia</span></div>
+    </div>
+    {% if d.failure_reason %}<div class="flash error">Motivo del fallo: {{ d.failure_reason }}</div>{% endif %}
+    {% if d.id %}
+    <form method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="check">
+      <input type="hidden" name="transfer_id" value="{{ d.id }}">
+      <button class="btn soft">Volver a comprobar el estado</button>
+    </form>
+    {% endif %}
+  {% else %}
+    <div class="flash error">Whop ha respondido con error {{ result.code }}. Mira el detalle abajo y mándame una captura.</div>
+  {% endif %}
+  <details {% if not result.ok %}open{% endif %}>
+    <summary class="small" style="cursor:pointer;font-weight:600">Ver la respuesta de Whop</summary>
+    <pre style="white-space:pre-wrap;word-break:break-all;background:var(--soft);padding:14px;border-radius:12px;font-size:12px;max-height:420px;overflow:auto">{{ pretty }}</pre>
+  </details>
+</div>
+{% endif %}
+{% endblock %}

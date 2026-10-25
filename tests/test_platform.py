@@ -615,3 +615,42 @@ def test_phone_notifications(monkeypatch):
     monkeypatch.setattr(A, "NTFY_TOPIC", "")
     post(a, "/soporte", body="otro")
     assert len(sent) == 2                                                   # sin tema configurado, no se envía nada
+
+
+def test_whop_test_transfer(monkeypatch):
+    """La página de prueba de Whop exige claves, confirmación y tope; manda la transferencia y busca por usuario."""
+    admin = client_for("admin@test.com", verify=False)
+    clipper = client_for("c@test.com", verify=False)
+    assert clipper.get("/admin/probar-whop").status_code in (302, 403, 404)
+    r = admin.get("/admin/probar-whop")
+    assert r.status_code == 200 and "WHOP_API_KEY" in r.get_data(as_text=True)
+    r = post(admin, "/admin/probar-whop", dest="user_abc", amount="1", confirm="1")
+    assert "Faltan WHOP_API_KEY" in r.get_data(as_text=True)
+
+    monkeypatch.setattr(A, "WHOP_API_KEY", "k")
+    monkeypatch.setattr(A, "WHOP_COMPANY_ID", "biz_1")
+    calls = []
+
+    class R:
+        def __init__(self, code, data):
+            self.status_code, self._d, self.ok, self.text = code, data, code < 400, ""
+
+        def json(self):
+            return self._d
+
+    def fake(method, url, **kw):
+        calls.append((method, url, kw.get("json")))
+        if url.endswith("/users/pepe"):
+            return R(200, {"id": "user_pepe"})
+        return R(201, {"id": "xfer_1", "status": "succeeded", "amount": 1.0, "currency": "usd", "fee": None})
+    monkeypatch.setattr(A.requests, "request", fake)
+
+    r = post(admin, "/admin/probar-whop", dest="user_abc", amount="1")
+    assert "Marca la casilla" in r.get_data(as_text=True) and not calls
+    r = post(admin, "/admin/probar-whop", dest="user_abc", amount="50", confirm="1")
+    assert "entre 0,01" in r.get_data(as_text=True) and not calls
+    r = post(admin, "/admin/probar-whop", dest="@pepe", amount="1", confirm="1")
+    html = r.get_data(as_text=True)
+    assert "Transferencia enviada" in html and "xfer_1" in html
+    body = calls[-1][2]
+    assert body["destination_id"] == "user_pepe" and body["origin_id"] == "biz_1" and body["amount"] == 1.0
