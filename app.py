@@ -88,7 +88,8 @@ NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 WHOP_API_KEY = os.environ.get("WHOP_API_KEY", "").strip()
 WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
 WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip("/")
-WHOP_TEST_MAX = 5.0  # tope de seguridad para las transferencias de prueba
+WHOP_AUTO_MAX = float(os.environ.get("WHOP_AUTO_MAX", "500"))   # por encima, el retiro espera a que lo apruebe un admin
+WHOP_USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,40}$")
 BASE_URL = os.environ.get("BASE_URL", "").strip().strip('"').rstrip("/")
 if BASE_URL and not BASE_URL.startswith("http"):
     BASE_URL = "https://" + BASE_URL
@@ -98,9 +99,11 @@ PLATFORMS = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube S
 CATEGORIES = {"musica": "Música", "streamer": "Streamers", "marca": "Marcas", "infoproducto": "Infoproductos", "otro": "Otros"}
 CATEGORY_ONE = {"musica": "Música", "streamer": "Streamer", "marca": "Marca", "infoproducto": "Infoproducto", "otro": "Otro"}
 USDT_METHOD = "Cripto (USDT · TRC20)"
-PAYOUT_METHODS = [USDT_METHOD, "PayPal", "Transferencia bancaria"]
-PAYOUT_AVAILABLE = {USDT_METHOD, "Cripto (USDT)"}         # de momento solo se paga en USDT (el segundo es el nombre antiguo)
-PAYOUT_ONLY_USDT_MSG = "De momento solo está disponible el cobro en cripto (USDT, red TRC20). Elige esa opción para guardar tu cuenta."
+WHOP_METHOD = "Whop"
+PAYOUT_METHODS = [WHOP_METHOD, USDT_METHOD, "PayPal", "Transferencia bancaria"]
+PAYOUT_AVAILABLE = {WHOP_METHOD, USDT_METHOD, "Cripto (USDT)"}   # "Cripto (USDT)" es el nombre antiguo
+PAYOUT_OPEN = ("solicitado", "procesando")                        # retiros que aún no han terminado
+PAYOUT_ONLY_USDT_MSG = "De momento solo está disponible el cobro por Whop o en cripto (USDT, red TRC20). Elige una de esas opciones para guardar tu cuenta."
 TRC20_RE = re.compile(r"^T[1-9A-HJ-NP-Za-km-z]{33}$")
 FLAG_LABELS = {
     "cuenta_no_declarada": "Cuenta no vinculada",
@@ -129,6 +132,8 @@ class User(UserMixin, db.Model):
     ban_reason = db.Column(db.String(255), default="")
     payout_method = db.Column(db.String(60), default="")
     payout_details = db.Column(db.String(255), default="")
+    whop_user_id = db.Column(db.String(40), default="")
+    whop_username = db.Column(db.String(80), default="")
     tiktok_handles = db.Column(db.String(400), default="")
     instagram_handles = db.Column(db.String(400), default="")
     youtube_handles = db.Column(db.String(400), default="")
@@ -141,6 +146,22 @@ class User(UserMixin, db.Model):
     @property
     def initial(self):
         return (self.name or self.email or "?")[0].upper()
+
+    @property
+    def payout_ready(self):
+        """True si tiene una forma de cobro activa y completa."""
+        if self.payout_method == WHOP_METHOD:
+            return bool(self.whop_user_id) and whop_enabled()
+        return self.payout_method in PAYOUT_AVAILABLE and bool(self.payout_details)
+
+    @property
+    def payout_label(self):
+        if self.payout_method == WHOP_METHOD and self.whop_user_id:
+            return f"Whop · @{self.whop_username}"
+        if self.payout_details:
+            d = self.payout_details
+            return f"USDT · {d[:6]}…{d[-4:]}" if len(d) > 12 else f"USDT · {d}"
+        return ""
 
     def handles(self, platform):
         raw = getattr(self, f"{platform}_handles", "") or ""
@@ -235,8 +256,9 @@ class Payout(db.Model):
     amount = db.Column(db.Float, nullable=False)
     method = db.Column(db.String(60), default="")
     details = db.Column(db.String(255), default="")
-    status = db.Column(db.String(20), default="solicitado")  # solicitado / pagado / rechazado
+    status = db.Column(db.String(20), default="solicitado")  # solicitado / procesando / pagado / rechazado
     note = db.Column(db.String(255), default="")
+    ext_id = db.Column(db.String(80), default="")    # ID de la transferencia en Whop
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     paid_at = db.Column(db.DateTime, nullable=True)
     user = db.relationship("User", backref="payouts")
@@ -463,7 +485,7 @@ def user_money(user):
             st = stats.setdefault(s.campaign_id, campaign_stats(s.campaign))
             pending_rows.append((s, st["estimates"].get(s.id, 0)))
     earned = cents(sum(a for _, a in earned_rows))
-    withdrawn = cents(sum(p.amount for p in user.payouts if p.status in ("solicitado", "pagado")))
+    withdrawn = cents(sum(p.amount for p in user.payouts if p.status in PAYOUT_OPEN + ("pagado",)))
     paid = cents(sum(p.amount for p in user.payouts if p.status == "pagado"))
     balance = cents(earned - withdrawn)
     return {
@@ -472,7 +494,7 @@ def user_money(user):
         "available": max(balance, 0.0),
         "debt": max(-balance, 0.0),
         "paid": paid,
-        "open_payout": next((p for p in user.payouts if p.status == "solicitado"), None),
+        "open_payout": next((p for p in user.payouts if p.status in PAYOUT_OPEN), None),
         "earned_rows": sorted(earned_rows, key=lambda r: r[0].created_at, reverse=True),
         "pending_rows": sorted(pending_rows, key=lambda r: r[0].created_at, reverse=True),
     }
@@ -728,7 +750,7 @@ def static_url(filename):
 def inject_globals():
     return {"csrf_token": csrf_token, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "MIN_WITHDRAW": MIN_WITHDRAW,
-            "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
+            "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year,
             "REFRESH_DAYS": REFRESH_DAYS, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads}
@@ -1073,30 +1095,60 @@ def earnings():
     tab = request.args.get("tab", "disponible")
     if tab not in ("disponible", "pendiente", "retiros"):
         tab = "disponible"
+    whop_sync([p for p in current_user.payouts if p.status == "procesando"])
     m = user_money(current_user)
     payouts = sorted(current_user.payouts, key=lambda p: p.created_at, reverse=True)
     return render_template("earnings.html", m=m, tab=tab, payouts=payouts)
 
 
+_withdraw_lock = threading.Lock()
+
+
 @app.route("/ganancias/retirar", methods=["POST"])
 @login_required
 def withdraw():
-    if not current_user.payout_details or current_user.payout_method not in PAYOUT_AVAILABLE:
-        flash("Primero agrega tu wallet de USDT (red TRC20) para cobrar.", "error")
+    if not current_user.payout_ready:
+        flash("Primero agrega tu cuenta de cobro.", "error")
         return redirect(url_for("account", _anchor="cobro"))
-    m = user_money(current_user)
-    if m["open_payout"] or Payout.query.filter_by(user_id=current_user.id, status="solicitado").first():
-        flash("Ya tienes un retiro en curso. Podrás pedir otro cuando lo paguemos.", "error")
-    elif m["available"] < MIN_WITHDRAW:
-        flash(f"El retiro mínimo es {money(MIN_WITHDRAW)}.", "error")
-    else:
-        db.session.add(Payout(user_id=current_user.id, amount=m["available"], method=current_user.payout_method,
-                              details=current_user.payout_details))
+    with _withdraw_lock:
+        m = user_money(current_user)
+        if m["open_payout"] or Payout.query.filter(Payout.user_id == current_user.id,
+                                                   Payout.status.in_(PAYOUT_OPEN)).first():
+            flash("Ya tienes un retiro en curso. Podrás pedir otro cuando termine.", "error")
+            return redirect(url_for("earnings", tab="retiros"))
+        if m["available"] < MIN_WITHDRAW:
+            flash(f"El retiro mínimo es {money(MIN_WITHDRAW)}.", "error")
+            return redirect(url_for("earnings", tab="retiros"))
+        amount = m["available"]
+        is_whop = current_user.payout_method == WHOP_METHOD
+        auto = is_whop and amount <= WHOP_AUTO_MAX
+        payout = Payout(user_id=current_user.id, amount=amount, method=current_user.payout_method,
+                        status="procesando" if auto else "solicitado",
+                        details=(f"@{current_user.whop_username} ({current_user.whop_user_id})" if is_whop
+                                 else current_user.payout_details))
+        db.session.add(payout)
         db.session.commit()
-        log.info("Retiro solicitado: user=%s amount=%s", current_user.id, m["available"])
-        notify_phone(f"💸 Retiro de {money(m['available'])}", f"{current_user.name} quiere cobrar en {current_user.payout_method}.",
-                     url_for("admin_clippers"), tags="money_with_wings")
-        flash(f"Retiro de {money(m['available'])} solicitado. Lo pagaremos en un plazo de {PAYOUT_DAYS} días hábiles.", "ok")
+    log.info("Retiro: user=%s amount=%s method=%s auto=%s", current_user.id, amount, payout.method, auto)
+    if auto:
+        result = whop_pay(payout)
+        db.session.commit()
+        if result == "pagado":
+            notify_phone(f"✅ Pagado por Whop: {money(amount)}", f"{current_user.name} · @{current_user.whop_username}",
+                         url_for("admin_clippers"), tags="white_check_mark")
+            flash(f"¡Listo! Te hemos enviado {money(amount)} a tu cuenta de Whop (@{current_user.whop_username}). "
+                  "Ya lo tienes en tu saldo de Whop.", "ok")
+        elif result == "procesando":
+            flash(f"Estamos enviando {money(amount)} a tu cuenta de Whop. Llegará en unos minutos.", "ok")
+        else:
+            flash("No hemos podido enviar el pago automático ahora mismo. Tu retiro queda solicitado "
+                  "y lo revisamos enseguida; no tienes que hacer nada.", "info")
+        return redirect(url_for("earnings", tab="retiros"))
+    notify_phone(f"💸 Retiro de {money(amount)}", f"{current_user.name} quiere cobrar en {payout.method}.",
+                 url_for("admin_clippers"), tags="money_with_wings")
+    if is_whop:
+        flash(f"Retiro de {money(amount)} solicitado. Por ser una cantidad alta lo revisamos antes de enviarlo a tu Whop.", "ok")
+    else:
+        flash(f"Retiro de {money(amount)} solicitado. Lo pagaremos en un plazo de {PAYOUT_DAYS} días hábiles.", "ok")
     return redirect(url_for("earnings", tab="retiros"))
 
 
@@ -1105,6 +1157,37 @@ def withdraw():
 def account():
     if request.method == "POST":
         section = request.form.get("section")
+        if section == "cobro_usar":
+            method = request.form.get("payout_method", "")
+            if method == WHOP_METHOD and current_user.whop_user_id and whop_enabled():
+                current_user.payout_method = WHOP_METHOD
+            elif method == USDT_METHOD and current_user.payout_details:
+                current_user.payout_method = USDT_METHOD
+            else:
+                flash("Primero conecta esa forma de cobro.", "error")
+                return redirect(url_for("account", _anchor="cobro"))
+            db.session.commit()
+            flash(f"Ahora cobrarás por {current_user.payout_label}.", "ok")
+            return redirect(url_for("account", _anchor="cobro"))
+        if section == "cobro" and request.form.get("payout_method") == WHOP_METHOD:
+            username = (request.form.get("whop_username") or "").strip().lstrip("@")
+            if "whop.com/" in username:
+                username = username.rstrip("/").rsplit("/", 1)[-1].lstrip("@")
+            if not whop_enabled():
+                flash("El cobro por Whop aún no está activado. De momento puedes cobrar en USDT.", "info")
+            elif not WHOP_USERNAME_RE.match(username):
+                flash("Escribe tu nombre de usuario de Whop (sin espacios), por ejemplo @tunombre.", "error")
+            else:
+                uid, uname = whop_find_user(username)
+                if not uid:
+                    flash(f"No encontramos el usuario @{username} en Whop. Revisa que esté bien escrito: "
+                          "lo ves en tu perfil de whop.com.", "error")
+                else:
+                    current_user.whop_user_id, current_user.whop_username = uid, uname[:80]
+                    current_user.payout_method = WHOP_METHOD
+                    db.session.commit()
+                    flash(f"Whop conectado: @{uname}. Cuando retires, el dinero llegará al momento a tu saldo de Whop.", "ok")
+            return redirect(url_for("account", _anchor="cobro"))
         if section == "cobro":
             method = request.form.get("payout_method", "")
             details = request.form.get("payout_details", "").strip()[:255]
@@ -1150,7 +1233,7 @@ def admin_home():
     camps = Campaign.query.order_by(Campaign.created_at.desc()).all()
     cards = [(c, campaign_stats(c)) for c in camps]
     pending = Submission.query.filter_by(status="pendiente").order_by(Submission.created_at).all()
-    open_payouts = Payout.query.filter_by(status="solicitado").all()
+    open_payouts = Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).all()
     kpis = {
         "budget_live": cents(sum(c.budget for c in camps if c.status == "activa")),
         "spent": cents(sum(c.spent or 0 for c in camps)),
@@ -1370,54 +1453,67 @@ def whop_call(method, path, **kw):
     return r.ok, r.status_code, data
 
 
-@app.route("/admin/probar-whop", methods=["GET", "POST"])
-@admin_required
-def admin_whop_test():
-    result, form = None, {"dest": "", "amount": "1"}
-    if request.method == "POST":
-        action = request.form.get("action", "send")
-        if action == "check":
-            tid = (request.form.get("transfer_id") or "").strip()
-            if re.fullmatch(r"[A-Za-z0-9_]{3,80}", tid):
-                ok, code, data = whop_call("GET", f"/transfers/{tid}")
-                result = {"ok": ok, "code": code, "data": data, "check": True}
-        else:
-            form = {"dest": (request.form.get("dest") or "").strip().lstrip("@"),
-                    "amount": (request.form.get("amount") or "").strip()}
-            amount = parse_float(form["amount"], 0) or 0
-            if not (WHOP_API_KEY and WHOP_COMPANY_ID):
-                flash("Faltan WHOP_API_KEY o WHOP_COMPANY_ID en las variables de Railway.", "error")
-            elif not request.form.get("confirm"):
-                flash("Marca la casilla para confirmar que quieres mandar dinero real.", "error")
-            elif not (0 < amount <= WHOP_TEST_MAX):
-                flash(f"Para probar, pon una cantidad entre 0,01 y {WHOP_TEST_MAX:.0f} $.", "error")
-            elif not re.fullmatch(r"[A-Za-z0-9_.\-]{2,80}", form["dest"]):
-                flash("Escribe el ID (user_…) o el nombre de usuario de Whop del destinatario.", "error")
-            else:
-                dest = form["dest"]
-                if not dest.startswith(("user_", "biz_", "ldgr_")):
-                    ok, code, data = whop_call("GET", f"/users/{dest}")
-                    if ok and isinstance(data, dict) and str(data.get("id", "")).startswith("user_"):
-                        dest = data["id"]
-                    else:
-                        result = {"ok": False, "code": code, "data": data,
-                                  "lookup": f"No he encontrado el usuario «{form['dest']}» en Whop. Prueba con su ID (empieza por user_)."}
-                if result is None:
-                    key = secrets.token_hex(16)
-                    body = {"amount": round(amount, 2), "currency": "usd", "origin_id": WHOP_COMPANY_ID,
-                            "destination_id": dest, "notes": "Prueba de retiro", "idempotence_key": key}
-                    ok, code, data = whop_call("POST", "/transfers", json=body, headers={"Idempotency-Key": key})
-                    if not ok and code == 400 and "type" in str(data).lower():
-                        ok, code, data = whop_call("POST", "/transfers", json={**body, "type": "balance"},
-                                                   headers={"Idempotency-Key": key})
-                    result = {"ok": ok, "code": code, "data": data, "dest": dest, "amount": amount}
-                    audit("whop_prueba", f"{amount:.2f} $ a {dest} · {'ok' if ok else 'error ' + str(code)}")
-    pretty = None
-    if result:
-        import json as _json
-        pretty = _json.dumps(result["data"], indent=2, ensure_ascii=False)[:6000]
-    return render_template("admin/whop_test.html", result=result, pretty=pretty, form=form,
-                           has_key=bool(WHOP_API_KEY), company=WHOP_COMPANY_ID, max_amount=WHOP_TEST_MAX)
+def whop_enabled():
+    return bool(WHOP_API_KEY and WHOP_COMPANY_ID)
+
+
+def whop_find_user(username):
+    """Busca un usuario de Whop por su nombre de usuario. Devuelve (id, username) o (None, None)."""
+    ok, code, data = whop_call("GET", f"/users/{username}")
+    if ok and isinstance(data, dict) and str(data.get("id", "")).startswith("user_"):
+        return data["id"], (data.get("username") or username)
+    log.warning("Whop: usuario %s no encontrado (%s) %s", username, code, str(data)[:300])
+    return None, None
+
+
+def _whop_apply(payout, ok, code, data):
+    """Actualiza el retiro según la respuesta de Whop. Devuelve 'pagado', 'procesando' o 'fallido'."""
+    data = data if isinstance(data, dict) else {}
+    status = str(data.get("status") or "").lower()
+    if data.get("id"):
+        payout.ext_id = str(data["id"])[:80]
+    if ok and status not in ("failed", "processing", "pending", "created"):
+        payout.status, payout.paid_at = "pagado", datetime.utcnow()
+        payout.note = f"Enviado a tu Whop · {payout.ext_id}"[:255]
+        return "pagado"
+    if ok and status != "failed":
+        payout.status, payout.note = "procesando", "Enviando a tu cuenta de Whop"
+        return "procesando"
+    err = data.get("error")
+    reason = data.get("failure_reason") or data.get("message") or (err.get("message") if isinstance(err, dict) else err)
+    payout.status, payout.note = "solicitado", "Pago automático pendiente de revisar"
+    log.error("Whop: fallo al pagar el retiro #%s (%s) %s", payout.id, code, str(data)[:500])
+    notify_phone(f"⚠️ Falló un pago por Whop ({money(payout.amount)})",
+                 f"{payout.user.name}: {str(reason or code)[:150]}", url_for("admin_clippers"), tags="warning")
+    return "fallido"
+
+
+def whop_pay(payout):
+    """Manda el retiro al saldo de Whop del clipper. Es seguro repetirlo: la clave evita pagar dos veces."""
+    key = f"{APP_NAME.lower().replace(' ', '')}-payout-{payout.id}"
+    body = {"amount": round(payout.amount, 2), "currency": "usd", "origin_id": WHOP_COMPANY_ID,
+            "destination_id": payout.user.whop_user_id, "notes": f"Retiro #{payout.id} · {APP_NAME}"[:50],
+            "idempotence_key": key, "metadata": {"payout_id": str(payout.id)}}
+    ok, code, data = whop_call("POST", "/transfers", json=body, headers={"Idempotency-Key": key})
+    if not ok and code == 400 and "type" in str(data).lower():
+        ok, code, data = whop_call("POST", "/transfers", json={**body, "type": "balance"}, headers={"Idempotency-Key": key})
+    result = _whop_apply(payout, ok, code, data)
+    log.info("Whop: retiro #%s → %s (%s)", payout.id, result, code)
+    return result
+
+
+def whop_sync(payouts):
+    """Consulta en Whop los retiros que seguían «procesando»."""
+    changed = False
+    for p in payouts:
+        if p.status != "procesando" or not p.ext_id or not whop_enabled():
+            continue
+        ok, code, data = whop_call("GET", f"/transfers/{p.ext_id}")
+        if ok:
+            _whop_apply(p, ok, code, data)
+            changed = True
+    if changed:
+        db.session.commit()
 
 
 @app.route("/admin/clippers", methods=["GET", "POST"])
@@ -1429,6 +1525,20 @@ def admin_clippers():
             flash("Ese retiro ya estaba gestionado.", "error")
             return redirect(url_for("admin_clippers"))
         note = request.form.get("note", "").strip()[:255]
+        if request.form.get("action") == "whop":
+            if payout.method != WHOP_METHOD or not payout.user.whop_user_id or not whop_enabled():
+                flash("Este retiro no se puede pagar por Whop.", "error")
+                return redirect(url_for("admin_clippers"))
+            payout.status = "procesando"
+            db.session.commit()
+            result = whop_pay(payout)
+            audit("retiro_whop", f"#{payout.id} {money(payout.amount)} a {payout.user.email} · {result} · {payout.ext_id}")
+            db.session.commit()
+            flash({"pagado": f"Enviado {money(payout.amount)} a @{payout.user.whop_username} por Whop.",
+                   "procesando": "Whop está procesando el pago. Se actualizará solo."}.get(
+                result, "Whop no ha aceptado el pago. Mira el aviso en tu móvil o los registros."),
+                "ok" if result != "fallido" else "error")
+            return redirect(url_for("admin_clippers"))
         if request.form.get("action") == "pagar":
             payout.status, payout.paid_at, payout.note = "pagado", datetime.utcnow(), note
             audit("retiro_pagado", f"#{payout.id} {money(payout.amount)} a {payout.user.email} · {payout.method} · {note}")
@@ -1439,7 +1549,8 @@ def admin_clippers():
             flash("Retiro rechazado. El dinero vuelve a su saldo disponible.", "ok")
         db.session.commit()
         return redirect(url_for("admin_clippers"))
-    open_requests = Payout.query.filter_by(status="solicitado").order_by(Payout.created_at).all()
+    whop_sync(Payout.query.filter_by(status="procesando").all())
+    open_requests = Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).order_by(Payout.created_at).all()
     q = request.args.get("q", "").strip().lower()
     users = User.query.order_by(User.created_at.desc()).all()
     if q:
@@ -1784,6 +1895,7 @@ def new_leads():
 def cron_refresh():
     if not CRON_SECRET or not secrets.compare_digest(request.args.get("key", ""), CRON_SECRET):
         abort(403)
+    whop_sync(Payout.query.filter_by(status="procesando").all())
     refresh_in_background()
     return "ok"
 

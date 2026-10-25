@@ -681,3 +681,31 @@ a,button,label{-webkit-tap-highlight-color:transparent}
 @media (max-width:640px){.mn-btn{display:none}.msg-notice{padding:11px 12px}}
 @media (prefers-reduced-motion:reduce){.msg-notice.is-new,.chat-fab.has-unread{animation:none}}
 .account-grid.single{grid-template-columns:minmax(0,560px)}
+
+/* ---- formas de cobro (tarjetas) */
+.paym{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;display:flex;flex-direction:column;gap:12px;transition:border-color .2s,box-shadow .2s}
+.paym.on{border-color:var(--sapphire);box-shadow:0 0 0 3px rgba(36,70,216,.10)}
+.paym-top{display:flex;align-items:center;gap:14px}
+.paym-logo{width:46px;height:46px;border-radius:14px;background:var(--soft);color:var(--ink);display:grid;place-items:center;flex:none;font-weight:800;font-size:20px}
+.paym-logo.whop{background:var(--ink);color:#fff}
+.paym-logo.usdt{background:#e6f6f1;color:#1a8f6e}
+.paym-txt{flex:1;min-width:0}
+.paym-title{font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.paym-badge{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:var(--coral-soft);color:var(--sapphire);padding:3px 8px;border-radius:999px}
+.paym-state{font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:5px 10px;white-space:nowrap}
+.paym-state.ok{color:#157a49;background:var(--green-soft);border-color:transparent}
+.paym-state.off{background:var(--soft);border-color:transparent}
+.paym-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px}
+.paym-form summary{cursor:pointer;font-weight:600;color:var(--sapphire);list-style:none}
+.paym-form summary::-webkit-details-marker{display:none}
+.paym-form[open] summary{margin-bottom:10px}
+.paym-inline{display:flex;gap:10px;margin-bottom:6px}
+.paym-inline input{flex:1;min-width:0}
+.paym.soon{opacity:.75}
+.status.procesando{background:var(--coral-soft);color:var(--sapphire)}
+@media (max-width:640px){
+  .paym-inline{flex-direction:column}
+  .paym-top{flex-wrap:wrap}
+  .paym-top .btn{width:100%}
+  .paym-row{flex-direction:column;align-items:flex-start}
+}

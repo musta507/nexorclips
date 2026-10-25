@@ -521,7 +521,7 @@ def test_campaign_request_rate_limit():
 def test_only_usdt_payouts():
     c = client_for("u@test.com")
     r = post(c, "/cuenta", section="cobro", payout_method="PayPal", payout_details="u@paypal.com")
-    assert "solo está disponible el cobro en cripto" in r.get_data(as_text=True)
+    assert "solo está disponible el cobro por Whop o en cripto" in r.get_data(as_text=True)
     assert "red TRC20" in post(c, "/cuenta", section="cobro", payout_method=A.USDT_METHOD, payout_details="0xabc").get_data(as_text=True)
     with A.app.app_context():
         assert not A.User.query.filter_by(email="u@test.com").one().payout_details
@@ -529,7 +529,8 @@ def test_only_usdt_payouts():
     with A.app.app_context():
         u = A.User.query.filter_by(email="u@test.com").one()
         assert u.payout_details == WALLET and u.payout_method == A.USDT_METHOD
-    assert 'value="Cripto (USDT · TRC20)" selected' in client_for("nuevo@test.com").get("/cuenta").get_data(as_text=True)
+    html = client_for("nuevo@test.com").get("/cuenta").get_data(as_text=True)
+    assert "Cripto · USDT" in html and "Próximamente" in html          # Whop aún sin activar
 
 
 def test_join_campaign_and_admin_accepts():
@@ -617,40 +618,108 @@ def test_phone_notifications(monkeypatch):
     assert len(sent) == 2                                                   # sin tema configurado, no se envía nada
 
 
-def test_whop_test_transfer(monkeypatch):
-    """La página de prueba de Whop exige claves, confirmación y tope; manda la transferencia y busca por usuario."""
-    admin = client_for("admin@test.com", verify=False)
-    clipper = client_for("c@test.com", verify=False)
-    assert clipper.get("/admin/probar-whop").status_code in (302, 403, 404)
-    r = admin.get("/admin/probar-whop")
-    assert r.status_code == 200 and "WHOP_API_KEY" in r.get_data(as_text=True)
-    r = post(admin, "/admin/probar-whop", dest="user_abc", amount="1", confirm="1")
-    assert "Faltan WHOP_API_KEY" in r.get_data(as_text=True)
+class _R:
+    def __init__(self, code, data):
+        self.status_code, self._d, self.ok, self.text = code, data, code < 400, ""
 
+    def json(self):
+        return self._d
+
+
+def _whop_fake(monkeypatch, transfer_status="succeeded", fail=False):
     monkeypatch.setattr(A, "WHOP_API_KEY", "k")
     monkeypatch.setattr(A, "WHOP_COMPANY_ID", "biz_1")
     calls = []
 
-    class R:
-        def __init__(self, code, data):
-            self.status_code, self._d, self.ok, self.text = code, data, code < 400, ""
-
-        def json(self):
-            return self._d
-
     def fake(method, url, **kw):
-        calls.append((method, url, kw.get("json")))
-        if url.endswith("/users/pepe"):
-            return R(200, {"id": "user_pepe"})
-        return R(201, {"id": "xfer_1", "status": "succeeded", "amount": 1.0, "currency": "usd", "fee": None})
+        calls.append((method, url, kw.get("json"), kw.get("headers", {})))
+        if "/users/" in url:
+            name = url.rsplit("/", 1)[-1]
+            return _R(200, {"id": "user_" + name, "username": name}) if name != "nadie" else _R(404, {"error": "not found"})
+        if method == "GET" and "/transfers/" in url:
+            return _R(200, {"id": "xfer_1", "status": "succeeded"})
+        if fail:
+            return _R(400, {"error": {"message": "Saldo insuficiente"}})
+        return _R(201, {"id": "xfer_1", "status": transfer_status, "amount": kw["json"]["amount"]})
     monkeypatch.setattr(A.requests, "request", fake)
+    monkeypatch.setattr(A, "notify_phone", lambda *a, **k: None)
+    return calls
 
-    r = post(admin, "/admin/probar-whop", dest="user_abc", amount="1")
-    assert "Marca la casilla" in r.get_data(as_text=True) and not calls
-    r = post(admin, "/admin/probar-whop", dest="user_abc", amount="50", confirm="1")
-    assert "entre 0,01" in r.get_data(as_text=True) and not calls
-    r = post(admin, "/admin/probar-whop", dest="@pepe", amount="1", confirm="1")
-    html = r.get_data(as_text=True)
-    assert "Transferencia enviada" in html and "xfer_1" in html
-    body = calls[-1][2]
-    assert body["destination_id"] == "user_pepe" and body["origin_id"] == "biz_1" and body["amount"] == 1.0
+
+def _clipper_with_balance(monkeypatch, email="w@test.com", views=450_000):
+    cid = make_campaign(rate=100, budget=1000)
+    admin = client_for("admin@test.com")
+    c = client_for(email, tiktok="wh")
+    post(c, f"/campana/{cid}", url=tt("wh", 1))
+    approve_all(admin)
+    set_views(monkeypatch, {str(7300000000000000001): views})
+    with A.app.app_context():
+        A.refresh_views()
+    return c, admin
+
+
+def test_whop_connect_and_instant_withdraw(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    # sin claves de Whop: no se puede conectar
+    r = post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    assert "aún no está activado" in r.get_data(as_text=True)
+    calls = _whop_fake(monkeypatch)
+    assert "No encontramos" in post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD,
+                                    whop_username="@nadie").get_data(as_text=True)
+    r = post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="https://whop.com/@ana/")
+    assert "Whop conectado: @ana" in r.get_data(as_text=True)
+    assert "Activo" in c.get("/cuenta").get_data(as_text=True)
+    r = post(c, "/ganancias/retirar")
+    assert "Te hemos enviado" in r.get_data(as_text=True)
+    with A.app.app_context():
+        p = A.Payout.query.one()
+        assert p.status == "pagado" and p.ext_id == "xfer_1" and p.amount == 45.0
+        u = A.User.query.filter_by(email="w@test.com").one()
+        assert A.user_money(u)["available"] == 0
+    body, headers = calls[-1][2], calls[-1][3]
+    assert body["destination_id"] == "user_ana" and body["origin_id"] == "biz_1" and body["amount"] == 45.0
+    assert headers["Idempotency-Key"] == body["idempotence_key"]
+    # cambiar a USDT y volver
+    post(c, "/cuenta", section="cobro", payout_method=A.USDT_METHOD, payout_details=WALLET)
+    with A.app.app_context():
+        assert A.User.query.filter_by(email="w@test.com").one().payout_method == A.USDT_METHOD
+    post(c, "/cuenta", section="cobro_usar", payout_method=A.WHOP_METHOD)
+    with A.app.app_context():
+        assert A.User.query.filter_by(email="w@test.com").one().payout_method == A.WHOP_METHOD
+
+
+def test_whop_processing_then_synced(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    _whop_fake(monkeypatch, transfer_status="processing")
+    post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    assert "Llegará en unos minutos" in post(c, "/ganancias/retirar").get_data(as_text=True)
+    c.get("/ganancias?tab=retiros")                                          # consulta a Whop y se actualiza
+    with A.app.app_context():
+        assert A.Payout.query.one().status == "pagado"
+
+
+def test_whop_failure_goes_to_admin(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    _whop_fake(monkeypatch, fail=True)
+    post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    assert "lo revisamos enseguida" in post(c, "/ganancias/retirar").get_data(as_text=True)
+    with A.app.app_context():
+        p = A.Payout.query.one()
+        assert p.status == "solicitado"
+        pid = p.id
+    assert "Pagar con Whop" in admin.get("/admin/clippers").get_data(as_text=True)
+    _whop_fake(monkeypatch)                                                   # el saldo ya está: el admin reintenta
+    post(admin, "/admin/clippers", payout_id=pid, action="whop")
+    with A.app.app_context():
+        assert get(A.Payout, pid).status == "pagado"
+
+
+def test_whop_big_amount_waits_for_admin(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    calls = _whop_fake(monkeypatch)
+    monkeypatch.setattr(A, "WHOP_AUTO_MAX", 10.0)
+    post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    assert "cantidad alta" in post(c, "/ganancias/retirar").get_data(as_text=True)
+    assert not [x for x in calls if "/transfers" in x[1]]
+    with A.app.app_context():
+        assert A.Payout.query.one().status == "solicitado"

@@ -7,30 +7,100 @@
   <p class="muted">{{ current_user.email }} · en {{ APP_NAME }} desde {{ current_user.created_at|date }}</p>
 </div>
 
-<div class="account-grid single">
-  <section class="card" id="cobro">
-    <form method="post" class="form-stack">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <input type="hidden" name="section" value="cobro">
-      <div>
-        <h2>Cuenta de cobro</h2>
-        <p class="muted small" style="margin-top:4px">Aquí te enviaremos el dinero cuando pidas un retiro. Revisa bien la dirección: un pago enviado a una wallet equivocada no se puede recuperar.</p>
+<section id="cobro" class="form-stack">
+  <div>
+    <h2>Cómo quieres cobrar</h2>
+    <p class="muted small" style="margin-top:4px">Elige dónde te enviamos el dinero cuando pulses «Retirar». Sin comisiones por nuestra parte.</p>
+  </div>
+
+  {% set whop_on = whop_enabled() %}
+  {% set whop_linked = current_user.whop_user_id and whop_on %}
+  {% set usdt_linked = current_user.payout_details %}
+  {% set active = current_user.payout_method if current_user.payout_ready else "" %}
+
+  {# ---- Whop #}
+  <div class="paym{% if active == WHOP_METHOD %} on{% endif %}">
+    <div class="paym-top">
+      <span class="paym-logo whop" aria-hidden="true">W</span>
+      <div class="paym-txt">
+        <div class="paym-title">Whop {% if whop_on %}<span class="paym-badge">Recomendado</span>{% endif %}</div>
+        <div class="small muted">Al instante · el dinero llega a tu saldo de Whop</div>
       </div>
-      {% set has_usdt = current_user.payout_details and current_user.payout_method in PAYOUT_AVAILABLE %}
-      <div class="field">
-        <label for="method">Método</label>
-        <select id="method" name="payout_method">
-          {% for mth in PAYOUT_METHODS %}<option value="{{ mth }}" {% if mth == USDT_METHOD %}selected{% endif %}>{{ mth }}</option>{% endfor %}
-        </select>
+      {% if active == WHOP_METHOD %}<span class="paym-state ok">Activo</span>
+      {% elif whop_linked %}<span class="paym-state">Conectado</span>
+      {% elif whop_on %}<span class="paym-state">Sin conectar</span>
+      {% else %}<span class="paym-state off">Próximamente</span>{% endif %}
+    </div>
+    {% if whop_on %}
+      {% if whop_linked %}
+      <div class="paym-row">
+        <span class="small">Cuenta: <b>@{{ current_user.whop_username }}</b></span>
+        {% if active != WHOP_METHOD %}
+        <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="section" value="cobro_usar">
+          <input type="hidden" name="payout_method" value="{{ WHOP_METHOD }}"><button class="btn sm">Cobrar por Whop</button></form>
+        {% endif %}
       </div>
-      <div class="field">
-        <label for="details">Dirección de tu wallet (red TRC20)</label>
-        <input id="details" name="payout_details" value="{{ current_user.payout_details if has_usdt else '' }}" maxlength="255"
-               placeholder="Empieza por T… (34 caracteres)" autocomplete="off" autocapitalize="none" spellcheck="false">
-        <span class="hint">Cópiala desde tu wallet o exchange (Binance, Trust Wallet…) eligiendo USDT en la red TRC20.</span>
+      {% endif %}
+      <details class="paym-form" {% if not whop_linked %}open{% endif %}>
+        <summary class="small">{{ "Cambiar de cuenta de Whop" if whop_linked else "Conectar mi Whop" }}</summary>
+        <form method="post" class="paym-inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="section" value="cobro">
+          <input type="hidden" name="payout_method" value="{{ WHOP_METHOD }}">
+          <input name="whop_username" placeholder="@tu_usuario_de_whop" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Usuario de Whop" required>
+          <button class="btn">Conectar Whop</button>
+        </form>
+        <span class="hint">Lo ves en tu perfil de whop.com. Comprueba que es el tuyo: el dinero va a esa cuenta.</span>
+      </details>
+    {% endif %}
+  </div>
+
+  {# ---- USDT #}
+  <div class="paym{% if active == USDT_METHOD or (active and active != WHOP_METHOD) %} on{% endif %}">
+    <div class="paym-top">
+      <span class="paym-logo usdt" aria-hidden="true">₮</span>
+      <div class="paym-txt">
+        <div class="paym-title">Cripto · USDT (red TRC20)</div>
+        <div class="small muted">Alrededor de 1 $ de comisión de red · en {{ PAYOUT_DAYS }} días hábiles</div>
       </div>
-      <button class="btn block">{{ "Guardar cuenta" if has_usdt else "Agregar cuenta" }}</button>
-    </form>
-  </section>
-</div>
+      {% if active and active != WHOP_METHOD %}<span class="paym-state ok">Activo</span>
+      {% elif usdt_linked %}<span class="paym-state">Guardada</span>
+      {% else %}<span class="paym-state">Sin conectar</span>{% endif %}
+    </div>
+    {% if usdt_linked %}
+    <div class="paym-row">
+      <span class="small selectable" style="word-break:break-all">{{ current_user.payout_details }}</span>
+      {% if not active or active == WHOP_METHOD %}
+      <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="section" value="cobro_usar">
+        <input type="hidden" name="payout_method" value="{{ USDT_METHOD }}"><button class="btn sm">Cobrar en USDT</button></form>
+      {% endif %}
+    </div>
+    {% endif %}
+    <details class="paym-form" {% if not usdt_linked and not whop_on %}open{% endif %}>
+      <summary class="small">{{ "Cambiar de wallet" if usdt_linked else "Agregar mi wallet" }}</summary>
+      <form method="post" class="paym-inline">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="section" value="cobro">
+        <input type="hidden" name="payout_method" value="{{ USDT_METHOD }}">
+        <input name="payout_details" maxlength="255" placeholder="Empieza por T… (34 caracteres)" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Dirección TRC20" required>
+        <button class="btn">Guardar wallet</button>
+      </form>
+      <span class="hint">Cópiala desde tu wallet o exchange (Binance, Trust Wallet…) eligiendo USDT en la red TRC20. Un pago a una dirección equivocada no se puede recuperar.</span>
+    </details>
+  </div>
+
+  {# ---- Próximamente #}
+  {% for name, sub, logo in [("PayPal", "Minutos a horas", "P"), ("Transferencia bancaria", "2 a 5 días hábiles", "€")] %}
+  <form method="post" class="paym soon">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="section" value="cobro">
+    <input type="hidden" name="payout_method" value="{{ name }}">
+    <div class="paym-top">
+      <span class="paym-logo" aria-hidden="true">{{ logo }}</span>
+      <div class="paym-txt"><div class="paym-title">{{ name }}</div><div class="small muted">{{ sub }}</div></div>
+      <button class="btn sm soft">Agregar cuenta</button>
+    </div>
+  </form>
+  {% endfor %}
+</section>
 {% endblock %}

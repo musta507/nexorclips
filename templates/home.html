@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon, budget %}
 {% block content %}
-{% if not new_user and not current_user.payout_details %}
+{% if not new_user and not current_user.payout_ready %}
 <div class="card tight notice">
   <span class="ico">{{ icon("card") }}</span>
   <div class="txt">
     <h3>Agrega tu cuenta para poder pagarte</h3>
-    <p class="small muted">Tu wallet de USDT (red TRC20). La necesitas para retirar tus ganancias.</p>
+    <p class="small muted">{% if whop_enabled() %}Conecta tu Whop para cobrar al instante, o agrega tu wallet de USDT.{% else %}Tu wallet de USDT (red TRC20). La necesitas para retirar tus ganancias.{% endif %}</p>
   </div>
   <a class="btn sm" href="{{ url_for('account') }}#cobro">Agregar</a>
 </div>

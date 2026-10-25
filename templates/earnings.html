@@ -7,8 +7,8 @@
     <span class="l">Balance disponible</span>
     <div class="row">
       <span class="v">{{ m.available|amount }}</span>
-      {% if not current_user.payout_details %}
-        <a class="btn sm" href="{{ url_for('account') }}">Agregar cuenta</a>
+      {% if not current_user.payout_ready %}
+        <a class="btn sm" href="{{ url_for('account') }}#cobro">Agregar cuenta</a>
       {% elif m.open_payout %}
         <span class="status solicitado">Retiro en curso</span>
       {% else %}
@@ -19,14 +19,14 @@
       {% endif %}
     </div>
     {% if m.open_payout %}
-    <p class="small" style="color:rgba(255,255,255,.75)">Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo pagamos en un plazo de {{ PAYOUT_DAYS }} días hábiles.</p>
+    <p class="small" style="color:rgba(255,255,255,.75)">{% if m.open_payout.status == "procesando" %}Enviando {{ m.open_payout.amount|money }} a tu cuenta de Whop. Llegará en unos minutos.{% elif m.open_payout.method == WHOP_METHOD %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo revisamos y te llega a tu Whop.{% else %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo pagamos en un plazo de {{ PAYOUT_DAYS }} días hábiles.{% endif %}</p>
     {% elif m.available < MIN_WITHDRAW %}
     <div class="withdraw-goal">
       <div class="budget-row tnum"><span>Te faltan <b>{{ (MIN_WITHDRAW - m.available)|money }}</b> para poder retirar</span><span>Mín. {{ MIN_WITHDRAW|money(0) }}</span></div>
       <div class="budget-bar"><span style="width:{{ (m.available / MIN_WITHDRAW * 100)|round|int }}%"></span></div>
     </div>
     {% endif %}
-    <span class="small muted">{% if current_user.payout_details %}Cobras por {{ current_user.payout_method }} · <a href="{{ url_for('account') }}" style="text-decoration:underline">cambiar</a> · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% else %}Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}</span>
+    <span class="small muted">{% if current_user.payout_ready %}Cobras por {{ current_user.payout_label }}{% if current_user.payout_method == WHOP_METHOD %} (al instante){% endif %} · <a href="{{ url_for('account') }}#cobro" style="text-decoration:underline">cambiar</a> · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% else %}Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}</span>
   </div>
   <div class="card stat">
     <span class="l">Balance pendiente</span>
@@ -79,7 +79,7 @@
       <tr>
         <td data-label="Fecha" class="small muted">{{ p.created_at|date }}</td>
         <td data-label="Método">{{ p.method }}</td>
-        <td data-label="Estado"><span class="status {{ p.status }}">{{ p.status|capitalize }}</span></td>
+        <td data-label="Estado"><span class="status {{ p.status }}">{{ "Enviando" if p.status == "procesando" else p.status|capitalize }}</span></td>
         <td data-label="Nota" class="small muted">{% if p.status == "pagado" %}Pagado el {{ p.paid_at|date }}{% if p.note %} · {{ p.note }}{% endif %}{% else %}{{ p.note }}{% endif %}</td>
         <td data-label="Monto" class="r tnum"><b>{{ p.amount|money }}</b></td>
       </tr>

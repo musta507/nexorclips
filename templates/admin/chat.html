@@ -40,7 +40,7 @@
       {% else %}<span class="muted">Aún no se ha unido a ninguna campaña.</span>{% endfor %}
       {% if accounts %}<p class="hint">Comprueba en el chat que la cuenta es suya y pulsa Aceptar. Le avisamos por este mismo chat.</p>{% endif %}
     </div>
-    <div class="small"><div class="label" style="margin-bottom:6px">Cobro</div>{% if user.payout_details %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% else %}<span class="muted">Sin cuenta de cobro</span>{% endif %}</div>
+    <div class="small"><div class="label" style="margin-bottom:6px">Cobro</div>{% if user.payout_ready %}{% if user.payout_method == WHOP_METHOD %}Whop · <span class="selectable">@{{ user.whop_username }}</span>{% else %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% endif %}{% else %}<span class="muted">Sin cuenta de cobro</span>{% endif %}</div>
     {% if m.open_payout %}<div class="flash ok">Retiro pendiente de {{ m.open_payout.amount|money }}</div>{% endif %}
     <a class="btn soft" href="{{ url_for('admin_clippers', q=user.email) }}">Ver en Clippers y retiros</a>
   </aside>
