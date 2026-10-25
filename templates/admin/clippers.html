@@ -11,7 +11,7 @@
 <section>
   <div class="section-head">
     <h2>Retiros en curso ({{ open_requests|length }})</h2>
-    <p class="muted">Los retiros por Whop se pagan solos{% if WHOP_AUTO_MAX %} hasta {{ WHOP_AUTO_MAX|money(0) }}{% endif %}; los mayores esperan aquí a que pulses «Pagar con Whop». Los de USDT envíalos tú, apunta el ID de la transacción y márcalos como pagados.</p>
+    <p class="muted">Los retiros se pagan solos por Whop en cuanto el clipper pulsa «Retirar». Si Whop no puede pagar (por ejemplo, porque no hay saldo en tu empresa), el retiro se cancela solo y el dinero vuelve al saldo del clipper.</p>
   </div>
   <div class="table-card">
   {% if open_requests %}
@@ -48,6 +48,21 @@
   {% endif %}
   </div>
 </section>
+
+{% if failed %}
+<section>
+  <div class="section-head"><h2>Últimos pagos que Whop no pudo enviar</h2><p class="muted">Se cancelaron solos y el dinero volvió al saldo de cada clipper. Aquí tienes el motivo que dio Whop.</p></div>
+  <div class="table-card"><div class="table-scroll"><table class="rt">
+    <thead><tr><th>Clipper</th><th class="r">Monto</th><th>Motivo de Whop</th></tr></thead>
+    <tbody>
+    {% for p in failed %}
+    <tr><td data-label="Clipper"><b>{{ p.user.name }}</b><div class="small muted">{{ p.created_at|ago }}</div></td>
+      <td data-label="Monto" class="r tnum">{{ p.amount|money }}</td>
+      <td data-label="Motivo" class="small selectable" style="word-break:break-word">{{ p.error }}</td></tr>
+    {% endfor %}
+    </tbody></table></div></div>
+</section>
+{% endif %}
 
 <section>
   <div class="toolbar" style="margin-bottom:18px">

@@ -1331,6 +1331,7 @@ def earnings():
     if tab not in ("disponible", "curso", "pendiente", "retiros"):
         tab = "disponible"
     whop_sync([p for p in current_user.payouts if p.status == "procesando"])
+    release_stuck_payouts(Payout.query.filter_by(user_id=current_user.id))
     m = user_money(current_user)
     payouts = sorted(current_user.payouts, key=lambda p: p.created_at, reverse=True)
     return render_template("earnings.html", m=m, tab=tab, payouts=payouts)
@@ -1388,8 +1389,8 @@ def withdraw():
         elif result == "procesando":
             flash(f"Estamos enviando {money(amount)} a tu cuenta de Whop. Llegará en unos minutos.", "ok")
         else:
-            flash("No hemos podido enviar el pago automático ahora mismo. Tu retiro queda solicitado "
-                  "y lo revisamos enseguida; no tienes que hacer nada.", "info")
+            flash("Whop no ha podido enviar el pago ahora mismo. No se te ha descontado nada: el dinero sigue "
+                  "en tu saldo. Vuelve a intentarlo en un rato.", "error")
         return redirect(url_for("earnings", tab="retiros"))
     notify_phone(f"💸 Retiro de {money(amount)}", f"{current_user.name} quiere cobrar en {payout.method}.",
                  url_for("admin_clippers"), tags="money_with_wings")
@@ -1782,6 +1783,20 @@ def whop_find_user(username):
     return None, None
 
 
+WHOP_FAIL_NOTE = "No se pudo enviar por Whop. El dinero ha vuelto a tu saldo."
+OLD_WHOP_FAIL_NOTE = "Pago automático pendiente de revisar"
+
+
+def release_stuck_payouts(query=None):
+    """Retiros por Whop que fallaron con la versión anterior: se cancelan y el dinero vuelve al clipper."""
+    q = query if query is not None else Payout.query
+    stuck = q.filter(Payout.status == "solicitado", Payout.method == WHOP_METHOD, Payout.note == OLD_WHOP_FAIL_NOTE).all()
+    for p in stuck:
+        p.status, p.note = "rechazado", WHOP_FAIL_NOTE
+    if stuck:
+        db.session.commit()
+
+
 def _whop_apply(payout, ok, code, data):
     """Actualiza el retiro según la respuesta de Whop. Devuelve 'pagado', 'procesando' o 'fallido'."""
     data = data if isinstance(data, dict) else {}
@@ -1797,11 +1812,12 @@ def _whop_apply(payout, ok, code, data):
         return "procesando"
     err = data.get("error")
     reason = data.get("failure_reason") or data.get("message") or (err.get("message") if isinstance(err, dict) else err)
-    payout.status, payout.note = "solicitado", "Pago automático pendiente de revisar"
+    payout.status, payout.note = "rechazado", WHOP_FAIL_NOTE      # se cancela solo: el dinero vuelve a su saldo
     payout.error = f"Whop {code}: {reason or str(data)[:300]}"[:400]
     log.error("Whop: fallo al pagar el retiro #%s (%s) %s", payout.id, code, str(data)[:500])
     notify_phone(f"⚠️ Falló un pago por Whop ({money(payout.amount)})",
-                 f"{payout.user.name}: {str(reason or code)[:150]}", url_for("admin_clippers"), tags="warning")
+                 f"{payout.user.name}: {str(reason or code)[:150]}. El dinero ha vuelto a su saldo.",
+                 url_for("admin_clippers") if has_request_context() else "", tags="warning")
     return "fallido"
 
 
@@ -1876,7 +1892,7 @@ def admin_clippers():
             db.session.commit()
             flash({"pagado": f"Enviado {money(payout.amount)} a @{payout.user.whop_username} por Whop.",
                    "procesando": "Whop está procesando el pago. Se actualizará solo."}.get(
-                result, "Whop no ha aceptado el pago. Mira el aviso en tu móvil o los registros."),
+                result, f"Whop no ha aceptado el pago ({payout.error}). El dinero ha vuelto al saldo del clipper."),
                 "ok" if result != "fallido" else "error")
             return redirect(url_for("admin_clippers"))
         if request.form.get("action") == "pagar":
@@ -1890,6 +1906,9 @@ def admin_clippers():
         db.session.commit()
         return redirect(url_for("admin_clippers"))
     whop_sync(Payout.query.filter_by(status="procesando").all())
+    release_stuck_payouts()
+    failed = (Payout.query.filter(Payout.status == "rechazado", Payout.error != "")
+              .order_by(Payout.created_at.desc()).limit(5).all())
     open_requests = Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).order_by(Payout.created_at).all()
     q = request.args.get("q", "").strip().lower()
     users = User.query.order_by(User.created_at.desc()).all()
@@ -1898,7 +1917,7 @@ def admin_clippers():
                  or any(q in h for p in PLATFORMS for h in u.handles(p))]
     rows = [(u, user_money(u), len(u.submissions)) for u in users]
     rows.sort(key=lambda r: -r[1]["earned"])
-    return render_template("admin/clippers.html", rows=rows, open_requests=open_requests, q=q)
+    return render_template("admin/clippers.html", rows=rows, open_requests=open_requests, q=q, failed=failed)
 
 
 @app.route("/admin/clipper/<int:uid>/<accion>", methods=["POST"])

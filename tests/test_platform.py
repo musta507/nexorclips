@@ -702,20 +702,30 @@ def test_whop_processing_then_synced(monkeypatch):
         assert A.Payout.query.one().status == "pagado"
 
 
-def test_whop_failure_goes_to_admin(monkeypatch):
+def test_whop_failure_returns_money(monkeypatch):
     c, admin = _clipper_with_balance(monkeypatch)
     _whop_fake(monkeypatch, fail=True)
     post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
-    assert "lo revisamos enseguida" in post(c, "/ganancias/retirar").get_data(as_text=True)
+    assert "sigue en tu saldo" in post(c, "/ganancias/retirar").get_data(as_text=True)
     with A.app.app_context():
         p = A.Payout.query.one()
-        assert p.status == "solicitado"
-        pid = p.id
-    assert "Pagar con Whop" in admin.get("/admin/clippers").get_data(as_text=True)
-    _whop_fake(monkeypatch)                                                   # el saldo ya está: el admin reintenta
-    post(admin, "/admin/clippers", payout_id=pid, action="whop")
+        u = A.User.query.filter_by(email="w@test.com").one()
+        assert p.status == "rechazado" and "Saldo insuficiente" in p.error and A.user_money(u)["available"] == 45.0
+    assert "Saldo insuficiente" in admin.get("/admin/clippers").get_data(as_text=True)
+    _whop_fake(monkeypatch)                                                   # ya hay saldo: el clipper vuelve a intentarlo
+    assert "Te hemos enviado" in post(c, "/ganancias/retirar").get_data(as_text=True)
+
+
+def test_old_stuck_payout_is_released(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
     with A.app.app_context():
-        assert get(A.Payout, pid).status == "pagado"
+        u = A.User.query.filter_by(email="w@test.com").one()
+        A.db.session.add(A.Payout(user_id=u.id, amount=45.0, method=A.WHOP_METHOD, status="solicitado", note=A.OLD_WHOP_FAIL_NOTE))
+        A.db.session.commit()
+    c.get("/ganancias")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="w@test.com").one()
+        assert A.Payout.query.one().status == "rechazado" and A.user_money(u)["available"] == 45.0
 
 
 def test_whop_big_amount_waits_for_admin(monkeypatch):
