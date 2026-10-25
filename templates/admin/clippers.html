@@ -25,9 +25,10 @@
         <td data-label="Monto" class="r tnum"><b>{{ p.amount|money }}</b></td>
         <td data-label="Acción">
           {% if p.status == "procesando" %}
-          <span class="status procesando">Enviando por Whop</span>
+          <span class="status procesando">Enviando por Whop</span>{% if p.ext_id %}<div class="small muted selectable">{{ p.ext_id }}</div>{% endif %}
           {% else %}
           {% if p.note %}<div class="small" style="color:var(--red);margin-bottom:6px">{{ p.note }}</div>{% endif %}
+          {% if p.error %}<div class="small muted selectable" style="word-break:break-all;margin-bottom:6px">{{ p.error }}</div>{% endif %}
           <form class="inline" method="post" style="flex-wrap:wrap" data-confirm="¿Confirmas esta acción sobre el retiro de {{ p.amount|money }}?">
             <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <input type="hidden" name="payout_id" value="{{ p.id }}">

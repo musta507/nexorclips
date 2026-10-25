@@ -277,6 +277,7 @@ class Payout(db.Model):
     status = db.Column(db.String(20), default="solicitado")  # solicitado / procesando / pagado / rechazado
     note = db.Column(db.String(255), default="")
     ext_id = db.Column(db.String(80), default="")    # ID de la transferencia en Whop
+    error = db.Column(db.String(400), default="")    # última respuesta de Whop si falló (solo la ve el admin)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     paid_at = db.Column(db.DateTime, nullable=True)
     user = db.relationship("User", backref="payouts")
@@ -1797,6 +1798,7 @@ def _whop_apply(payout, ok, code, data):
     err = data.get("error")
     reason = data.get("failure_reason") or data.get("message") or (err.get("message") if isinstance(err, dict) else err)
     payout.status, payout.note = "solicitado", "Pago automático pendiente de revisar"
+    payout.error = f"Whop {code}: {reason or str(data)[:300]}"[:400]
     log.error("Whop: fallo al pagar el retiro #%s (%s) %s", payout.id, code, str(data)[:500])
     notify_phone(f"⚠️ Falló un pago por Whop ({money(payout.amount)})",
                  f"{payout.user.name}: {str(reason or code)[:150]}", url_for("admin_clippers"), tags="warning")
