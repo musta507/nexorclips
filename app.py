@@ -3,6 +3,7 @@ import csv
 import io
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -73,7 +74,7 @@ for prefix in ("postgres://", "postgresql://"):   # Railway da "postgresql://"; 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True, "pool_recycle": 280}
 
-APP_NAME = os.environ.get("APP_NAME", "NexorClips")
+APP_NAME = os.environ.get("APP_NAME", "ClipProfit Hispano")
 SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "")
 CURRENCY = os.environ.get("CURRENCY", "$")
 CURRENCY_CODE = os.environ.get("CURRENCY_CODE", "USD")
@@ -777,11 +778,22 @@ def static_url(filename):
 @app.context_processor
 def inject_globals():
     return {"csrf_token": csrf_token, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
-            "PLATFORMS": PLATFORMS, "cover_src": cover_src, "MIN_WITHDRAW": MIN_WITHDRAW,
+            "PLATFORMS": PLATFORMS, "cover_src": cover_src, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year,
             "REFRESH_DAYS": REFRESH_DAYS, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads}
+
+
+@app.template_filter("rate_k")
+def rate_k_filter(rate_per_million):
+    """Tarifa guardada por 1M de vistas → texto por cada 1.000 vistas ($1.00)."""
+    return money((rate_per_million or 0) / 1000)
+
+
+def min_pay(camp):
+    """Lo mínimo que cobra un clip: las vistas mínimas al precio de la campaña."""
+    return round((camp.min_views or 0) / 1_000_000 * (camp.rate or 0), 2)
 
 
 @app.template_filter("money")
@@ -1304,9 +1316,16 @@ def _campaign_from_form(camp):
     sound_url = request.form.get("sound_url", "").strip()[:500]
     camp.sound_url = sound_url if sound_url.startswith(("https://", "http://")) else ""
     camp.rules = request.form.get("rules", "").strip()[:5000]
-    camp.rate = parse_float(request.form.get("rate"), 0) or 0
+    if request.form.get("rate_k") is not None:          # el formulario pide el pago por cada 1.000 vistas
+        camp.rate = round((parse_float(request.form.get("rate_k"), 0) or 0) * 1000, 4)
+    else:
+        camp.rate = parse_float(request.form.get("rate"), 0) or 0
     camp.budget = parse_float(request.form.get("budget"), 0) or 0
-    camp.min_views = max(int(parse_float(request.form.get("min_views"), 0) or 0), 0)
+    if request.form.get("min_pay") is not None:         # y el pago mínimo por clip en dinero
+        mp = parse_float(request.form.get("min_pay"), 0) or 0
+        camp.min_views = int(math.ceil(mp * 1_000_000 / camp.rate)) if mp > 0 and camp.rate > 0 else 0
+    else:
+        camp.min_views = max(int(parse_float(request.form.get("min_views"), 0) or 0), 0)
     max_pv = parse_float(request.form.get("max_per_video"))
     camp.max_per_video = max_pv if max_pv and max_pv > 0 else None
     camp.platforms = ",".join(p for p in PLATFORMS if request.form.get(f"pf_{p}")) or "tiktok"

@@ -9,34 +9,31 @@
     {% if request.args.get('solicitud') and not editing %}<div class="flash ok">Creando la campaña a partir de una solicitud. Al guardarla, la solicitud quedará como «Campaña creada».</div>{% endif %}
 
     <div class="form-grid">
-      <div class="field"><label for="song">Título</label><input id="song" name="song" value="{{ camp.song or '' }}" placeholder="Nombre de la canción, del streamer o de la marca" required></div>
-      <div class="field"><label for="artist">Creador o artista</label><input id="artist" name="artist" value="{{ camp.artist or '' }}" placeholder="Quién paga la campaña" required></div>
+      <div class="field"><label for="song">Nombre de la campaña</label><input id="song" name="song" value="{{ camp.song or '' }}" placeholder="Ej.: Mejores momentos del directo" required></div>
+      <div class="field"><label for="artist">Creador</label><input id="artist" name="artist" value="{{ camp.artist or '' }}" placeholder="Ej.: Rafa Gaming" required></div>
     </div>
-    <div class="field"><label for="category">Tipo de campaña</label>
-      <select id="category" name="category">
-        {% for key, label in CATEGORY_ONE.items() %}<option value="{{ key }}" {% if camp.category == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select></div>
+    <input type="hidden" name="category" value="{{ camp.category or 'streamer' }}">
 
     <div class="field">
       <label for="cover_file">Portada</label>
       {% if cover_src(camp) %}<img src="{{ cover_src(camp) }}" alt="Portada actual" style="width:160px;aspect-ratio:1;object-fit:cover;border-radius:14px">{% endif %}
       <input id="cover_file" type="file" name="cover_file" accept="image/*">
-      <span class="hint">Sube una imagen cuadrada, como una portada de álbum (JPG, PNG o WEBP, máx. 8 MB). O pega un enlace que empiece por https://</span>
+      <span class="hint">Sube una imagen cuadrada (JPG, PNG o WEBP, máx. 8 MB). O pega un enlace que empiece por https://</span>
       <input id="cover_url" name="cover_url" value="{{ camp.cover_url or '' }}" placeholder="https://…/portada.jpg">
       {% if camp.cover_version %}<label class="check"><input type="checkbox" name="remove_cover"> Quitar la imagen subida</label>{% endif %}
     </div>
 
-    <div class="field"><label for="sound_url">Enlace al sonido o material oficial</label>
-      <input id="sound_url" name="sound_url" value="{{ camp.sound_url or '' }}" placeholder="Sonido de TikTok, carpeta de Drive con los vídeos…"></div>
+    <div class="field"><label for="sound_url">Enlace al material oficial</label>
+      <input id="sound_url" name="sound_url" value="{{ camp.sound_url or '' }}" placeholder="Carpeta de Drive con los vídeos, guías…"></div>
 
     <div class="field"><label for="rules">Cómo participar (reglas)</label>
-      <textarea id="rules" name="rules" rows="5" placeholder="Ej.: usa el sonido desde el estribillo, menciona la marca en el texto, nada de bots…">{{ camp.rules or '' }}</textarea></div>
+      <textarea id="rules" name="rules" rows="5" placeholder="Qué tienen que hacer, duración, menciones…">{{ camp.rules or '' }}</textarea></div>
 
     <div class="form-grid">
-      <div class="field"><label for="rate">Pago por 1M de vistas ({{ CUR_CODE }})</label><input id="rate" name="rate" value="{{ '%g'|format(camp.rate) if camp.rate else '' }}" inputmode="decimal" placeholder="200" required></div>
+      <div class="field"><label for="rate_k">Pago por cada 1.000 vistas ({{ CUR_CODE }})</label><input id="rate_k" name="rate_k" value="{{ '%g'|format(camp.rate / 1000) if camp.rate else '' }}" inputmode="decimal" placeholder="1.00" required></div>
       <div class="field"><label for="budget">Presupuesto total ({{ CUR_CODE }})</label><input id="budget" name="budget" value="{{ '%g'|format(camp.budget) if camp.budget else '' }}" inputmode="decimal" placeholder="2000" required>{% if editing and camp.spent %}<span class="hint">Ya repartido: {{ camp.spent|money }}. No puede ser menor.</span>{% endif %}</div>
-      <div class="field"><label for="min_views">Vistas mínimas por clip</label><input id="min_views" name="min_views" value="{{ camp.min_views or 0 }}" inputmode="numeric"></div>
-      <div class="field"><label for="max_per_video">Máximo a pagar por clip (vacío = sin tope)</label><input id="max_per_video" name="max_per_video" value="{{ '%g'|format(camp.max_per_video) if camp.max_per_video else '' }}" inputmode="decimal"></div>
+      <div class="field"><label for="min_pay">Pago mínimo por clip ({{ CUR_CODE }})</label><input id="min_pay" name="min_pay" value="{{ '%g'|format(min_pay(camp)) if camp.min_views and camp.rate else '' }}" inputmode="decimal" placeholder="5"><span class="hint">Un clip empieza a cobrar cuando llega a esa cantidad.</span></div>
+      <div class="field"><label for="max_per_video">Pago máximo por clip ({{ CUR_CODE }}, vacío = sin tope)</label><input id="max_per_video" name="max_per_video" value="{{ '%g'|format(camp.max_per_video) if camp.max_per_video else '' }}" inputmode="decimal"></div>
     </div>
 
     <div class="field">

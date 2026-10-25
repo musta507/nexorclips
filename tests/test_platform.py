@@ -478,7 +478,7 @@ def test_chat_limits_and_banned_can_write(monkeypatch):
 def test_landing_and_campaign_request():
     c = A.app.test_client()
     html = c.get("/").get_data(as_text=True)
-    assert "Empezar a clipear" in html and "Lanzar una campaña" in html
+    assert "Empezar a clipear" in html and "Gana dinero haciendo" in html
     assert "Continuar con Google" in c.get("/login").get_data(as_text=True)
     with c.session_transaction() as s:
         s["_csrf"] = "t"
@@ -549,7 +549,7 @@ def test_join_campaign_and_admin_accepts():
         assert (acc.handle, acc.status) == ("ana", "pendiente")
         assert "ana" in get(A.User, acc.user_id).handles("tiktok")      # se vincula sola
         aid = acc.id
-    assert "Pendiente de verificar" in a.get("/").get_data(as_text=True)
+    assert "Pendiente" in a.get("/").get_data(as_text=True)
     r = post(a, f"/campana/{cid}", url=tt("ana", 1))
     assert "pendiente de verificar" in r.get_data(as_text=True)
     assert "Clippers por verificar (1)" in admin.get("/admin").get_data(as_text=True)
@@ -574,7 +574,7 @@ def test_join_campaign_and_admin_accepts():
 
 def test_landing_next_step():
     c = A.app.test_client()
-    assert "Siguiente" in c.get("/").get_data(as_text=True)
+    assert "Empezar a clipear" in c.get("/").get_data(as_text=True)
     assert c.get("/empezar?rol=clipper").headers["Location"].endswith("/login")
     assert c.get("/empezar?rol=campana").headers["Location"].endswith("/lanzar-campana")
     assert c.get("/empezar").headers["Location"].endswith("/")
@@ -590,7 +590,7 @@ def test_logout_really_logs_out():
     assert r.status_code == 302
     assert any("remember_token=;" in h for h in r.headers.getlist("Set-Cookie"))
     assert c.get("/ganancias").status_code == 302          # ya no entra
-    assert "Siguiente" in c.get("/").get_data(as_text=True)
+    assert "Empezar a clipear" in c.get("/").get_data(as_text=True)
 
 
 def test_phone_notifications(monkeypatch):
@@ -723,3 +723,15 @@ def test_whop_big_amount_waits_for_admin(monkeypatch):
     assert not [x for x in calls if "/transfers" in x[1]]
     with A.app.app_context():
         assert A.Payout.query.one().status == "solicitado"
+
+
+def test_campaign_form_per_thousand_and_min_pay():
+    """El admin pone el pago por cada 1.000 vistas y el mínimo por clip en dinero."""
+    admin = client_for("admin@test.com")
+    r = post(admin, "/admin/campana/nueva", song="Directo", artist="Rafa", rate_k="1.20", budget="3000",
+             min_pay="6", max_per_video="150", pf_tiktok="on", status="activa")
+    with A.app.app_context():
+        camp = A.Campaign.query.filter_by(song="Directo").one()
+        assert camp.rate == 1200 and camp.min_views == 5000 and A.min_pay(camp) == 6.0
+    html = client_for("c@test.com").get("/").get_data(as_text=True)
+    assert "$1.20" in html and "POR 1.000 VISTAS" in html and "Mín. $6.00 por clip" in html

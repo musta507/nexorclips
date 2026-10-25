@@ -1,18 +1,20 @@
-{% from "_icons.html" import icon, budget %}
-<a class="camp" href="{{ url_for('campaign', cid=c.id) }}">
-  <div class="cover">
-    {% if cover_src(c) %}<img src="{{ cover_src(c) }}" alt="Portada de {{ c.song }}" loading="lazy">{% else %}<span class="cover-fallback">{{ c.song[:1] }}</span>{% endif %}
-    <div class="plat-badges">{% for p in c.platform_list %}<span class="plat" title="{{ PLATFORMS[p] }}">{{ icon(p) }}</span>{% endfor %}</div>
-    <span class="open" aria-hidden="true">{{ icon("arrow") }}</span>
-    <span class="tag"><b>{{ c.rate|money(0) }}</b> / 1M vistas</span>
-  </div>
-  <div class="body">
-    <div class="camp-title">
-      <h3>{{ c.song }} {{ icon("check") }}</h3>
-      <span class="muted">{{ c.artist }} · {{ c.created_at|ago }}</span>
-      <span class="inline" style="gap:6px;flex-wrap:wrap"><span class="cat cat-{{ c.category }}">{{ CATEGORY_ONE[c.category] }}</span>{% if my_join is defined and my_join.get(c.id) == 'aceptada' %}<span class="cat joined">Ya participas</span>{% elif my_join is defined and my_join.get(c.id) == 'pendiente' %}<span class="cat waiting">Pendiente de verificar</span>{% endif %}</span>
+{% from "_icons.html" import icon %}
+<a class="dcard" href="{{ url_for('campaign', cid=c.id) }}" data-new="{{ c.created_at.timestamp()|int }}" data-budget="{{ st.remaining }}" data-rate="{{ c.rate }}">
+  <div class="dcard-top">
+    <span class="dthumb">{% if cover_src(c) %}<img src="{{ cover_src(c) }}" alt="" loading="lazy">{% endif %}</span>
+    <div class="dhead">
+      <h3><span>{{ c.artist }}</span> {{ icon("check") }}</h3>
+      <span class="dmeta">{{ c.created_at|ago }} · Por vista{% if my_join is defined and my_join.get(c.id) == 'aceptada' %} · <b class="dj ok">Ya participas</b>{% elif my_join is defined and my_join.get(c.id) == 'pendiente' %} · <b class="dj">Pendiente</b>{% endif %}</span>
     </div>
-    {{ budget(c, st) }}
-    <div class="meta-row tnum"><span>{{ st.views|short }} vistas generadas</span><span>{{ st.clips }} {{ "clip" if st.clips == 1 else "clips" }}</span></div>
+  </div>
+  <p class="ddesc">{{ c.song }}</p>
+  <div class="drange">{% if c.min_views %}<span>Mín. {{ min_pay(c)|money }} por clip</span>{% endif %}<span>{% if c.max_per_video %}Máx. {{ c.max_per_video|money(0) }} por clip{% else %}Sin máximo por clip{% endif %}</span></div>
+  <div class="dbudget">
+    <div class="dbar"><span style="width:{{ st.left_pct }}%"></span></div>
+    <span><b>{{ st.remaining|money(0) }}</b> disponibles de {{ c.budget|money(0) }}</span>
+  </div>
+  <div class="dfoot">
+    <div class="dplats">{% for p in c.platform_list %}<span title="{{ PLATFORMS[p] }}">{{ icon(p) }}</span>{% endfor %}</div>
+    <div class="drate"><b>{{ c.rate|rate_k }}</b><span>POR 1.000 VISTAS</span></div>
   </div>
 </a>

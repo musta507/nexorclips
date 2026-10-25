@@ -5,7 +5,7 @@
 <div>
   <span class="admin-tag">Admin</span>
   <h1 style="margin-top:8px">Solicitudes de campaña</h1>
-  <p class="muted" style="margin-top:6px">Artistas y marcas que han rellenado «Lanzar una campaña». Respóndeles por correo y, cuando cerréis el trato, crea la campaña con sus datos ya puestos.</p>
+  <p class="muted" style="margin-top:6px">Creadores que han rellenado «Lanzar una campaña». Respóndeles por correo y, cuando cerréis el trato, crea la campaña con sus datos ya puestos.</p>
 </div>
 <div class="leads">
   {% for l in leads %}
@@ -32,7 +32,7 @@
     </div>
   </article>
   {% else %}
-  <div class="table-card"><div class="empty"><h3>Aún no hay solicitudes</h3><p class="muted">Cuando un artista o marca rellene el formulario de la portada, aparecerá aquí.</p></div></div>
+  <div class="table-card"><div class="empty"><h3>Aún no hay solicitudes</h3><p class="muted">Cuando un creador rellene el formulario, aparecerá aquí.</p></div></div>
   {% endfor %}
 </div>
 {% endblock %}

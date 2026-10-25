@@ -15,7 +15,7 @@
 {% if new_user %}
 <section class="how" aria-label="Cómo funciona">
   <div class="how-step"><b>1</b><div><h3>Elige una campaña</h3><p class="small muted">Mira cuánto paga y sus reglas.</p></div></div>
-  <div class="how-step"><b>2</b><div><h3>Publica tu clip</h3><p class="small muted">Únete a la campaña con tu cuenta y publica con el sonido o material oficial.</p></div></div>
+  <div class="how-step"><b>2</b><div><h3>Publica tu clip</h3><p class="small muted">Únete a la campaña con tu cuenta y publica con el material oficial del creador.</p></div></div>
   <div class="how-step"><b>3</b><div><h3>Pega el enlace</h3><p class="small muted">Lo revisamos y contamos sus vistas automáticamente.</p></div></div>
   <div class="how-step"><b>4</b><div><h3>Cobra</h3><p class="small muted">Retira desde {{ MIN_WITHDRAW|money(0) }} en USDT a tu wallet.</p></div></div>
 </section>
@@ -26,13 +26,13 @@
 <a class="featured" href="{{ url_for('campaign', cid=c.id) }}">
   <div class="art">{% if cover_src(c) %}<img src="{{ cover_src(c) }}" alt="Portada de {{ c.song }}">{% else %}<span class="cover-fallback">{{ c.song[:1] }}</span>{% endif %}</div>
   <div class="info">
-    <span class="eyebrow">Campaña destacada de {{ CATEGORY_ONE[c.category]|lower }}</span>
+    <span class="eyebrow">Campaña destacada</span>
     <div>
       <h2>{{ c.song }} {{ icon("check") }}</h2>
       <p class="artist">{{ c.artist }}</p>
     </div>
     <div class="f-stats tnum">
-      <div><b class="hot">{{ c.rate|money(0) }}</b><span>por 1M vistas</span></div>
+      <div><b class="hot">{{ c.rate|rate_k }}</b><span>por 1.000 vistas</span></div>
       <div><b>{{ st.views|short }}</b><span>vistas generadas</span></div>
       <div><b>{{ st.remaining|money(0) }}</b><span>por repartir</span></div>
     </div>
@@ -44,15 +44,10 @@
 
 <section>
   <div class="section-head">
-    <h2>Campañas activas</h2>
-    <p class="muted">Elige una campaña, haz clips y cobra por cada vista</p>
+    <h2>Campañas para ti</h2>
+    <p class="muted">Únete a campañas y empieza a ganar</p>
   </div>
-  <nav class="filters" aria-label="Tipo de campaña">
-    <a class="{% if not cat %}on{% endif %}" href="{{ url_for('index') }}">Todas <span>{{ total }}</span></a>
-    {% for key, label in CATEGORIES.items() %}{% if counts[key] %}
-    <a class="{% if cat == key %}on{% endif %}" href="{{ url_for('index', cat=key) }}">{{ label }} <span>{{ counts[key] }}</span></a>
-    {% endif %}{% endfor %}
-  </nav>
+  <div class="sortbar" role="group" aria-label="Ordenar"><button type="button" class="on" data-sort="new">Más nuevas</button><button type="button" data-sort="budget">Más presupuesto</button><button type="button" data-sort="rate">Mejor pago</button></div>
   {% if cards %}
     <div class="grid">{% for c, st in cards %}{% include "_camp_card.html" %}{% endfor %}</div>
   {% else %}

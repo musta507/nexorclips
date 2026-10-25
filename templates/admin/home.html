@@ -96,13 +96,13 @@
   <div class="section-head"><h2>Campañas</h2></div>
   <div class="table-card">
     <div class="table-scroll"><table class="rt">
-      <thead><tr><th>Campaña</th><th>Estado</th><th class="r">Pago / 1M</th><th>Repartido</th><th class="r">Vistas</th><th class="r">Clips</th><th></th></tr></thead>
+      <thead><tr><th>Campaña</th><th>Estado</th><th class="r">Pago / 1.000</th><th>Repartido</th><th class="r">Vistas</th><th class="r">Clips</th><th></th></tr></thead>
       <tbody>
       {% for c, st in cards %}
       <tr>
         <td data-label="Campaña"><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<div class="small muted">{{ c.artist }} · {{ CATEGORY_ONE[c.category] }}</div></td>
         <td data-label="Estado"><span class="status {{ c.status }}">{{ c.status|capitalize }}</span></td>
-        <td data-label="Pago / 1M" class="r tnum">{{ c.rate|money(0) }}</td>
+        <td data-label="Pago / 1.000" class="r tnum">{{ c.rate|rate_k }}</td>
         <td data-label="Repartido" class="tnum"><span class="small">{{ st.spent|money(0) }} / {{ c.budget|money(0) }}</span><div class="bar mini-bar" style="margin-top:6px"><span style="width:{{ st.pct }}%"></span></div></td>
         <td data-label="Vistas" class="r tnum">{{ st.views|short }}</td>
         <td data-label="Clips" class="r tnum">{{ st.clips }}{% if st.pending %} <span class="small" style="color:var(--amber)">+{{ st.pending }}</span>{% endif %}</td>

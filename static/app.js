@@ -201,3 +201,39 @@ document.addEventListener("click", function (e) {
     }
   });
 })();
+
+// ---------------------------------------------------------------- campañas: ordenar y color de la destacada
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-sort]");
+  if (!b) return;
+  b.parentNode.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
+  var grid = document.querySelector(".grid");
+  if (!grid) return;
+  var k = b.dataset.sort;
+  Array.prototype.slice.call(grid.children)
+    .sort(function (x, y) { return parseFloat(y.dataset[k] || 0) - parseFloat(x.dataset[k] || 0); })
+    .forEach(function (el) { grid.appendChild(el); });
+});
+(function () {
+  // La tarjeta destacada toma el color de su imagen (como las portadas en Spotify)
+  var card = document.querySelector(".featured");
+  var img = card && card.querySelector(".art img");
+  if (!img) return;
+  function run() {
+    try {
+      var c = document.createElement("canvas"); c.width = c.height = 24;
+      var x = c.getContext("2d"); x.drawImage(img, 0, 0, 24, 24);
+      var d = x.getImageData(0, 0, 24, 24).data, r = 0, g = 0, bl = 0, n = 0;
+      for (var i = 0; i < d.length; i += 4) {
+        var w = 1 + (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2])) / 40;
+        r += d[i] * w; g += d[i + 1] * w; bl += d[i + 2] * w; n += w;
+      }
+      r /= n; g /= n; bl /= n;
+      var k = (0.42 * 255) / Math.max(r, g, bl, 1);
+      var deep = "rgb(" + Math.round(r * k) + "," + Math.round(g * k) + "," + Math.round(bl * k) + ")";
+      var mid = "rgb(" + Math.round(r * .62) + "," + Math.round(g * .62) + "," + Math.round(bl * .62) + ")";
+      card.style.background = "radial-gradient(120% 140% at 0% 0%, " + mid + " 0%, " + deep + " 45%, #0b0b0c 100%)";
+    } catch (err) { /* imagen de otra web: se queda en negro */ }
+  }
+  if (img.complete && img.naturalWidth) run(); else img.addEventListener("load", run);
+})();

@@ -17,13 +17,13 @@
 <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
   <div class="card stat"><span class="l">Repartido</span><span class="v">{{ st.spent|money(0) }}</span><span class="small muted">de {{ camp.budget|money(0) }} · quedan {{ st.remaining|money(0) }}</span></div>
   <div class="card stat"><span class="l">Vistas aprobadas</span><span class="v">{{ st.views|short }}</span><span class="small muted">{{ st.clips }} clips</span></div>
-  <div class="card stat"><span class="l">Coste real por 1M</span><span class="v">{% if st.views %}{{ st.effective_cpm|money(0) }}{% else %}—{% endif %}</span><span class="small muted">tarifa: {{ camp.rate|money(0) }}</span></div>
+  <div class="card stat"><span class="l">Coste real por 1.000</span><span class="v">{% if st.views %}{{ (st.effective_cpm / 1000)|money }}{% else %}—{% endif %}</span><span class="small muted">tarifa: {{ camp.rate|rate_k }}</span></div>
 </div>
 {% if camp.status == 'finalizada' %}<div class="flash ok">Campaña completada{% if camp.ended_at %} el {{ camp.ended_at|date }}{% endif %}. Ya no acepta clips ni se actualizan sus vistas. Para reabrirla, sube el presupuesto y ponla en «Activa».</div>{% endif %}
 
 <div class="card tight report-link">
   <div>
-    <h3>Informe para el artista</h3>
+    <h3>Informe para el creador</h3>
     <p class="small muted">Enlace privado con los resultados en directo: vistas, clips y coste. No muestra correos ni datos de pago.</p>
   </div>
   <div class="inline" style="flex:1;min-width:260px">

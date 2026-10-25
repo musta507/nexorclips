@@ -732,3 +732,163 @@ a,button,.btn,.tab,label,summary{touch-action:manipulation}
   #nav-progress.go{animation:none;width:60%}
   .tab:active,.camp:active,a.card:active,.btn:active{transform:none}
 }
+
+/* ================= Tema ClipProfit (demo): cercano, con personalidad, sin perder calidad ================= */
+@font-face{font-family:"Poppins";font-weight:500;font-display:swap;src:url("fonts/poppins-500.woff2") format("woff2")}@font-face{font-family:"Poppins";font-weight:600;font-display:swap;src:url("fonts/poppins-600.woff2") format("woff2")}@font-face{font-family:"Poppins";font-weight:700;font-display:swap;src:url("fonts/poppins-700.woff2") format("woff2")}@font-face{font-family:"Poppins";font-weight:800;font-style:italic;font-display:swap;src:url("fonts/poppins-800-italic.woff2") format("woff2")}
+:root{
+  --font:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --display:"Poppins",system-ui,-apple-system,sans-serif;
+  --bg:#f6f7f9; --card:#fff; --soft:#f1f2f4; --soft-2:#e6e7ea; --line:#e9eaee;
+  --ink:#0e0e0e; --ink-2:#3b3b40; --muted:#71727a;
+  --money:#12b76a; --money-ink:#067647; --money-soft:#e3f8ec; --pop:#2ee88f;
+  --coral:#ffffff; --coral-ink:#0e0e0e; --coral-soft:#f1f2f4; --sapphire:#0e0e0e; --amber:#0e0e0e; --amber-soft:#f1f2f4;
+  --radius:24px; --radius-sm:16px;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 6px 20px rgba(16,24,40,.05);
+}
+body{font:15px/1.6 var(--font);letter-spacing:-.005em}
+h1,h2,h3{letter-spacing:-.02em;font-weight:700}
+.muted{color:var(--muted)}
+
+/* --- barra superior: enlaces de texto como en las plataformas grandes */
+.topbar{background:#fff!important;backdrop-filter:none!important;border-bottom:1px solid var(--line)}
+.tabs{background:transparent;border:0;box-shadow:none;gap:6px;padding:0}
+.tab{color:var(--muted);font-weight:500;font-size:15px;padding:9px 16px}
+.tab svg{display:none}
+.tab:hover{background:var(--soft);color:var(--ink)}
+.tab.on{background:var(--ink);color:#fff;font-weight:600}
+.avatar{background:var(--ink);font-family:var(--font)}
+@media (max-width:640px){
+  .tabs{background:rgba(255,255,255,.96)!important;border-top:1px solid var(--line)!important;box-shadow:0 -6px 20px rgba(16,24,40,.06)!important;backdrop-filter:blur(12px)}
+  .sortbar{display:flex;width:100%;overflow-x:auto}
+  .sortbar button{flex:1 1 auto;white-space:nowrap;font-size:12.5px;padding:9px 9px}
+  .tab svg{display:block}
+  .tab{font-size:11px;font-weight:600}
+  .tab.on{background:transparent;color:var(--ink)}
+}
+
+/* --- botones: píldoras */
+.btn{border-radius:999px;font:600 14px/1 var(--font);padding:13px 22px}
+.btn.accent{background:var(--ink);color:#fff}
+.btn.accent:hover{background:#2a2a2e;filter:none}
+.btn.soft{background:var(--soft);color:var(--ink)}
+
+/* --- destacada: negro ClipProfit con verde dinero */
+.featured{background:#0e0e0e;border-radius:28px;position:relative;overflow:hidden}
+@media (min-width:901px){.featured{grid-template-columns:240px minmax(0,1fr);gap:28px;padding:22px}}
+.featured .art{border-radius:20px}
+.featured .eyebrow{color:rgba(255,255,255,.6);font-weight:600;letter-spacing:.02em}
+.featured h2{font-weight:700;letter-spacing:-.03em;font-size:clamp(28px,4vw,44px)}
+.featured .verified,.featured h2 svg{color:#fff}
+.f-stats b{font-family:var(--font);font-weight:700}
+.f-stats .hot{color:#fff}
+.featured .budget-bar span,.pay-panel .budget-bar span{background:var(--pop)}
+.featured .btn,.featured .btn.accent{background:#fff;color:#0e0e0e}
+
+/* --- tarjetas de campaña (estilo lista compacta) */
+.grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+.dcard{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow);transition:transform .18s,box-shadow .18s,border-color .18s;color:var(--ink)}
+.dcard:hover{transform:translateY(-3px);box-shadow:0 14px 34px rgba(16,24,40,.10);border-color:#dcdde2}
+.dcard-top{display:flex;gap:14px;align-items:center}
+.dthumb{width:62px;height:62px;border-radius:16px;overflow:hidden;flex:none;background:var(--soft)}
+.dthumb img{width:100%;height:100%;object-fit:cover}
+.dhead{min-width:0}
+.dhead h3{font-size:18px;font-weight:700;display:flex;align-items:center;gap:6px;line-height:1.25}
+.dhead h3 span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dhead h3 svg{width:17px;height:17px;flex:none;color:var(--ink)}
+.dmeta{font-size:13px;color:var(--muted)}
+.ddesc{margin:0;font-size:15px;font-weight:500;color:var(--ink-2);line-height:1.45;min-height:22px}
+.dbudget{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--muted)}
+.dbudget b{color:var(--ink);font-weight:600}
+.dbar{height:6px;border-radius:99px;background:var(--soft);overflow:hidden}
+.dbar span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--money),var(--pop))}
+.dfoot{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:auto}
+.dplats{display:flex;gap:12px;align-items:center;padding-bottom:4px}
+.dplats svg{width:21px;height:21px;color:var(--ink)}
+.drate{text-align:right;line-height:1}
+.drate b{display:block;font-size:30px;font-weight:700;letter-spacing:-.03em}
+.drate span{font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.06em}
+.drange{display:flex;gap:8px;flex-wrap:wrap}
+.drange span{background:var(--soft);color:var(--ink-2);font-size:12.5px;font-weight:600;padding:5px 10px;border-radius:999px}
+
+/* --- orden de campañas (píldoras) */
+.sortbar{display:inline-flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;margin-bottom:18px}
+.sortbar button{border:0;background:transparent;font:500 14px/1 var(--font);color:var(--muted);padding:10px 16px;border-radius:999px;cursor:pointer}
+.sortbar button.on{background:var(--ink);color:#fff;font-weight:600}
+.section-head h2{font-size:26px}
+
+/* --- página de campaña */
+.album h1{font-weight:700;letter-spacing:-.03em}
+.album .art{border-radius:22px}
+.album h1 svg{color:var(--ink)}
+.fact{border-radius:20px}
+.fact b{font-family:var(--font);font-weight:700}
+.chip{font-weight:500}
+.pay-panel{background:#0e0e0e;border-radius:26px;position:relative;overflow:hidden}
+.pay-panel .eyebrow{color:rgba(255,255,255,.6);font-weight:600}
+.pay-panel .big{font-family:var(--font);font-weight:700;letter-spacing:-.04em}
+.pay-panel .btn,.pay-panel .btn.accent{background:#fff;color:#0e0e0e;position:relative;z-index:1}
+.pay-panel .sub + .sub{color:#fff}
+.calc{border-radius:18px}
+
+/* --- ganancias: tarjetas blancas y píldoras */
+.stat{border-radius:24px;box-shadow:var(--shadow)}
+.stat .v{font-family:var(--font);font-weight:700;letter-spacing:-.03em}
+.stat.hero{background:var(--card);border-color:var(--line);color:var(--ink)}
+.stat.hero .l{color:var(--ink-2)}
+.stat.hero .btn{background:var(--ink);color:#fff}
+.stat .l{font-weight:500}
+.seg{border:0;gap:6px}
+.seg a{border:0;border-radius:14px;padding:10px 16px;margin:0;color:var(--muted);font-weight:500}
+.seg a.on{background:#e9eaee;color:var(--ink);font-weight:600;border:0}
+.table-card{border-radius:22px;box-shadow:var(--shadow)}
+th{background:#fafafb;font-weight:500}
+td b{font-weight:600}
+td .link{color:var(--ink)}
+
+/* --- portada */
+.lp h1{font-weight:700;letter-spacing:-.04em}
+.lp h1 em{font-style:italic;font-weight:800;padding:0 .04em}
+.opt{border-radius:24px}
+.lp-cta{margin:30px auto 0;padding:17px 34px;font-size:16px;background:#0e0e0e;color:#fff;box-shadow:0 10px 26px rgba(0,0,0,.18)}
+.lp-cta:hover{filter:none;background:#26262a}
+.lp-cta svg{width:18px;height:18px}
+.lp{text-align:center}
+
+.site-footer{font-size:13px}
+@media (max-width:640px){
+  .sortbar{display:flex;width:100%}
+  .sortbar button{flex:1 1 auto;white-space:nowrap;font-size:12.5px;padding:9px 8px}
+}
+
+.link,a.link,td .link{color:var(--ink)}
+.featured .budget-bar span,.pay-panel .budget-bar span,.budget-bar span{background:var(--money)}
+.featured .budget-bar span,.pay-panel .budget-bar span{background:var(--pop)}
+
+/* --- panel de admin (demo) */
+.adm-top{align-items:flex-end}
+.adm-kpis{display:grid;gap:14px;grid-template-columns:repeat(4,minmax(0,1fr))}
+.adm-kpis .kpi{border-radius:20px;padding:18px 20px;box-shadow:var(--shadow)}
+.adm-kpis .kpi span{font-weight:500;font-size:13px}
+.adm-kpis .kpi b{font-family:var(--font);font-weight:700;font-size:28px}
+.adm-c{display:flex;align-items:center;gap:12px}
+.dthumb.sm{width:44px;height:44px;border-radius:12px}
+.admin-tag{background:var(--ink);color:#fff;font-weight:600;border-radius:999px}
+.adm-chips{display:flex;gap:10px;flex-wrap:wrap}
+.adm-chips label{display:flex;align-items:center;gap:8px;background:var(--soft);padding:10px 14px;border-radius:999px;font-weight:500;color:var(--ink)}
+.adm-chips input{width:auto}
+.status.activa{background:#e3f8ec;color:#067647}
+@media (max-width:900px){.adm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---- marca ClipProfit */
+.cp{gap:8px;font-family:var(--display);letter-spacing:-.025em;color:#0e0e0e}
+.cp-mark{width:34px;height:26px;flex:none}
+.cp-name{font-weight:700;font-size:19px;white-space:nowrap}
+@media (max-width:640px){.cp-name{font-size:17px}.cp-mark{width:30px;height:23px}}
+.logo-mark{background:url("logo.svg") center/100% no-repeat!important}
+.btn,.tab,.dhead h3,.drate b,.stat .v,.fact b,.pay-panel .big,.f-stats b,.featured h2,.album h1,.section-head h2,.lp h1,h1,h2,h3{font-family:var(--display)}
+.lp-cta{margin:30px auto 0;padding:17px 34px;font-size:16px;background:#0e0e0e;color:#fff;box-shadow:0 10px 26px rgba(0,0,0,.18);display:inline-flex}
+.lp-cta:hover{filter:none;background:#26262a}
+.lp{text-align:center}
+.pay-panel .sub + .sub{display:block;margin-top:6px;color:#fff;font-weight:600}
+.dmeta .dj{font-weight:600;color:var(--ink)}.dmeta .dj.ok{color:#067647}
+.seg{overflow-x:auto;scrollbar-width:none;max-width:100%}.seg::-webkit-scrollbar{display:none}.seg a{white-space:nowrap;flex:none}

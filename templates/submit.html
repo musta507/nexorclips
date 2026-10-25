@@ -15,7 +15,7 @@
       <label for="campaign">Campaña</label>
       <select id="campaign" name="campaign_id" required>
         <option value="">Elige una campaña</option>
-        {% for c in camps %}<option value="{{ c.id }}" {% if selected == c.id %}selected{% endif %}>{{ c.song }} - {{ c.artist }} · {{ c.rate|money(0) }}/1M</option>{% endfor %}
+        {% for c in camps %}<option value="{{ c.id }}" {% if selected == c.id %}selected{% endif %}>{{ c.song }} - {{ c.artist }} · {{ c.rate|rate_k }}/1.000</option>{% endfor %}
       </select>
     </div>
     <div class="field">
