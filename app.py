@@ -1828,8 +1828,6 @@ def whop_pay(payout):
             "destination_id": payout.user.whop_user_id, "notes": f"Retiro #{payout.id} · {APP_NAME}"[:50],
             "idempotence_key": key, "metadata": {"payout_id": str(payout.id)}}
     ok, code, data = whop_call("POST", "/transfers", json=body, headers={"Idempotency-Key": key})
-    if not ok and code == 400 and "type" in str(data).lower():
-        ok, code, data = whop_call("POST", "/transfers", json={**body, "type": "balance"}, headers={"Idempotency-Key": key})
     result = _whop_apply(payout, ok, code, data)
     log.info("Whop: retiro #%s → %s (%s)", payout.id, result, code)
     return result
