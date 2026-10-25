@@ -927,3 +927,8 @@ details.answers[open] summary::before{content:"▾ "}
 .bio-code{font:800 26px/1 var(--font);letter-spacing:.06em;text-align:center;padding:12px;border-radius:12px;background:var(--card);border:1px dashed var(--line)}
 .bio-warn{color:#b54708}
 .acc-ok{color:#067647;margin-top:6px}
+.wd-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.wd-input{display:flex;align-items:center;gap:4px;flex:1;min-width:120px;background:var(--soft);border-radius:12px;padding:0 12px}
+.wd-input span{font-weight:700;color:var(--ink-2)}
+.wd-input input{border:0;background:transparent;padding:10px 0;font-weight:700;font-size:16px;width:100%;min-width:0}
+.wd-input input:focus{outline:none}

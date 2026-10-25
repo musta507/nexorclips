@@ -1356,7 +1356,17 @@ def withdraw():
         if m["available"] < MIN_WITHDRAW:
             flash(f"El retiro mínimo es {money(MIN_WITHDRAW)}.", "error")
             return redirect(url_for("earnings", tab="retiros"))
-        amount = m["available"]
+        asked = request.form.get("amount")
+        amount = cents(parse_float(asked, 0) or 0) if asked not in (None, "") else m["available"]
+        if amount < 0.01:
+            flash("Escribe cuánto quieres retirar.", "error")
+            return redirect(url_for("earnings"))
+        if amount > m["available"] + 1e-9:
+            flash(f"Solo tienes {money(m['available'])} disponibles para retirar.", "error")
+            return redirect(url_for("earnings"))
+        if amount < MIN_WITHDRAW:
+            flash(f"El retiro mínimo es {money(MIN_WITHDRAW)}.", "error")
+            return redirect(url_for("earnings"))
         is_whop = current_user.payout_method == WHOP_METHOD
         auto = is_whop and whop_enabled() and (WHOP_AUTO_MAX <= 0 or amount <= WHOP_AUTO_MAX)
         payout = Payout(user_id=current_user.id, amount=amount, method=current_user.payout_method,

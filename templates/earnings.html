@@ -12,12 +12,17 @@
       {% elif m.open_payout %}
         <span class="status solicitado">Retiro en curso</span>
       {% else %}
-        <form method="post" action="{{ url_for('withdraw') }}">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <button class="btn sm" {% if m.available < 0.01 or m.available < MIN_WITHDRAW %}disabled{% endif %}>Retirar</button>
-        </form>
       {% endif %}
     </div>
+    {% if current_user.payout_ready and not m.open_payout and m.available >= 0.01 %}
+    <form method="post" action="{{ url_for('withdraw') }}" class="wd-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="sr-only" for="wd-amount">Cantidad a retirar</label>
+      <div class="wd-input"><span>{{ CUR }}</span><input id="wd-amount" name="amount" type="number" inputmode="decimal" step="0.01" min="0.01" max="{{ '%.2f'|format(m.available) }}" value="{{ '%.2f'|format(m.available) }}" required></div>
+      <button type="button" class="btn sm soft wd-all" data-all="{{ '%.2f'|format(m.available) }}">Todo</button>
+      <button class="btn sm">Retirar</button>
+    </form>
+    {% endif %}
     {% if m.open_payout %}
     <p class="small" style="color:rgba(255,255,255,.75)">{% if m.open_payout.status == "procesando" %}Enviando {{ m.open_payout.amount|money }} a tu cuenta de Whop. Llegará en unos minutos.{% elif m.open_payout.method == WHOP_METHOD %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo revisamos y te llega a tu Whop.{% else %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo pagamos en un plazo de {{ PAYOUT_DAYS }} días hábiles.{% endif %}</p>
     {% elif MIN_WITHDRAW and m.available < MIN_WITHDRAW and m.available > 0 %}

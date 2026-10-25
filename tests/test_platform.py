@@ -875,3 +875,18 @@ def test_whop_company_detected_from_key(monkeypatch):
     monkeypatch.setattr(A.requests, "request", lambda m, url, **kw: _R(200, {"id": "biz_auto"}) if url.endswith("/accounts/me") else _R(404, {}))
     with A.app.app_context():
         assert A.whop_enabled() and A.whop_company_id() == "biz_auto"
+
+
+def test_withdraw_chosen_amount(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)      # 45 $ disponibles
+    calls = _whop_fake(monkeypatch)
+    post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    assert 'id="wd-amount"' in c.get("/ganancias").get_data(as_text=True)
+    assert "Solo tienes" in flashes(post(c, "/ganancias/retirar", amount="100"))[0][1]
+    assert flashes(post(c, "/ganancias/retirar", amount="0"))[0][0] == "error"
+    assert flashes(post(c, "/ganancias/retirar", amount="10,5"))[0][0] == "ok"
+    with A.app.app_context():
+        p = A.Payout.query.one()
+        u = A.User.query.filter_by(email="w@test.com").one()
+        assert p.amount == 10.5 and p.status == "pagado" and A.user_money(u)["available"] == 34.5
+    assert [x for x in calls if "/transfers" in x[1]][-1][2]["amount"] == 10.5

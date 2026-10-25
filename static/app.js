@@ -257,3 +257,9 @@ document.addEventListener("click", function (e) {
   }
   if (img.complete && img.naturalWidth) run(); else img.addEventListener("load", run);
 })();
+
+// ---------------------------------------------------------------- retirar: botón «Todo»
+document.addEventListener("click", function (e) {
+  var b = e.target.closest(".wd-all"); if (!b) return;
+  var i = document.getElementById("wd-amount"); if (i) { i.value = b.getAttribute("data-all"); i.focus(); }
+});
