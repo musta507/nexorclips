@@ -310,30 +310,25 @@ def test_withdrawals(monkeypatch):
     a = client_for("a@test.com", tiktok="ana")
     post(a, f"/campana/{cid}", url=tt("ana", 1))
     approve_all(admin)
-    set_views(monkeypatch, {str(7300000000000000001): 200_000})     # 20 $
-    with A.app.app_context():
-        A.refresh_views()
-    post(a, "/cuenta", section="cobro", payout_method=A.USDT_METHOD, payout_details=WALLET)
-    assert "cuando la campaña termina" in flashes(post(a, "/ganancias/retirar"))[0][1]   # campaña abierta: aún no
     set_views(monkeypatch, {str(7300000000000000001): 450_000})     # 45 $
     with A.app.app_context():
         A.refresh_views()
+    assert "conecta tu usuario de Whop" in flashes(post(a, "/ganancias/retirar"))[0][1]
+    calls = _whop_fake(monkeypatch)
+    post(a, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    assert "cuando la campaña termina" in flashes(post(a, "/ganancias/retirar"))[0][1]   # campaña abierta: aún no
+    with A.app.app_context():
         u = A.User.query.filter_by(email="a@test.com").one()
         assert A.user_money(u)["live"] == 45.0 and A.user_money(u)["available"] == 0
+    assert not [x for x in calls if "/transfers" in x[1]]
     post(admin, f"/admin/campana/{cid}/cerrar")
     assert "ha terminado" in a.get("/soporte").get_data(as_text=True)     # aviso por el chat
     assert flashes(post(a, "/ganancias/retirar"))[0][0] == "ok"
-    assert "en curso" in flashes(post(a, "/ganancias/retirar"))[0][1]
     with A.app.app_context():
         p = A.Payout.query.one()
-        assert p.amount == 45.0
-        pid = p.id
-    post(admin, "/admin/clippers", payout_id=pid, action="pagar", note="tx-1")
-    post(admin, "/admin/clippers", payout_id=pid, action="rechazar")          # ya pagado: no cambia
-    with A.app.app_context():
         u = A.User.query.filter_by(email="a@test.com").one()
-        m = A.user_money(u)
-        assert get(A.Payout, pid).status == "pagado" and m["available"] == 0 and m["paid"] == 45.0
+        assert p.amount == 45.0 and p.status == "pagado" and A.user_money(u)["available"] == 0
+    assert "Aún no tienes saldo" in flashes(post(a, "/ganancias/retirar"))[0][1]
 
 
 # ---------------------------------------------------------------- informes, CSV y admin
@@ -537,19 +532,15 @@ def test_campaign_request_rate_limit():
 
 
 # ---------------------------------------------------------------- cobro en USDT y verificación de cuentas
-def test_only_usdt_payouts():
+def test_whop_is_only_payout():
     c = client_for("u@test.com")
-    r = post(c, "/cuenta", section="cobro", payout_method="PayPal", payout_details="u@paypal.com")
-    assert "solo está disponible el cobro por Whop o en cripto" in r.get_data(as_text=True)
-    assert "red TRC20" in post(c, "/cuenta", section="cobro", payout_method=A.USDT_METHOD, payout_details="0xabc").get_data(as_text=True)
+    for method in ("PayPal", A.USDT_METHOD):
+        r = post(c, "/cuenta", section="cobro", payout_method=method, payout_details=WALLET)
+        assert "solo por Whop" in r.get_data(as_text=True)
     with A.app.app_context():
         assert not A.User.query.filter_by(email="u@test.com").one().payout_details
-    post(c, "/cuenta", section="cobro", payout_method=A.USDT_METHOD, payout_details=WALLET)
-    with A.app.app_context():
-        u = A.User.query.filter_by(email="u@test.com").one()
-        assert u.payout_details == WALLET and u.payout_method == A.USDT_METHOD
     html = client_for("nuevo@test.com").get("/cuenta").get_data(as_text=True)
-    assert "Cripto · USDT" in html and "Próximamente" in html          # Whop aún sin activar
+    assert "Whop" in html and "USDT" not in html and "PayPal" not in html
 
 
 def test_join_campaign_and_admin_accepts():
@@ -699,13 +690,6 @@ def test_whop_connect_and_instant_withdraw(monkeypatch):
     body, headers = calls[-1][2], calls[-1][3]
     assert body["destination_id"] == "user_ana" and body["origin_id"] == "biz_1" and body["amount"] == 45.0
     assert headers["Idempotency-Key"] == body["idempotence_key"]
-    # cambiar a USDT y volver
-    post(c, "/cuenta", section="cobro", payout_method=A.USDT_METHOD, payout_details=WALLET)
-    with A.app.app_context():
-        assert A.User.query.filter_by(email="w@test.com").one().payout_method == A.USDT_METHOD
-    post(c, "/cuenta", section="cobro_usar", payout_method=A.WHOP_METHOD)
-    with A.app.app_context():
-        assert A.User.query.filter_by(email="w@test.com").one().payout_method == A.WHOP_METHOD
 
 
 def test_whop_processing_then_synced(monkeypatch):

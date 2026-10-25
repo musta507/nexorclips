@@ -8,7 +8,7 @@
     <div class="row">
       <span class="v">{{ m.available|amount }}</span>
       {% if not current_user.payout_ready %}
-        <a class="btn sm" href="{{ url_for('account') }}#cobro">Agregar cuenta</a>
+        <a class="btn sm" href="{{ url_for('account') }}#cobro">Conectar Whop</a>
       {% elif m.open_payout %}
         <span class="status solicitado">Retiro en curso</span>
       {% else %}
@@ -26,7 +26,7 @@
       <div class="budget-bar"><span style="width:{{ (m.available / MIN_WITHDRAW * 100)|round|int }}%"></span></div>
     </div>
     {% endif %}
-    <span class="small muted">{% if current_user.payout_ready %}Cobras por {{ current_user.payout_label }}{% if current_user.payout_method == WHOP_METHOD %} (al instante){% endif %} · <a href="{{ url_for('account') }}#cobro" style="text-decoration:underline">cambiar</a>{% if MIN_WITHDRAW %} · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}{% else %}Conecta tu cuenta de cobro para retirar{% endif %}</span>
+    <span class="small muted">{% if current_user.payout_ready %}Cobras por {{ current_user.payout_label }}{% if current_user.payout_method == WHOP_METHOD %} (al instante){% endif %} · <a href="{{ url_for('account') }}#cobro" style="text-decoration:underline">cambiar</a>{% if MIN_WITHDRAW %} · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}{% else %}Conecta tu Whop para retirar{% endif %}</span>
   </div>
   <div class="card stat">
     <span class="l">En campañas abiertas</span>

@@ -104,10 +104,10 @@ CATEGORIES = {"musica": "Música", "streamer": "Streamers", "marca": "Marcas", "
 CATEGORY_ONE = {"musica": "Música", "streamer": "Streamer", "marca": "Marca", "infoproducto": "Infoproducto", "otro": "Otro"}
 USDT_METHOD = "Cripto (USDT · TRC20)"
 WHOP_METHOD = "Whop"
-PAYOUT_METHODS = [WHOP_METHOD, USDT_METHOD, "PayPal", "Transferencia bancaria"]
-PAYOUT_AVAILABLE = {WHOP_METHOD, USDT_METHOD, "Cripto (USDT)"}   # "Cripto (USDT)" es el nombre antiguo
+PAYOUT_METHODS = [WHOP_METHOD]                                    # Whop es la única forma de cobro
+PAYOUT_AVAILABLE = {WHOP_METHOD}
 PAYOUT_OPEN = ("solicitado", "procesando")                        # retiros que aún no han terminado
-PAYOUT_ONLY_USDT_MSG = "De momento solo está disponible el cobro por Whop o en cripto (USDT, red TRC20). Elige una de esas opciones para guardar tu cuenta."
+PAYOUT_ONLY_USDT_MSG = "Los pagos se hacen solo por Whop. Conecta tu usuario de Whop para cobrar."
 TRC20_RE = re.compile(r"^T[1-9A-HJ-NP-Za-km-z]{33}$")
 FLAG_LABELS = {
     "cuenta_no_declarada": "Cuenta no vinculada",
@@ -1342,7 +1342,7 @@ _withdraw_lock = threading.Lock()
 @login_required
 def withdraw():
     if not current_user.payout_ready:
-        flash("Primero agrega tu cuenta de cobro.", "error")
+        flash("Primero conecta tu usuario de Whop en «Mi cuenta».", "error")
         return redirect(url_for("account", _anchor="cobro"))
     with _withdraw_lock:
         m = user_money(current_user)
@@ -1398,8 +1398,6 @@ def account():
             method = request.form.get("payout_method", "")
             if method == WHOP_METHOD and current_user.whop_user_id and whop_enabled():
                 current_user.payout_method = WHOP_METHOD
-            elif method == USDT_METHOD and current_user.payout_details:
-                current_user.payout_method = USDT_METHOD
             else:
                 flash("Primero conecta esa forma de cobro.", "error")
                 return redirect(url_for("account", _anchor="cobro"))
@@ -1426,20 +1424,9 @@ def account():
                     flash(f"Whop conectado: @{uname}. Cuando retires, el dinero llegará al momento a tu saldo de Whop.", "ok")
             return redirect(url_for("account", _anchor="cobro"))
         if section == "cobro":
-            method = request.form.get("payout_method", "")
-            details = request.form.get("payout_details", "").strip()[:255]
-            if method not in PAYOUT_AVAILABLE:
-                flash(PAYOUT_ONLY_USDT_MSG, "info")
-                return redirect(url_for("account", _anchor="cobro"))
-            if not TRC20_RE.match(details):
-                flash("Esa dirección no parece de la red TRC20. Debe empezar por «T» y tener 34 caracteres. "
-                      "Cópiala tal cual desde tu wallet o exchange, eligiendo la red TRC20.", "error")
-                return redirect(url_for("account", _anchor="cobro"))
-            current_user.payout_method = USDT_METHOD
-            current_user.payout_details = details
-            db.session.commit()
-            flash("Wallet guardada. Te enviaremos los retiros en USDT por la red TRC20.", "ok")
-        elif section == "redes":
+            flash(PAYOUT_ONLY_USDT_MSG, "info")
+            return redirect(url_for("account", _anchor="cobro"))
+        if section == "redes":
             for p in PLATFORMS:
                 raw = request.form.get(f"handles_{p}", "")
                 handles = []
