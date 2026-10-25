@@ -53,7 +53,7 @@
             <a class="btn white block" href="{{ url_for('support') }}">{{ icon("chat") }} Abrir el chat</a>
           </div>
         {% else %}
-          <p class="sub">Para participar, únete con la cuenta desde la que vas a publicar. Te escribiremos por el chat para verificarla.</p>
+          <p class="sub">Para participar, únete con la cuenta desde la que vas a publicar y verifica que es tuya con un código en tu bio.</p>
         {% endif %}
       {% else %}
         <form method="post" class="form-stack">
@@ -77,7 +77,24 @@
       {% if accounts %}
       <ul class="handle-list">
         {% for a in accounts %}
-        <li>{{ icon(a.platform) }} <b>@{{ a.handle }}</b><span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></li>
+        <li class="acc-item">
+          <div class="acc-top">{{ icon(a.platform) }} <b>@{{ a.handle }}</b><span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></div>
+          {% if a.status == 'pendiente' %}
+            {% if a.bio_verified %}
+            <p class="small acc-ok">✓ Cuenta verificada. Ya puedes quitar el código de tu bio. Te avisaremos cuando te acepten.</p>
+            {% else %}
+            <div class="bio-box">
+              <p class="small">Para demostrar que @{{ a.handle }} es tuya, pon este código en la bio de tu perfil de {{ PLATFORMS[a.platform] }}:</p>
+              <div class="bio-code selectable">{{ current_user.bio_code() }}</div>
+              {% if a.bio_status %}<p class="small {{ 'muted' if a.bio_status == 'Comprobando…' else 'bio-warn' }}">{{ a.bio_status }}</p>{% endif %}
+              <form method="post" action="{{ url_for('verify_bio', cid=camp.id, aid=a.id) }}">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <button class="btn accent block">{{ "Volver a comprobar" if a.bio_status else "Ya lo he puesto, comprobar" }}</button>
+              </form>
+            </div>
+            {% endif %}
+          {% endif %}
+        </li>
         {% endfor %}
       </ul>
       {% endif %}

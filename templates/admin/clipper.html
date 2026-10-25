@@ -57,7 +57,7 @@
     <div class="inline small" style="flex-wrap:wrap;gap:8px;margin-top:10px">
       {% for a in c.accounts %}
       <span class="chip-acc">{{ icon(a.platform) }} <a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a>
-        <span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></span>
+        <span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span>{% if a.status == "pendiente" %}{% if a.bio_verified %} <span class="status aprobado">Bio verificada</span>{% else %} <span class="status pendiente">Sin verificar</span>{% endif %}{% endif %}</span>
       {% if a.status == 'pendiente' %}
         <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
         <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='rechazar') }}" data-confirm="¿Rechazar @{{ a.handle }}?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>

@@ -14,7 +14,7 @@ from functools import wraps
 from urllib.parse import urlencode
 
 import requests
-from flask import (Flask, Response, abort, flash, redirect, render_template,
+from flask import (Flask, Response, abort, flash, has_request_context, redirect, render_template,
                    g, request, session, url_for)
 from flask_login import (LoginManager, UserMixin, current_user, login_required,
                          login_user, logout_user)
@@ -79,9 +79,9 @@ APP_NAME = os.environ.get("APP_NAME", "ClipProfit Hispano")
 SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "")
 CURRENCY = os.environ.get("CURRENCY", "$")
 CURRENCY_CODE = os.environ.get("CURRENCY_CODE", "USD")
-REFRESH_DAYS = int(os.environ.get("REFRESH_DAYS", "14"))       # dejar de actualizar clips más antiguos
+REFRESH_DAYS = int(os.environ.get("REFRESH_DAYS", "0"))        # 0 = se cuentan hasta que acaba la campaña
 MIN_WITHDRAW = float(os.environ.get("MIN_WITHDRAW", "0"))           # 0 = sin mínimo
-MAX_CLIPS_DAY = int(os.environ.get("MAX_CLIPS_DAY", "30"))     # límite de clips por clipper y día
+MAX_CLIPS_DAY = int(os.environ.get("MAX_CLIPS_DAY", "0"))      # 0 = sin límite de clips al día
 PAYOUT_DAYS = int(os.environ.get("PAYOUT_DAYS", "7"))          # plazo de pago que se promete al clipper
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").split(",") if e.strip()}
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
@@ -168,6 +168,13 @@ class User(UserMixin, db.Model):
             d = self.payout_details
             return f"USDT · {d[:6]}…{d[-4:]}" if len(d) > 12 else f"USDT · {d}"
         return ""
+
+    def bio_code(self):
+        """Código que el clipper pone en su bio para demostrar que la cuenta es suya."""
+        if not self.verify_code:
+            self.verify_code = "CP" + str(secrets.randbelow(900000) + 100000)
+            db.session.commit()
+        return self.verify_code
 
     def handles(self, platform):
         raw = getattr(self, f"{platform}_handles", "") or ""
@@ -310,6 +317,9 @@ class CampaignAccount(db.Model):
     handle = db.Column(db.String(100), nullable=False)
     status = db.Column(db.String(20), default="pendiente", index=True)    # pendiente · aceptada · rechazada
     answers = db.Column(db.Text, default="")                              # respuestas al formulario (JSON)
+    bio_verified = db.Column(db.Boolean, default=False)                   # el código estaba en su bio
+    bio_status = db.Column(db.String(160), default="")                    # resultado de la última comprobación
+    bio_checked_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime, nullable=True)
     user = db.relationship("User")
@@ -323,7 +333,7 @@ class CampaignAccount(db.Model):
             return []
 
 
-JOIN_STATUSES = {"pendiente": "Pendiente de verificar", "aceptada": "Aceptada", "rechazada": "Rechazada"}
+JOIN_STATUSES = {"pendiente": "En revisión", "aceptada": "Aceptada", "rechazada": "Rechazada"}
 MAX_JOIN_ACCOUNTS = 5
 
 
@@ -620,11 +630,11 @@ def refresh_views():
     if not _refresh_lock.acquire(blocking=False):
         return "Ya hay una actualización en marcha."
     try:
-        since = datetime.utcnow() - timedelta(days=REFRESH_DAYS)
-        subs = (Submission.query.join(Campaign)
-                .filter(Campaign.status == "activa", Submission.status != "rechazado",
-                        Submission.created_at >= since)
-                .order_by(Submission.created_at).all())
+        q = (Submission.query.join(Campaign)
+             .filter(Campaign.status == "activa", Submission.status != "rechazado"))
+        if REFRESH_DAYS > 0:
+            q = q.filter(Submission.created_at >= datetime.utcnow() - timedelta(days=REFRESH_DAYS))
+        subs = q.order_by(Submission.created_at).all()
         subs = [s for s in subs if not s.campaign.exhausted]
         read, errors = 0, []
         for platform in PLATFORMS:
@@ -1130,7 +1140,7 @@ def submit_clip(camp, raw_url):
     if camp.status != "activa" or camp.exhausted:
         return False, "Esta campaña ya no acepta clips."
     today = datetime.utcnow() - timedelta(hours=24)
-    if Submission.query.filter(Submission.user_id == current_user.id, Submission.created_at >= today).count() >= MAX_CLIPS_DAY:
+    if MAX_CLIPS_DAY > 0 and Submission.query.filter(Submission.user_id == current_user.id, Submission.created_at >= today).count() >= MAX_CLIPS_DAY:
         return False, f"Has llegado al límite de {MAX_CLIPS_DAY} clips en 24 horas. Vuelve a intentarlo mañana."
     url = viewcounter.normalize_url(raw_url)
     platform, vid = viewcounter.detect_platform(url), viewcounter.video_id(url)
@@ -1218,17 +1228,82 @@ def join_campaign(cid):
             flash(f"Ya tienes {MAX_HANDLES} cuentas de {PLATFORMS[platform]} vinculadas. Quita alguna en «Mi cuenta».", "error")
             return back
         setattr(current_user, f"{platform}_handles", ",".join(linked + [handle]))
+    already = CampaignAccount.query.filter_by(user_id=current_user.id, platform=platform, handle=handle, bio_verified=True).first()
     db.session.add(CampaignAccount(user_id=current_user.id, campaign_id=cid, platform=platform, handle=handle,
-                                   answers=json.dumps(answers, ensure_ascii=False) if answers else ""))
-    db.session.add(Message(user_id=current_user.id, from_admin=False, sender_id=current_user.id,
-                           body=f"He solicitado unirme a «{camp.song}» con @{handle} ({PLATFORMS[platform]}).",
-                           read_by_admin=False, read_by_user=True))
+                                   answers=json.dumps(answers, ensure_ascii=False) if answers else "",
+                                   bio_verified=bool(already), bio_status="Verificada" if already else ""))
     db.session.commit()
-    notify_phone(f"🙋 {current_user.name} quiere unirse", f"«{camp.song}» con @{handle} ({PLATFORMS[platform]}). "
-                 "Escríbele para verificar la cuenta.", url_for("admin_chat", uid=current_user.id), tags="raising_hand")
-    flash("¡Solicitud enviada! El equipo revisará tus respuestas y te escribirá por el chat para verificar tu cuenta. "
-          "Cuando te aceptemos, podrás subir vídeos en esta campaña.", "ok")
+    notify_phone(f"🙋 {current_user.name} quiere unirse", f"«{camp.song}» con @{handle} ({PLATFORMS[platform]}).",
+                 url_for("admin_home", _anchor="unirse"), tags="raising_hand")
+    if already:
+        flash("¡Solicitud enviada! Tu cuenta ya estaba verificada. Te avisaremos por el chat cuando te aceptemos.", "ok")
+    else:
+        flash(f"¡Solicitud enviada! Ahora pon el código {current_user.bio_code()} en la bio de @{handle} y pulsa «Comprobar». "
+              "Así sabemos que la cuenta es tuya.", "ok")
     return back
+
+
+BIO_WAIT = 90          # segundos entre comprobaciones de la misma cuenta
+
+
+def check_bio(aid):
+    """Lee la bio con Apify y marca la cuenta como verificada si tiene el código. Va en segundo plano."""
+    acc = db.session.get(CampaignAccount, aid)
+    if not acc:
+        return
+    code = acc.user.bio_code()
+    try:
+        bio = viewcounter.fetch_bio(acc.platform, acc.handle)
+    except Exception as e:  # noqa: BLE001
+        log.warning("No se pudo leer la bio de @%s: %s", acc.handle, e)
+        acc.bio_status = "No hemos podido leer tu perfil ahora. Inténtalo en unos minutos."
+        db.session.commit()
+        return
+    if bio is None:
+        acc.bio_status = f"No encontramos el perfil @{acc.handle}. Revisa que el usuario esté bien y que el perfil sea público."
+    elif code.lower() in bio.lower():
+        others = CampaignAccount.query.filter_by(user_id=acc.user_id, platform=acc.platform, handle=acc.handle).all()
+        for a in others:              # la misma cuenta queda verificada en todas sus campañas
+            a.bio_verified, a.bio_status = True, "Verificada"
+        db.session.add(Message(user_id=acc.user_id, from_admin=True, read_by_admin=True, read_by_user=False,
+                               body=f"¡Cuenta @{acc.handle} verificada! Ya puedes quitar el código {code} de tu bio. "
+                                    "El equipo revisará tu solicitud y te avisará por aquí."))
+        notify_phone(f"✅ {acc.user.name} verificó @{acc.handle}", f"«{acc.campaign.song}» · revisa su solicitud",
+                     url_for("admin_home", _anchor="unirse") if has_request_context() else "", tags="white_check_mark")
+    else:
+        acc.bio_status = f"Todavía no vemos el código {code} en la bio de @{acc.handle}. Guárdalo en tu perfil y vuelve a comprobar."
+    db.session.commit()
+
+
+@app.route("/campana/<int:cid>/cuenta/<int:aid>/comprobar", methods=["POST"])
+@login_required
+def verify_bio(cid, aid):
+    acc = db.session.get(CampaignAccount, aid)
+    if not acc or acc.user_id != current_user.id or acc.campaign_id != cid:
+        abort(404)
+    if acc.bio_verified:
+        flash("Esa cuenta ya está verificada.", "ok")
+        return redirect(url_for("campaign", cid=cid))
+    if acc.bio_checked_at and (datetime.utcnow() - acc.bio_checked_at).total_seconds() < BIO_WAIT and acc.bio_status == "Comprobando…":
+        flash("Ya lo estamos comprobando. Recarga la página en un momento.", "info")
+        return redirect(url_for("campaign", cid=cid))
+    acc.bio_checked_at, acc.bio_status = datetime.utcnow(), "Comprobando…"
+    db.session.commit()
+    if not viewcounter.APIFY_TOKEN:
+        acc.bio_status = "La comprobación automática no está disponible ahora. El equipo lo revisará por el chat."
+        db.session.commit()
+        return redirect(url_for("campaign", cid=cid))
+
+    def run(app_obj=app, aid=aid):
+        with app_obj.test_request_context(base_url=BASE_URL or "http://localhost"):
+            try:
+                check_bio(aid)
+            except Exception:  # noqa: BLE001
+                log.exception("Fallo comprobando la bio")
+                db.session.rollback()
+    threading.Thread(target=run, daemon=True).start()
+    flash("Comprobando tu bio… tarda menos de un minuto. Recarga la página para ver el resultado.", "info")
+    return redirect(url_for("campaign", cid=cid))
 
 
 @app.route("/enviar", methods=["GET", "POST"])
@@ -1571,10 +1646,13 @@ def admin_review(sid, accion):
         if camp.exhausted and not sub.earned:
             flash("Aprobado, pero la campaña ya no tiene presupuesto: este clip no suma dinero.", "error")
     elif accion == "rechazar":
+        if not request.form.get("reason", "").strip():
+            flash("Escribe el motivo del rechazo: el clipper lo verá.", "error")
+            return redirect(request.referrer or url_for("admin_home"))
         was = sub.status
         removed = clawback(sub) if was == "aprobado" else 0
         sub.status = "rechazado"
-        sub.reject_reason = request.form.get("reason", "").strip()[:255] or "No cumple las reglas de la campaña"
+        sub.reject_reason = request.form.get("reason", "").strip()[:255]
         audit("clip_rechazado", f"#{sub.id} de {sub.user.email} · motivo: {sub.reject_reason}"
                                 + (f" · {money(removed)} retirados" if removed else ""))
         if removed:

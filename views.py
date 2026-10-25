@@ -215,3 +215,36 @@ def probe(url):
                         "Pásale a Claude el resultado de abajo para ajustarlo.") if items else \
                        "Apify no devolvió ningún dato para este enlace (¿vídeo privado o borrado?)."
     return out
+
+
+# ---------------------------------------------------------------- bio del perfil (verificar que la cuenta es suya)
+BIO_KEYS = {
+    "tiktok": ["authorMeta.signature", "author.signature", "signature", "bio"],
+    "instagram": ["biography", "bio"],
+    "youtube": ["channelDescription", "aboutChannelInfo.channelDescription", "description"],
+}
+
+
+def fetch_bio(platform, handle):
+    """Lee el texto de la bio del perfil. Devuelve el texto, o None si no se pudo leer."""
+    if not APIFY_TOKEN:
+        raise RuntimeError("Falta APIFY_TOKEN en las variables de entorno.")
+    if platform == "tiktok":
+        actor, body = ACTORS["tiktok"], {"profiles": [handle], "resultsPerPage": 1, "shouldDownloadVideos": False,
+                                         "shouldDownloadCovers": False, "shouldDownloadSubtitles": False}
+    elif platform == "instagram":
+        actor, body = ACTORS["instagram"], {"directUrls": [f"https://www.instagram.com/{handle}/"],
+                                            "resultsType": "details", "resultsLimit": 1}
+    else:
+        actor, body = ACTORS["youtube"], {"startUrls": [{"url": f"https://www.youtube.com/@{handle}"}],
+                                          "maxResults": 1, "maxResultsShorts": 0}
+    resp = requests.post(f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items",
+                         params={"token": APIFY_TOKEN, "timeout": 110}, json=body, timeout=120)
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Apify respondió {resp.status_code}: {resp.text[:200]}")
+    data = resp.json() or []
+    for item in data if isinstance(data, list) else []:
+        bio = _first(item, BIO_KEYS[platform]) if isinstance(item, dict) else None
+        if isinstance(bio, str):
+            return bio
+    return None

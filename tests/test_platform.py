@@ -418,7 +418,22 @@ def test_url_helpers():
     assert info["1"]["views"] == 1234 and info["1"]["author"] == "ana"
 
 
+def test_clips_counted_until_campaign_ends(monkeypatch):
+    cid = make_campaign()
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        A.Submission.query.one().created_at = datetime.utcnow() - timedelta(days=60)
+        A.db.session.commit()
+    asked = []
+    monkeypatch.setattr(V, "fetch_views", lambda p, urls: (asked.extend(urls), {})[1])
+    with A.app.app_context():
+        A.refresh_views()
+    assert asked == [tt("ana", 1)]
+
+
 def test_old_clips_are_not_refreshed(monkeypatch):
+    monkeypatch.setattr(A, "REFRESH_DAYS", 14)          # si se pone un límite de días en Railway
     cid = make_campaign()
     a = client_for("a@test.com", tiktok="ana")
     post(a, f"/campana/{cid}", url=tt("ana", 1))
@@ -547,7 +562,7 @@ def test_join_campaign_and_admin_accepts():
     r = post(a, f"/campana/{cid}/unirme", platform="tiktok", handle="@Ana")
     html = r.get_data(as_text=True)
     assert "Solicitud enviada" in html and "Enlace de tu clip" not in html
-    assert "He solicitado unirme" in a.get("/soporte").get_data(as_text=True)
+    assert "en la bio" in html
     with A.app.app_context():
         acc = A.CampaignAccount.query.one()
         assert (acc.handle, acc.status) == ("ana", "pendiente")
@@ -824,3 +839,46 @@ def test_chat_photo():
     r = c.post("/soporte", data={"_csrf": "t", "body": "", "image": (io.BytesIO(b"nada"), "x.png", "image/png")},
                content_type="multipart/form-data", headers={"X-Requested-With": "fetch"})
     assert r.status_code == 400 and "no se puede abrir" in r.get_json()["error"]
+
+
+def test_bio_code_verification(monkeypatch):
+    cid = make_campaign()
+    a = client_for("bio@test.com", verify=False)
+    post(a, f"/campana/{cid}/unirme", platform="tiktok", handle="biouser")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="bio@test.com").one()
+        code = u.verify_code
+        aid = A.CampaignAccount.query.one().id
+    assert code.startswith("CP") and code in a.get(f"/campana/{cid}").get_data(as_text=True)
+    monkeypatch.setattr(V, "fetch_bio", lambda p, h: "Clips diarios 🔥")
+    with A.app.test_request_context():
+        A.check_bio(aid)
+    with A.app.app_context():
+        acc = get(A.CampaignAccount, aid)
+        assert not acc.bio_verified and "Todavía no vemos" in acc.bio_status
+    monkeypatch.setattr(V, "fetch_bio", lambda p, h: f"Clips diarios {code.lower()}")
+    with A.app.test_request_context():
+        A.check_bio(aid)
+    with A.app.app_context():
+        acc = get(A.CampaignAccount, aid)
+        assert acc.bio_verified and acc.status == "pendiente"        # verificada, pero la acepta el admin
+    assert "verificada" in a.get("/soporte").get_data(as_text=True)
+    assert "Bio verificada" in client_for("admin@test.com").get("/admin").get_data(as_text=True)
+    cid2 = make_campaign(song="Otra")
+    post(a, f"/campana/{cid2}/unirme", platform="tiktok", handle="biouser")   # en otra campaña ya sale verificada
+    with A.app.app_context():
+        assert A.CampaignAccount.query.filter_by(campaign_id=cid2).one().bio_verified
+
+
+def test_reject_needs_reason():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        sid = A.Submission.query.one().id
+    assert "motivo" in post(admin, f"/admin/envio/{sid}/rechazar", reason=" ").get_data(as_text=True)
+    post(admin, f"/admin/envio/{sid}/rechazar", reason="Sin subtítulos")
+    with A.app.app_context():
+        s = get(A.Submission, sid)
+        assert s.status == "rechazado" and s.reject_reason == "Sin subtítulos"

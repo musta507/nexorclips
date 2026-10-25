@@ -7,7 +7,7 @@
   {% if s.status != 'rechazado' %}
   <form class="inline" method="post" action="{{ url_for('admin_review', sid=s.id, accion='rechazar') }}"{% if s.status == 'aprobado' %} data-confirm="Este clip ya está aprobado y tiene {{ s.earned|money }} asignados. Si lo rechazas, se le quitarán. ¿Seguir?"{% endif %}>
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <input id="reason-{{ s.id }}" name="reason" placeholder="Motivo" style="width:130px" aria-label="Motivo del rechazo">
+    <input id="reason-{{ s.id }}" name="reason" placeholder="Motivo (obligatorio)" style="width:150px" aria-label="Motivo del rechazo" required>
     <button class="btn sm red">Rechazar</button>
   </form>
   {% endif %}

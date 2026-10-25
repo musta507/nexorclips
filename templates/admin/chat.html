@@ -29,7 +29,7 @@
       {% for a in accounts %}
       <div class="side-handle">
         <div class="top">{{ icon(a.platform) }} <a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a>
-          <span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></div>
+          <span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span>{% if a.status == "pendiente" %}{% if a.bio_verified %} <span class="status aprobado">Bio verificada</span>{% else %} <span class="status pendiente">Sin verificar</span>{% endif %}{% endif %}</div>
         <span class="muted">en «{{ a.campaign.song }}»</span>
         {% if a.answer_list %}<details class="answers"><summary>Sus respuestas</summary>{% for q, ans in a.answer_list %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}</details>{% endif %}
         {% if a.status == 'pendiente' %}
@@ -40,7 +40,7 @@
         {% endif %}
       </div>
       {% else %}<span class="muted">Aún no se ha unido a ninguna campaña.</span>{% endfor %}
-      {% if accounts %}<p class="hint">Comprueba en el chat que la cuenta es suya y pulsa Aceptar. Le avisamos por este mismo chat.</p>{% endif %}
+      {% if accounts %}<p class="hint">«Bio verificada» = ha puesto su código en la bio, así que la cuenta es suya. Pulsa Aceptar y le avisamos por este chat.</p>{% endif %}
     </div>
     <div class="small"><div class="label" style="margin-bottom:6px">Cobro</div>{% if user.payout_ready %}{% if user.payout_method == WHOP_METHOD %}Whop · <span class="selectable">@{{ user.whop_username }}</span>{% else %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% endif %}{% else %}<span class="muted">Sin cuenta de cobro</span>{% endif %}</div>
     {% if m.open_payout %}<div class="flash ok">Retiro pendiente de {{ m.open_payout.amount|money }}</div>{% endif %}

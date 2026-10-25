@@ -920,3 +920,10 @@ details.answers[open] summary::before{content:"▾ "}
 .chat-photo{display:block;max-width:min(260px,70vw);border-radius:16px;overflow:hidden;margin-bottom:4px;border:1px solid var(--line)}
 .chat-photo{max-width:min(240px,62vw)}.chat-photo img{display:block;width:100%;height:auto;max-height:300px;object-fit:cover}
 .msg.mine .chat-photo{margin-left:auto}
+.acc-item{display:block!important}
+.acc-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.acc-top .status{margin-left:auto}
+.bio-box{margin-top:10px;padding:14px;border-radius:14px;background:var(--soft);display:flex;flex-direction:column;gap:10px}
+.bio-code{font:800 26px/1 var(--font);letter-spacing:.06em;text-align:center;padding:12px;border-radius:12px;background:var(--card);border:1px dashed var(--line)}
+.bio-warn{color:#b54708}
+.acc-ok{color:#067647;margin-top:6px}

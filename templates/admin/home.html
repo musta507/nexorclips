@@ -41,7 +41,7 @@
 </div>
 
 <section id="unirse">
-  <div class="section-head"><h2>Clippers por verificar ({{ joins|length }})</h2><p class="muted">Quieren unirse a una campaña. Mira sus respuestas, escríbeles por el chat para comprobar que la cuenta es suya y acéptalos.</p></div>
+  <div class="section-head"><h2>Clippers por verificar ({{ joins|length }})</h2><p class="muted">Quieren unirse a una campaña. El clipper verifica que la cuenta es suya poniendo un código en su bio. Mira sus respuestas y acéptalo.</p></div>
   <div class="table-card">
     <div class="table-scroll"><table class="rt">
       <thead><tr><th>Clipper</th><th>Campaña</th><th>Cuenta</th><th>Pidió</th><th>Acción</th></tr></thead>
@@ -53,7 +53,7 @@
           <details class="answers"><summary>Ver respuestas ({{ a.answer_list|length }})</summary>
             {% for q, ans in a.answer_list %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}
           </details>{% endif %}</td>
-        <td data-label="Cuenta"><a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a><div class="small muted">{{ PLATFORMS[a.platform] }}</div></td>
+        <td data-label="Cuenta"><a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a><div class="small muted">{{ PLATFORMS[a.platform] }}</div><div style="margin-top:4px">{% if a.bio_verified %} <span class="status aprobado">Bio verificada</span>{% else %} <span class="status pendiente">Sin verificar</span>{% endif %}</div></td>
         <td data-label="Pidió" class="small muted">{{ a.created_at|ago }}</td>
         <td data-label="Acción">
           <div class="inline" style="gap:6px;flex-wrap:wrap">
