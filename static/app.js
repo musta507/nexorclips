@@ -283,17 +283,13 @@ document.addEventListener("click", function (e) {
       if (!animate) { void pill.offsetWidth; pill.style.transition = ""; }
     }
     place(box.querySelector(sel + ".on"), false);
+    box.classList.add("pill-ready");
     box.addEventListener("click", function (e) {
       var it = e.target.closest(sel);
       if (!it || !box.contains(it)) return;
       box.querySelectorAll(sel + ".on").forEach(function (x) { x.classList.remove("on"); });
       it.classList.add("on");
-      place(it, true);
-      if (it.tagName === "A" && it.href && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
-        e.preventDefault();                       // primero se ve deslizar la pastilla y luego cambia de página
-        var href = it.href;
-        setTimeout(function () { location.href = href; }, 220);
-      }
+      place(it, it.tagName !== "A");          // en enlaces se cambia de página al momento, sin esperar
     });
     window.addEventListener("resize", function () { place(box.querySelector(sel + ".on"), false); });
   }
