@@ -263,3 +263,77 @@ document.addEventListener("click", function (e) {
   var b = e.target.closest(".wd-all"); if (!b) return;
   var i = document.getElementById("wd-amount"); if (i) { i.value = b.getAttribute("data-all"); i.focus(); }
 });
+
+// ---------------------------------------------------------------- pastilla negra que se desliza en los selectores
+(function () {
+  function setup(box, sel) {
+    if (box.dataset.pill) return;
+    box.dataset.pill = "1";
+    var pill = document.createElement("span");
+    pill.className = "pill";
+    box.insertBefore(pill, box.firstChild);
+    box.classList.add("has-pill");
+    function place(el, animate) {
+      if (!el) { pill.style.opacity = 0; return; }
+      if (!animate) pill.style.transition = "none";
+      pill.style.width = el.offsetWidth + "px";
+      pill.style.height = el.offsetHeight + "px";
+      pill.style.transform = "translate(" + el.offsetLeft + "px," + el.offsetTop + "px)";
+      pill.style.opacity = 1;
+      if (!animate) { void pill.offsetWidth; pill.style.transition = ""; }
+    }
+    place(box.querySelector(sel + ".on"), false);
+    box.addEventListener("click", function (e) {
+      var it = e.target.closest(sel);
+      if (!it || !box.contains(it)) return;
+      box.querySelectorAll(sel + ".on").forEach(function (x) { x.classList.remove("on"); });
+      it.classList.add("on");
+      place(it, true);
+      if (it.tagName === "A" && it.href && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        e.preventDefault();                       // primero se ve deslizar la pastilla y luego cambia de página
+        var href = it.href;
+        setTimeout(function () { location.href = href; }, 220);
+      }
+    });
+    window.addEventListener("resize", function () { place(box.querySelector(sel + ".on"), false); });
+  }
+  function init() {
+    document.querySelectorAll(".sortbar").forEach(function (b) { setup(b, "button"); });
+    document.querySelectorAll(".seg").forEach(function (b) { setup(b, "a"); });
+    if (window.matchMedia("(min-width:641px)").matches) document.querySelectorAll(".topbar .tabs").forEach(function (b) { setup(b, ".tab"); });
+  }
+  init();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.dispatchEvent(new Event("resize")); });
+})();
+
+// ---------------------------------------------------------------- campañas: al ordenar, las tarjetas se mueven suave
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-sort]");
+  var grid = b && document.querySelector(".grid");
+  if (!grid) return;
+  // Las posiciones de antes se guardan aquí; el reordenado lo hace el código de arriba en este mismo clic
+  var before = new Map();
+  Array.prototype.forEach.call(grid.children, function (el) { before.set(el, el.getBoundingClientRect()); });
+  requestAnimationFrame(function () {
+    Array.prototype.forEach.call(grid.children, function (el) {
+      var a = before.get(el), n = el.getBoundingClientRect();
+      if (!a) return;
+      var dx = a.left - n.left, dy = a.top - n.top;
+      if (!dx && !dy) return;
+      el.style.transition = "none";
+      el.style.transform = "translate(" + dx + "px," + dy + "px)";
+      void el.offsetWidth;
+      el.style.transition = "transform .45s cubic-bezier(.3,.9,.3,1)";
+      el.style.transform = "";
+    });
+  });
+}, true);
+
+// ---------------------------------------------------------------- ventana de retirar
+document.addEventListener("click", function (e) {
+  var o = e.target.closest("[data-open]");
+  if (o) { var d = document.getElementById(o.getAttribute("data-open")); if (d && d.showModal) { d.showModal(); var i = d.querySelector("input[name=amount]"); if (i) i.select(); } return; }
+  var c = e.target.closest("[data-close]");
+  if (c) { var dl = c.closest("dialog"); if (dl) dl.close(); return; }
+  if (e.target.tagName === "DIALOG" && e.target.open) e.target.close();   // clic fuera de la ventana
+});

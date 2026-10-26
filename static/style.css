@@ -950,4 +950,41 @@ details.answers[open] summary::before{content:"▾ "}
 }
 @media (max-width:640px){.album{grid-template-columns:1fr}.album .art{width:min(240px,70%)}}
 .handle-input input,.handle-input input:focus{background:transparent!important;box-shadow:none!important;border:0!important;outline:none}
-.chat-fab{left:max(16px,env(safe-area-inset-left,0px))}
+@media (min-width:641px){.chat-fab{left:max(16px,env(safe-area-inset-left,0px))}}
+
+/* ---- sin efectos al cambiar de página */
+@view-transition{navigation:none}
+::view-transition-old(root),::view-transition-new(root),::view-transition-group(root){animation:none!important}
+#nav-progress{display:none!important}
+
+/* ---- menú de la cuenta: cristal esmerilado */
+.topbar{view-transition-name:none!important}
+.menu{background:rgba(255,255,255,.8)!important;-webkit-backdrop-filter:blur(30px) saturate(190%)!important;backdrop-filter:blur(30px) saturate(190%)!important;border:1px solid rgba(255,255,255,.7)!important;box-shadow:0 20px 50px rgba(0,0,0,.16)!important}
+
+/* ---- selectores con pastilla negra que se desliza (ordenar, pestañas de ganancias y menú de arriba) */
+.seg{display:inline-flex!important;gap:4px!important;background:var(--card)!important;border:1px solid var(--line)!important;border-radius:999px!important;padding:4px!important;align-self:flex-start}
+.seg a{border:0!important;border-radius:999px!important;padding:10px 16px!important;margin:0!important;color:var(--muted)!important;font:500 14px/1 var(--font)!important;background:transparent!important;box-shadow:none!important}
+.seg a.on{background:var(--ink)!important;color:#fff!important;font-weight:600!important}
+.has-pill{position:relative;isolation:isolate}
+.has-pill .pill{position:absolute;left:0;top:0;border-radius:999px;background:var(--ink);z-index:-1;pointer-events:none;transition:transform .32s cubic-bezier(.3,.9,.3,1),width .32s cubic-bezier(.3,.9,.3,1);opacity:0}
+.has-pill > .on,.has-pill > .on:hover{background:transparent!important}
+.sortbar button,.seg a,.tabs .tab{transition:color .25s}
+@media (min-width:641px){
+  .topbar .tabs{background:var(--card)!important;border:1px solid var(--line)!important;border-radius:999px!important;padding:4px!important;gap:4px!important}
+  .topbar .tab{border-radius:999px!important;padding:9px 16px!important;font-size:14px!important}
+  .topbar .tab svg{display:block!important;width:17px;height:17px}
+  .topbar .tab.on{background:var(--ink);color:#fff!important}
+}
+@media (max-width:640px){.seg{display:flex!important;width:100%}.seg a{flex:1;text-align:center;padding:10px 6px!important;font-size:13px!important}}
+@media (prefers-reduced-motion:reduce){.has-pill .pill{transition:none}}
+
+/* ---- ventana de retirar */
+.wd-dialog{border:0;border-radius:24px;padding:24px;width:min(420px,calc(100vw - 32px));box-shadow:0 30px 80px rgba(0,0,0,.25);background:var(--card);color:var(--ink)}
+.wd-dialog::backdrop{background:rgba(10,10,12,.45);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.wd-dialog h2{font-size:22px}
+.wd-row{display:flex;gap:8px;align-items:stretch}
+.wd-dialog .wd-input{flex:1;background:var(--soft);border-radius:14px;padding:0 16px;display:flex;align-items:center;gap:6px}
+.wd-dialog .wd-input input{border:0!important;background:transparent!important;box-shadow:none!important;font:800 30px/1 var(--font);padding:14px 0;width:100%;min-width:0}
+.wd-dialog .wd-input span{font:700 22px var(--font);color:var(--ink-2)}
+.wd-actions{display:flex;gap:8px;justify-content:flex-end}
+.wd-actions .btn{flex:1}

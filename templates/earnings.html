@@ -1,6 +1,26 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
-{% block title %}Ganancias · {{ APP_NAME }}{% endblock %}
+{% block title %}Ganancias · {{ APP_NAME }}{% if current_user.payout_ready and not m.open_payout and m.available >= 0.01 %}
+<dialog class="wd-dialog" id="wd-dialog" aria-labelledby="wd-title">
+  <form method="post" action="{{ url_for('withdraw') }}" class="form-stack">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div>
+      <h2 id="wd-title">¿Cuánto quieres retirar?</h2>
+      <p class="small muted" style="margin-top:4px">Tienes <b>{{ m.available|money }}</b> disponibles.</p>
+    </div>
+    <div class="wd-row">
+      <div class="wd-input"><input id="wd-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" value="{{ m.available|amount }}" required aria-label="Cantidad"><span>{{ CUR }}</span></div>
+      <button type="button" class="btn soft wd-all" data-all="{{ m.available|amount }}">Todo</button>
+    </div>
+    <p class="small muted">Llega al instante a tu Whop <b>@{{ current_user.whop_username }}</b>.</p>
+    <div class="wd-actions">
+      <button type="button" class="btn soft" data-close>Cancelar</button>
+      <button class="btn accent">Confirmar retiro</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}
 {% block content %}
 <div class="stats four">
   <div class="card stat hero">
@@ -12,17 +32,9 @@
       {% elif m.open_payout %}
         <span class="status solicitado">Retiro en curso</span>
       {% else %}
+        <button type="button" class="btn sm" data-open="wd-dialog" {% if m.available < 0.01 %}disabled{% endif %}>Retirar</button>
       {% endif %}
     </div>
-    {% if current_user.payout_ready and not m.open_payout and m.available >= 0.01 %}
-    <form method="post" action="{{ url_for('withdraw') }}" class="wd-form">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <label class="sr-only" for="wd-amount">Cantidad a retirar</label>
-      <div class="wd-input"><span>{{ CUR }}</span><input id="wd-amount" name="amount" type="number" inputmode="decimal" step="0.01" min="0.01" max="{{ '%.2f'|format(m.available) }}" value="{{ '%.2f'|format(m.available) }}" required></div>
-      <button type="button" class="btn sm soft wd-all" data-all="{{ '%.2f'|format(m.available) }}">Todo</button>
-      <button class="btn sm">Retirar</button>
-    </form>
-    {% endif %}
     {% if m.open_payout %}
     <p class="small" style="color:rgba(255,255,255,.75)">{% if m.open_payout.status == "procesando" %}Enviando {{ m.open_payout.amount|money }} a tu cuenta de Whop. Llegará en unos minutos.{% elif m.open_payout.method == WHOP_METHOD %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo revisamos y te llega a tu Whop.{% else %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo pagamos en un plazo de {{ PAYOUT_DAYS }} días hábiles.{% endif %}</p>
     {% elif MIN_WITHDRAW and m.available < MIN_WITHDRAW and m.available > 0 %}
@@ -105,4 +117,24 @@
   {% endif %}
   </div>
 </div>
+{% if current_user.payout_ready and not m.open_payout and m.available >= 0.01 %}
+<dialog class="wd-dialog" id="wd-dialog" aria-labelledby="wd-title">
+  <form method="post" action="{{ url_for('withdraw') }}" class="form-stack">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div>
+      <h2 id="wd-title">¿Cuánto quieres retirar?</h2>
+      <p class="small muted" style="margin-top:4px">Tienes <b>{{ m.available|money }}</b> disponibles.</p>
+    </div>
+    <div class="wd-row">
+      <div class="wd-input"><input id="wd-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" value="{{ m.available|amount }}" required aria-label="Cantidad"><span>{{ CUR }}</span></div>
+      <button type="button" class="btn soft wd-all" data-all="{{ m.available|amount }}">Todo</button>
+    </div>
+    <p class="small muted">Llega al instante a tu Whop <b>@{{ current_user.whop_username }}</b>.</p>
+    <div class="wd-actions">
+      <button type="button" class="btn soft" data-close>Cancelar</button>
+      <button class="btn accent">Confirmar retiro</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
 {% endblock %}

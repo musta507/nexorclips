@@ -894,7 +894,7 @@ def test_withdraw_chosen_amount(monkeypatch):
     assert 'id="wd-amount"' in c.get("/ganancias").get_data(as_text=True)
     assert "Solo tienes" in flashes(post(c, "/ganancias/retirar", amount="100"))[0][1]
     assert flashes(post(c, "/ganancias/retirar", amount="0"))[0][0] == "error"
-    assert flashes(post(c, "/ganancias/retirar", amount="10,5"))[0][0] == "ok"
+    assert flashes(post(c, "/ganancias/retirar", amount="10,50 $"))[0][0] == "ok"
     with A.app.app_context():
         p = A.Payout.query.one()
         u = A.User.query.filter_by(email="w@test.com").one()

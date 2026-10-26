@@ -1363,7 +1363,9 @@ def withdraw():
         if m["available"] < MIN_WITHDRAW:
             flash(f"El retiro mínimo es {money(MIN_WITHDRAW)}.", "error")
             return redirect(url_for("earnings", tab="retiros"))
-        asked = request.form.get("amount")
+        asked = (request.form.get("amount") or "").strip().replace(" ", "").replace("$", "")
+        if "," in asked:                       # formato español: 1.234,56
+            asked = asked.replace(".", "").replace(",", ".")
         amount = cents(parse_float(asked, 0) or 0) if asked not in (None, "") else m["available"]
         if amount < 0.01:
             flash("Escribe cuánto quieres retirar.", "error")
