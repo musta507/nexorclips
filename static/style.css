@@ -942,9 +942,11 @@ details.answers[open] summary::before{content:"▾ "}
 .album{grid-template-columns:190px minmax(0,1fr);align-items:center}
 .album .art{width:190px}
 @media (min-width:901px){
-  .featured{grid-template-columns:300px minmax(0,1fr);align-items:center}
+  .featured{grid-template-columns:330px minmax(0,1fr);align-items:center;padding:22px}
   .featured .art{align-self:center;aspect-ratio:1;height:auto;width:100%}
-  .featured .info{justify-content:space-between}
+  .featured .info{justify-content:center;gap:14px;padding:0 12px 0 0}
+  .featured .f-stats{padding-top:14px}
+  .featured h2{font-size:clamp(26px,2.8vw,36px)}
 }
 @media (max-width:640px){.album{grid-template-columns:1fr}.album .art{width:min(240px,70%)}}
 .handle-input input,.handle-input input:focus{background:transparent!important;box-shadow:none!important;border:0!important;outline:none}

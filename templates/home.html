@@ -33,7 +33,7 @@
     </div>
     <div class="f-stats tnum">
       <div><b class="hot">{{ c.rate|rate_k }}</b><span>por 1.000 vistas</span></div>
-      <div><b>{{ st.views|short }}</b><span>vistas generadas</span></div>
+      <div><b>{% if st.views %}{{ st.views|short }}{% else %}Nueva{% endif %}</b><span>{% if st.views %}vistas generadas{% else %}aún sin vistas{% endif %}</span></div>
       <div><b>{{ st.remaining|money(0) }}</b><span>por repartir</span></div>
     </div>
     {{ budget(c, st) }}
