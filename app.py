@@ -843,28 +843,33 @@ def min_pay(camp):
     return round((camp.min_views or 0) / 1_000_000 * (camp.rate or 0), 2)
 
 
+def _es(v, decimals):
+    """Número en formato español: 5.000,00"""
+    return f"{(v or 0):,.{decimals}f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+
+
 @app.template_filter("money")
 def money(v, decimals=2):
-    return f"{CURRENCY}{(v or 0):,.{decimals}f}"
+    return f"{_es(v, decimals)} {CURRENCY}"
 
 
 @app.template_filter("amount")
 def amount(v):
-    return f"{(v or 0):,.2f}"
+    return _es(v, 2)
 
 
 @app.template_filter("num")
 def num(v):
-    return f"{int(v or 0):,}"
+    return f"{int(v or 0):,}".replace(",", ".")
 
 
 @app.template_filter("short")
 def short(v):
     v = int(v or 0)
     if v >= 1_000_000:
-        return f"{v / 1_000_000:.1f}M".replace(".0M", "M")
+        return f"{v / 1_000_000:.1f}M".replace(".0M", "M").replace(".", ",")
     if v >= 1_000:
-        return f"{v / 1_000:.1f}K".replace(".0K", "K")
+        return f"{v / 1_000:.1f}K".replace(".0K", "K").replace(".", ",")
     return str(v)
 
 

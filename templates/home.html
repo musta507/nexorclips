@@ -6,7 +6,7 @@
   <span class="ico">{{ icon("card") }}</span>
   <div class="txt">
     <h3>Agrega tu cuenta para poder pagarte</h3>
-    <p class="small muted">{% if whop_enabled() %}Conecta tu Whop para cobrar al instante, o agrega tu wallet de USDT.{% else %}Tu wallet de USDT (red TRC20). La necesitas para retirar tus ganancias.{% endif %}</p>
+    <p class="small muted">Conecta tu usuario de Whop: ahí te llega el dinero al instante cuando retiras.</p>
   </div>
   <a class="btn sm" href="{{ url_for('account') }}#cobro">Agregar</a>
 </div>
@@ -17,7 +17,7 @@
   <div class="how-step"><b>1</b><div><h3>Elige una campaña</h3><p class="small muted">Mira cuánto paga y sus reglas.</p></div></div>
   <div class="how-step"><b>2</b><div><h3>Publica tu clip</h3><p class="small muted">Únete a la campaña con tu cuenta y publica con el material oficial del creador.</p></div></div>
   <div class="how-step"><b>3</b><div><h3>Pega el enlace</h3><p class="small muted">Lo revisamos y contamos sus vistas automáticamente.</p></div></div>
-  <div class="how-step"><b>4</b><div><h3>Cobra</h3><p class="small muted">Retira desde {{ MIN_WITHDRAW|money(0) }} en USDT a tu wallet.</p></div></div>
+  <div class="how-step"><b>4</b><div><h3>Cobra</h3><p class="small muted">Cuando termina la campaña, retira lo que has ganado a tu Whop al instante.</p></div></div>
 </section>
 {% endif %}
 

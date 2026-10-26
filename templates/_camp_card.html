@@ -4,11 +4,11 @@
     <span class="dthumb">{% if cover_src(c) %}<img src="{{ cover_src(c) }}" alt="" loading="lazy">{% endif %}</span>
     <div class="dhead">
       <h3><span>{{ c.artist }}</span> {{ icon("check") }}</h3>
-      <span class="dmeta">{{ c.created_at|ago }} · Por vista{% if my_join is defined and my_join.get(c.id) == 'aceptada' %} · <b class="dj ok">Ya participas</b>{% elif my_join is defined and my_join.get(c.id) == 'pendiente' %} · <b class="dj">Pendiente</b>{% endif %}</span>
+      <span class="dmeta">{{ c.created_at|ago }} · Por 1.000 vistas{% if my_join is defined and my_join.get(c.id) == 'aceptada' %} · <b class="dj ok">Ya participas</b>{% elif my_join is defined and my_join.get(c.id) == 'pendiente' %} · <b class="dj">Pendiente</b>{% endif %}</span>
     </div>
   </div>
   <p class="ddesc">{{ c.song }}</p>
-  <div class="drange">{% if c.min_views %}<span>Mín. {{ min_pay(c)|money }} por clip</span>{% endif %}<span>{% if c.max_per_video %}Máx. {{ c.max_per_video|money(0) }} por clip{% else %}Sin máximo por clip{% endif %}</span></div>
+  <div class="drange">{% if c.min_views %}<span>Mín. {{ min_pay(c)|money }} por clip</span>{% endif %}<span>{% if c.max_per_video %}Máx. {{ c.max_per_video|money }} por clip{% else %}Sin máximo por clip{% endif %}</span></div>
   <div class="dbudget">
     <div class="dbar"><span style="width:{{ st.left_pct }}%"></span></div>
     <span><b>{{ st.remaining|money(0) }}</b> disponibles de {{ c.budget|money(0) }}</span>

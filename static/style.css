@@ -932,3 +932,20 @@ details.answers[open] summary::before{content:"▾ "}
 .wd-input span{font-weight:700;color:var(--ink-2)}
 .wd-input input{border:0;background:transparent;padding:10px 0;font-weight:700;font-size:16px;width:100%;min-width:0}
 .wd-input input:focus{outline:none}
+
+/* ---- repaso de maquetación: barra a todo el ancho, imagen y texto cuadrados, verificado alineado */
+.topbar .wrap{max-width:none;padding-inline:clamp(16px,3vw,36px)}
+.featured h2 svg,.album-info h1 svg{width:.62em;height:.62em;display:inline-block;vertical-align:-.04em;margin-left:.12em;stroke-width:2.2}
+.album-info h1 svg{color:var(--ink-2)}
+.featured h2{font-size:clamp(26px,3.1vw,40px);line-height:1.06;text-wrap:balance}
+.album-info h1{font-size:clamp(26px,3vw,38px);line-height:1.08;text-wrap:balance}
+.album{grid-template-columns:190px minmax(0,1fr);align-items:center}
+.album .art{width:190px}
+@media (min-width:901px){
+  .featured{grid-template-columns:280px minmax(0,1fr);align-items:stretch}
+  .featured .art{align-self:stretch;aspect-ratio:auto;height:100%;min-height:280px}
+  .featured .info{justify-content:space-between}
+}
+@media (max-width:640px){.album{grid-template-columns:1fr}.album .art{width:min(240px,70%)}}
+.handle-input input,.handle-input input:focus{background:transparent!important;box-shadow:none!important;border:0!important;outline:none}
+.chat-fab{left:max(16px,env(safe-area-inset-left,0px))}

@@ -393,7 +393,7 @@ def test_probe(monkeypatch):
     monkeypatch.setattr(V, "fetch_items", lambda p, urls: [{"id": "7300000000000000001", "playCount": 1234.0,
                                                              "diggCount": 50, "authorMeta": {"name": "Ana"}}])
     html = post(admin, "/admin/probar-apify", url=tt("ana", 1)).get_data(as_text=True)
-    assert "Funciona" in html and "1,234" in html and "@ana" in html
+    assert "Funciona" in html and "1.234" in html and "@ana" in html
 
 
 def test_cron_requires_key():
@@ -748,7 +748,7 @@ def test_campaign_form_per_thousand_and_min_pay():
         camp = A.Campaign.query.filter_by(song="Directo").one()
         assert camp.rate == 1200 and camp.min_views == 5000 and A.min_pay(camp) == 6.0
     html = client_for("c@test.com").get("/").get_data(as_text=True)
-    assert "$1.20" in html and "POR 1.000 VISTAS" in html and "Mín. $6.00 por clip" in html
+    assert "1,20 $" in html and "POR 1.000 VISTAS" in html and "Mín. 6,00 $ por clip" in html
 
 
 def test_admin_wipe_all_test_data(monkeypatch):
