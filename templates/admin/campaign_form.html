@@ -46,8 +46,10 @@
       <textarea id="rules" name="rules" rows="7" placeholder="Qué publicar, hashtags y menciones obligatorias, lo que está prohibido…">{{ camp.rules_text }}</textarea>
       <span class="hint">Se ven en la página de la campaña tal cual las escribas.</span></div>
 
-    <div class="field"><label for="sound_url">Enlace al material oficial</label>
-      <input id="sound_url" name="sound_url" value="{{ camp.sound_url or '' }}" placeholder="Carpeta de Drive con los vídeos, guías…"></div>
+    <div class="field"><label for="materials">Materiales de referencia (uno por línea)</label>
+      <textarea id="materials" name="materials" rows="4" placeholder="Instagram | https://instagram.com/…&#10;Drive con los vídeos | https://drive.google.com/…">{% for n, u, k in camp.material_list %}{{ n }} | {{ u }}
+{% endfor %}</textarea>
+      <span class="hint">Escribe «Nombre | enlace». Si pones solo el enlace, el nombre y el icono se ponen solos (Instagram, YouTube, TikTok, Drive).</span></div>
 
     <div class="field"><label for="join_questions">Preguntas para unirse (una por línea)</label>
       <textarea id="join_questions" name="join_questions" rows="5">{{ camp.join_questions or '' }}</textarea>

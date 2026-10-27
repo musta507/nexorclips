@@ -11,7 +11,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from functools import wraps
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import requests
 from flask import (Flask, Response, abort, flash, has_request_context, redirect, render_template,
@@ -205,6 +205,7 @@ class Campaign(db.Model):
     cover_lqip = db.Column(db.Text, default="")            # versión diminuta de la portada (se ve mientras carga la buena)
     cover_meta_v = db.Column(db.Integer, default=0)        # de qué versión de la portada son el color y la miniatura
     sound_url = db.Column(db.String(500), default="")
+    materials = db.Column(db.Text, default="")               # materiales de referencia: «Nombre | enlace» por línea
     rules = db.Column(db.Text, default="")                 # reglas: qué publicar
     rules_required = db.Column(db.Text, default="")        # reglas: obligatorio
     rules_forbidden = db.Column(db.Text, default="")       # reglas: prohibido
@@ -243,6 +244,26 @@ class Campaign(db.Model):
     def min_money(self):
         """Pago mínimo por clip en dinero (lo que un clip tiene que valer para empezar a cobrar)."""
         return round((self.min_views or 0) / 1_000_000 * (self.rate or 0), 2)   # en céntimos, como se escribió
+
+    @property
+    def material_list(self):
+        """[(nombre, enlace, tipo)] — tipo sirve para el icono: tiktok, instagram, youtube, drive o link."""
+        out = []
+        lines = (self.materials or "").splitlines() or ([self.sound_url] if self.sound_url else [])
+        for line in lines:
+            name, _, url = line.rpartition("|") if "|" in line else ("", "", line)
+            name, url = name.strip(), url.strip()
+            if not url.startswith(("https://", "http://")):
+                continue
+            host = urlparse(url).netloc.lower()
+            kind = ("tiktok" if "tiktok." in host else "instagram" if "instagram." in host
+                    else "youtube" if ("youtube." in host or "youtu.be" in host)
+                    else "drive" if host.endswith(("drive.google.com", "docs.google.com")) else "link")
+            if not name:
+                name = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube",
+                        "drive": "Google Drive"}.get(kind) or host.removeprefix("www.") or "Enlace"
+            out.append((name[:80], url, kind))
+        return out[:12]
 
     @property
     def rules_text(self):
@@ -1794,8 +1815,13 @@ def _campaign_from_form(camp):
     camp.artist = request.form.get("artist", "").strip()[:200]
     cover_url = request.form.get("cover_url", "").strip()[:500]
     camp.cover_url = cover_url if cover_url.startswith("https://") else ""
-    sound_url = request.form.get("sound_url", "").strip()[:500]
-    camp.sound_url = sound_url if sound_url.startswith(("https://", "http://")) else ""
+    mats = []
+    for line in request.form.get("materials", "").splitlines()[:12]:
+        url = line.rpartition("|")[2].strip() if "|" in line else line.strip()
+        if url.startswith(("https://", "http://")) and len(line) <= 600:
+            mats.append(line.strip())
+    camp.materials = "\n".join(mats)
+    camp.sound_url = ""          # el enlace antiguo pasa a la lista de materiales
     camp.rules = request.form.get("rules", "").strip()[:8000]
     camp.rules_required = ""      # ahora todo va en un solo campo
     camp.rules_forbidden = ""

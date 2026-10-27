@@ -24,11 +24,24 @@
     </div>
 
     {% set rules_all = camp.rules_text %}
-    {% if rules_all or camp.sound_url %}
+    {% if rules_all %}
     <div class="card form-stack">
       <h3>Reglas de la campaña</h3>
       {% if rules_all %}<div class="rules">{{ rules_all }}</div>{% endif %}
-      {% if camp.sound_url %}<a class="btn soft" href="{{ camp.sound_url }}" target="_blank" rel="noopener">Descargar el material oficial</a>{% endif %}
+    </div>
+    {% endif %}
+
+    {% set mats = camp.material_list %}
+    {% if mats %}
+    <div class="card mats">
+      <div class="mats-head">{{ icon("stack") }} Materiales de referencia</div>
+      {% for name, url, kind in mats %}
+      <a class="mat-row" href="{{ url }}" target="_blank" rel="noopener">
+        <span class="mat-ico">{{ icon(kind if kind in ("tiktok", "instagram", "youtube") else ("folder" if kind == "drive" else "link")) }}</span>
+        <span class="mat-name">{{ name }}</span>
+        <span class="mat-out">{{ icon("out") }}</span>
+      </a>
+      {% endfor %}
     </div>
     {% endif %}
   </div>

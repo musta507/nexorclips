@@ -701,3 +701,16 @@ details.answers[open] summary::before{content:"▾ "}
 .whop-ico{display:inline-block;width:1.2em;height:1.2em;border-radius:28%;background:url("whop.png") center/cover no-repeat;vertical-align:-.25em;flex:none}
 .whop-h{display:flex;align-items:center;gap:8px}
 .paym-logo.whop{background:url("whop.png") center/cover no-repeat;color:transparent}
+
+/* materiales de referencia de la campaña */
+.card.mats{padding:0;overflow:hidden}
+.mats-head{display:flex;align-items:center;gap:8px;padding:16px 22px;font-family:var(--display);font-weight:600;font-size:15px;color:var(--ink);border-bottom:1px solid var(--line)}
+.mats-head svg{width:16px;height:16px;color:var(--ink-2)}
+.mat-row{display:flex;align-items:center;gap:12px;padding:15px 22px;color:var(--ink);text-decoration:none;font-weight:600;transition:background .15s}
+.mat-row + .mat-row{border-top:1px solid var(--line)}
+.mat-row:hover{background:var(--soft)}
+.mat-ico{display:grid;place-items:center;width:22px;height:22px;flex:none}
+.mat-ico svg{width:20px;height:20px}
+.mat-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mat-out{display:grid;place-items:center;color:var(--ink-3,#9a9aa3)}
+.mat-out svg{width:16px;height:16px}
