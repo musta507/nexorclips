@@ -502,10 +502,6 @@ details.answers[open] summary::before{content:"▾ "}
 .site-footer nav{display:flex;gap:16px;flex-wrap:wrap}
 .site-footer a:hover{color:var(--ink)}
 
-/* =============================================================== aparición suave de la página (solo el contenido; la barra de arriba no se mueve) */
-#contenido{animation:page-in .15s ease-out both}
-@keyframes page-in{from{opacity:0}to{opacity:1}}
-
 /* =============================================================== tamaños de pantalla */
 @media (max-width:1000px){
   .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -602,7 +598,7 @@ details.answers[open] summary::before{content:"▾ "}
 }
 @media (prefers-reduced-motion:reduce){
   *{transition:none!important}
-  .btn.busy::after,.chat-fab.has-unread,#contenido{animation:none}
+  .btn.busy::after,.chat-fab.has-unread{animation:none}
 }
 
 /* barra de carga de Turbo: solo aparece si una página tarda mucho */
