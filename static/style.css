@@ -147,7 +147,8 @@ input:focus,textarea:focus,select:focus{outline:none;background:#fff;border-colo
 .empty{padding:64px 20px;text-align:center;display:flex;flex-direction:column;gap:4px;align-items:center}
 .empty h3{font-size:19px}
 .verified{display:inline-block;width:18px;height:18px;vertical-align:-2px;color:var(--ink)}
-.cover-fallback{font-family:var(--display);font-size:64px;font-weight:700;color:rgba(255,255,255,.9)}
+.cover-fallback{font-family:var(--display);font-size:64px;font-weight:700;color:var(--muted)}
+.featured .cover-fallback{color:rgba(255,255,255,.5)}
 
 /* estados */
 .status{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:8px;padding:4px 9px;white-space:nowrap}
@@ -198,7 +199,7 @@ input:focus,textarea:focus,select:focus{outline:none;background:#fff;border-colo
 
 /* =============================================================== campaña destacada */
 .featured{display:grid;grid-template-columns:330px minmax(0,1fr);gap:28px;align-items:center;padding:22px;border-radius:28px;background:var(--dark);color:#fff;position:relative;overflow:hidden}
-.featured .art{width:100%;aspect-ratio:1;border-radius:20px;overflow:hidden;background:linear-gradient(135deg,#241a4f,#ff2d55);display:grid;place-items:center;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+.featured .art{width:100%;aspect-ratio:1;border-radius:20px;overflow:hidden;background:rgba(255,255,255,.08) center/cover no-repeat;display:grid;place-items:center;box-shadow:0 18px 40px rgba(0,0,0,.35)}
 .featured .art img{width:100%;height:100%;object-fit:cover}
 .featured .info{display:flex;flex-direction:column;justify-content:center;gap:14px;padding-right:12px;min-width:0}
 .featured .eyebrow{color:rgba(255,255,255,.6);letter-spacing:.02em}
@@ -220,7 +221,7 @@ input:focus,textarea:focus,select:focus{outline:none;background:#fff;border-colo
 .dcard{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow);color:var(--ink);transition:box-shadow .18s,border-color .18s}
 .dcard:hover{box-shadow:0 14px 34px rgba(16,24,40,.10);border-color:#dcdde2}
 .dcard-top{display:flex;gap:14px;align-items:center}
-.dthumb{width:62px;height:62px;border-radius:16px;overflow:hidden;flex:none;background:var(--soft)}
+.dthumb{width:62px;height:62px;border-radius:16px;overflow:hidden;flex:none;background:var(--soft) center/cover no-repeat}
 .dthumb img{width:100%;height:100%;object-fit:cover}
 .dthumb.sm{width:44px;height:44px;border-radius:12px}
 .dhead{min-width:0}
@@ -253,7 +254,7 @@ input:focus,textarea:focus,select:focus{outline:none;background:#fff;border-colo
 /* =============================================================== página de campaña */
 .detail{display:grid;gap:28px;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);align-items:start}
 .album{display:grid;grid-template-columns:190px minmax(0,1fr);gap:24px;align-items:center}
-.album .art{width:190px;aspect-ratio:1;border-radius:22px;overflow:hidden;background:linear-gradient(135deg,#241a4f,#ff2d55);display:grid;place-items:center;box-shadow:0 18px 40px rgba(0,0,0,.18)}
+.album .art{width:190px;aspect-ratio:1;border-radius:22px;overflow:hidden;background:var(--soft-2) center/cover no-repeat;display:grid;place-items:center;box-shadow:0 18px 40px rgba(0,0,0,.18)}
 .album .art img{width:100%;height:100%;object-fit:cover}
 .album-info{display:flex;flex-direction:column;gap:10px;min-width:0}
 .album-info h1{font-size:clamp(26px,3vw,38px);line-height:1.08;letter-spacing:-.03em}
@@ -605,3 +606,90 @@ details.answers[open] summary::before{content:"▾ "}
 
 /* barra de carga de Turbo: solo aparece si una página tarda mucho */
 .turbo-progress-bar{height:2px;background:var(--ink)}
+
+/* formulario de campaña: una fila por red con su pago */
+.rate-rows{display:flex;flex-direction:column;gap:8px}
+.rate-row{display:grid;grid-template-columns:180px minmax(0,160px);gap:12px;align-items:center}
+@media (max-width:640px){.rate-row{grid-template-columns:1fr 120px}}
+
+/* reglas de la campaña y pago de cada red */
+.rule-block{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:16px;background:var(--soft)}
+.rule-ico{font-size:18px;line-height:1.4;flex:none}
+.rule-block b{display:block;font:600 14px/1.4 var(--display);margin-bottom:2px}
+.pp-rates{display:flex;flex-direction:column;gap:6px;margin-top:12px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.08)}
+.pp-rate{display:flex;align-items:center;gap:8px;font-size:14px;color:rgba(255,255,255,.75)}
+.pp-rate svg{width:15px;height:15px;color:#fff}
+.pp-rate b{margin-left:auto;color:#fff;font-weight:700}
+.drate span:first-child:not(:last-child){display:block;margin-bottom:3px}
+
+/* =============================================================== panel de admin: menú lateral y secciones */
+.admin-shell{background:var(--bg)}
+.adm-badge{margin-left:10px;vertical-align:2px}
+.adm-view{justify-self:center;display:inline-flex;align-items:center;gap:8px;font:500 14px var(--display);color:var(--muted);padding:9px 14px;border-radius:999px;transition:background-color .15s,color .15s}
+.adm-view:hover{background:var(--soft);color:var(--ink)}
+.adm-view svg{width:16px;height:16px}
+.adm{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:calc(100vh - 69px)}
+.adm-side{position:sticky;top:69px;height:calc(100vh - 69px);overflow-y:auto;background:#fff;border-right:1px solid var(--line);padding:18px 12px}
+.adm-nav{display:flex;flex-direction:column;gap:2px}
+.adm-link{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;color:var(--ink-2);font:500 14px/1.2 var(--display);transition:background-color .15s,color .15s}
+.adm-link svg{width:18px;height:18px;flex:none;color:var(--muted)}
+.adm-link:hover{background:var(--soft);color:var(--ink)}
+.adm-link.on{background:var(--ink);color:#fff}
+.adm-link.on svg{color:#fff}
+.adm-n{margin-left:auto;min-width:22px;height:22px;padding:0 7px;border-radius:99px;background:var(--red);color:#fff;font:700 11px/22px var(--font);text-align:center}
+.adm-link.on .adm-n{background:#fff;color:var(--ink)}
+.adm-main{min-width:0;padding:28px clamp(16px,3vw,40px) 80px;display:block}
+.adm-main > .page{max-width:1200px;gap:24px}
+.adm-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.adm-head h1{font-size:30px}
+.adm-head p{margin-top:4px;max-width:62ch}
+.adm-actions{display:flex;gap:8px;flex-wrap:wrap}
+.adm-subhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.adm-kpis{display:grid;gap:12px;grid-template-columns:repeat(6,minmax(0,1fr))}
+.adm-kpis .kpi{border:0;box-shadow:var(--shadow);border-radius:18px;padding:16px 18px}
+.adm-kpis .kpi b{font-size:26px}
+.adm-kpis .kpi small{font-size:12px}
+.adm-grid{display:grid;gap:16px;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);align-items:start}
+.adm-todo h3{margin-bottom:10px}
+.adm-alerts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.adm-alerts a{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:14px;background:var(--soft);font-weight:500;transition:background-color .15s}
+.adm-alerts a:hover{background:var(--soft-2)}
+.adm-alerts a > svg{width:16px;height:16px;margin-left:auto;color:var(--muted);flex:none}
+.adm-alert-ico{width:32px;height:32px;border-radius:10px;background:#fff;display:grid;place-items:center;flex:none}
+.adm-alert-ico svg{width:17px;height:17px}
+.adm-charts{display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))}
+.adm-chart{padding:16px 16px 12px;display:flex;flex-direction:column;gap:8px}
+.adm-chart-top{display:flex;flex-direction:column}
+.adm-chart-top b{font:700 22px/1.2 var(--display)}
+.adm-bars{width:100%;height:70px;display:block}
+.adm-bars rect{fill:var(--ink)}
+.adm-bars rect.base{fill:var(--soft-2)}
+.adm-chart-axis{display:flex;justify-content:space-between}
+.adm-camps{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.adm-camp{display:flex;flex-direction:column;gap:12px;padding:16px 18px;transition:box-shadow .15s}
+.adm-camp:hover{box-shadow:0 10px 28px rgba(16,24,40,.09)}
+.adm-camp-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.adm-camp-name{display:flex;flex-direction:column;min-width:0;flex:1}
+.adm-camp-name b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.adm-camp-cell{display:flex;align-items:center;gap:12px}
+.adm-filters{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.adm-filters select{width:auto;min-width:220px;padding:10px 14px}
+@media (max-width:1200px){.adm-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.adm-grid{grid-template-columns:1fr}}
+@media (max-width:900px){
+  .adm{grid-template-columns:1fr}
+  .adm-side{position:sticky;top:60px;height:auto;z-index:15;border-right:0;border-bottom:1px solid var(--line);padding:8px 12px;overflow-x:auto;scrollbar-width:none}
+  .adm-side::-webkit-scrollbar{display:none}
+  .adm-nav{flex-direction:row;gap:4px}
+  .adm-link{white-space:nowrap;padding:9px 12px}
+  .adm-view{display:none}
+  .adm-charts{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  .adm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .adm-main{padding:20px 16px 60px}
+  .adm-head h1{font-size:26px}
+  .adm-filters select{min-width:0;flex:1}
+}
+.adm-main > .page{padding-top:0}
+.adm-main > .flashes{padding-top:0;margin-bottom:16px}
+.adm-camp-top > .small{flex-basis:100%}

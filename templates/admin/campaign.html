@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ camp.song }} · Admin{% endblock %}
 {% block content %}
-<a class="back" href="{{ url_for('admin_home') }}">← Panel de control</a>
+<a class="back" href="{{ url_for('admin_campaigns') }}">← Campañas</a>
 <div class="toolbar">
   <div>
     <span class="status {{ camp.status }}">{{ camp.status|capitalize }}</span>

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon, budget %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Resumen · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Resumen", "Cómo va " ~ APP_NAME ~ " de un vistazo.") %}
+  <a class="btn" href="{{ url_for('admin_campaign_form') }}">{{ icon("plus") }} Nueva campaña</a>
+{% endcall %}
+
+<div class="adm-kpis">
+  <div class="kpi"><span>Presupuesto en campañas activas</span><b class="tnum">{{ kpis.budget_live|money(0) }}</b><small class="muted">{{ kpis.live_camps }} {{ "campaña activa" if kpis.live_camps == 1 else "campañas activas" }}</small></div>
+  <div class="kpi"><span>Repartido a clips</span><b class="tnum">{{ kpis.spent|money(0) }}</b></div>
+  <div class="kpi"><span>Pagado a clippers</span><b class="tnum">{{ kpis.paid|money(0) }}</b></div>
+  <div class="kpi{% if kpis.open_payouts_n %} warn{% endif %}"><span>Retiros en curso</span><b class="tnum">{{ kpis.open_payouts|money(0) }}</b>{% if kpis.open_payouts_n %}<a href="{{ url_for('admin_payouts') }}">{{ kpis.open_payouts_n }} {{ "retiro" if kpis.open_payouts_n == 1 else "retiros" }} →</a>{% endif %}</div>
+  <div class="kpi"><span>Vistas aprobadas</span><b class="tnum">{{ kpis.views|short }}</b></div>
+  <div class="kpi"><span>Clippers con clips</span><b class="tnum">{{ kpis.clippers }}</b></div>
+</div>
+
+<div class="adm-grid">
+  <section class="card adm-todo">
+    <h3>Para hacer</h3>
+    {% if alerts %}
+    <ul class="adm-alerts">
+      {% for ico, text, url in alerts %}
+      <li><a href="{{ url }}"><span class="adm-alert-ico">{{ icon(ico) }}</span><span>{{ text }}</span>{{ icon("arrow") }}</a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Todo al día. No hay nada pendiente.</p>
+    {% endif %}
+  </section>
+  <div class="adm-charts">
+    {{ ui.bars(clips_day, "Clips enviados") }}
+    {{ ui.bars(paid_day, "Pagado a clippers", "money") }}
+    {{ ui.bars(users_day, "Clippers nuevos") }}
+  </div>
+</div>
+
+<section>
+  <div class="adm-subhead"><h2>Campañas activas</h2><a class="link small" href="{{ url_for('admin_campaigns') }}">Ver todas</a></div>
+  {% if live %}
+  <div class="adm-camps">
+    {% for c, st in live %}
+    <a class="card adm-camp" href="{{ url_for('admin_campaign', cid=c.id) }}">
+      <div class="adm-camp-top">
+        {% set _t, lqip = cover_meta(c) %}<span class="dthumb sm"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="44" height="44" loading="lazy">{% endif %}</span>
+        <div class="adm-camp-name"><b>{{ c.song }}</b><span class="small muted">{{ c.artist }}</span></div>
+        <span class="small muted tnum">{{ st.views|short }} vistas · {{ st.clips }} clips{% if st.pending %} · <b>{{ st.pending }} por revisar</b>{% endif %}</span>
+      </div>
+      {{ budget(c, st) }}
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card empty"><h3>No hay campañas activas</h3><p class="muted">Crea una con «Nueva campaña».</p></div>
+  {% endif %}
+</section>
+{% endblock %}

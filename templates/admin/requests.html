@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Solicitudes · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Solicitudes para entrar", "Clippers que quieren entrar en una campaña. Al aceptarlos, ellos añaden su cuenta y la verifican con el código en su bio.") %}{% endcall %}
+<nav class="seg" aria-label="Filtrar">
+  {% for k, label in [("pendiente", "Por revisar"), ("aceptada", "Aceptadas"), ("rechazada", "Rechazadas")] %}
+  <a class="{% if estado == k %}on{% endif %}" href="{{ url_for('admin_requests', estado=k) }}">{{ label }}</a>
+  {% endfor %}
+</nav>
+<section id="unirse">
+  <div class="table-card">
+    <div class="table-scroll"><table class="rt">
+      <thead><tr><th>Clipper</th><th>Campaña y respuestas</th><th>Pidió</th><th>{{ "Acción" if estado == "pendiente" else "Estado" }}</th></tr></thead>
+      <tbody>
+      {% for a in joins %}
+      <tr>
+        <td data-label="Clipper"><a class="link" href="{{ url_for('admin_clipper', uid=a.user_id) }}"><b>{{ a.user.name }}</b></a><div class="small muted">{{ a.user.email }}</div></td>
+        <td data-label="Campaña">{{ a.campaign.song }}{% if a.answer_list %}
+          <details class="answers"{% if estado == "pendiente" %} open{% endif %}><summary>Respuestas ({{ a.answer_list|length }})</summary>
+            {% for q, ans in a.answer_list %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}
+          </details>{% endif %}</td>
+        <td data-label="Pidió" class="small muted">{{ a.created_at|ago }}</td>
+        <td data-label="{{ 'Acción' if estado == 'pendiente' else 'Estado' }}">
+          {% if a.status == "pendiente" %}
+          <div class="inline" style="gap:6px;flex-wrap:wrap">
+            <form method="post" action="{{ url_for('admin_campaign_member', mid=a.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
+            <form method="post" action="{{ url_for('admin_campaign_member', mid=a.id, accion='rechazar') }}" data-confirm="¿Rechazar a {{ a.user.name }} en «{{ a.campaign.song }}»?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>
+          </div>
+          {% else %}<span class="status {{ 'aprobado' if a.status == 'aceptada' else 'rechazado' }}">{{ "Aceptado" if a.status == "aceptada" else "Rechazado" }}</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4"><div class="empty"><p class="muted">{% if estado == "pendiente" %}Nadie esperando. Cuando un clipper pida entrar en una campaña, aparecerá aquí.{% else %}No hay solicitudes aquí.{% endif %}</p></div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+</section>
+{% endblock %}

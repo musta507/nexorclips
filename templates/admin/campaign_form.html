@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ "Editar" if editing else "Nueva" }} campaña · Admin{% endblock %}
 {% block content %}
-<a class="back" href="{{ url_for('admin_campaign', cid=camp.id) if editing else url_for('admin_home') }}">← Volver</a>
+<a class="back" href="{{ url_for('admin_campaign', cid=camp.id) if editing else url_for('admin_campaigns') }}">← Volver</a>
 <div class="card" style="max-width:760px;width:100%">
   <form method="post" enctype="multipart/form-data" class="form-stack">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -23,31 +23,40 @@
       {% if camp.cover_version %}<label class="check"><input type="checkbox" name="remove_cover"> Quitar la imagen subida</label>{% endif %}
     </div>
 
-    <div class="field"><label for="sound_url">Enlace al material oficial</label>
-      <input id="sound_url" name="sound_url" value="{{ camp.sound_url or '' }}" placeholder="Carpeta de Drive con los vídeos, guías…"></div>
-
-    <div class="field"><label for="rules">Cómo participar (reglas)</label>
-      <textarea id="rules" name="rules" rows="5" placeholder="Qué tienen que hacer, duración, menciones…">{{ camp.rules or '' }}</textarea></div>
+    <div class="field">
+      <span class="label">Redes y pago por cada 1.000 vistas ({{ CUR_CODE }})</span>
+      <div class="rate-rows">
+        {% for key, label in PLATFORMS.items() %}
+        <div class="rate-row">
+          <label class="check"><input type="checkbox" name="pf_{{ key }}" {% if key in camp.platform_list %}checked{% endif %}> {{ label }}</label>
+          <input name="rate_k_{{ key }}" value="{{ '%g'|format(camp.rate_for(key) / 1000) if camp.rate and key in camp.platform_list else '' }}" inputmode="decimal" placeholder="1.00" aria-label="Pago en {{ label }} por cada 1.000 vistas">
+        </div>
+        {% endfor %}
+      </div>
+      <span class="hint">Marca las redes que acepta la campaña y pon lo que se paga en cada una. Por fuera se enseña el pago más alto.</span>
+    </div>
 
     <div class="form-grid">
-      <div class="field"><label for="rate_k">Pago por cada 1.000 vistas ({{ CUR_CODE }})</label><input id="rate_k" name="rate_k" value="{{ '%g'|format(camp.rate / 1000) if camp.rate else '' }}" inputmode="decimal" placeholder="1.00" required></div>
       <div class="field"><label for="budget">Presupuesto total ({{ CUR_CODE }})</label><input id="budget" name="budget" value="{{ '%g'|format(camp.budget) if camp.budget else '' }}" inputmode="decimal" placeholder="2000" required>{% if editing and camp.spent %}<span class="hint">Ya repartido: {{ camp.spent|money }}. No puede ser menor.</span>{% endif %}</div>
-      <div class="field"><label for="min_pay">Pago mínimo por clip ({{ CUR_CODE }})</label><input id="min_pay" name="min_pay" value="{{ '%g'|format(min_pay(camp)) if camp.min_views and camp.rate else '' }}" inputmode="decimal" placeholder="5"><span class="hint">Un clip empieza a cobrar cuando llega a esa cantidad.</span></div>
+      <div class="field"><label for="min_pay">Pago mínimo por clip ({{ CUR_CODE }})</label><input id="min_pay" name="min_pay" value="{{ '%g'|format(min_pay(camp)) if camp.min_views and camp.rate else '' }}" inputmode="decimal" placeholder="5"><span class="hint">Un clip empieza a cobrar cuando su valor llega a esa cantidad. Igual para todas las redes.</span></div>
       <div class="field"><label for="max_per_video">Pago máximo por clip ({{ CUR_CODE }}, vacío = sin tope)</label><input id="max_per_video" name="max_per_video" value="{{ '%g'|format(camp.max_per_video) if camp.max_per_video else '' }}" inputmode="decimal"></div>
     </div>
 
-    <div class="field"><label for="join_questions">Preguntas para unirse (una por línea)</label>
-      <textarea id="join_questions" name="join_questions" rows="4" placeholder="¿Cuánto tiempo llevas haciendo clips?&#10;Pásanos un clip tuyo que haya funcionado bien&#10;¿Cuántos clips puedes publicar al día?">{{ camp.join_questions or '' }}</textarea>
-      <span class="hint">El clipper las responde al pedir entrar y tú ves sus respuestas antes de aceptarlo. Déjalo vacío si no quieres preguntar nada.</span></div>
+    <div class="field"><span class="label">Reglas de la campaña</span>
+      <span class="hint">Se ven en la página de la campaña. Deja vacío lo que no necesites.</span></div>
+    <div class="field"><label for="rules">✅ Qué publicar</label>
+      <textarea id="rules" name="rules" rows="3" placeholder="Tipo de clips, duración, formato vertical…">{{ camp.rules or '' }}</textarea></div>
+    <div class="field"><label for="rules_required">#️⃣ Obligatorio</label>
+      <textarea id="rules_required" name="rules_required" rows="2" placeholder="Hashtags, mención al creador, sonido…">{{ camp.rules_required or '' }}</textarea></div>
+    <div class="field"><label for="rules_forbidden">❌ Prohibido</label>
+      <textarea id="rules_forbidden" name="rules_forbidden" rows="2" placeholder="Lo que hace que se rechace un clip…">{{ camp.rules_forbidden or '' }}</textarea></div>
 
-    <div class="field">
-      <span class="label">Redes aceptadas</span>
-      <div class="inline" style="gap:18px;flex-wrap:wrap">
-        {% for key, label in PLATFORMS.items() %}
-          <label class="check"><input type="checkbox" name="pf_{{ key }}" {% if key in camp.platform_list %}checked{% endif %}> {{ label }}</label>
-        {% endfor %}
-      </div>
-    </div>
+    <div class="field"><label for="sound_url">Enlace al material oficial</label>
+      <input id="sound_url" name="sound_url" value="{{ camp.sound_url or '' }}" placeholder="Carpeta de Drive con los vídeos, guías…"></div>
+
+    <div class="field"><label for="join_questions">Preguntas para unirse (una por línea)</label>
+      <textarea id="join_questions" name="join_questions" rows="5">{{ camp.join_questions or '' }}</textarea>
+      <span class="hint">El clipper las responde al pedir entrar y tú ves sus respuestas antes de aceptarlo. Déjalo vacío si no quieres preguntar nada.</span></div>
 
     <div class="form-grid">
       <div class="field"><label for="status">Estado</label>

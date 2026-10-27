@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Clips por revisar · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Clips por revisar", "Aprueba los clips que cumplen las reglas. Para rechazar hay que escribir el motivo: el clipper lo verá.") %}
+  <form method="post" action="{{ url_for('admin_refresh') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">↻ Actualizar vistas</button></form>
+{% endcall %}
+<form method="get" class="adm-filters" data-autosubmit>
+  <select name="c" aria-label="Campaña">
+    <option value="">Todas las campañas</option>
+    {% for c in camps %}<option value="{{ c.id }}"{% if cid == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}
+  </select>
+  <label class="check"><input type="checkbox" name="avisos" value="1"{% if avisos %} checked{% endif %}> Solo con avisos</label>
+  <noscript><button class="btn sm soft">Filtrar</button></noscript>
+</form>
+<div class="table-card">
+{% if pending %}
+  <div class="table-scroll"><table class="rt">
+    <thead><tr><th>Clipper</th><th>Campaña</th><th>Clip</th><th class="r">Vistas</th><th>Acción</th></tr></thead>
+    <tbody>
+    {% for s in pending %}
+    <tr{% if s.flag_list %} class="row-flag"{% endif %}>
+      <td data-label="Clipper"><a class="link" href="{{ url_for('admin_clipper', uid=s.user_id) }}"><b>{{ s.user.name }}</b></a><div class="small muted">{{ s.user.email }}</div></td>
+      <td data-label="Campaña">{{ s.campaign.song }}</td>
+      <td data-label="Clip"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver en {{ PLATFORMS[s.platform] }}</a><div class="small muted">{{ s.created_at|ago }}</div>{% include "admin/_flags.html" %}</td>
+      <td data-label="Vistas" class="r tnum">{{ s.views|num }}<div class="small {% if s.views_error %}" style="color:var(--red){% else %} muted{% endif %}">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</div></td>
+      <td data-label="Acción">{% include "admin/_review_buttons.html" %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+{% else %}
+  <div class="empty"><h3>Todo revisado</h3><p class="muted">No hay clips pendientes{% if cid or avisos %} con este filtro{% endif %}.</p></div>
+{% endif %}
+</div>
+{% endblock %}

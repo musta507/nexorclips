@@ -1,68 +1,9 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
-{% block title %}Clippers y retiros · Admin{% endblock %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Clippers · Admin{% endblock %}
 {% block content %}
-<a class="back" href="{{ url_for('admin_home') }}">← Panel de control</a>
-<div class="toolbar">
-  <div><span class="admin-tag">Admin</span><h1 style="margin-top:8px">Clippers y retiros</h1></div>
-  <a class="btn soft" href="{{ url_for('admin_payouts_csv') }}" data-turbo="false">Descargar retiros (CSV)</a>
-</div>
-
-<section>
-  <div class="section-head">
-    <h2>Retiros en curso ({{ open_requests|length }})</h2>
-    <p class="muted">Los retiros se pagan solos por Whop en cuanto el clipper pulsa «Retirar». Si Whop no puede pagar (por ejemplo, porque no hay saldo en tu empresa), el retiro se cancela solo y el dinero vuelve al saldo del clipper.</p>
-  </div>
-  <div class="table-card">
-  {% if open_requests %}
-    <div class="table-scroll"><table class="rt">
-      <thead><tr><th>Clipper</th><th>Enviar a</th><th class="r">Monto</th><th>Acción</th></tr></thead>
-      <tbody>
-      {% for p in open_requests %}
-      <tr{% if p.user.is_banned %} class="row-flag"{% endif %}>
-        <td data-label="Clipper"><a class="link" href="{{ url_for('admin_clipper', uid=p.user_id) }}"><b>{{ p.user.name }}</b></a>{% if p.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">{{ p.user.email }} · {{ p.created_at|ago }}</div></td>
-        <td data-label="Enviar a"><b>{{ p.method }}</b><div class="small selectable" style="word-break:break-all">{{ p.details }}</div></td>
-        <td data-label="Monto" class="r tnum"><b>{{ p.amount|money }}</b></td>
-        <td data-label="Acción">
-          {% if p.status == "procesando" %}
-          <span class="status procesando">Enviando por Whop</span>{% if p.ext_id %}<div class="small muted selectable">{{ p.ext_id }}</div>{% endif %}
-          {% else %}
-          {% if p.note %}<div class="small" style="color:var(--red);margin-bottom:6px">{{ p.note }}</div>{% endif %}
-          {% if p.error %}<div class="small muted selectable" style="word-break:break-all;margin-bottom:6px">{{ p.error }}</div>{% endif %}
-          <form class="inline" method="post" style="flex-wrap:wrap" data-confirm="¿Confirmas esta acción sobre el retiro de {{ p.amount|money }}?">
-            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-            <input type="hidden" name="payout_id" value="{{ p.id }}">
-            <input id="note-{{ p.id }}" name="note" placeholder="ID de transacción o motivo" style="width:200px" aria-label="Nota">
-            {% if p.method == WHOP_METHOD and whop_enabled() %}<button class="btn sm" name="action" value="whop">Pagar con Whop</button>{% endif %}
-            <button class="btn sm green" name="action" value="pagar">Marcar pagado</button>
-            <button class="btn sm red" name="action" value="rechazar">Rechazar</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table></div>
-  {% else %}
-    <div class="empty"><h3>No hay retiros pendientes</h3><p class="muted">Cuando un clipper pida su dinero, aparecerá aquí.</p></div>
-  {% endif %}
-  </div>
-</section>
-
-{% if failed %}
-<section>
-  <div class="section-head"><h2>Últimos pagos que Whop no pudo enviar</h2><p class="muted">Se cancelaron solos y el dinero volvió al saldo de cada clipper. Aquí tienes el motivo que dio Whop.</p></div>
-  <div class="table-card"><div class="table-scroll"><table class="rt">
-    <thead><tr><th>Clipper</th><th class="r">Monto</th><th>Motivo de Whop</th></tr></thead>
-    <tbody>
-    {% for p in failed %}
-    <tr><td data-label="Clipper"><b>{{ p.user.name }}</b><div class="small muted">{{ p.created_at|ago }}</div></td>
-      <td data-label="Monto" class="r tnum">{{ p.amount|money }}</td>
-      <td data-label="Motivo" class="small selectable" style="word-break:break-word">{{ p.error }}</td></tr>
-    {% endfor %}
-    </tbody></table></div></div>
-</section>
-{% endif %}
+{% call ui.head("Clippers", "Todas las personas registradas, lo que han ganado y su ficha.") %}{% endcall %}
 
 <section>
   <div class="toolbar" style="margin-bottom:18px">

@@ -1,0 +1,28 @@
+{# Piezas comunes del panel de admin #}
+{% macro head(title, sub="") -%}
+<div class="adm-head">
+  <div><h1>{{ title }}</h1>{% if sub %}<p class="muted">{{ sub }}</p>{% endif %}</div>
+  <div class="adm-actions">{{ caller() if caller else "" }}</div>
+</div>
+{%- endmacro %}
+
+{# Gráfico de barras de los últimos 30 días, dibujado en el servidor (sin librerías) #}
+{% macro bars(series, title, fmt="num") -%}
+{% set top = (series|map(attribute=1)|max) or 1 %}
+{% set total = series|map(attribute=1)|sum %}
+<div class="card adm-chart">
+  <div class="adm-chart-top">
+    <span class="muted small">{{ title }}</span>
+    <b class="tnum">{% if fmt == "money" %}{{ total|money(0) }}{% else %}{{ total|int|num }}{% endif %}</b>
+    <span class="small muted">últimos 30 días</span>
+  </div>
+  <svg viewBox="0 0 300 70" preserveAspectRatio="none" class="adm-bars" role="img" aria-label="{{ title }}">
+    {% for d, v in series %}
+      {% set h = (v / top * 62) if v else 0 %}
+      <rect x="{{ loop.index0 * 10 + 1 }}" y="{{ 68 - h }}" width="8" height="{{ h if h > 0 else 0 }}" rx="2"><title>{{ d.strftime('%d/%m') }}: {% if fmt == "money" %}{{ v|money }}{% else %}{{ v|int }}{% endif %}</title></rect>
+      <rect x="{{ loop.index0 * 10 + 1 }}" y="67" width="8" height="1" class="base"/>
+    {% endfor %}
+  </svg>
+  <div class="adm-chart-axis small muted"><span>{{ series[0][0].strftime('%d/%m') }}</span><span>hoy</span></div>
+</div>
+{%- endmacro %}

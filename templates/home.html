@@ -23,8 +23,9 @@
 
 {% if featured %}
 {% set c, st = featured %}
-<a class="featured" href="{{ url_for('campaign', cid=c.id) }}">
-  <div class="art">{% if cover_src(c) %}<img src="{{ cover_src(c, 720) }}" alt="Portada de {{ c.song }}" width="330" height="330" fetchpriority="high" decoding="async">{% else %}<span class="cover-fallback">{{ c.song[:1] }}</span>{% endif %}</div>
+{% set tint, lqip = cover_meta(c) %}
+<a class="featured" href="{{ url_for('campaign', cid=c.id) }}"{% if tint %} style="background:{{ tint }}"{% endif %}>
+  <div class="art"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 720) }}" alt="Portada de {{ c.song }}" width="330" height="330" fetchpriority="high" decoding="async">{% else %}<span class="cover-fallback">{{ c.song[:1] }}</span>{% endif %}</div>
   <div class="info">
     <span class="eyebrow">Campaña destacada</span>
     <div>
@@ -32,7 +33,7 @@
       <p class="artist">{{ c.artist }}</p>
     </div>
     <div class="f-stats tnum">
-      <div><b class="hot">{{ c.rate|rate_k }}</b><span>por 1.000 vistas</span></div>
+      <div><b class="hot">{{ c.rate|rate_k }}</b><span>{% if c.rates_vary %}hasta, {% endif %}por 1.000 vistas</span></div>
       <div><b>{% if st.views %}{{ st.views|short }}{% else %}Nueva{% endif %}</b><span>{% if st.views %}vistas generadas{% else %}aún sin vistas{% endif %}</span></div>
       <div><b>{{ st.remaining|money(0) }}</b><span>por repartir</span></div>
     </div>

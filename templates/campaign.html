@@ -7,7 +7,8 @@
 <div class="detail">
   <div class="form-stack" style="gap:24px">
     <header class="album">
-      <div class="art">{% if cover_src(camp) %}<img src="{{ cover_src(camp, 720) }}" alt="Portada de {{ camp.song }}" width="190" height="190" fetchpriority="high" decoding="async">{% else %}<span class="cover-fallback">{{ camp.song[:1] }}</span>{% endif %}</div>
+      {% set _t, lqip = cover_meta(camp) %}
+      <div class="art"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(camp) %}<img src="{{ cover_src(camp, 720) }}" alt="Portada de {{ camp.song }}" width="190" height="190" fetchpriority="high" decoding="async">{% else %}<span class="cover-fallback">{{ camp.song[:1] }}</span>{% endif %}</div>
       <div class="album-info">
         <span class="eyebrow muted">Publicada {{ camp.created_at|ago }}</span>
         <h1>{{ camp.song }} {{ icon("check") }}</h1>
@@ -17,29 +18,37 @@
     </header>
 
     <div class="facts">
-      <div class="fact"><b>{% if camp.min_views %}{{ min_pay(camp)|money }}{% else %}Sin mínimo{% endif %}</b><span>pago mínimo por clip{% if camp.min_views %} ({{ camp.min_views|short }} vistas){% endif %}</span></div>
+      <div class="fact"><b>{% if camp.min_views %}{{ min_pay(camp)|money }}{% else %}Sin mínimo{% endif %}</b><span>pago mínimo por clip</span></div>
       <div class="fact"><b>{% if camp.max_per_video %}{{ camp.max_per_video|money }}{% else %}Sin máximo{% endif %}</b><span>pago máximo por clip</span></div>
       <div class="fact"><b>{% if st.views %}{{ st.views|short }}{% else %}Nueva{% endif %}</b><span>{% if st.views %}vistas generadas{% else %}aún sin vistas{% endif %}</span></div>
     </div>
 
+    {% if camp.rules or camp.rules_required or camp.rules_forbidden or camp.sound_url %}
     <div class="card form-stack">
-      <h3>Cómo participar</h3>
-      <div class="rules">{{ camp.rules or "Sigue las indicaciones del creador en tus clips." }}</div>
-      <div class="calc">
-        <h3>Cómo se calcula tu pago</h3>
-        <p class="small">Vistas ÷ 1.000 × {{ camp.rate|rate_k }}. {% if camp.min_views %}Cada clip cobra como mínimo {{ min_pay(camp)|money }} (a partir de {{ camp.min_views|num }} vistas). {% endif %}{% if camp.max_per_video %}Y como máximo {{ camp.max_per_video|money }}. {% endif %}{% if REFRESH_DAYS %}Contamos las vistas de los primeros {{ REFRESH_DAYS }} días{% else %}Contamos las vistas hasta que termina la campaña{% endif %} y el presupuesto se reparte por orden hasta agotarse. Lo que ya has ganado no baja y lo puedes retirar cuando la campaña termina.</p>
-        <p class="small muted">Ejemplo: un clip con 250.000 vistas gana {{ ([250000 / 1000000 * camp.rate, camp.max_per_video or 999999999]|min if 250000 >= (camp.min_views or 0) else 0)|money }}.</p>
+      <h3>Reglas de la campaña</h3>
+      {% for icon_, title, text in [("✅", "Qué publicar", camp.rules), ("#️⃣", "Obligatorio", camp.rules_required), ("❌", "Prohibido", camp.rules_forbidden)] if text %}
+      <div class="rule-block">
+        <span class="rule-ico" aria-hidden="true">{{ icon_ }}</span>
+        <div><b>{{ title }}</b><div class="rules">{{ text }}</div></div>
       </div>
+      {% endfor %}
       {% if camp.sound_url %}<a class="btn soft" href="{{ camp.sound_url }}" target="_blank" rel="noopener">Descargar el material oficial</a>{% endif %}
     </div>
+    {% endif %}
   </div>
 
   <aside class="sticky">
     <div class="pay-panel form-stack">
       <div>
         <span class="eyebrow">Pagamos</span>
+        {% if camp.rates_vary %}<span class="sub">hasta</span>{% endif %}
         <div class="big tnum">{{ (camp.rate / 1000)|amount }} <span>{{ CUR }}</span></div>
-        <span class="sub">por cada 1.000 vistas</span><span class="sub">Por clip: {% if camp.min_views %}mínimo {{ min_pay(camp)|money }}{% else %}sin mínimo{% endif %} · {% if camp.max_per_video %}máximo {{ camp.max_per_video|money(0) }}{% else %}sin máximo{% endif %}</span>
+        <span class="sub">por cada 1.000 vistas</span>
+        {% if camp.rates_vary %}
+        <div class="pp-rates">
+          {% for p, r in camp.platform_rates %}<div class="pp-rate">{{ icon(p) }}<span>{{ PLATFORMS[p] }}</span><b class="tnum">{{ r|rate_k }}</b></div>{% endfor %}
+        </div>
+        {% endif %}<span class="sub">Por clip: {% if camp.min_views %}mínimo {{ min_pay(camp)|money }}{% else %}sin mínimo{% endif %} · {% if camp.max_per_video %}máximo {{ camp.max_per_video|money }}{% else %}sin máximo{% endif %}</span>
       </div>
       {{ budget(camp, st) }}
       {% if camp.status == 'finalizada' or st.exhausted %}

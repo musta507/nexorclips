@@ -511,7 +511,7 @@ def test_landing_and_campaign_request():
         lid = lead.id
     admin = client_for("admin@test.com")
     assert "Luna Varela" in admin.get("/admin/solicitudes").get_data(as_text=True)
-    assert 'class="count"' in admin.get("/admin").get_data(as_text=True)
+    assert 'class="adm-n"' in admin.get("/admin").get_data(as_text=True)
     form = admin.get(f"/admin/campana/nueva?solicitud={lid}").get_data(as_text=True)
     assert 'value="Luna Varela"' in form and "open.spotify.com" in form
     post(admin, f"/admin/campana/nueva?solicitud={lid}", song="Noche", artist="Luna Varela", rate="200", budget="2000",
@@ -564,7 +564,8 @@ def test_join_campaign_and_admin_accepts(monkeypatch):
     assert "no se puede añadir" not in post(a, f"/campana/{cid}/cuentas", platform="tiktok", handle="ana").get_data(as_text=True)
     with A.app.app_context():
         assert not A.CampaignAccount.query.first()                       # aún no aceptado: no puede añadir cuenta
-    assert "Solicitudes para entrar (1)" in admin.get("/admin").get_data(as_text=True)
+    assert "solicitud para entrar" in admin.get("/admin").get_data(as_text=True)          # aviso en el resumen
+    assert "Aceptar" in admin.get("/admin/solicitudes-clippers").get_data(as_text=True)
     # 2) el admin acepta
     post(admin, f"/admin/solicitud/{mid}/aceptar")
     assert "Te hemos aceptado" in a.get("/soporte").get_data(as_text=True)
@@ -744,7 +745,7 @@ def test_whop_failure_returns_money(monkeypatch):
         p = A.Payout.query.one()
         u = A.User.query.filter_by(email="w@test.com").one()
         assert p.status == "rechazado" and "Saldo insuficiente" in p.error and A.user_money(u)["available"] == 45.0
-    assert "Saldo insuficiente" in admin.get("/admin/clippers").get_data(as_text=True)
+    assert "Saldo insuficiente" in admin.get("/admin/retiros").get_data(as_text=True)
     _whop_fake(monkeypatch)                                                   # ya hay saldo: el clipper vuelve a intentarlo
     assert "Te hemos enviado" in post(c, "/ganancias/retirar").get_data(as_text=True)
 
@@ -843,7 +844,7 @@ def test_join_questions_answers_and_clipper_page():
         mb = A.CampaignMember.query.filter_by(campaign_id=cid).one()
         assert mb.answer_list == [("¿Cuánto llevas clipeando?", "2 años"), ("¿Clips al día?", "5")]
         uid, mid = mb.user_id, mb.id
-    assert "2 años" in admin.get("/admin").get_data(as_text=True)
+    assert "2 años" in admin.get("/admin/solicitudes-clippers").get_data(as_text=True)
     post(admin, f"/admin/solicitud/{mid}/aceptar")
     post(c, f"/campana/{cid}/cuentas", platform="tiktok", handle="qq")
     html = admin.get(f"/admin/clipper/{uid}").get_data(as_text=True)
@@ -964,3 +965,39 @@ def test_cover_small_sizes():
     r = admin.get(f"/portada/{cid}?v={v}&t=160")
     assert r.mimetype == "image/webp" and len(r.data) < 3000
     assert 'width="62"' in client_for("c@test.com").get("/").get_data(as_text=True)
+
+
+def test_rate_per_platform(monkeypatch):
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/campana/nueva", song="Redes", artist="Rafa", budget="1000", min_pay="2", status="activa",
+         pf_tiktok="on", pf_instagram="on", rate_k_tiktok="1", rate_k_instagram="1,50")
+    with A.app.app_context():
+        c = A.Campaign.query.filter_by(song="Redes").one()
+        cid = c.id
+        assert c.rate == 1500 and c.rate_for("tiktok") == 1000 and c.rate_for("instagram") == 1500 and c.rates_vary
+    assert "¿Cuánto tiempo llevas haciendo clips?" in admin.get("/admin/campana/nueva").get_data(as_text=True)   # preguntas predeterminadas
+    html = client_for("v@test.com").get("/").get_data(as_text=True)
+    assert "HASTA" in html and "1,50 $" in html
+    # el mismo número de vistas paga distinto según la red; el mínimo (2 $) es en dinero
+    with A.app.app_context():
+        camp = A.db.session.get(A.Campaign, cid)
+        t = A.Submission(platform="tiktok", views=1500); i = A.Submission(platform="instagram", views=1500)
+        assert A.raw_earning(t, camp) == 0.0            # 1,50 $ < mínimo 2 $
+        assert A.raw_earning(i, camp) == 2.25          # 1.500 vistas × 1,50 $/1.000
+        t.views = 2000
+        assert A.raw_earning(t, camp) == 2.0
+    page = client_for("v@test.com").get(f"/campana/{cid}").get_data(as_text=True)
+    assert "hasta" in page and "1,00 $" in page and "Instagram" in page
+
+
+def test_admin_sections_render():
+    admin = client_for("admin@test.com")
+    cid = make_campaign()
+    for url in ["/admin", "/admin/campanas", "/admin/campanas?estado=activa", "/admin/solicitudes-clippers",
+                "/admin/solicitudes-clippers?estado=aceptada", "/admin/clips", f"/admin/clips?c={cid}&avisos=1",
+                "/admin/retiros", "/admin/ajustes", "/admin/clippers", "/admin/mensajes", "/admin/actividad",
+                "/admin/solicitudes", f"/admin/campana/{cid}", "/admin/campana/nueva"]:
+        r = admin.get(url)
+        assert r.status_code == 200, url
+        assert 'class="adm-side"' in r.get_data(as_text=True), url          # menú lateral en todas
+    assert 'class="adm-side"' not in client_for("c@test.com").get("/").get_data(as_text=True)

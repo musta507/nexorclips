@@ -5,17 +5,22 @@
   {% set note = notice_data() if current_user.is_authenticated else {"unread": 0} %}
   <title>{% if note.unread %}({{ note.unread }}) {% endif %}{% block title %}{{ APP_NAME }}{% endblock %}</title>
 </head>
-<body class="has-tabs" data-notices="{{ url_for('notices') }}" data-unread="{{ note.unread }}" data-on-chat="{{ 1 if (request.endpoint or '') in ['support', 'admin_chat', 'admin_inbox'] else 0 }}">
-  {% set ep = request.endpoint or "" %}
+{% set ep = request.endpoint or "" %}
+{% set admin_page = ep.startswith("admin_") and current_user.is_authenticated and current_user.is_admin %}
+<body class="{{ 'admin-shell' if admin_page else 'has-tabs' }}" data-notices="{{ url_for('notices') }}" data-unread="{{ note.unread }}" data-on-chat="{{ 1 if (request.endpoint or '') in ['support', 'admin_chat', 'admin_inbox'] else 0 }}">
   <a class="skip" href="#contenido">Saltar al contenido</a>
   <header class="topbar">
     <div class="wrap">
-      <a href="{{ url_for('index') }}" aria-label="Inicio">{{ logo() }}</a>
+      <a href="{{ url_for('admin_home') if admin_page else url_for('index') }}" aria-label="Inicio">{{ logo() }}{% if admin_page %}<span class="admin-tag adm-badge">Admin</span>{% endif %}</a>
+      {% if admin_page %}
+      <a class="adm-view" href="{{ url_for('index') }}">{{ icon("out") }} Ver la web como clipper</a>
+      {% else %}
       <nav class="tabs" aria-label="Secciones">
         <a class="tab {% if ep in ['index', 'campaign'] %}on{% endif %}" href="{{ url_for('index') }}" {% if ep in ['index', 'campaign'] %}aria-current="page"{% endif %}>{{ icon("home") }}Home</a>
         <a class="tab {% if ep == 'submit' %}on{% endif %}" href="{{ url_for('submit') }}" {% if ep == 'submit' %}aria-current="page"{% endif %}>{{ icon("plus") }}Enviar clips</a>
         <a class="tab {% if ep in ['earnings', 'account'] %}on{% endif %}" href="{{ url_for('earnings') }}" {% if ep in ['earnings', 'account'] %}aria-current="page"{% endif %}>{{ icon("wallet") }}Ganancias</a>
       </nav>
+      {% endif %}
       {% set unread = unread_messages() %}
       <details class="user-menu">
         <summary class="avatar" aria-label="Tu cuenta{% if unread %} · {{ unread }} mensajes sin leer{% endif %}"><span class="dot" id="avatar-dot" aria-hidden="true"{% if not unread %} hidden{% endif %}></span>
@@ -36,6 +41,43 @@
       </details>
     </div>
   </header>
+  {% if admin_page %}
+  {% set nc = admin_counts() %}
+  <div class="adm">
+    <aside class="adm-side" aria-label="Secciones del panel">
+      <nav class="adm-nav">
+        {% for e, eps, label, ico, n in [
+          ("admin_home", ["admin_home"], "Resumen", "grid", 0),
+          ("admin_campaigns", ["admin_campaigns", "admin_campaign", "admin_campaign_form"], "Campañas", "flag", 0),
+          ("admin_requests", ["admin_requests"], "Solicitudes", "inbox", nc.requests),
+          ("admin_clips", ["admin_clips"], "Clips por revisar", "film", nc.clips),
+          ("admin_clippers", ["admin_clippers", "admin_clipper"], "Clippers", "users", 0),
+          ("admin_payouts", ["admin_payouts"], "Retiros", "cash", nc.payouts),
+          ("admin_inbox", ["admin_inbox", "admin_chat"], "Mensajes", "chat", nc.messages),
+          ("admin_leads", ["admin_leads"], "Creadores interesados", "megaphone", nc.leads),
+          ("admin_activity", ["admin_activity"], "Actividad", "pulse", 0),
+          ("admin_settings", ["admin_settings", "admin_probe"], "Ajustes", "gear", 0)] %}
+        <a class="adm-link{% if ep in eps %} on{% endif %}" href="{{ url_for(e) }}"{% if ep in eps %} aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span>{% if n %}<b class="adm-n">{{ n }}</b>{% endif %}</a>
+        {% endfor %}
+      </nav>
+    </aside>
+    <main class="adm-main" id="contenido">
+    <div id="msg-notice" class="msg-notice-slot">
+    {% if note.unread and ep not in ["support", "admin_chat", "admin_inbox"] %}
+      <a class="msg-notice" href="{{ note.url }}" role="status">
+        <span class="mn-ico"><span class="logo-mark"></span></span>
+        <span class="mn-txt"><span class="mn-top"><b>{{ note.title }}</b><span>{{ note.ago }}</span></span><span class="mn-body">{{ note.body }}</span></span>
+        <span class="mn-btn">{{ "Abrir" if current_user.is_admin else "Responder" }}</span>
+      </a>
+    {% endif %}
+    </div>
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% if msgs %}<div class="flashes">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}</div>{% endif %}
+    {% endwith %}
+    <div class="page">{{ self.content() }}</div>
+    </main>
+  </div>
+  {% else %}
   <main class="wrap" id="contenido">
     <div id="msg-notice" class="msg-notice-slot">
     {% if note.unread and ep not in ["support", "admin_chat", "admin_inbox"] %}
@@ -51,8 +93,9 @@
     {% endwith %}
     <div class="page">{% block content %}{% endblock %}</div>
   </main>
-  {% include "_footer.html" %}
-  {% if ep not in ["support", "admin_chat", "admin_inbox"] %}
+  {% endif %}
+  {% if not admin_page %}{% include "_footer.html" %}{% endif %}
+  {% if ep not in ["support", "admin_chat", "admin_inbox"] and not admin_page %}
   <a class="chat-fab{% if unread %} has-unread{% endif %}" id="chat-fab" href="{{ url_for('admin_inbox') if current_user.is_admin else url_for('support') }}"
      aria-label="{{ 'Mensajes' if current_user.is_admin else 'Chat de soporte' }}{% if unread %} · {{ unread }} sin leer{% endif %}">
     {{ icon("chat") }}<span>{{ "Mensajes" if current_user.is_admin else "Chat de soporte" }}</span><span class="count" id="fab-count"{% if not unread %} hidden{% endif %}>{{ unread }}</span>

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Campañas · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Campañas", "Todas las campañas, su presupuesto y cómo van.") %}
+  <a class="btn" href="{{ url_for('admin_campaign_form') }}">{{ icon("plus") }} Nueva campaña</a>
+{% endcall %}
+<nav class="seg" aria-label="Filtrar por estado">
+  {% for k, label in [("", "Todas"), ("activa", "Activas"), ("pausada", "Pausadas"), ("finalizada", "Finalizadas")] %}
+  <a class="{% if filt == k %}on{% endif %}" href="{{ url_for('admin_campaigns', estado=k or None) }}">{{ label }}</a>
+  {% endfor %}
+</nav>
+<div class="table-card">
+  <div class="table-scroll"><table class="rt">
+    <thead><tr><th>Campaña</th><th>Estado</th><th class="r">Pago / 1.000</th><th>Repartido</th><th class="r">Vistas</th><th class="r">Clips</th><th></th></tr></thead>
+    <tbody>
+    {% for c, st in cards %}
+    <tr>
+      <td data-label="Campaña"><a class="adm-camp-cell" href="{{ url_for('admin_campaign', cid=c.id) }}">{% set _t, lqip = cover_meta(c) %}<span class="dthumb sm"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="44" height="44" loading="lazy">{% endif %}</span><span><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<span class="small muted" style="display:block">{{ c.artist }}</span></span></a></td>
+      <td data-label="Estado"><span class="status {{ c.status }}">{{ c.status|capitalize }}</span></td>
+      <td data-label="Pago / 1.000" class="r tnum">{% if c.rates_vary %}<span class="small muted">hasta </span>{% endif %}{{ c.rate|rate_k }}</td>
+      <td data-label="Repartido" class="tnum"><span class="small">{{ st.spent|money(0) }} / {{ c.budget|money(0) }}</span><div class="bar mini-bar" style="margin-top:6px"><span style="width:{{ st.pct }}%"></span></div></td>
+      <td data-label="Vistas" class="r tnum">{{ st.views|short }}</td>
+      <td data-label="Clips" class="r tnum">{{ st.clips }}{% if st.pending %} <a class="small" href="{{ url_for('admin_clips', c=c.id) }}">+{{ st.pending }}</a>{% endif %}</td>
+      <td data-label="" class="r"><a class="btn sm soft" href="{{ url_for('admin_campaign', cid=c.id) }}">Abrir</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7"><div class="empty"><h3>No hay campañas aquí</h3><p class="muted">Crea la primera con «Nueva campaña».</p></div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

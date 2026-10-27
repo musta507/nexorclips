@@ -136,7 +136,6 @@ var limpiar = [];   // cosas que hay que parar al salir de la página (temporiza
 
 function pagina() {
   iniciarChat();
-  colorDestacada();
   pastillaOrden();
 }
 
@@ -220,31 +219,6 @@ function iniciarChat() {
   var onVisible = function () { if (!document.hidden) poll(); };
   document.addEventListener("visibilitychange", onVisible);
   limpiar.push(function () { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); });
-}
-
-// La tarjeta destacada toma el color de su imagen (como las portadas en Spotify)
-function colorDestacada() {
-  var card = document.querySelector(".featured");
-  var img = card && card.querySelector(".art img");
-  if (!img || card.dataset.tinted) return;
-  function run() {
-    try {
-      var c = document.createElement("canvas"); c.width = c.height = 24;
-      var x = c.getContext("2d"); x.drawImage(img, 0, 0, 24, 24);
-      var d = x.getImageData(0, 0, 24, 24).data, r = 0, g = 0, bl = 0, n = 0;
-      for (var i = 0; i < d.length; i += 4) {
-        var w = 1 + (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2])) / 40;
-        r += d[i] * w; g += d[i + 1] * w; bl += d[i + 2] * w; n += w;
-      }
-      r /= n; g /= n; bl /= n;
-      var k = (0.42 * 255) / Math.max(r, g, bl, 1);
-      var deep = "rgb(" + Math.round(r * k) + "," + Math.round(g * k) + "," + Math.round(bl * k) + ")";
-      var mid = "rgb(" + Math.round(r * .62) + "," + Math.round(g * .62) + "," + Math.round(bl * .62) + ")";
-      card.style.background = "radial-gradient(120% 140% at 0% 0%, " + mid + " 0%, " + deep + " 45%, #0b0b0c 100%)";
-      card.dataset.tinted = "1";
-    } catch (err) { /* imagen de otra web: se queda en negro */ }
-  }
-  if (img.complete && img.naturalWidth) run(); else img.addEventListener("load", run, { once: true });
 }
 
 // Pastilla negra que se desliza: en «Más nuevas / Más presupuesto / Mejor pago» y en las pestañas de Ganancias. En los menús que cambian de página, se guarda dónde estaba la pastilla
@@ -336,4 +310,10 @@ document.addEventListener("turbo:before-prefetch", function (e) {
   var a = e.target, path = "";
   try { path = new URL(a.href, location.href).pathname; } catch (err) { return; }
   if (/^\/(salir|auth\/|login|empezar|cron\/|soporte|admin\/mensajes|avisos|static\/|portada\/)/.test(path) || /\.csv$/.test(path)) e.preventDefault();
+});
+
+// Filtros que se aplican solos al cambiarlos (sin botón)
+document.addEventListener("change", function (e) {
+  var f = e.target.closest("form[data-autosubmit]");
+  if (f) f.requestSubmit ? f.requestSubmit() : f.submit();
 });

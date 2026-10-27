@@ -2,7 +2,7 @@
 {% from "_icons.html" import icon %}
 {% block title %}{{ user.name }} · Ficha del clipper{% endblock %}
 {% block content %}
-<a class="back" href="{{ url_for('admin_clippers') }}">← Clippers y retiros</a>
+<a class="back" href="{{ url_for('admin_clippers') }}">← Clippers</a>
 <div class="toolbar">
   <div class="inline" style="gap:14px">
     <span class="avatar lg">{% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ user.initial }}{% endif %}</span>

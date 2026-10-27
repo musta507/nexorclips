@@ -118,6 +118,12 @@ FLAG_LABELS = {
 }
 MAX_HANDLES = 5
 MAX_QUESTIONS = 10
+DEFAULT_QUESTIONS = "\n".join([                 # preguntas que salen ya escritas al crear una campaña
+    "¿Cuánto tiempo llevas haciendo clips?",
+    "Pásanos el enlace de un clip tuyo que haya funcionado bien",
+    "¿Cuántos clips puedes publicar al día?",
+    "¿En qué redes vas a publicar (TikTok, Instagram, YouTube)?",
+])
 CENT = 0.005
 
 db = SQLAlchemy(app)
@@ -195,9 +201,17 @@ class Campaign(db.Model):
     cover_data = db.deferred(db.Column(db.LargeBinary, nullable=True))
     cover_mime = db.Column(db.String(40), default="")
     cover_version = db.Column(db.Integer, default=0)       # 0 = sin imagen subida
+    cover_tint = db.Column(db.String(200), default="")     # color de la tarjeta destacada, sacado de la portada
+    cover_lqip = db.Column(db.Text, default="")            # versión diminuta de la portada (se ve mientras carga la buena)
+    cover_meta_v = db.Column(db.Integer, default=0)        # de qué versión de la portada son el color y la miniatura
     sound_url = db.Column(db.String(500), default="")
-    rules = db.Column(db.Text, default="")
-    rate = db.Column(db.Float, nullable=False)              # pago por cada 1.000.000 de vistas
+    rules = db.Column(db.Text, default="")                 # reglas: qué publicar
+    rules_required = db.Column(db.Text, default="")        # reglas: obligatorio
+    rules_forbidden = db.Column(db.Text, default="")       # reglas: prohibido
+    rate = db.Column(db.Float, nullable=False)              # pago por cada 1.000.000 de vistas (el más alto de las redes)
+    rate_tiktok = db.Column(db.Float, nullable=True)        # pago de cada red (vacío = el general)
+    rate_instagram = db.Column(db.Float, nullable=True)
+    rate_youtube = db.Column(db.Float, nullable=True)
     budget = db.Column(db.Float, nullable=False)
     spent = db.Column(db.Float, default=0.0)                # dinero ya asignado a clips (libro de cuentas)
     min_views = db.Column(db.Integer, default=0)            # mínimo para cobrar un vídeo
@@ -211,6 +225,24 @@ class Campaign(db.Model):
     ended_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     submissions = db.relationship("Submission", backref="campaign", lazy=True)
+
+    def rate_for(self, platform):
+        """Pago por 1M de vistas de una red concreta."""
+        return getattr(self, f"rate_{platform}", None) or self.rate or 0
+
+    @property
+    def platform_rates(self):
+        """[(red, pago por 1M)] de las redes que acepta la campaña."""
+        return [(p, self.rate_for(p)) for p in self.platform_list]
+
+    @property
+    def rates_vary(self):
+        return len({round(r, 4) for _, r in self.platform_rates}) > 1
+
+    @property
+    def min_money(self):
+        """Pago mínimo por clip en dinero (lo que un clip tiene que valer para empezar a cobrar)."""
+        return round((self.min_views or 0) / 1_000_000 * (self.rate or 0), 2)   # en céntimos, como se escribió
 
     @property
     def question_list(self):
@@ -487,10 +519,10 @@ def cents(v):
 
 # ---------------------------------------------------------------- dinero (libro de cuentas)
 def raw_earning(sub, camp):
-    """Lo que valdría el clip por sus vistas, con mínimo y tope por clip aplicados."""
-    if (sub.views or 0) < (camp.min_views or 0):
+    """Lo que valdría el clip por sus vistas, según el pago de su red, con mínimo y tope por clip aplicados."""
+    amount = (sub.views or 0) / 1_000_000 * camp.rate_for(sub.platform)
+    if camp.min_views and amount + 1e-9 < camp.min_money:
         return 0.0
-    amount = (sub.views or 0) / 1_000_000 * camp.rate
     if camp.max_per_video:
         amount = min(amount, camp.max_per_video)
     return cents(amount)
@@ -838,6 +870,44 @@ def admin_required(f):
 
 
 # ---------------------------------------------------------------- plantillas
+def _cover_meta(data):
+    """Color de fondo para la tarjeta destacada y una miniatura difuminada (en texto) a partir de la portada."""
+    import base64
+    from PIL import Image
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    small = img.resize((24, 24))
+    r = g = b = n = 0.0
+    for pr, pg, pb in small.getdata():
+        w = 1 + (max(pr, pg, pb) - min(pr, pg, pb)) / 40      # más peso a los colores vivos que a los grises
+        r += pr * w; g += pg * w; b += pb * w; n += w
+    r, g, b = r / n, g / n, b / n
+    k = 0.42 * 255 / max(r, g, b, 1)
+    deep = f"rgb({round(r * k)},{round(g * k)},{round(b * k)})"
+    mid = f"rgb({round(r * .62)},{round(g * .62)},{round(b * .62)})"
+    tint = f"radial-gradient(120% 140% at 0% 0%, {mid} 0%, {deep} 45%, #0b0b0c 100%)"
+    tiny = img.copy()
+    tiny.thumbnail((20, 20))
+    out = io.BytesIO()
+    tiny.save(out, "WEBP", quality=45)
+    return tint, "data:image/webp;base64," + base64.b64encode(out.getvalue()).decode()
+
+
+def cover_meta(camp):
+    """(color de la tarjeta, miniatura difuminada). Se calcula una vez por portada y se guarda."""
+    if not camp.cover_version:
+        return "", ""
+    if camp.cover_meta_v != camp.cover_version or not camp.cover_lqip:
+        try:
+            camp.cover_tint, camp.cover_lqip = _cover_meta(camp.cover_data)
+            camp.cover_meta_v = camp.cover_version
+            db.session.commit()
+        except Exception:  # noqa: BLE001
+            log.exception("No se pudo preparar la miniatura de la portada %s", camp.id)
+            db.session.rollback()
+            return "", ""
+    return camp.cover_tint or "", camp.cover_lqip or ""
+
+
 def cover_src(camp, size=None):
     if camp.cover_version:
         return url_for("cover", cid=camp.id, v=camp.cover_version, t=size if size in COVER_SIZES else None)
@@ -871,11 +941,11 @@ def static_url(filename):
 @app.context_processor
 def inject_globals():
     return {"csrf_token": csrf_token, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
-            "PLATFORMS": PLATFORMS, "cover_src": cover_src, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
+            "PLATFORMS": PLATFORMS, "cover_src": cover_src, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year,
-            "REFRESH_DAYS": REFRESH_DAYS, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads}
+            "REFRESH_DAYS": REFRESH_DAYS, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads}
 
 
 @app.template_filter("rate_k")
@@ -1561,15 +1631,31 @@ def account():
 
 
 # ---------------------------------------------------------------- panel de admin
-@app.route("/admin")
-@admin_required
-def admin_home():
-    camps = Campaign.query.options(selectinload(Campaign.submissions)).order_by(Campaign.created_at.desc()).all()
-    cards = [(c, campaign_stats(c)) for c in camps]
-    pending = (Submission.query.filter_by(status="pendiente").options(joinedload(Submission.user), joinedload(Submission.campaign))
-               .order_by(Submission.created_at).all())
+def admin_counts():
+    """Números del menú lateral del panel: lo que está esperando a que hagas algo."""
+    return {
+        "requests": CampaignMember.query.filter_by(status="pendiente").count(),
+        "clips": Submission.query.filter_by(status="pendiente").count(),
+        "payouts": Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).count(),
+        "messages": Message.query.filter_by(from_admin=False, read_by_admin=False).count(),
+        "leads": CampaignLead.query.filter_by(status="nueva").count(),
+    }
+
+
+def daily_series(rows, days=30):
+    """[(fecha, valor)] → lista de (día, total) de los últimos `days` días, con ceros donde no hubo nada."""
+    today = datetime.utcnow().date()
+    totals = {today - timedelta(days=i): 0.0 for i in range(days)}
+    for when, value in rows:
+        d = when.date() if when else None
+        if d in totals:
+            totals[d] += value or 0
+    return [(d, totals[d]) for d in sorted(totals)]
+
+
+def admin_kpis(camps):
     open_payouts = Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).all()
-    kpis = {
+    return {
         "budget_live": cents(sum(c.budget for c in camps if c.status == "activa")),
         "spent": cents(sum(c.spent or 0 for c in camps)),
         "paid": cents(db.session.query(db.func.coalesce(db.func.sum(Payout.amount), 0)).filter(Payout.status == "pagado").scalar()),
@@ -1577,16 +1663,102 @@ def admin_home():
         "open_payouts_n": len(open_payouts),
         "clippers": db.session.query(db.func.count(db.distinct(Submission.user_id))).scalar() or 0,
         "views": db.session.query(db.func.coalesce(db.func.sum(Submission.views), 0)).filter(Submission.status == "aprobado").scalar() or 0,
-        "pending": len(pending),
-        "flagged": sum(1 for s in pending if s.flag_list),
+        "live_camps": sum(1 for c in camps if c.status == "activa"),
     }
-    joins = (CampaignMember.query.filter_by(status="pendiente")
+
+
+@app.route("/admin")
+@admin_required
+def admin_home():
+    camps = Campaign.query.options(selectinload(Campaign.submissions)).order_by(Campaign.created_at.desc()).all()
+    cards = [(c, campaign_stats(c)) for c in camps]
+    since = datetime.utcnow() - timedelta(days=31)
+    clips_day = daily_series([(s.created_at, 1) for s in Submission.query.filter(Submission.created_at >= since)
+                              .with_entities(Submission.created_at)])
+    paid_day = daily_series(Payout.query.filter(Payout.status == "pagado", Payout.paid_at >= since)
+                            .with_entities(Payout.paid_at, Payout.amount).all())
+    users_day = daily_series([(u.created_at, 1) for u in User.query.filter(User.created_at >= since).with_entities(User.created_at)])
+    nc = admin_counts()
+    alerts = []
+    if nc["requests"]:
+        alerts.append(("inbox", f"{nc['requests']} {'solicitud' if nc['requests'] == 1 else 'solicitudes'} para entrar en campañas", url_for("admin_requests")))
+    if nc["clips"]:
+        alerts.append(("film", f"{nc['clips']} {'clip' if nc['clips'] == 1 else 'clips'} por revisar", url_for("admin_clips")))
+    if nc["payouts"]:
+        alerts.append(("cash", f"{nc['payouts']} {'retiro' if nc['payouts'] == 1 else 'retiros'} en curso", url_for("admin_payouts")))
+    failed = Payout.query.filter(Payout.status == "rechazado", Payout.error != "",
+                                 Payout.created_at >= datetime.utcnow() - timedelta(days=7)).count()
+    if failed:
+        alerts.append(("cash", f"{failed} {'pago' if failed == 1 else 'pagos'} que Whop no pudo enviar esta semana", url_for("admin_payouts")))
+    for c, st in cards:
+        if c.status == "activa" and st["left_pct"] <= 20:
+            alerts.append(("flag", f"«{c.song}» está a punto de agotarse: queda el {st['left_pct']}%", url_for("admin_campaign", cid=c.id)))
+    if nc["messages"]:
+        alerts.append(("chat", f"{nc['messages']} {'mensaje' if nc['messages'] == 1 else 'mensajes'} sin leer", url_for("admin_inbox")))
+    if not viewcounter.APIFY_TOKEN:
+        alerts.append(("gear", "Falta APIFY_TOKEN: las vistas no se están contando", url_for("admin_settings")))
+    live = [(c, st) for c, st in cards if c.status == "activa"]
+    return render_template("admin/overview.html", kpis=admin_kpis(camps), alerts=alerts, live=live[:6],
+                           clips_day=clips_day, paid_day=paid_day, users_day=users_day)
+
+
+@app.route("/admin/campanas")
+@admin_required
+def admin_campaigns():
+    camps = Campaign.query.options(selectinload(Campaign.submissions)).order_by(Campaign.created_at.desc()).all()
+    filt = request.args.get("estado", "")
+    if filt in ("activa", "pausada", "finalizada"):
+        camps = [c for c in camps if c.status == filt]
+    return render_template("admin/campaigns.html", cards=[(c, campaign_stats(c)) for c in camps], filt=filt)
+
+
+@app.route("/admin/solicitudes-clippers")
+@admin_required
+def admin_requests():
+    estado = request.args.get("estado", "pendiente")
+    estado = estado if estado in ("pendiente", "aceptada", "rechazada") else "pendiente"
+    joins = (CampaignMember.query.filter_by(status=estado)
              .options(joinedload(CampaignMember.user), joinedload(CampaignMember.campaign))
-             .order_by(CampaignMember.created_at).all())
+             .order_by(CampaignMember.created_at.desc() if estado != "pendiente" else CampaignMember.created_at).limit(300).all())
+    return render_template("admin/requests.html", joins=joins, estado=estado)
+
+
+@app.route("/admin/clips")
+@admin_required
+def admin_clips():
+    q = (Submission.query.filter_by(status="pendiente")
+         .options(joinedload(Submission.user), joinedload(Submission.campaign)).order_by(Submission.created_at))
+    cid = request.args.get("c", type=int)
+    if cid:
+        q = q.filter(Submission.campaign_id == cid)
+    pending = q.all()
+    if request.args.get("avisos"):
+        pending = [s for s in pending if s.flag_list]
+    camps = Campaign.query.order_by(Campaign.created_at.desc()).all()
+    return render_template("admin/clips.html", pending=pending, camps=camps, cid=cid,
+                           avisos=bool(request.args.get("avisos")))
+
+
+@app.route("/admin/retiros")
+@admin_required
+def admin_payouts():
+    whop_sync(Payout.query.filter_by(status="procesando").all())
+    release_stuck_payouts()
+    open_requests = (Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).options(joinedload(Payout.user))
+                     .order_by(Payout.created_at).all())
+    failed = (Payout.query.filter(Payout.status == "rechazado", Payout.error != "").options(joinedload(Payout.user))
+              .order_by(Payout.created_at.desc()).limit(10).all())
+    history = (Payout.query.filter(Payout.status == "pagado").options(joinedload(Payout.user))
+               .order_by(Payout.paid_at.desc()).limit(100).all())
+    return render_template("admin/payouts.html", open_requests=open_requests, failed=failed, history=history)
+
+
+@app.route("/admin/ajustes")
+@admin_required
+def admin_settings():
     whop = {"key": bool(WHOP_API_KEY), "company": whop_company_id() if WHOP_API_KEY else "",
             "error": _whop_company.get("error", ""), "from_env": bool(WHOP_COMPANY_ID)}
-    return render_template("admin/home.html", whop=whop, cards=cards, pending=pending, kpis=kpis, joins=joins,
-                           last_refresh=get_setting("last_refresh", "Nunca"),
+    return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"),
                            has_token=bool(viewcounter.APIFY_TOKEN))
 
 
@@ -1615,12 +1787,27 @@ def _campaign_from_form(camp):
     sound_url = request.form.get("sound_url", "").strip()[:500]
     camp.sound_url = sound_url if sound_url.startswith(("https://", "http://")) else ""
     camp.rules = request.form.get("rules", "").strip()[:5000]
+    camp.rules_required = request.form.get("rules_required", "").strip()[:3000]
+    camp.rules_forbidden = request.form.get("rules_forbidden", "").strip()[:3000]
     qs = [q.strip()[:300] for q in (request.form.get("join_questions") or "").splitlines() if q.strip()]
     camp.join_questions = "\n".join(qs[:MAX_QUESTIONS])
-    if request.form.get("rate_k") is not None:          # el formulario pide el pago por cada 1.000 vistas
-        camp.rate = round((parse_float(request.form.get("rate_k"), 0) or 0) * 1000, 4)
+    chosen = [p for p in PLATFORMS if request.form.get(f"pf_{p}")] or ["tiktok"]
+    per = {p: parse_float(request.form.get(f"rate_k_{p}")) for p in PLATFORMS}
+    if any(per[p] for p in chosen):                     # un pago distinto por cada red (por cada 1.000 vistas)
+        for p in PLATFORMS:
+            v = per[p] if p in chosen else None
+            setattr(camp, f"rate_{p}", round(v * 1000, 4) if v and v > 0 else None)
+        camp.rate = max((getattr(camp, f"rate_{p}") or 0) for p in chosen)
+        for p in chosen:                                # una red sin precio cobra lo mismo que la que más paga
+            if not getattr(camp, f"rate_{p}"):
+                setattr(camp, f"rate_{p}", camp.rate)
     else:
-        camp.rate = parse_float(request.form.get("rate"), 0) or 0
+        if request.form.get("rate_k") is not None:      # un único pago para todas las redes
+            camp.rate = round((parse_float(request.form.get("rate_k"), 0) or 0) * 1000, 4)
+        else:
+            camp.rate = parse_float(request.form.get("rate"), 0) or 0
+        for p in PLATFORMS:
+            setattr(camp, f"rate_{p}", None)
     camp.budget = parse_float(request.form.get("budget"), 0) or 0
     if request.form.get("min_pay") is not None:         # y el pago mínimo por clip en dinero
         mp = parse_float(request.form.get("min_pay"), 0) or 0
@@ -1645,10 +1832,15 @@ def _campaign_from_form(camp):
             return "La portada tiene que ser una imagen válida (JPG, PNG o WEBP)."
         camp.cover_data, camp.cover_mime = data, "image/webp"
         camp.cover_version = (camp.cover_version or 0) + 1
+        try:
+            camp.cover_tint, camp.cover_lqip = _cover_meta(data)
+            camp.cover_meta_v = camp.cover_version
+        except Exception:  # noqa: BLE001
+            log.exception("No se pudo preparar la miniatura de la portada")
     if request.form.get("remove_cover"):
         camp.cover_data, camp.cover_version = None, 0
     if not (camp.song and camp.artist and camp.rate > 0 and camp.budget > 0):
-        return "Faltan datos: título, creador, pago por 1M de vistas y presupuesto."
+        return "Faltan datos: nombre, creador, pago por cada 1.000 vistas y presupuesto."
     if camp.budget < (camp.spent or 0):
         return f"El presupuesto no puede ser menor que lo ya repartido ({money(camp.spent)})."
     return None
@@ -1661,6 +1853,8 @@ def admin_campaign_form(cid=None):
     camp = db.session.get(Campaign, cid) if cid else Campaign(platforms="tiktok,instagram,youtube", status="activa",
                                                               category="musica", spent=0.0)
     lead = db.session.get(CampaignLead, request.args.get("solicitud", type=int) or 0) if not cid else None
+    if not cid and request.method == "GET":
+        camp.join_questions = DEFAULT_QUESTIONS
     if lead and request.method == "GET":       # crear campaña a partir de una solicitud
         camp.song, camp.artist, camp.category = "", lead.brand, lead.category
         camp.sound_url = lead.link if lead.link.startswith(("https://", "http://")) else ""
@@ -1780,7 +1974,7 @@ def admin_review(sid, accion):
 def admin_refresh():
     refresh_in_background()
     flash("Actualizando vistas en segundo plano. Recarga en unos minutos.", "ok")
-    return redirect(url_for("admin_home"))
+    return redirect(url_for("admin_settings"))
 
 
 @app.route("/admin/probar-apify", methods=["GET", "POST"])
@@ -1955,7 +2149,7 @@ def admin_wipe():
     """Borra todos los datos de prueba (campañas, clips, retiros, mensajes, clippers…). Solo quedan los admins."""
     if (request.form.get("confirm") or "").strip().upper() != "BORRAR":
         flash("Para borrar todo, escribe BORRAR en la casilla.", "error")
-        return redirect(url_for("admin_home"))
+        return redirect(url_for("admin_settings"))
     admin_ids = [u.id for u in User.query.filter_by(is_admin=True).all()]
     if current_user.id not in admin_ids:
         admin_ids.append(current_user.id)
@@ -1979,12 +2173,12 @@ def admin_clippers():
         payout = db.session.get(Payout, request.form.get("payout_id", type=int) or 0) or abort(404)
         if payout.status != "solicitado":
             flash("Ese retiro ya estaba gestionado.", "error")
-            return redirect(url_for("admin_clippers"))
+            return redirect(url_for("admin_payouts"))
         note = request.form.get("note", "").strip()[:255]
         if request.form.get("action") == "whop":
             if payout.method != WHOP_METHOD or not payout.user.whop_user_id or not whop_enabled():
                 flash("Este retiro no se puede pagar por Whop.", "error")
-                return redirect(url_for("admin_clippers"))
+                return redirect(url_for("admin_payouts"))
             payout.status = "procesando"
             db.session.commit()
             result = whop_pay(payout)
@@ -1994,7 +2188,7 @@ def admin_clippers():
                    "procesando": "Whop está procesando el pago. Se actualizará solo."}.get(
                 result, f"Whop no ha aceptado el pago ({payout.error}). El dinero ha vuelto al saldo del clipper."),
                 "ok" if result != "fallido" else "error")
-            return redirect(url_for("admin_clippers"))
+            return redirect(url_for("admin_payouts"))
         if request.form.get("action") == "pagar":
             payout.status, payout.paid_at, payout.note = "pagado", datetime.utcnow(), note
             audit("retiro_pagado", f"#{payout.id} {money(payout.amount)} a {payout.user.email} · {payout.method} · {note}")
@@ -2004,13 +2198,7 @@ def admin_clippers():
             audit("retiro_rechazado", f"#{payout.id} {money(payout.amount)} de {payout.user.email} · {payout.note}")
             flash("Retiro rechazado. El dinero vuelve a su saldo disponible.", "ok")
         db.session.commit()
-        return redirect(url_for("admin_clippers"))
-    whop_sync(Payout.query.filter_by(status="procesando").all())
-    release_stuck_payouts()
-    failed = (Payout.query.filter(Payout.status == "rechazado", Payout.error != "")
-              .order_by(Payout.created_at.desc()).limit(5).all())
-    open_requests = (Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).options(joinedload(Payout.user))
-                     .order_by(Payout.created_at).all())
+        return redirect(url_for("admin_payouts"))
     q = request.args.get("q", "").strip().lower()
     users = (User.query.options(selectinload(User.submissions).joinedload(Submission.campaign), selectinload(User.payouts))
              .order_by(User.created_at.desc()).all())          # todo en 3 consultas aunque haya miles de clippers
@@ -2019,7 +2207,7 @@ def admin_clippers():
                  or any(q in h for p in PLATFORMS for h in u.handles(p))]
     rows = [(u, user_money(u), len(u.submissions)) for u in users]
     rows.sort(key=lambda r: -r[1]["earned"])
-    return render_template("admin/clippers.html", rows=rows, open_requests=open_requests, q=q, failed=failed)
+    return render_template("admin/clippers.html", rows=rows, q=q)
 
 
 @app.route("/admin/clipper/<int:uid>/<accion>", methods=["POST"])
