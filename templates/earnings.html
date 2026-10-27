@@ -36,7 +36,7 @@
       {% endif %}
     </div>
     {% if m.open_payout %}
-    <p class="small" style="color:rgba(255,255,255,.75)">{% if m.open_payout.status == "procesando" %}Enviando {{ m.open_payout.amount|money }} a tu cuenta de Whop. Llegará en unos minutos.{% elif m.open_payout.method == WHOP_METHOD %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo revisamos y te llega a tu Whop.{% else %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo pagamos en un plazo de {{ PAYOUT_DAYS }} días hábiles.{% endif %}</p>
+    <p class="small muted">{% if m.open_payout.status == "procesando" %}Enviando {{ m.open_payout.amount|money }} a tu cuenta de Whop. Llegará en unos minutos.{% elif m.open_payout.method == WHOP_METHOD %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo revisamos y te llega a tu Whop.{% else %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo pagamos en un plazo de {{ PAYOUT_DAYS }} días hábiles.{% endif %}</p>
     {% elif MIN_WITHDRAW and m.available < MIN_WITHDRAW and m.available > 0 %}
     <div class="withdraw-goal">
       <div class="budget-row tnum"><span>Te faltan <b>{{ (MIN_WITHDRAW - m.available)|money }}</b> para poder retirar</span><span>Mín. {{ MIN_WITHDRAW|money(0) }}</span></div>
