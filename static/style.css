@@ -236,8 +236,8 @@ input:focus,textarea:focus,select:focus{outline:none;background:#fff;border-colo
 .drange span{background:var(--soft);color:var(--ink-2);font-size:12.5px;font-weight:600;padding:5px 10px;border-radius:999px}
 .dbudget{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--muted)}
 .dbudget b{color:var(--ink);font-weight:600}
-.dbar{height:6px;border-radius:99px;background:var(--soft);overflow:hidden}
-.dbar span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--money),var(--pop))}
+.dbar{height:6px;border-radius:99px;background:var(--soft-2);overflow:hidden}
+.dbar span{display:block;height:100%;border-radius:99px;background:var(--money)}
 .dfoot{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:auto}
 .dplats{display:flex;gap:12px;align-items:center;padding-bottom:4px}
 .dplats svg{width:21px;height:21px;color:var(--ink)}

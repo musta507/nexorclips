@@ -41,6 +41,6 @@
 {% macro budget(camp, st) -%}
 <div class="budget{% if st.left_pct <= 20 %} low{% endif %}">
   <div class="budget-row tnum"><span><b>{{ st.remaining|money(0) }}</b> libres de {{ camp.budget|money(0) }}</span><span>{% if st.exhausted %}Agotada{% else %}Queda {{ st.left_pct }}%{% endif %}</span></div>
-  <div class="budget-bar" role="progressbar" aria-label="Presupuesto restante" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ st.left_pct }}"><span style="width:{{ st.left_pct }}%"></span></div>
+  <div class="budget-bar" role="progressbar" aria-label="Presupuesto repartido" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ st.pct }}"><span style="width:{{ st.pct }}%"></span></div>
 </div>
 {%- endmacro %}
