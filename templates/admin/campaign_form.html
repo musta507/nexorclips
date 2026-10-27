@@ -16,7 +16,7 @@
 
     <div class="field">
       <label for="cover_file">Portada</label>
-      {% if cover_src(camp) %}<img src="{{ cover_src(camp) }}" alt="Portada actual" style="width:160px;aspect-ratio:1;object-fit:cover;border-radius:14px">{% endif %}
+      {% if cover_src(camp) %}<img src="{{ cover_src(camp, 720) }}" alt="Portada actual" style="width:160px;aspect-ratio:1;object-fit:cover;border-radius:14px">{% endif %}
       <input id="cover_file" type="file" name="cover_file" accept="image/*">
       <span class="hint">Sube una imagen cuadrada (JPG, PNG o WEBP, máx. 8 MB). O pega un enlace que empiece por https://</span>
       <input id="cover_url" name="cover_url" value="{{ camp.cover_url or '' }}" placeholder="https://…/portada.jpg">

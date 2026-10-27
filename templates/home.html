@@ -24,7 +24,7 @@
 {% if featured %}
 {% set c, st = featured %}
 <a class="featured" href="{{ url_for('campaign', cid=c.id) }}">
-  <div class="art">{% if cover_src(c) %}<img src="{{ cover_src(c) }}" alt="Portada de {{ c.song }}">{% else %}<span class="cover-fallback">{{ c.song[:1] }}</span>{% endif %}</div>
+  <div class="art">{% if cover_src(c) %}<img src="{{ cover_src(c, 720) }}" alt="Portada de {{ c.song }}" width="330" height="330" fetchpriority="high" decoding="async">{% else %}<span class="cover-fallback">{{ c.song[:1] }}</span>{% endif %}</div>
   <div class="info">
     <span class="eyebrow">Campaña destacada</span>
     <div>

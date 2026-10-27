@@ -6,7 +6,7 @@
 <div class="detail">
   <div class="form-stack" style="gap:24px">
     <header class="album">
-      <div class="art">{% if cover_src(camp) %}<img src="{{ cover_src(camp) }}" alt="Portada de {{ camp.song }}">{% else %}<span class="cover-fallback">{{ camp.song[:1] }}</span>{% endif %}</div>
+      <div class="art">{% if cover_src(camp) %}<img src="{{ cover_src(camp, 720) }}" alt="Portada de {{ camp.song }}" width="190" height="190" fetchpriority="high" decoding="async">{% else %}<span class="cover-fallback">{{ camp.song[:1] }}</span>{% endif %}</div>
       <div class="album-info">
         <span class="eyebrow muted">Publicada {{ camp.created_at|ago }}</span>
         <h1>{{ camp.song }} {{ icon("check") }}</h1>

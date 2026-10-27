@@ -1,7 +1,7 @@
 {% from "_icons.html" import icon %}
 <a class="dcard" href="{{ url_for('campaign', cid=c.id) }}" data-new="{{ c.created_at.timestamp()|int }}" data-budget="{{ st.remaining }}" data-rate="{{ c.rate }}">
   <div class="dcard-top">
-    <span class="dthumb">{% if cover_src(c) %}<img src="{{ cover_src(c) }}" alt="" loading="lazy">{% endif %}</span>
+    <span class="dthumb">{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="62" height="62" loading="lazy" decoding="async">{% endif %}</span>
     <div class="dhead">
       <h3><span>{{ c.artist }}</span> {{ icon("check") }}</h3>
       <span class="dmeta">{{ c.created_at|ago }} · Por 1.000 vistas{% if my_join is defined and my_join.get(c.id) == 'aceptada' %} · <b class="dj ok">Ya participas</b>{% elif my_join is defined and my_join.get(c.id) == 'pendiente' %} · <b class="dj">Pendiente</b>{% endif %}</span>

@@ -792,9 +792,9 @@ def admin_required(f):
 
 
 # ---------------------------------------------------------------- plantillas
-def cover_src(camp):
+def cover_src(camp, size=None):
     if camp.cover_version:
-        return url_for("cover", cid=camp.id, v=camp.cover_version)
+        return url_for("cover", cid=camp.id, v=camp.cover_version, t=size if size in COVER_SIZES else None)
     return camp.cover_url or ""
 
 
@@ -1118,9 +1118,35 @@ def cover(cid):
     camp = db.session.get(Campaign, cid)
     if not camp or not camp.cover_version:
         abort(404)
-    resp = Response(camp.cover_data, mimetype=camp.cover_mime or "image/jpeg")
+    size = request.args.get("t", type=int)
+    if size in COVER_SIZES:
+        key = (cid, camp.cover_version, size)
+        data = _cover_cache.get(key)
+        if data is None:
+            data = resize_cover(camp.cover_data, size)
+            if len(_cover_cache) > 300:
+                _cover_cache.clear()
+            _cover_cache[key] = data
+        mime = "image/webp"
+    else:
+        data, mime = camp.cover_data, camp.cover_mime or "image/jpeg"
+    resp = Response(data, mimetype=mime)
     resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return resp
+
+
+COVER_SIZES = (160, 720)          # miniatura de las tarjetas y portada grande (el doble de lo que se ve, para pantallas nítidas)
+_cover_cache = {}
+
+
+def resize_cover(data, size):
+    """Versión pequeña de la portada en WebP, para que el móvil no descargue la imagen entera."""
+    from PIL import Image
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    img.thumbnail((size, size))
+    out = io.BytesIO()
+    img.save(out, "WEBP", quality=80, method=4)
+    return out.getvalue()
 
 
 # ---------------------------------------------------------------- clipper
@@ -1507,9 +1533,9 @@ def process_cover(file):
         img = img.convert("RGB")
     except (UnidentifiedImageError, OSError, ValueError):
         return None
-    img.thumbnail((1600, 1600))
+    img.thumbnail((1200, 1200))
     out = io.BytesIO()
-    img.save(out, "JPEG", quality=85, optimize=True, progressive=True)
+    img.save(out, "WEBP", quality=82, method=6)        # WebP: pesa mucho menos que JPG con la misma calidad
     return out.getvalue()
 
 
@@ -1549,7 +1575,7 @@ def _campaign_from_form(camp):
         data = process_cover(file)
         if not data:
             return "La portada tiene que ser una imagen válida (JPG, PNG o WEBP)."
-        camp.cover_data, camp.cover_mime = data, "image/jpeg"
+        camp.cover_data, camp.cover_mime = data, "image/webp"
         camp.cover_version = (camp.cover_version or 0) + 1
     if request.form.get("remove_cover"):
         camp.cover_data, camp.cover_version = None, 0

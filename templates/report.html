@@ -5,7 +5,7 @@
 {% block top_right %}<span class="report-tag">Informe de campaña · en directo</span>{% endblock %}
 {% block content %}
 <header class="album report-head">
-  <div class="art">{% if cover_src(camp) %}<img src="{{ cover_src(camp) }}" alt="Portada de {{ camp.song }}">{% else %}<span class="cover-fallback">{{ camp.song[:1] }}</span>{% endif %}</div>
+  <div class="art">{% if cover_src(camp) %}<img src="{{ cover_src(camp, 720) }}" alt="Portada de {{ camp.song }}" width="200" height="200" decoding="async">{% else %}<span class="cover-fallback">{{ camp.song[:1] }}</span>{% endif %}</div>
   <div class="album-info">
     <span class="eyebrow muted">{{ CATEGORY_ONE[camp.category] }} · desde el {{ camp.created_at|date }}{% if camp.ended_at %} hasta el {{ camp.ended_at|date }}{% endif %}</span>
     <h1>{{ camp.song }}</h1>

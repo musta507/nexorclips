@@ -372,7 +372,7 @@ def test_cover_upload_validation():
     admin.post("/admin/campana/nueva", data=good, content_type="multipart/form-data")
     with A.app.app_context():
         camp = A.Campaign.query.one()
-        assert camp.cover_mime == "image/jpeg" and camp.cover_data[:2] == b"\xff\xd8" and camp.report_token
+        assert camp.cover_mime == "image/webp" and camp.cover_data[8:12] == b"WEBP" and camp.report_token
 
 
 def test_all_pages_render():
@@ -900,3 +900,17 @@ def test_withdraw_chosen_amount(monkeypatch):
         u = A.User.query.filter_by(email="w@test.com").one()
         assert p.amount == 10.5 and p.status == "pagado" and A.user_money(u)["available"] == 34.5
     assert [x for x in calls if "/transfers" in x[1]][-1][2]["amount"] == 10.5
+
+
+def test_cover_small_sizes():
+    from PIL import Image
+    admin = client_for("admin@test.com")
+    img = io.BytesIO(); Image.new("RGB", (900, 900), (10, 200, 90)).save(img, "PNG"); img.seek(0)
+    data = {"_csrf": "t", "song": "S", "artist": "A", "rate": "100", "budget": "500", "pf_tiktok": "on", "status": "activa",
+            "cover_file": (img, "x.png", "image/png")}
+    admin.post("/admin/campana/nueva", data=data, content_type="multipart/form-data")
+    with A.app.app_context():
+        c = A.Campaign.query.filter_by(song="S").one(); cid, v = c.id, c.cover_version
+    r = admin.get(f"/portada/{cid}?v={v}&t=160")
+    assert r.mimetype == "image/webp" and len(r.data) < 3000
+    assert 'width="62"' in client_for("c@test.com").get("/").get_data(as_text=True)
