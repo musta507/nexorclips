@@ -15,6 +15,6 @@
   </div>
   <div class="dfoot">
     <div class="dplats">{% for p in c.platform_list %}<span title="{{ PLATFORMS[p] }}">{{ icon(p) }}</span>{% endfor %}</div>
-    <div class="drate">{% if c.rates_vary %}<span>HASTA</span>{% endif %}<b>{{ c.rate|rate_k }}</b><span>POR 1.000 VISTAS</span></div>
+    <div class="drate"><b>{{ c.rate|rate_k }}</b><span>POR 1.000 VISTAS</span></div>
   </div>
 </a>
