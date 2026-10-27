@@ -247,31 +247,63 @@ function colorDestacada() {
   if (img.complete && img.naturalWidth) run(); else img.addEventListener("load", run, { once: true });
 }
 
-// Pastilla negra que se desliza en «Más nuevas / Más presupuesto / Mejor pago»
+// Pastilla negra que se desliza: en «Más nuevas / Más presupuesto / Mejor pago», en las pestañas de Ganancias
+// y en el menú de arriba (ordenador). En los menús que cambian de página, se guarda dónde estaba la pastilla
+// al pulsar y la página nueva la desliza desde ahí (solo desplazamiento: lo hace la tarjeta gráfica, sin tirones).
+var PILL_KEY = "pill-from:";
 function pastillaOrden() {
-  document.querySelectorAll(".sortbar").forEach(function (box) {
-    if (box.dataset.pill) return;
-    box.dataset.pill = "1";
-    var pill = document.createElement("span");
-    pill.className = "pill";
-    box.insertBefore(pill, box.firstChild);
-    box.classList.add("has-pill");
-    function place(el, animate) {
-      if (!el) { pill.style.opacity = 0; return; }
-      if (!animate) pill.style.transition = "none";
-      pill.style.width = el.offsetWidth + "px";
-      pill.style.height = el.offsetHeight + "px";
-      pill.style.transform = "translate(" + el.offsetLeft + "px," + el.offsetTop + "px)";
-      pill.style.opacity = 1;
-      if (!animate) { void pill.offsetWidth; pill.style.transition = ""; }
-    }
-    place(box.querySelector("button.on"), false);
-    box.classList.add("pill-ready");
-    box.addEventListener("click", function (e) { var it = e.target.closest("button"); if (it) place(it, true); });
-    var onResize = function () { place(box.querySelector("button.on"), false); };
-    window.addEventListener("resize", onResize);
-    limpiar.push(function () { window.removeEventListener("resize", onResize); });
+  var grupos = [[".sortbar", "button", ""], [".seg", "a", "seg"]];
+  if (window.matchMedia("(min-width:641px)").matches) grupos.push([".topbar .tabs", ".tab", "tabs"]);
+  grupos.forEach(function (g) {
+    document.querySelectorAll(g[0]).forEach(function (box) { montarPastilla(box, g[1], g[2]); });
   });
+}
+function montarPastilla(box, sel, name) {
+  if (box.dataset.pill) return;
+  box.dataset.pill = "1";
+  var pill = document.createElement("span");
+  pill.className = "pill";
+  box.insertBefore(pill, box.firstChild);
+  box.classList.add("has-pill");
+  function place(el, animate) {
+    if (!el) { pill.style.opacity = 0; return; }
+    if (!animate) pill.style.transition = "none";
+    pill.style.width = el.offsetWidth + "px";
+    pill.style.height = el.offsetHeight + "px";
+    pill.style.transform = "translate(" + el.offsetLeft + "px," + el.offsetTop + "px)";
+    pill.style.opacity = 1;
+    if (!animate) { void pill.offsetWidth; pill.style.transition = ""; }
+  }
+  var cur = box.querySelector(sel + ".on");
+  var from = null;
+  if (name) { try { from = JSON.parse(sessionStorage.getItem(PILL_KEY + name) || "null"); sessionStorage.removeItem(PILL_KEY + name); } catch (e) { from = null; } }
+  if (from && cur && pill.animate && Math.abs(from.x - cur.offsetLeft) > 2) {
+    var y = cur.offsetTop;
+    var startT = "translate(" + Math.round(from.x + from.w / 2 - cur.offsetWidth / 2) + "px," + y + "px)";
+    var endT = "translate(" + cur.offsetLeft + "px," + y + "px)";
+    pill.style.transition = "none";
+    pill.style.width = cur.offsetWidth + "px";
+    pill.style.height = cur.offsetHeight + "px";
+    pill.style.opacity = 1;
+    pill.style.transform = endT;
+    pill.animate([{ transform: startT }, { transform: endT }], { duration: 300, easing: "cubic-bezier(.3,.9,.3,1)" })
+      .onfinish = function () { pill.style.transition = ""; };
+  } else {
+    place(cur, false);
+  }
+  box.classList.add("pill-ready");
+  box.addEventListener("click", function (e) {
+    var it = e.target.closest(sel);
+    if (!it || !box.contains(it) || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    var was = box.querySelector(sel + ".on");
+    if (name && was && it !== was) {
+      try { sessionStorage.setItem(PILL_KEY + name, JSON.stringify({ x: was.offsetLeft, w: was.offsetWidth })); } catch (err) {}
+    }
+    if (it.tagName !== "A") place(it, true);    // en los enlaces, la página nueva hace el deslizamiento
+  });
+  var onResize = function () { place(box.querySelector(sel + ".on"), false); };
+  window.addEventListener("resize", onResize);
+  limpiar.push(function () { window.removeEventListener("resize", onResize); });
 }
 
 // =============================================================== cuándo se ejecuta
