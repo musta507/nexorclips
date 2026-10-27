@@ -258,8 +258,8 @@ input:focus,textarea:focus,select:focus{outline:none;background:#fff;border-colo
 .album .art img{width:100%;height:100%;object-fit:cover}
 .album-info{display:flex;flex-direction:column;gap:10px;min-width:0}
 .album-info h1{font-size:clamp(26px,3vw,38px);line-height:1.08;letter-spacing:-.03em}
-.album-info h1 svg{width:.62em;height:.62em;vertical-align:-.04em;margin-left:.12em;color:var(--ink-2);stroke-width:2.2}
-.album-info .artist{font-size:18px;color:var(--ink-2);margin-top:-6px}
+.album-info .artist{display:inline-flex;align-items:center;gap:6px;font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:-.01em;color:var(--ink);margin-top:-4px}
+.album-info .artist svg{width:18px;height:18px;flex:none;color:var(--ink);stroke-width:2.2}
 .album-info .status{align-self:flex-start}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
