@@ -335,7 +335,34 @@ class CampaignAccount(db.Model):
             return []
 
 
-JOIN_STATUSES = {"pendiente": "En revisión", "aceptada": "Aceptada", "rechazada": "Rechazada"}
+class CampaignMember(db.Model):
+    """Solicitud de un clipper para entrar en una campaña: responde a las preguntas y el equipo la acepta o rechaza.
+    Una vez aceptado, el clipper añade la cuenta (normalmente creada solo para esa campaña) y la verifica con su bio."""
+    __table_args__ = (db.UniqueConstraint("user_id", "campaign_id", name="uq_campaign_member"),)
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
+    status = db.Column(db.String(20), default="pendiente", index=True)    # pendiente · aceptada · rechazada
+    answers = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    decided_at = db.Column(db.DateTime, nullable=True)
+    user = db.relationship("User")
+    campaign = db.relationship("Campaign")
+
+    @property
+    def answer_list(self):
+        try:
+            return [(str(q), str(a)) for q, a in json.loads(self.answers or "[]")]
+        except (ValueError, TypeError):
+            return []
+
+
+def campaign_member(user_id, campaign_id):
+    return CampaignMember.query.filter_by(user_id=user_id, campaign_id=campaign_id).first()
+
+
+JOIN_STATUSES = {"pendiente": "Sin verificar", "aceptada": "Verificada", "rechazada": "Rechazada"}        # cuentas
+MEMBER_STATUSES = {"pendiente": "En revisión", "aceptada": "Aceptado", "rechazada": "Rechazado"}          # solicitudes
 MAX_JOIN_ACCOUNTS = 5
 
 
@@ -399,8 +426,29 @@ def ensure_schema():
             log.info("Columna añadida: %s.%s", table.name, col.name)
 
 
+def migrate_members():
+    """Antes, la solicitud iba unida a la cuenta. Crea la solicitud de quien ya tenía cuentas en una campaña (solo una vez)."""
+    if CampaignMember.query.first() or not CampaignAccount.query.first():
+        return
+    seen = {}
+    for a in CampaignAccount.query.order_by(CampaignAccount.created_at).all():
+        key = (a.user_id, a.campaign_id)
+        m = seen.get(key)
+        if not m:
+            m = seen[key] = CampaignMember(user_id=a.user_id, campaign_id=a.campaign_id, status=a.status,
+                                          answers=a.answers or "", created_at=a.created_at, decided_at=a.decided_at)
+            db.session.add(m)
+        elif a.status == "aceptada" or (a.status == "pendiente" and m.status == "rechazada"):
+            m.status = a.status
+        if a.status == "aceptada" and not a.bio_verified:
+            a.bio_verified, a.bio_status = True, "Verificada"     # ya la había aceptado el equipo a mano
+    db.session.commit()
+    log.info("Solicitudes creadas a partir de cuentas antiguas: %s", len(seen))
+
+
 with app.app_context():
     ensure_schema()
+    migrate_members()
 
 
 # ---------------------------------------------------------------- utilidades generales
@@ -1158,10 +1206,7 @@ def index():
     cat = request.args.get("cat", "")
     cards = [x for x in all_cards if not cat or x[0].category == cat]
     counts = {k: sum(1 for c, _ in all_cards if c.category == k) for k in CATEGORIES}
-    my_join = {}
-    for a in CampaignAccount.query.filter_by(user_id=current_user.id).all():
-        if my_join.get(a.campaign_id) != "aceptada":
-            my_join[a.campaign_id] = a.status
+    my_join = {m.campaign_id: m.status for m in CampaignMember.query.filter_by(user_id=current_user.id).all()}
     return render_template("home.html", cards=cards, featured=featured, cat=cat, counts=counts,
                            total=len(all_cards), new_user=not current_user.submissions, my_join=my_join)
 
@@ -1181,9 +1226,14 @@ def submit_clip(camp, raw_url):
         return False, f"Esta campaña no acepta vídeos de {PLATFORMS[platform]}."
     mine = [a.handle for a in campaign_accounts(current_user.id, camp.id, "aceptada", platform)]
     if not mine:
-        if campaign_accounts(current_user.id, camp.id, "pendiente"):
-            return False, "Tu cuenta aún está pendiente de verificar en esta campaña. Te escribiremos por el chat."
-        return False, f"Para subir vídeos de {PLATFORMS[platform]} aquí, primero únete a la campaña con esa cuenta."
+        member = campaign_member(current_user.id, camp.id)
+        if not member:
+            return False, "Primero solicita entrar en esta campaña."
+        if member.status == "pendiente":
+            return False, "Tu solicitud para esta campaña aún está en revisión."
+        if member.status == "rechazada":
+            return False, "No has sido aceptado en esta campaña."
+        return False, f"Añade y verifica tu cuenta de {PLATFORMS[platform]} en esta campaña para subir clips desde ella."
     author = viewcounter.tiktok_handle_from_url(url) if platform == "tiktok" else ""
     if author and author not in mine:
         if handle_owner(platform, author, exclude_user_id=current_user.id):
@@ -1213,16 +1263,46 @@ def campaign(cid):
     accounts = campaign_accounts(current_user.id, camp.id)
     accepted = [a for a in accounts if a.status == "aceptada"]
     return render_template("campaign.html", camp=camp, st=st, mine=mine, accounts=accounts, accepted=accepted,
-                           join_statuses=JOIN_STATUSES)
+                           member=campaign_member(current_user.id, camp.id), join_statuses=JOIN_STATUSES)
 
 
 @app.route("/campana/<int:cid>/unirme", methods=["POST"])
 @login_required
 def join_campaign(cid):
+    """El clipper pide entrar: solo responde a las preguntas. La cuenta la añade cuando le aceptan."""
     camp = db.session.get(Campaign, cid) or abort(404)
     back = redirect(url_for("campaign", cid=cid))
     if camp.status != "activa" or camp.exhausted:
         flash("Esta campaña ya no acepta clippers nuevos.", "error")
+        return back
+    if campaign_member(current_user.id, cid):
+        flash("Ya enviaste tu solicitud para esta campaña.", "info")
+        return back
+    answers = []
+    for i, q in enumerate(camp.question_list):
+        a = (request.form.get(f"q_{i}") or "").strip()[:1500]
+        if not a:
+            flash("Responde a todas las preguntas para enviar tu solicitud.", "error")
+            return back
+        answers.append([q, a])
+    db.session.add(CampaignMember(user_id=current_user.id, campaign_id=cid,
+                                  answers=json.dumps(answers, ensure_ascii=False) if answers else ""))
+    db.session.commit()
+    notify_phone(f"🙋 {current_user.name} quiere unirse", f"«{camp.song}». Revisa su solicitud.",
+                 url_for("admin_home", _anchor="unirse"), tags="raising_hand")
+    flash("¡Solicitud enviada! Te avisaremos cuando el equipo la revise.", "ok")
+    return back
+
+
+@app.route("/campana/<int:cid>/cuentas", methods=["POST"])
+@login_required
+def add_campaign_account(cid):
+    """Ya aceptado en la campaña, el clipper añade la cuenta con la que publicará y luego la verifica con su bio."""
+    camp = db.session.get(Campaign, cid) or abort(404)
+    back = redirect(url_for("campaign", cid=cid))
+    member = campaign_member(current_user.id, cid)
+    if not member or member.status != "aceptada":
+        flash("Podrás añadir tu cuenta cuando te acepten en la campaña.", "error")
         return back
     platform = request.form.get("platform", "")
     handle = viewcounter.clean_handle(request.form.get("handle", ""))
@@ -1232,24 +1312,14 @@ def join_campaign(cid):
     if not handle:
         flash("Escribe el usuario de la cuenta con la que vas a publicar.", "error")
         return back
-    owner = handle_owner(platform, handle, exclude_user_id=current_user.id)
-    if owner:
-        flash(f"La cuenta @{handle} ya está vinculada a otro clipper. Si es tuya, escríbenos por el chat.", "error")
+    if handle_owner(platform, handle, exclude_user_id=current_user.id):
+        flash(f"La cuenta @{handle} ya está vinculada a otro clipper.", "error")
         return back
     existing = CampaignAccount.query.filter_by(campaign_id=cid, platform=platform, handle=handle).first()
     if existing:
         flash("Ya has añadido esa cuenta a esta campaña." if existing.user_id == current_user.id
               else f"La cuenta @{handle} ya está en esta campaña con otro clipper.", "error")
         return back
-    first_join = not campaign_accounts(current_user.id, cid)
-    answers = []
-    if first_join:
-        for i, q in enumerate(camp.question_list):
-            a = (request.form.get(f"q_{i}") or "").strip()[:1500]
-            if not a:
-                flash("Responde a todas las preguntas para enviar tu solicitud.", "error")
-                return back
-            answers.append([q, a])
     if len(campaign_accounts(current_user.id, cid)) >= MAX_JOIN_ACCOUNTS:
         flash(f"Puedes añadir como máximo {MAX_JOIN_ACCOUNTS} cuentas por campaña.", "error")
         return back
@@ -1259,18 +1329,15 @@ def join_campaign(cid):
             flash(f"Ya tienes {MAX_HANDLES} cuentas de {PLATFORMS[platform]} vinculadas. Quita alguna en «Mi cuenta».", "error")
             return back
         setattr(current_user, f"{platform}_handles", ",".join(linked + [handle]))
-    already = CampaignAccount.query.filter_by(user_id=current_user.id, platform=platform, handle=handle, bio_verified=True).first()
+    verified = CampaignAccount.query.filter_by(user_id=current_user.id, platform=platform, handle=handle, bio_verified=True).first()
     db.session.add(CampaignAccount(user_id=current_user.id, campaign_id=cid, platform=platform, handle=handle,
-                                   answers=json.dumps(answers, ensure_ascii=False) if answers else "",
-                                   bio_verified=bool(already), bio_status="Verificada" if already else ""))
+                                   status="aceptada" if verified else "pendiente", decided_at=datetime.utcnow() if verified else None,
+                                   bio_verified=bool(verified), bio_status="Verificada" if verified else ""))
     db.session.commit()
-    notify_phone(f"🙋 {current_user.name} quiere unirse", f"«{camp.song}» con @{handle} ({PLATFORMS[platform]}).",
-                 url_for("admin_home", _anchor="unirse"), tags="raising_hand")
-    if already:
-        flash("¡Solicitud enviada! Tu cuenta ya estaba verificada. Te avisaremos por el chat cuando te aceptemos.", "ok")
+    if verified:
+        flash(f"Cuenta @{handle} añadida. Ya estaba verificada: puedes subir clips desde ella.", "ok")
     else:
-        flash(f"¡Solicitud enviada! Ahora pon el código {current_user.bio_code()} en la bio de @{handle} y pulsa «Comprobar». "
-              "Así sabemos que la cuenta es tuya.", "ok")
+        flash(f"Cuenta @{handle} añadida. Pon el código {current_user.bio_code()} en su bio y pulsa «Comprobar».", "ok")
     return back
 
 
@@ -1293,14 +1360,12 @@ def check_bio(aid):
     if bio is None:
         acc.bio_status = f"No encontramos el perfil @{acc.handle}. Revisa que el usuario esté bien y que el perfil sea público."
     elif code.lower() in bio.lower():
+        now = datetime.utcnow()
         others = CampaignAccount.query.filter_by(user_id=acc.user_id, platform=acc.platform, handle=acc.handle).all()
         for a in others:              # la misma cuenta queda verificada en todas sus campañas
             a.bio_verified, a.bio_status = True, "Verificada"
-        db.session.add(Message(user_id=acc.user_id, from_admin=True, read_by_admin=True, read_by_user=False,
-                               body=f"¡Cuenta @{acc.handle} verificada! Ya puedes quitar el código {code} de tu bio. "
-                                    "El equipo revisará tu solicitud y te avisará por aquí."))
-        notify_phone(f"✅ {acc.user.name} verificó @{acc.handle}", f"«{acc.campaign.song}» · revisa su solicitud",
-                     url_for("admin_home", _anchor="unirse") if has_request_context() else "", tags="white_check_mark")
+            if a.status == "pendiente":
+                a.status, a.decided_at = "aceptada", now
     else:
         acc.bio_status = f"Todavía no vemos el código {code} en la bio de @{acc.handle}. Guárdalo en tu perfil y vuelve a comprobar."
     db.session.commit()
@@ -1321,7 +1386,7 @@ def verify_bio(cid, aid):
     acc.bio_checked_at, acc.bio_status = datetime.utcnow(), "Comprobando…"
     db.session.commit()
     if not viewcounter.APIFY_TOKEN:
-        acc.bio_status = "La comprobación automática no está disponible ahora. El equipo lo revisará por el chat."
+        acc.bio_status = "La comprobación automática no está disponible ahora mismo. Inténtalo de nuevo en un rato."
         db.session.commit()
         return redirect(url_for("campaign", cid=cid))
 
@@ -1341,6 +1406,7 @@ def verify_bio(cid, aid):
 @login_required
 def submit():
     joined = {a.campaign_id for a in CampaignAccount.query.filter_by(user_id=current_user.id, status="aceptada")}
+    joined |= {m.campaign_id for m in CampaignMember.query.filter_by(user_id=current_user.id, status="aceptada")}
     camps = [c for c in active_campaigns() if c.id in joined]
     if request.method == "POST":
         camp = db.session.get(Campaign, request.form.get("campaign_id", type=int) or 0)
@@ -1514,9 +1580,9 @@ def admin_home():
         "pending": len(pending),
         "flagged": sum(1 for s in pending if s.flag_list),
     }
-    joins = (CampaignAccount.query.filter_by(status="pendiente")
-             .options(joinedload(CampaignAccount.user), joinedload(CampaignAccount.campaign))
-             .order_by(CampaignAccount.created_at).all())
+    joins = (CampaignMember.query.filter_by(status="pendiente")
+             .options(joinedload(CampaignMember.user), joinedload(CampaignMember.campaign))
+             .order_by(CampaignMember.created_at).all())
     whop = {"key": bool(WHOP_API_KEY), "company": whop_company_id() if WHOP_API_KEY else "",
             "error": _whop_company.get("error", ""), "from_env": bool(WHOP_COMPANY_ID)}
     return render_template("admin/home.html", whop=whop, cards=cards, pending=pending, kpis=kpis, joins=joins,
@@ -1748,14 +1814,15 @@ def admin_clipper(uid):
     subs = sorted(user.submissions, key=lambda s: s.created_at, reverse=True)
     accounts = CampaignAccount.query.filter_by(user_id=uid).order_by(CampaignAccount.created_at).all()
     per_camp = {}
+    for mb in CampaignMember.query.filter_by(user_id=uid).order_by(CampaignMember.created_at).all():
+        per_camp[mb.campaign_id] = {"camp": mb.campaign, "member": mb, "accounts": [], "answers": mb.answer_list,
+                                    "clips": 0, "views": 0, "earned": 0.0, "pending": 0}
     for a in accounts:
-        row = per_camp.setdefault(a.campaign_id, {"camp": a.campaign, "accounts": [], "answers": [], "clips": 0,
+        row = per_camp.setdefault(a.campaign_id, {"camp": a.campaign, "member": None, "accounts": [], "answers": [], "clips": 0,
                                                  "views": 0, "earned": 0.0, "pending": 0})
         row["accounts"].append(a)
-        if a.answer_list and not row["answers"]:
-            row["answers"] = a.answer_list
     for s in subs:
-        row = per_camp.setdefault(s.campaign_id, {"camp": s.campaign, "accounts": [], "answers": [], "clips": 0,
+        row = per_camp.setdefault(s.campaign_id, {"camp": s.campaign, "member": None, "accounts": [], "answers": [], "clips": 0,
                                                  "views": 0, "earned": 0.0, "pending": 0})
         if s.status == "aprobado":
             row["clips"] += 1
@@ -1766,7 +1833,7 @@ def admin_clipper(uid):
     payouts = sorted(user.payouts, key=lambda p: p.created_at, reverse=True)
     views = sum(s.views or 0 for s in subs if s.status == "aprobado")
     return render_template("admin/clipper.html", user=user, m=m, subs=subs, camps=list(per_camp.values()),
-                           payouts=payouts, views=views, join_statuses=JOIN_STATUSES,
+                           payouts=payouts, views=views, join_statuses=JOIN_STATUSES, member_statuses=MEMBER_STATUSES,
                            unread=Message.query.filter_by(user_id=uid, from_admin=False, read_by_admin=False).count())
 
 
@@ -1892,7 +1959,7 @@ def admin_wipe():
     admin_ids = [u.id for u in User.query.filter_by(is_admin=True).all()]
     if current_user.id not in admin_ids:
         admin_ids.append(current_user.id)
-    for model in (ViewSnapshot, Submission, Payout, CampaignAccount, Message, CampaignLead, Campaign, AuditLog, Setting):
+    for model in (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, Message, CampaignLead, Campaign, AuditLog, Setting):
         model.query.delete(synchronize_session=False)
     User.query.filter(~User.id.in_(admin_ids)).delete(synchronize_session=False)
     for u in User.query.all():   # los admins se quedan, pero sin cuentas ni datos de cobro de prueba
@@ -2189,7 +2256,9 @@ def admin_chat(uid):
     msgs = conversation(user.id)
     mark_read(user.id, by_admin=True)
     accounts = CampaignAccount.query.filter_by(user_id=user.id).order_by(CampaignAccount.created_at.desc()).all()
+    members = CampaignMember.query.filter_by(user_id=user.id).order_by(CampaignMember.created_at.desc()).all()
     return render_template("admin/chat.html", user=user, msgs=msgs, m=user_money(user), accounts=accounts,
+                           members=members, member_statuses=MEMBER_STATUSES,
                            join_statuses=JOIN_STATUSES)
 
 
@@ -2222,6 +2291,28 @@ def admin_campaign_account(aid, accion):
           f"{acc.user.email} · {label} · «{acc.campaign.song}»")
     db.session.commit()
     flash(f"{acc.user.name} {'aceptado' if accion == 'aceptar' else 'rechazado'} en «{acc.campaign.song}».", "ok")
+    return redirect(request.referrer or url_for("admin_home"))
+
+
+@app.route("/admin/solicitud/<int:mid>/<accion>", methods=["POST"])
+@admin_required
+def admin_campaign_member(mid, accion):
+    """Aceptar o rechazar la solicitud de un clipper para entrar en una campaña."""
+    mb = db.session.get(CampaignMember, mid) or abort(404)
+    if accion not in ("aceptar", "rechazar"):
+        abort(400)
+    mb.status = "aceptada" if accion == "aceptar" else "rechazada"
+    mb.decided_at = datetime.utcnow()
+    if accion == "aceptar":
+        note = (f"¡Te hemos aceptado en «{mb.campaign.song}»! Entra en la campaña, añade la cuenta con la que vas a publicar "
+                "y verifícala con el código en su bio. En cuanto esté verificada podrás subir tus clips.")
+    else:
+        note = f"Esta vez no hemos podido aceptarte en «{mb.campaign.song}». Gracias por tu interés."
+    db.session.add(Message(user_id=mb.user_id, from_admin=True, sender_id=current_user.id, body=note,
+                           read_by_admin=True, read_by_user=False))
+    audit("clipper_" + ("aceptado" if accion == "aceptar" else "rechazado"), f"{mb.user.email} · «{mb.campaign.song}»")
+    db.session.commit()
+    flash(f"{mb.user.name} {'aceptado' if accion == 'aceptar' else 'rechazado'} en «{mb.campaign.song}».", "ok")
     return redirect(request.referrer or url_for("admin_home"))
 
 

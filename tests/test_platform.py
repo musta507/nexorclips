@@ -56,7 +56,9 @@ def _auto_accept():
                     for h in u.handles(p):
                         if not A.CampaignAccount.query.filter_by(campaign_id=camp.id, platform=p, handle=h).first():
                             A.db.session.add(A.CampaignAccount(user_id=u.id, campaign_id=camp.id, platform=p,
-                                                               handle=h, status="aceptada"))
+                                                               handle=h, status="aceptada", bio_verified=True))
+                if not A.CampaignMember.query.filter_by(user_id=u.id, campaign_id=camp.id).first():
+                    A.db.session.add(A.CampaignMember(user_id=u.id, campaign_id=camp.id, status="aceptada"))
         A.db.session.commit()
 
 
@@ -148,7 +150,7 @@ def test_submission_rules():
     cid = make_campaign(platforms="tiktok,instagram")
     c = client_for("a@test.com")
     r = post(c, f"/campana/{cid}", url=tt("ana", 1))
-    assert "únete a la campaña" in flashes(r)[0][1]
+    assert "verifica tu cuenta" in flashes(r)[0][1]          # aceptado en la campaña, pero sin cuenta añadida
     post(c, "/cuenta", section="redes", handles_tiktok="@Ana")
     assert "no es una de tus cuentas aceptadas" in flashes(post(c, f"/campana/{cid}", url=tt("otra", 1)))[0][1]
     assert flashes(post(c, f"/campana/{cid}", url=tt("ana", 1) + "?is_from_webapp=1"))[0][0] == "ok"
@@ -543,44 +545,75 @@ def test_whop_is_only_payout():
     assert "Whop" in html and "USDT" not in html and "PayPal" not in html
 
 
-def test_join_campaign_and_admin_accepts():
+def test_join_campaign_and_admin_accepts(monkeypatch):
     cid = make_campaign()
     admin = client_for("admin@test.com")
     a = client_for("a@test.com", verify=False)
     page = a.get(f"/campana/{cid}").get_data(as_text=True)
-    assert "Unirme a la campaña" in page and "Enlace de tu clip" not in page
+    assert "Solicitar entrar" in page and "Enlace de tu clip" not in page and 'name="handle"' not in page
     assert "Aún no estás aceptado" in a.get("/enviar").get_data(as_text=True)
-    r = post(a, f"/campana/{cid}/unirme", platform="tiktok", handle="@Ana")
-    html = r.get_data(as_text=True)
+    # 1) pide entrar: sin cuenta
+    html = post(a, f"/campana/{cid}/unirme").get_data(as_text=True)
     assert "Solicitud enviada" in html and "Enlace de tu clip" not in html
-    assert "en la bio" in html
+    with A.app.app_context():
+        mb = A.CampaignMember.query.one()
+        assert mb.status == "pendiente" and not A.CampaignAccount.query.first()
+        mid = mb.id
+    assert "Pendiente" in a.get("/").get_data(as_text=True)
+    assert "en revisión" in post(a, f"/campana/{cid}", url=tt("ana", 1)).get_data(as_text=True)
+    assert "no se puede añadir" not in post(a, f"/campana/{cid}/cuentas", platform="tiktok", handle="ana").get_data(as_text=True)
+    with A.app.app_context():
+        assert not A.CampaignAccount.query.first()                       # aún no aceptado: no puede añadir cuenta
+    assert "Solicitudes para entrar (1)" in admin.get("/admin").get_data(as_text=True)
+    # 2) el admin acepta
+    post(admin, f"/admin/solicitud/{mid}/aceptar")
+    assert "Te hemos aceptado" in a.get("/soporte").get_data(as_text=True)
+    page = a.get(f"/campana/{cid}").get_data(as_text=True)
+    assert "Tus cuentas en esta campaña" in page and "Enlace de tu clip" not in page
+    # 3) añade su cuenta y la verifica con la bio (automático)
+    post(a, f"/campana/{cid}/cuentas", platform="tiktok", handle="@Ana")
     with A.app.app_context():
         acc = A.CampaignAccount.query.one()
         assert (acc.handle, acc.status) == ("ana", "pendiente")
-        assert "ana" in get(A.User, acc.user_id).handles("tiktok")      # se vincula sola
-        aid = acc.id
-    assert "Pendiente" in a.get("/").get_data(as_text=True)
-    r = post(a, f"/campana/{cid}", url=tt("ana", 1))
-    assert "pendiente de verificar" in r.get_data(as_text=True)
-    assert "Clippers por verificar (1)" in admin.get("/admin").get_data(as_text=True)
-    # otro clipper no puede usar la misma cuenta
+        code, aid = acc.user.bio_code(), acc.id
+    assert "verifica tu cuenta" in post(a, f"/campana/{cid}", url=tt("ana", 1)).get_data(as_text=True)
     b = client_for("b@test.com")
-    assert "ya está vinculada a otro clipper" in post(b, f"/campana/{cid}/unirme", platform="tiktok", handle="ana").get_data(as_text=True)
-    post(admin, f"/admin/cuenta-campana/{aid}/aceptar")
-    assert "Te hemos aceptado" in a.get("/soporte").get_data(as_text=True)
+    with A.app.app_context():
+        A.db.session.add(A.CampaignMember(user_id=A.User.query.filter_by(email="b@test.com").one().id, campaign_id=cid, status="aceptada"))
+        A.db.session.commit()
+    assert "ya está vinculada a otro clipper" in post(b, f"/campana/{cid}/cuentas", platform="tiktok", handle="ana").get_data(as_text=True)
+    monkeypatch.setattr(V, "fetch_bio", lambda p, h: f"clips {code}")
+    with A.app.test_request_context():
+        A.check_bio(aid)
+    with A.app.app_context():
+        assert get(A.CampaignAccount, aid).status == "aceptada"
+    with A.app.app_context():
+        assert A.Message.query.filter_by(user_id=get(A.CampaignAccount, aid).user_id).count() == 1   # solo el aviso de aceptado
     assert "Enlace de tu clip" in a.get(f"/campana/{cid}").get_data(as_text=True)
-    r = post(a, f"/campana/{cid}", url=tt("ana", 2))
-    assert "Clip enviado" in r.get_data(as_text=True)
+    assert "Clip enviado" in post(a, f"/campana/{cid}", url=tt("ana", 2)).get_data(as_text=True)
     assert "no es una de tus cuentas aceptadas" in post(a, f"/campana/{cid}", url=tt("otra", 3)).get_data(as_text=True)
     with A.app.app_context():
         sid = A.Submission.query.one().id
     post(admin, f"/admin/envio/{sid}/aprobar")
     with A.app.app_context():
         assert get(A.Submission, sid).status == "aprobado"
-    # en otra campaña hay que unirse de nuevo
+    # en otra campaña hay que pedir entrar de nuevo
     cid2 = make_campaign(song="Otra")
-    assert "únete a la campaña" in post(a, f"/campana/{cid2}", url=tt("ana", 4)).get_data(as_text=True)
-    assert A.app.test_client().post(f"/admin/cuenta-campana/{aid}/aceptar").status_code in (302, 400)
+    assert "solicita entrar" in post(a, f"/campana/{cid2}", url=tt("ana", 4)).get_data(as_text=True)
+    assert A.app.test_client().post(f"/admin/solicitud/{mid}/aceptar").status_code in (302, 400)
+
+
+def test_rejected_member():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("r@test.com", verify=False)
+    post(a, f"/campana/{cid}/unirme")
+    with A.app.app_context():
+        mid = A.CampaignMember.query.one().id
+    post(admin, f"/admin/solicitud/{mid}/rechazar")
+    page = a.get(f"/campana/{cid}").get_data(as_text=True)
+    assert "Solicitud no aceptada" in page and "Solicitar entrar" not in page
+
 
 def test_landing_next_step():
     c = A.app.test_client()
@@ -803,17 +836,19 @@ def test_join_questions_answers_and_clipper_page():
         assert camp.question_list == ["¿Cuánto llevas clipeando?", "¿Clips al día?"] and camp.platform_list == ["tiktok", "instagram"]
     c = client_for("q@test.com", verify=False)
     assert "¿Clips al día?" in c.get(f"/campana/{cid}").get_data(as_text=True)
-    r = post(c, f"/campana/{cid}/unirme", platform="tiktok", handle="qq", q_0="2 años")
-    assert "todas las preguntas" in r.get_data(as_text=True)
-    post(c, f"/campana/{cid}/unirme", platform="tiktok", handle="qq", q_0="2 años", q_1="5")
-    post(c, f"/campana/{cid}/unirme", platform="instagram", handle="qq2")      # segunda cuenta: no repite preguntas
+    assert "todas las preguntas" in post(c, f"/campana/{cid}/unirme", q_0="2 años").get_data(as_text=True)
+    post(c, f"/campana/{cid}/unirme", q_0="2 años", q_1="5")
+    assert "Ya enviaste" in post(c, f"/campana/{cid}/unirme", q_0="x", q_1="y").get_data(as_text=True)
     with A.app.app_context():
-        accs = A.CampaignAccount.query.filter_by(campaign_id=cid).order_by(A.CampaignAccount.id).all()
-        assert accs[0].answer_list == [("¿Cuánto llevas clipeando?", "2 años"), ("¿Clips al día?", "5")] and len(accs) == 2
-        uid = accs[0].user_id
+        mb = A.CampaignMember.query.filter_by(campaign_id=cid).one()
+        assert mb.answer_list == [("¿Cuánto llevas clipeando?", "2 años"), ("¿Clips al día?", "5")]
+        uid, mid = mb.user_id, mb.id
     assert "2 años" in admin.get("/admin").get_data(as_text=True)
+    post(admin, f"/admin/solicitud/{mid}/aceptar")
+    post(c, f"/campana/{cid}/cuentas", platform="tiktok", handle="qq")
     html = admin.get(f"/admin/clipper/{uid}").get_data(as_text=True)
-    assert "2 años" in html and "@qq" in html and "Preguntas" in html
+    assert "2 años" in html and "@qq" in html and "Preguntas" in html and "Sin verificar" in html
+    assert "2 años" in admin.get(f"/admin/mensajes/{uid}").get_data(as_text=True)
     assert c.get(f"/admin/clipper/{uid}").status_code == 403
 
 
@@ -838,10 +873,12 @@ def test_chat_photo():
 def test_bio_code_verification(monkeypatch):
     cid = make_campaign()
     a = client_for("bio@test.com", verify=False)
-    post(a, f"/campana/{cid}/unirme", platform="tiktok", handle="biouser")
     with A.app.app_context():
-        u = A.User.query.filter_by(email="bio@test.com").one()
-        code = u.verify_code
+        uid = A.User.query.filter_by(email="bio@test.com").one().id
+        A.db.session.add(A.CampaignMember(user_id=uid, campaign_id=cid, status="aceptada")); A.db.session.commit()
+    post(a, f"/campana/{cid}/cuentas", platform="tiktok", handle="biouser")
+    with A.app.app_context():
+        code = A.User.query.filter_by(email="bio@test.com").one().verify_code
         aid = A.CampaignAccount.query.one().id
     assert code.startswith("CP") and code in a.get(f"/campana/{cid}").get_data(as_text=True)
     monkeypatch.setattr(V, "fetch_bio", lambda p, h: "Clips diarios 🔥")
@@ -849,19 +886,32 @@ def test_bio_code_verification(monkeypatch):
         A.check_bio(aid)
     with A.app.app_context():
         acc = get(A.CampaignAccount, aid)
-        assert not acc.bio_verified and "Todavía no vemos" in acc.bio_status
+        assert not acc.bio_verified and acc.status == "pendiente" and "Todavía no vemos" in acc.bio_status
     monkeypatch.setattr(V, "fetch_bio", lambda p, h: f"Clips diarios {code.lower()}")
     with A.app.test_request_context():
         A.check_bio(aid)
     with A.app.app_context():
         acc = get(A.CampaignAccount, aid)
-        assert acc.bio_verified and acc.status == "pendiente"        # verificada, pero la acepta el admin
-    assert "verificada" in a.get("/soporte").get_data(as_text=True)
-    assert "Bio verificada" in client_for("admin@test.com").get("/admin").get_data(as_text=True)
+        assert acc.bio_verified and acc.status == "aceptada"          # verificada = ya puede subir clips, sin pasar por el admin
+        assert not A.Message.query.filter_by(user_id=uid).first()      # nada por el chat
     cid2 = make_campaign(song="Otra")
-    post(a, f"/campana/{cid2}/unirme", platform="tiktok", handle="biouser")   # en otra campaña ya sale verificada
     with A.app.app_context():
-        assert A.CampaignAccount.query.filter_by(campaign_id=cid2).one().bio_verified
+        A.db.session.add(A.CampaignMember(user_id=uid, campaign_id=cid2, status="aceptada")); A.db.session.commit()
+    post(a, f"/campana/{cid2}/cuentas", platform="tiktok", handle="biouser")   # la misma cuenta en otra campaña ya sale verificada
+    with A.app.app_context():
+        assert A.CampaignAccount.query.filter_by(campaign_id=cid2).one().status == "aceptada"
+
+
+def test_old_accounts_become_members():
+    cid = make_campaign()
+    with A.app.app_context():
+        A.CampaignMember.query.delete()
+        u = A.User(email="old@test.com", name="Old"); A.db.session.add(u); A.db.session.flush()
+        A.db.session.add(A.CampaignAccount(user_id=u.id, campaign_id=cid, platform="tiktok", handle="oldie", status="aceptada"))
+        A.db.session.commit()
+        A.migrate_members()
+        mb = A.CampaignMember.query.filter_by(user_id=u.id).one()
+        assert mb.status == "aceptada" and A.CampaignAccount.query.filter_by(handle="oldie").one().bio_verified
 
 
 def test_reject_needs_reason():

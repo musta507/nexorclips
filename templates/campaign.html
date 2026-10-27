@@ -2,6 +2,7 @@
 {% from "_icons.html" import icon, budget %}
 {% block title %}{{ camp.song }} - {{ camp.artist }} · {{ APP_NAME }}{% endblock %}
 {% block content %}
+{% if not member and accepted %}{% set member = {"status": "aceptada"} %}{% endif %}
 <a class="back" href="{{ url_for('index') }}">← Campañas</a>
 <div class="detail">
   <div class="form-stack" style="gap:24px">
@@ -46,14 +47,14 @@
       {% elif camp.status != 'activa' %}
         <p class="sub">Esta campaña está en pausa y no acepta clips ahora mismo.</p>
       {% elif not accepted %}
-        {% if accounts %}
-          <div class="join-wait">
-            <b>Solicitud enviada</b>
-            <p>Nuestro equipo te escribirá por el chat de soporte para verificar tu cuenta. Cuando te aceptemos, aquí podrás subir tus vídeos.</p>
-            <a class="btn white block" href="{{ url_for('support') }}">{{ icon("chat") }} Abrir el chat</a>
-          </div>
+        {% if not member %}
+          <p class="sub">Para participar, solicita entrar respondiendo a las preguntas. Cuando te acepten, añadirás la cuenta con la que vas a publicar.</p>
+        {% elif member.status == 'pendiente' %}
+          <div class="join-wait"><b>Solicitud enviada</b><p>El equipo está revisando tus respuestas. Te avisaremos cuando te acepten.</p></div>
+        {% elif member.status == 'rechazada' %}
+          <div class="join-wait"><b>Solicitud no aceptada</b><p>Esta vez no has entrado en esta campaña.</p></div>
         {% else %}
-          <p class="sub">Para participar, únete con la cuenta desde la que vas a publicar y verifica que es tuya con un código en tu bio.</p>
+          <div class="join-wait"><b>¡Estás dentro!</b><p>Añade abajo la cuenta con la que vas a publicar y verifícala con el código en su bio. Después podrás subir tus clips aquí.</p></div>
         {% endif %}
       {% else %}
         <form method="post" class="form-stack">
@@ -68,11 +69,33 @@
       {% endif %}
     </div>
 
-    {% if camp.status == 'activa' and not st.exhausted %}
+    {% if camp.status == 'activa' and not st.exhausted and (not member or member.status != 'rechazada') %}
     <div class="card form-stack join-card">
+      {% if not member %}
       <div>
-        <h3>{% if accounts %}Tus cuentas en esta campaña{% else %}Unirme a la campaña{% endif %}</h3>
-        {% if not accounts %}<p class="small muted" style="margin-top:4px">Añade la cuenta con la que vas a publicar los clips{% if camp.question_list %} y responde a las preguntas del equipo{% endif %}.</p>{% endif %}
+        <h3>Solicitar entrar</h3>
+        <p class="small muted" style="margin-top:4px">{% if camp.question_list %}Responde a las preguntas del equipo. {% endif %}Cuando te acepten, añadirás tu cuenta.</p>
+      </div>
+      <form method="post" action="{{ url_for('join_campaign', cid=camp.id) }}" class="form-stack">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        {% if camp.question_list %}
+        <div class="join-qs">
+          {% for q in camp.question_list %}
+          <div class="field"><label for="q{{ loop.index0 }}">{{ q }}</label><textarea id="q{{ loop.index0 }}" name="q_{{ loop.index0 }}" rows="2" maxlength="1500" required></textarea></div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <button class="btn accent block">Enviar solicitud</button>
+      </form>
+      {% elif member.status == 'pendiente' %}
+      <div>
+        <h3>Solicitud en revisión</h3>
+        <p class="small muted" style="margin-top:4px">Enviada {{ member.created_at|ago }}. Cuando te acepten, aquí podrás añadir tu cuenta.</p>
+      </div>
+      {% else %}
+      <div>
+        <h3>Tus cuentas en esta campaña</h3>
+        <p class="small muted" style="margin-top:4px">Añade la cuenta con la que vas a publicar (puede ser una nueva solo para esta campaña) y verifícala con el código en su bio.</p>
       </div>
       {% if accounts %}
       <ul class="handle-list">
@@ -80,26 +103,24 @@
         <li class="acc-item">
           <div class="acc-top">{{ icon(a.platform) }} <b>@{{ a.handle }}</b><span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></div>
           {% if a.status == 'pendiente' %}
-            {% if a.bio_verified %}
-            <p class="small acc-ok">✓ Cuenta verificada. Ya puedes quitar el código de tu bio. Te avisaremos cuando te acepten.</p>
-            {% else %}
-            <div class="bio-box">
-              <p class="small">Para demostrar que @{{ a.handle }} es tuya, pon este código en la bio de tu perfil de {{ PLATFORMS[a.platform] }}:</p>
-              <div class="bio-code selectable">{{ current_user.bio_code() }}</div>
-              {% if a.bio_status %}<p class="small {{ 'muted' if a.bio_status == 'Comprobando…' else 'bio-warn' }}">{{ a.bio_status }}</p>{% endif %}
-              <form method="post" action="{{ url_for('verify_bio', cid=camp.id, aid=a.id) }}">
-                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-                <button class="btn accent block">{{ "Volver a comprobar" if a.bio_status else "Ya lo he puesto, comprobar" }}</button>
-              </form>
-            </div>
-            {% endif %}
+          <div class="bio-box">
+            <p class="small">Pon este código en la bio de @{{ a.handle }} en {{ PLATFORMS[a.platform] }} y pulsa comprobar:</p>
+            <div class="bio-code selectable">{{ current_user.bio_code() }}</div>
+            {% if a.bio_status %}<p class="small {{ 'muted' if a.bio_status == 'Comprobando…' else 'bio-warn' }}">{{ a.bio_status }}</p>{% endif %}
+            <form method="post" action="{{ url_for('verify_bio', cid=camp.id, aid=a.id) }}">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn accent block">{{ "Volver a comprobar" if a.bio_status else "Ya lo he puesto, comprobar" }}</button>
+            </form>
+          </div>
+          {% elif a.status == 'aceptada' %}
+          <p class="small acc-ok">✓ Verificada. Ya puedes quitar el código de la bio y subir clips desde esta cuenta.</p>
           {% endif %}
         </li>
         {% endfor %}
       </ul>
       {% endif %}
       {% if accounts|length < 5 %}
-      <form method="post" action="{{ url_for('join_campaign', cid=camp.id) }}" class="form-stack">
+      <form method="post" action="{{ url_for('add_campaign_account', cid=camp.id) }}" class="form-stack">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <div class="join-row">
           <select name="platform" aria-label="Red social">
@@ -107,15 +128,9 @@
           </select>
           <div class="handle-input"><span>@</span><input name="handle" placeholder="tu_usuario" required autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Usuario"></div>
         </div>
-        {% if not accounts and camp.question_list %}
-        <div class="join-qs">
-          {% for q in camp.question_list %}
-          <div class="field"><label for="q{{ loop.index0 }}">{{ q }}</label><textarea id="q{{ loop.index0 }}" name="q_{{ loop.index0 }}" rows="2" maxlength="1500" required></textarea></div>
-          {% endfor %}
-        </div>
-        {% endif %}
-        <button class="btn {{ 'soft' if accounts else 'accent' }} block">{{ "Añadir otra cuenta" if accounts else "Enviar solicitud" }}</button>
+        <button class="btn {{ 'soft' if accounts else 'accent' }} block">{{ "Añadir otra cuenta" if accounts else "Añadir cuenta" }}</button>
       </form>
+      {% endif %}
       {% endif %}
     </div>
     {% endif %}

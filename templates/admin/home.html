@@ -52,10 +52,10 @@
 </div>
 
 <section id="unirse">
-  <div class="section-head"><h2>Clippers por verificar ({{ joins|length }})</h2><p class="muted">Quieren unirse a una campaña. El clipper verifica que la cuenta es suya poniendo un código en su bio. Mira sus respuestas y acéptalo.</p></div>
+  <div class="section-head"><h2>Solicitudes para entrar ({{ joins|length }})</h2><p class="muted">Clippers que quieren entrar en una campaña. Mira sus respuestas y acepta o rechaza. Al aceptarlos, ellos mismos añaden su cuenta y la verifican con el código en su bio.</p></div>
   <div class="table-card">
     <div class="table-scroll"><table class="rt">
-      <thead><tr><th>Clipper</th><th>Campaña</th><th>Cuenta</th><th>Pidió</th><th>Acción</th></tr></thead>
+      <thead><tr><th>Clipper</th><th>Campaña</th><th>Pidió</th><th>Acción</th></tr></thead>
       <tbody>
       {% for a in joins %}
       <tr>
@@ -64,18 +64,16 @@
           <details class="answers"><summary>Ver respuestas ({{ a.answer_list|length }})</summary>
             {% for q, ans in a.answer_list %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}
           </details>{% endif %}</td>
-        <td data-label="Cuenta"><a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a><div class="small muted">{{ PLATFORMS[a.platform] }}</div><div style="margin-top:4px">{% if a.bio_verified %} <span class="status aprobado">Bio verificada</span>{% else %} <span class="status pendiente">Sin verificar</span>{% endif %}</div></td>
         <td data-label="Pidió" class="small muted">{{ a.created_at|ago }}</td>
         <td data-label="Acción">
           <div class="inline" style="gap:6px;flex-wrap:wrap">
-            <a class="btn sm soft" href="{{ url_for('admin_chat', uid=a.user_id) }}">{{ icon("chat") }} Escribir</a>
-            <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
-            <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='rechazar') }}" data-confirm="¿Rechazar @{{ a.handle }} en «{{ a.campaign.song }}»? Le avisaremos por el chat."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>
+            <form method="post" action="{{ url_for('admin_campaign_member', mid=a.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
+            <form method="post" action="{{ url_for('admin_campaign_member', mid=a.id, accion='rechazar') }}" data-confirm="¿Rechazar a {{ a.user.name }} en «{{ a.campaign.song }}»?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>
           </div>
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="5"><div class="empty"><p class="muted">Nadie esperando. Cuando un clipper se una a una campaña, aparecerá aquí.</p></div></td></tr>
+      <tr><td colspan="4"><div class="empty"><p class="muted">Nadie esperando. Cuando un clipper pida entrar en una campaña, aparecerá aquí.</p></div></td></tr>
       {% endfor %}
       </tbody>
     </table></div>

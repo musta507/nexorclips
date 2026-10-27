@@ -53,18 +53,18 @@
         <div class="fact"><b class="tnum">{{ c.earned|money }}</b><span>ganado</span></div>
       </div>
     </div>
-    {% if c.accounts %}
     <div class="inline small" style="flex-wrap:wrap;gap:8px;margin-top:10px">
+      {% if c.member %}<span class="status {{ 'aprobado' if c.member.status == 'aceptada' else ('rechazado' if c.member.status == 'rechazada' else 'pendiente') }}">Solicitud: {{ member_statuses[c.member.status] }}</span>
+      {% if c.member.status == 'pendiente' %}
+        <form method="post" action="{{ url_for('admin_campaign_member', mid=c.member.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
+        <form method="post" action="{{ url_for('admin_campaign_member', mid=c.member.id, accion='rechazar') }}" data-confirm="¿Rechazar a {{ user.name }} en «{{ c.camp.song }}»?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>
+      {% endif %}{% endif %}
       {% for a in c.accounts %}
       <span class="chip-acc">{{ icon(a.platform) }} <a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a>
-        <span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span>{% if a.status == "pendiente" %}{% if a.bio_verified %} <span class="status aprobado">Bio verificada</span>{% else %} <span class="status pendiente">Sin verificar</span>{% endif %}{% endif %}</span>
-      {% if a.status == 'pendiente' %}
-        <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
-        <form method="post" action="{{ url_for('admin_campaign_account', aid=a.id, accion='rechazar') }}" data-confirm="¿Rechazar @{{ a.handle }}?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>
-      {% endif %}
+        <span class="status {{ 'aprobado' if a.status == 'aceptada' else 'pendiente' }}">{{ join_statuses[a.status] }}</span></span>
       {% endfor %}
+      {% if c.member and c.member.status == 'aceptada' and not c.accounts %}<span class="muted">Aún no ha añadido su cuenta.</span>{% endif %}
     </div>
-    {% endif %}
     {% if c.answers %}
     <details class="answers"><summary>Respuestas al pedir entrar</summary>
       {% for q, ans in c.answers %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}
