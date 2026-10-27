@@ -286,6 +286,11 @@ function salirDePagina() {
 if (window.Turbo) {
   document.addEventListener("turbo:load", pagina);              // también en la primera carga
   document.addEventListener("turbo:before-render", salirDePagina);
+  // Animación de entrada: solo el contenido (la barra de arriba no se mueve) y solo al navegar
+  document.addEventListener("turbo:before-render", function (e) {
+    var main = e.detail.newBody && e.detail.newBody.querySelector("#contenido");
+    if (main) main.classList.add("entra");
+  });
   // Antes de guardar la página para el botón «atrás»: cerrar menús y ventanas y quitar el «cargando» de los botones
   document.addEventListener("turbo:before-cache", function () {
     document.querySelectorAll("details[open]").forEach(function (d) { d.removeAttribute("open"); });

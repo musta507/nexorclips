@@ -599,9 +599,12 @@ details.answers[open] summary::before{content:"▾ "}
   table.rt tr.row-flag{background:#f5f7ff}
   table.rt tr.row-flag td{background:transparent}
 }
+/* entrada suave del contenido al cambiar de página */
+#contenido.entra{animation:entra .32s cubic-bezier(.2,.7,.2,1) both}
+@keyframes entra{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){
   *{transition:none!important}
-  .btn.busy::after,.chat-fab.has-unread{animation:none}
+  .btn.busy::after,.chat-fab.has-unread,#contenido.entra{animation:none}
 }
 
 /* barra de carga de Turbo: solo aparece si una página tarda mucho */
