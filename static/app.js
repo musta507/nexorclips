@@ -246,15 +246,27 @@ document.addEventListener("click", function (e) {
     var cur = box.querySelector(sel + ".on");
     var from = null;
     if (name) { try { from = JSON.parse(sessionStorage.getItem(KEY + name) || "null"); sessionStorage.removeItem(KEY + name); } catch (e) { from = null; } }
-    if (from && cur && Math.abs(from.x - cur.offsetLeft) > 2) {
+    if (from && cur && Math.abs(from.x - cur.offsetLeft) > 2 && pill.animate) {
+      // La pastilla ya tiene el ancho final y se pinta centrada donde estaba la opción anterior;
+      // luego solo se desplaza (lo hace la tarjeta gráfica, así no se traba aunque la página esté cargando).
+      var y = cur.offsetTop;
+      var startX = Math.round(from.x + from.w / 2 - cur.offsetWidth / 2);
+      var endT = "translate(" + cur.offsetLeft + "px," + y + "px)";
+      var startT = "translate(" + startX + "px," + y + "px)";
       pill.style.transition = "none";
-      pill.style.width = from.w + "px";
+      pill.style.width = cur.offsetWidth + "px";
       pill.style.height = cur.offsetHeight + "px";
-      pill.style.transform = "translate(" + from.x + "px," + cur.offsetTop + "px)";
+      pill.style.transform = startT;
       pill.style.opacity = 1;
-      void pill.offsetWidth;
-      pill.style.transition = "";
-      requestAnimationFrame(function () { place(cur, true); });
+      var go = function () {
+        requestAnimationFrame(function () { requestAnimationFrame(function () {   // espera a que la página esté pintada
+          pill.style.transform = endT;
+          var anim = pill.animate([{ transform: startT }, { transform: endT }], { duration: 340, easing: "cubic-bezier(.3,.9,.3,1)" });
+          anim.onfinish = function () { pill.style.transition = ""; };
+        }); });
+      };
+      if (document.prerendering) document.addEventListener("prerenderingchange", go, { once: true });   // página preparada por adelantado
+      else go();
     } else {
       place(cur, false);
     }
@@ -271,9 +283,6 @@ document.addEventListener("click", function (e) {
       place(it, true);
     });
     window.addEventListener("resize", function () { place(box.querySelector(sel + ".on"), false); });
-    if (document.fonts && document.fonts.ready) {       // si la letra termina de llegar después, se recoloca sin animación
-      document.fonts.ready.then(function () { setTimeout(function () { place(box.querySelector(sel + ".on"), false); }, 400); });
-    }
   }
   document.querySelectorAll(".sortbar").forEach(function (b) { setup(b, "button"); });
   document.querySelectorAll(".seg").forEach(function (b, i) { setup(b, "a", "seg" + i); });
