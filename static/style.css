@@ -341,6 +341,7 @@ input:focus,textarea:focus,select:focus{outline:none;background:#fff;border-colo
 .wd-input input,.wd-input input:focus{border:0;background:transparent;font:800 30px/1 var(--font);padding:14px 0;width:100%;min-width:0}
 .wd-input span{font:700 22px var(--font);color:var(--ink-2)}
 .wd-actions{display:flex;gap:8px}
+.join-dialog{width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 48px);overflow-y:auto}
 .wd-actions .btn{flex:1}
 
 /* =============================================================== tablas */

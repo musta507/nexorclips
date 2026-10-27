@@ -73,25 +73,16 @@
     <div class="card form-stack join-card">
       {% if not member %}
       <div>
-        <h3>Solicitar entrar</h3>
-        <p class="small muted" style="margin-top:4px">{% if camp.question_list %}Responde a las preguntas del equipo. {% endif %}Cuando te acepten, añadirás tu cuenta.</p>
+        <h3>Únete a esta campaña</h3>
+        <p class="small muted" style="margin-top:4px">Solicita entrar{% if camp.question_list %} respondiendo a unas preguntas del equipo{% endif %}. Cuando te acepten, añadirás tu cuenta.</p>
       </div>
-      <form method="post" action="{{ url_for('join_campaign', cid=camp.id) }}" class="form-stack">
-        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-        {% if camp.question_list %}
-        <div class="join-qs">
-          {% for q in camp.question_list %}
-          <div class="field"><label for="q{{ loop.index0 }}">{{ q }}</label><textarea id="q{{ loop.index0 }}" name="q_{{ loop.index0 }}" rows="2" maxlength="1500" required></textarea></div>
-          {% endfor %}
-        </div>
-        {% endif %}
-        <button class="btn accent block">Enviar solicitud</button>
-      </form>
+      <button type="button" class="btn accent block" data-open="join-dialog">Solicitar entrar</button>
       {% elif member.status == 'pendiente' %}
       <div>
-        <h3>Solicitud en revisión</h3>
-        <p class="small muted" style="margin-top:4px">Enviada {{ member.created_at|ago }}. Cuando te acepten, aquí podrás añadir tu cuenta.</p>
+        <h3>Únete a esta campaña</h3>
+        <p class="small muted" style="margin-top:4px">El equipo está revisando tus respuestas. Te avisaremos cuando te acepten.</p>
       </div>
+      <button type="button" class="btn soft block" disabled>✓ Solicitud enviada</button>
       {% else %}
       <div>
         <h3>Tus cuentas en esta campaña</h3>
@@ -151,4 +142,28 @@
     {% endif %}
   </aside>
 </div>
+{% if camp.status == 'activa' and not st.exhausted and not member %}
+<dialog class="wd-dialog join-dialog" id="join-dialog" aria-labelledby="join-title">
+  <form method="post" action="{{ url_for('join_campaign', cid=camp.id) }}" class="form-stack">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div>
+      <h2 id="join-title">Solicitar entrar</h2>
+      <p class="small muted" style="margin-top:4px">{{ camp.song }} · {{ camp.artist }}</p>
+    </div>
+    {% if camp.question_list %}
+    <div class="join-qs">
+      {% for q in camp.question_list %}
+      <div class="field"><label for="q{{ loop.index0 }}">{{ q }}</label><textarea id="q{{ loop.index0 }}" name="q_{{ loop.index0 }}" rows="2" maxlength="1500" required></textarea></div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="small muted">El equipo revisará tu solicitud y te avisará.</p>
+    {% endif %}
+    <div class="wd-actions">
+      <button type="button" class="btn soft" data-close>Cancelar</button>
+      <button class="btn accent">Enviar solicitud</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
 {% endblock %}
