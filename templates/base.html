@@ -11,7 +11,7 @@
   <a class="skip" href="#contenido">Saltar al contenido</a>
   <header class="topbar">
     <div class="wrap">
-      <a href="{{ url_for('admin_home') if admin_page else url_for('index') }}" aria-label="Inicio">{{ logo() }}{% if admin_page %}<span class="admin-tag adm-badge">Admin</span>{% endif %}</a>
+      <a class="home-link" href="{{ url_for('admin_home') if admin_page else url_for('index') }}" aria-label="Inicio">{{ logo() }}{% if admin_page %}<span class="admin-tag adm-badge">Admin</span>{% endif %}</a>
       {% if admin_page %}
       <a class="adm-view" href="{{ url_for('index') }}">{{ icon("out") }} Ver la web como clipper</a>
       {% else %}

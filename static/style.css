@@ -624,7 +624,8 @@ details.answers[open] summary::before{content:"▾ "}
 
 /* =============================================================== panel de admin: menú lateral y secciones */
 .admin-shell{background:var(--bg)}
-.adm-badge{margin-left:10px;vertical-align:2px}
+.home-link{display:inline-flex;align-items:center;gap:10px}
+.adm-badge{line-height:1;padding:5px 10px;display:inline-flex;align-items:center}
 .adm-view{justify-self:center;display:inline-flex;align-items:center;gap:8px;font:500 14px var(--display);color:var(--muted);padding:9px 14px;border-radius:999px;transition:background-color .15s,color .15s}
 .adm-view:hover{background:var(--soft);color:var(--ink)}
 .adm-view svg{width:16px;height:16px}
