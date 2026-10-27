@@ -25,7 +25,8 @@
 
 /* =============================================================== base */
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scrollbar-width:none}   /* sin barra de desplazamiento visible; se sigue bajando igual */
+html::-webkit-scrollbar{display:none}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--font);letter-spacing:-.005em;-webkit-font-smoothing:antialiased}
 a{color:inherit;text-decoration:none}
