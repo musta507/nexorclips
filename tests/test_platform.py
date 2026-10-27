@@ -977,7 +977,7 @@ def test_rate_per_platform(monkeypatch):
         assert c.rate == 1500 and c.rate_for("tiktok") == 1000 and c.rate_for("instagram") == 1500 and c.rates_vary
     assert "¿Cuánto tiempo llevas haciendo clips?" in admin.get("/admin/campana/nueva").get_data(as_text=True)   # preguntas predeterminadas
     html = client_for("v@test.com").get("/").get_data(as_text=True)
-    assert "HASTA" in html and "1,50 $" in html
+    assert "HASTA" not in html and "1,50 $" in html   # por fuera, el pago más alto sin «hasta»
     # el mismo número de vistas paga distinto según la red; el mínimo (2 $) es en dinero
     with A.app.app_context():
         camp = A.db.session.get(A.Campaign, cid)
