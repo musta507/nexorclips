@@ -247,13 +247,11 @@ function colorDestacada() {
   if (img.complete && img.naturalWidth) run(); else img.addEventListener("load", run, { once: true });
 }
 
-// Pastilla negra que se desliza: en «Más nuevas / Más presupuesto / Mejor pago», en las pestañas de Ganancias
-// y en el menú de arriba (ordenador). En los menús que cambian de página, se guarda dónde estaba la pastilla
+// Pastilla negra que se desliza: en «Más nuevas / Más presupuesto / Mejor pago» y en las pestañas de Ganancias. En los menús que cambian de página, se guarda dónde estaba la pastilla
 // al pulsar y la página nueva la desliza desde ahí (solo desplazamiento: lo hace la tarjeta gráfica, sin tirones).
 var PILL_KEY = "pill-from:";
 function pastillaOrden() {
   var grupos = [[".sortbar", "button", ""], [".seg", "a", "seg"]];
-  if (window.matchMedia("(min-width:641px)").matches) grupos.push([".topbar .tabs", ".tab", "tabs"]);
   grupos.forEach(function (g) {
     document.querySelectorAll(g[0]).forEach(function (box) { montarPastilla(box, g[1], g[2]); });
   });

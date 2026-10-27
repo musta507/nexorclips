@@ -76,7 +76,7 @@ p{margin:0}
 .tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px}
 .tab{display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;color:var(--muted);font:500 14px/1.2 var(--display);transition:color .15s,background-color .15s}
 .tab svg{width:17px;height:17px;flex:none}
-.tab:hover{color:var(--ink)}
+.tab:not(.on):hover{color:var(--ink);background:var(--soft)}   /* al pasar el ratón: fondo gris suave */
 .tab.on{background:var(--ink);color:#fff;font-weight:600}
 
 .user-menu{justify-self:end;position:relative}
