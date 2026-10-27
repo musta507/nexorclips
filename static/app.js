@@ -287,9 +287,25 @@ if (window.Turbo) {
   document.addEventListener("turbo:load", pagina);              // también en la primera carga
   document.addEventListener("turbo:before-render", salirDePagina);
   // Animación de entrada: solo el contenido (la barra de arriba no se mueve) y solo al navegar
+  // Si solo cambia una pestaña o un filtro de la misma página (misma dirección, distinto «?…»),
+  // no hay animación y la página se queda donde estaba, como si fuera una pestaña.
+  var pathActual = location.pathname, pathNuevo = null, scrollGuardado = null;
+  document.addEventListener("turbo:visit", function (e) {
+    if (e.detail.action === "restore") { pathNuevo = null; return; }   // «atrás»: Turbo ya recoloca la página
+    try { pathNuevo = new URL(e.detail.url, location.href).pathname; } catch (err) { pathNuevo = null; }
+  });
   document.addEventListener("turbo:before-render", function (e) {
+    var misma = pathNuevo !== null && pathNuevo === pathActual;
+    scrollGuardado = misma ? window.scrollY : null;
     var main = e.detail.newBody && e.detail.newBody.querySelector("#contenido");
-    if (main) main.classList.add("entra");
+    if (main && !misma) main.classList.add("entra");
+  });
+  document.addEventListener("turbo:render", function () {
+    if (scrollGuardado !== null) window.scrollTo(0, scrollGuardado);
+  });
+  document.addEventListener("turbo:load", function () {
+    if (scrollGuardado !== null) { window.scrollTo(0, scrollGuardado); scrollGuardado = null; }
+    pathActual = location.pathname; pathNuevo = null;
   });
   // Antes de guardar la página para el botón «atrás»: cerrar menús y ventanas y quitar el «cargando» de los botones
   document.addEventListener("turbo:before-cache", function () {
