@@ -285,8 +285,6 @@ document.addEventListener("click", function (e) {
     window.addEventListener("resize", function () { place(box.querySelector(sel + ".on"), false); });
   }
   document.querySelectorAll(".sortbar").forEach(function (b) { setup(b, "button"); });
-  document.querySelectorAll(".seg").forEach(function (b, i) { setup(b, "a", "seg" + i); });
-  if (window.matchMedia("(min-width:641px)").matches) document.querySelectorAll(".topbar .tabs").forEach(function (b) { setup(b, ".tab", "tabs"); });
 })();
 
 // ---------------------------------------------------------------- campañas: al ordenar, las tarjetas se mueven suave
