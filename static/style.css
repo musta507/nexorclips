@@ -364,7 +364,6 @@ tr.row-flag td{background:#f5f7ff}
 .paym.soon{opacity:.75}
 .paym-top{display:flex;align-items:center;gap:14px}
 .paym-logo{width:46px;height:46px;border-radius:14px;background:var(--soft);color:var(--ink);display:grid;place-items:center;flex:none;font-weight:800;font-size:20px}
-.paym-logo.whop{background:var(--ink);color:#fff}
 .paym-txt{flex:1;min-width:0}
 .paym-title{font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .paym-state{font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:5px 10px;white-space:nowrap}
@@ -697,3 +696,8 @@ details.answers[open] summary::before{content:"▾ "}
 .adm-main > .page{padding-top:0}
 .adm-main > .flashes{padding-top:0;margin-bottom:16px}
 .adm-camp-top > .small{flex-basis:100%}
+
+/* logo de Whop */
+.whop-ico{display:inline-block;width:1.2em;height:1.2em;border-radius:28%;background:url("whop.png") center/cover no-repeat;vertical-align:-.25em;flex:none}
+.whop-h{display:flex;align-items:center;gap:8px}
+.paym-logo.whop{background:url("whop.png") center/cover no-repeat;color:transparent}

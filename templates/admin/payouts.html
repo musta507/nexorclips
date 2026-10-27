@@ -30,7 +30,7 @@
             <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <input type="hidden" name="payout_id" value="{{ p.id }}">
             <input id="note-{{ p.id }}" name="note" placeholder="ID de transacción o motivo" style="width:200px" aria-label="Nota">
-            {% if p.method == WHOP_METHOD and whop_enabled() %}<button class="btn sm" name="action" value="whop">Pagar con Whop</button>{% endif %}
+            {% if p.method == WHOP_METHOD and whop_enabled() %}<button class="btn sm" name="action" value="whop"><span class="whop-ico" aria-hidden="true"></span>Pagar con Whop</button>{% endif %}
             <button class="btn sm green" name="action" value="pagar">Marcar pagado</button>
             <button class="btn sm red" name="action" value="rechazar">Rechazar</button>
           </form>

@@ -45,7 +45,7 @@
       {% else %}<span class="muted">Aún no ha pedido entrar en ninguna campaña.</span>{% endfor %}
       {% if members %}<p class="hint">Las cuentas se verifican solas: el clipper pone su código en la bio y la web lo comprueba.</p>{% endif %}
     </div>
-    <div class="small"><div class="label" style="margin-bottom:6px">Cobro</div>{% if user.payout_ready %}{% if user.payout_method == WHOP_METHOD %}Whop · <span class="selectable">@{{ user.whop_username }}</span>{% else %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% endif %}{% else %}<span class="muted">Sin cuenta de cobro</span>{% endif %}</div>
+    <div class="small"><div class="label" style="margin-bottom:6px">Cobro</div>{% if user.payout_ready %}{% if user.payout_method == WHOP_METHOD %}<span class="whop-ico" aria-hidden="true"></span> Whop · <span class="selectable">@{{ user.whop_username }}</span>{% else %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% endif %}{% else %}<span class="muted">Sin cuenta de cobro</span>{% endif %}</div>
     {% if m.open_payout %}<div class="flash ok">Retiro pendiente de {{ m.open_payout.amount|money }}</div>{% endif %}
     <a class="btn soft" href="{{ url_for('admin_clipper', uid=user.id) }}">Ver ficha del clipper</a>
   </aside>

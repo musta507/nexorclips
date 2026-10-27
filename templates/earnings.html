@@ -8,7 +8,7 @@
     <div class="row">
       <span class="v">{{ m.available|amount }}</span>
       {% if not current_user.payout_ready %}
-        <a class="btn sm" href="{{ url_for('account') }}#cobro">Conectar Whop</a>
+        <a class="btn sm" href="{{ url_for('account') }}#cobro"><span class="whop-ico" aria-hidden="true"></span>Conectar Whop</a>
       {% elif m.open_payout %}
         <span class="status solicitado">Retiro en curso</span>
       {% else %}
@@ -109,7 +109,7 @@
       <div class="wd-input"><input id="wd-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" value="{{ m.available|amount }}" required aria-label="Cantidad"><span>{{ CUR }}</span></div>
       <button type="button" class="btn soft wd-all" data-all="{{ m.available|amount }}">Todo</button>
     </div>
-    <p class="small muted">Llega al instante a tu Whop <b>@{{ current_user.whop_username }}</b>.</p>
+    <p class="small muted">Llega al instante a tu <span class="whop-ico" aria-hidden="true"></span> Whop <b>@{{ current_user.whop_username }}</b>.</p>
     <div class="wd-actions">
       <button type="button" class="btn soft" data-close>Cancelar</button>
       <button class="btn accent">Confirmar retiro</button>

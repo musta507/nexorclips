@@ -35,7 +35,7 @@
 
 <div class="card tight toolbar">
   <div><h3>Cobro</h3>
-    <p class="small">{% if user.payout_ready %}{% if user.payout_method == WHOP_METHOD %}Whop · <span class="selectable">@{{ user.whop_username }}</span>{% else %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% endif %}{% else %}<span class="muted">Aún no ha conectado una forma de cobro</span>{% endif %}</p>
+    <p class="small">{% if user.payout_ready %}{% if user.payout_method == WHOP_METHOD %}<span class="whop-ico" aria-hidden="true"></span> Whop · <span class="selectable">@{{ user.whop_username }}</span>{% else %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% endif %}{% else %}<span class="muted">Aún no ha conectado una forma de cobro</span>{% endif %}</p>
   </div>
   {% if m.open_payout %}<span class="status solicitado">Retiro en curso: {{ m.open_payout.amount|money }}</span>{% endif %}
 </div>
