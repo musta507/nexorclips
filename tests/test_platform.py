@@ -570,7 +570,7 @@ def test_join_campaign_and_admin_accepts(monkeypatch):
     post(admin, f"/admin/solicitud/{mid}/aceptar")
     assert "Te hemos aceptado" in a.get("/soporte").get_data(as_text=True)
     page = a.get(f"/campana/{cid}").get_data(as_text=True)
-    assert "Tus cuentas en esta campaña" in page and "Enlace de tu clip" not in page
+    assert "Solicitud aprobada" in page and 'name="handle"' in page and "Enlace de tu clip" not in page
     # 3) añade su cuenta y la verifica con la bio (automático)
     post(a, f"/campana/{cid}/cuentas", platform="tiktok", handle="@Ana")
     with A.app.app_context():
@@ -987,7 +987,38 @@ def test_rate_per_platform(monkeypatch):
         t.views = 2000
         assert A.raw_earning(t, camp) == 2.0
     page = client_for("v@test.com").get(f"/campana/{cid}").get_data(as_text=True)
-    assert "hasta" in page and "1,00 $" in page and "Instagram" in page
+    assert "1,00 $" in page and "1,50 $" in page and "Instagram" in page
+
+
+def test_min_max_per_platform():
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/campana/nueva", song="MinMax", artist="Pablo", budget="5000", status="activa",
+         pf_tiktok="on", pf_instagram="on",
+         rate_k_tiktok="1", min_k_tiktok="10", max_k_tiktok="100",
+         rate_k_instagram="1,50", min_k_instagram="5", max_k_instagram="")
+    with A.app.app_context():
+        c = A.Campaign.query.filter_by(song="MinMax").one()
+        cid = c.id
+        assert (c.min_for("tiktok"), c.max_for("tiktok")) == (10.0, 100.0)
+        assert (c.min_for("instagram"), c.max_for("instagram")) == (5.0, None)
+        assert c.min_for("youtube") == c.min_money       # red no marcada: valores generales
+        t = A.Submission(platform="tiktok", views=9_000)       # 9 $ < mínimo 10 $
+        assert A.raw_earning(t, c) == 0.0
+        t.views = 500_000                                       # 500 $ → tope 100 $
+        assert A.raw_earning(t, c) == 100.0
+        i = A.Submission(platform="instagram", views=4_000)     # 6 $ ≥ mínimo 5 $
+        assert A.raw_earning(i, c) == 6.0
+        i.views = 1_000_000                                     # sin tope en Instagram
+        assert A.raw_earning(i, c) == 1500.0
+        assert c.min_views_for("tiktok") == 10_000
+    page = client_for("v@test.com").get(f"/campana/{cid}").get_data(as_text=True)
+    assert "10,00 $" in page and "100,00 $" in page and "Sin máximo" in page and "hasta" not in page
+    home = client_for("v@test.com").get("/").get_data(as_text=True)
+    assert "Mín. hasta 10,00 $" in home and "Sin máximo por clip" in home
+    # un mínimo mayor que el máximo no se puede guardar
+    r = post(admin, f"/admin/campana/{cid}/editar", song="MinMax", artist="Pablo", budget="5000", status="activa",
+             pf_tiktok="on", rate_k_tiktok="1", min_k_tiktok="200", max_k_tiktok="100")
+    assert "no puede ser mayor que el máximo" in r.get_data(as_text=True)
 
 
 def test_admin_sections_render():

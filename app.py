@@ -213,6 +213,12 @@ class Campaign(db.Model):
     rate_tiktok = db.Column(db.Float, nullable=True)        # pago de cada red (vacío = el general)
     rate_instagram = db.Column(db.Float, nullable=True)
     rate_youtube = db.Column(db.Float, nullable=True)
+    min_tiktok = db.Column(db.Float, nullable=True)         # pago mínimo por clip de cada red en dinero (vacío = el general, 0 = sin mínimo)
+    min_instagram = db.Column(db.Float, nullable=True)
+    min_youtube = db.Column(db.Float, nullable=True)
+    max_tiktok = db.Column(db.Float, nullable=True)         # pago máximo por clip de cada red (vacío = el general, 0 = sin tope)
+    max_instagram = db.Column(db.Float, nullable=True)
+    max_youtube = db.Column(db.Float, nullable=True)
     budget = db.Column(db.Float, nullable=False)
     spent = db.Column(db.Float, default=0.0)                # dinero ya asignado a clips (libro de cuentas)
     min_views = db.Column(db.Integer, default=0)            # mínimo para cobrar un vídeo
@@ -244,6 +250,42 @@ class Campaign(db.Model):
     def min_money(self):
         """Pago mínimo por clip en dinero (lo que un clip tiene que valer para empezar a cobrar)."""
         return round((self.min_views or 0) / 1_000_000 * (self.rate or 0), 2)   # en céntimos, como se escribió
+
+    def min_for(self, platform):
+        """Pago mínimo por clip en una red (0 = sin mínimo)."""
+        v = getattr(self, f"min_{platform}", None)
+        return self.min_money if v is None else round(v, 2)
+
+    def max_for(self, platform):
+        """Pago máximo por clip en una red (None = sin tope)."""
+        v = getattr(self, f"max_{platform}", None)
+        v = self.max_per_video if v is None else v
+        return v if v and v > 0 else None
+
+    def min_views_for(self, platform):
+        r, m = self.rate_for(platform), self.min_for(platform)
+        return int(math.ceil(m * 1_000_000 / r)) if r and m else 0
+
+    @property
+    def pay_rows(self):
+        """[(red, pago por 1M, mínimo, máximo)] de las redes que acepta la campaña."""
+        return [(p, self.rate_for(p), self.min_for(p), self.max_for(p)) for p in self.platform_list]
+
+    @property
+    def min_range(self):
+        """(el mínimo más bajo, el más alto) de todas las redes — para las tarjetas de fuera."""
+        mins = [m for _, _, m, _ in self.pay_rows] or [0]
+        return min(mins), max(mins)
+
+    @property
+    def top_max(self):
+        """El máximo por clip más alto de las redes, o None si alguna no tiene tope."""
+        maxs = [m for _, _, _, m in self.pay_rows]
+        return None if (not maxs or None in maxs) else max(maxs)
+
+    @property
+    def maxs_vary(self):
+        return len({m for _, _, _, m in self.pay_rows}) > 1
 
     @property
     def material_list(self):
@@ -552,10 +594,12 @@ def cents(v):
 def raw_earning(sub, camp):
     """Lo que valdría el clip por sus vistas, según el pago de su red, con mínimo y tope por clip aplicados."""
     amount = (sub.views or 0) / 1_000_000 * camp.rate_for(sub.platform)
-    if camp.min_views and amount + 1e-9 < camp.min_money:
+    low = camp.min_for(sub.platform)
+    if low and amount + 1e-9 < low:
         return 0.0
-    if camp.max_per_video:
-        amount = min(amount, camp.max_per_video)
+    top = camp.max_for(sub.platform)
+    if top:
+        amount = min(amount, top)
     return cents(amount)
 
 
@@ -1852,6 +1896,18 @@ def _campaign_from_form(camp):
         camp.min_views = max(int(parse_float(request.form.get("min_views"), 0) or 0), 0)
     max_pv = parse_float(request.form.get("max_per_video"))
     camp.max_per_video = max_pv if max_pv and max_pv > 0 else None
+    if any(request.form.get(f"min_k_{p}") is not None for p in PLATFORMS):   # mínimo y máximo de cada red
+        for p in PLATFORMS:
+            on = p in chosen
+            mn = parse_float(request.form.get(f"min_k_{p}"))
+            mx = parse_float(request.form.get(f"max_k_{p}"))
+            setattr(camp, f"min_{p}", round(mn, 2) if on and mn and mn > 0 else (0.0 if on else None))
+            setattr(camp, f"max_{p}", round(mx, 2) if on and mx and mx > 0 else (0.0 if on else None))
+        camp.min_views, camp.max_per_video = 0, None   # ya no se usa el general
+    else:
+        for p in PLATFORMS:
+            setattr(camp, f"min_{p}", None)
+            setattr(camp, f"max_{p}", None)
     camp.platforms = ",".join(p for p in PLATFORMS if request.form.get(f"pf_{p}")) or "tiktok"
     status = request.form.get("status", "activa")
     status = status if status in ("activa", "pausada", "finalizada") else "activa"
@@ -1879,6 +1935,9 @@ def _campaign_from_form(camp):
         return "Faltan datos: nombre, creador, pago por cada 1.000 vistas y presupuesto."
     if camp.budget < (camp.spent or 0):
         return f"El presupuesto no puede ser menor que lo ya repartido ({money(camp.spent)})."
+    for p in camp.platform_list:
+        if camp.max_for(p) and camp.min_for(p) > camp.max_for(p):
+            return f"En {PLATFORMS[p]} el pago mínimo por clip no puede ser mayor que el máximo."
     return None
 
 

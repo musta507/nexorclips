@@ -44,7 +44,7 @@
         <td data-label="Fecha" class="small muted">{{ s.created_at|date }}</td>
         <td data-label="Clip"><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a></td>
         <td data-label="Campaña">{{ s.campaign.song }}<div class="small muted">{{ s.campaign.artist }}</div></td>
-        <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b>{% if s.views < s.campaign.min_views %}<div class="small muted">mín. {{ s.campaign.min_views|short }}</div>{% endif %}{% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}</td>
+        <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b>{% set mv = s.campaign.min_views_for(s.platform) %}{% if s.views < mv %}<div class="small muted">mín. {{ mv|short }}</div>{% endif %}{% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}</td>
         <td data-label="Estado"><span class="status {{ s.status }}">{{ s.status|capitalize }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
         <td data-label="Ganado" class="r tnum">{% if s.status == 'aprobado' %}<b>{{ s.earned|money }}</b>{% else %}<span class="muted">—</span>{% endif %}</td>
       </tr>

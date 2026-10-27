@@ -4,112 +4,46 @@
 {% block content %}
 {% if not member and accepted %}{% set member = {"status": "aceptada"} %}{% endif %}
 <a class="back" href="{{ url_for('index') }}">← Campañas</a>
-<div class="detail">
-  <div class="form-stack" style="gap:24px">
-    <header class="album">
-      {% set _t, lqip = cover_meta(camp) %}
-      <div class="art"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(camp) %}<img src="{{ cover_src(camp, 720) }}" alt="Portada de {{ camp.song }}" width="190" height="190" fetchpriority="high" decoding="async">{% else %}<span class="cover-fallback">{{ camp.song[:1] }}</span>{% endif %}</div>
-      <div class="album-info">
-        <span class="eyebrow muted">Publicada {{ camp.created_at|ago }}</span>
-        <h1>{{ camp.song }}</h1>
-        <p class="artist">{{ camp.artist }} {{ icon("check") }}</p>
-        <div class="chips">{% for p in camp.platform_list %}<span class="chip">{{ icon(p) }} {{ PLATFORMS[p] }}</span>{% endfor %}</div>
-      </div>
-    </header>
-
-    <div class="facts">
-      <div class="fact"><b>{% if camp.min_views %}{{ min_pay(camp)|money }}{% else %}Sin mínimo{% endif %}</b><span>pago mínimo por clip</span></div>
-      <div class="fact"><b>{% if camp.max_per_video %}{{ camp.max_per_video|money }}{% else %}Sin máximo{% endif %}</b><span>pago máximo por clip</span></div>
-      <div class="fact"><b>{% if st.views %}{{ st.views|short }}{% else %}Nueva{% endif %}</b><span>{% if st.views %}vistas generadas{% else %}aún sin vistas{% endif %}</span></div>
+{% set open_camp = camp.status == 'activa' and not st.exhausted %}
+<div class="cdetail">
+  <header class="album">
+    {% set _t, lqip = cover_meta(camp) %}
+    <div class="art"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(camp) %}<img src="{{ cover_src(camp, 720) }}" alt="Portada de {{ camp.song }}" width="190" height="190" fetchpriority="high" decoding="async">{% else %}<span class="cover-fallback">{{ camp.song[:1] }}</span>{% endif %}</div>
+    <div class="album-info">
+      <span class="eyebrow muted">Publicada {{ camp.created_at|ago }}{% if st.views %} · {{ st.views|short }} vistas generadas{% endif %}</span>
+      <h1>{{ camp.song }}</h1>
+      <p class="artist">{{ camp.artist }} {{ icon("check") }}</p>
+      <div class="chips">{% for p in camp.platform_list %}<span class="chip">{{ icon(p) }} {{ PLATFORMS[p] }}</span>{% endfor %}</div>
     </div>
+  </header>
 
-    {% set rules_all = camp.rules_text %}
-    {% if rules_all %}
-    <div class="card form-stack">
-      <h3>Reglas de la campaña</h3>
-      {% if rules_all %}<div class="rules">{{ rules_all }}</div>{% endif %}
-    </div>
-    {% endif %}
-
-    {% set mats = camp.material_list %}
-    {% if mats %}
-    <div class="card mats">
-      <div class="mats-head">{{ icon("stack") }} Materiales de referencia</div>
-      {% for name, url, kind in mats %}
-      <a class="mat-row" href="{{ url }}" target="_blank" rel="noopener">
-        <span class="mat-ico">{{ icon(kind if kind in ("tiktok", "instagram", "youtube") else ("folder" if kind == "drive" else "link")) }}</span>
-        <span class="mat-name">{{ name }}</span>
-        <span class="mat-out">{{ icon("out") }}</span>
-      </a>
-      {% endfor %}
-    </div>
-    {% endif %}
-  </div>
-
-  <aside class="sticky">
-    <div class="pay-panel form-stack">
-      <div>
-        <span class="eyebrow">Pagamos</span>
-        {% if camp.rates_vary %}<span class="sub">hasta</span>{% endif %}
-        <div class="big tnum">{{ (camp.rate / 1000)|amount }} <span>{{ CUR }}</span></div>
-        <span class="sub">por cada 1.000 vistas</span>
-        {% if camp.rates_vary %}
-        <div class="pp-rates">
-          {% for p, r in camp.platform_rates %}<div class="pp-rate">{{ icon(p) }}<span>{{ PLATFORMS[p] }}</span><b class="tnum">{{ r|rate_k }}</b></div>{% endfor %}
-        </div>
-        {% endif %}<span class="sub">Por clip: {% if camp.min_views %}mínimo {{ min_pay(camp)|money }}{% else %}sin mínimo{% endif %} · {% if camp.max_per_video %}máximo {{ camp.max_per_video|money }}{% else %}sin máximo{% endif %}</span>
+  {# ---------- estado de tu solicitud #}
+  <section class="card box st-card">
+    {% if camp.status == 'finalizada' or st.exhausted %}
+      <div class="box-head">{{ icon("ok") }} Campaña completada</div>
+      <p class="box-body muted">Se ha repartido todo el presupuesto y ya no acepta clips nuevos.</p>
+    {% elif camp.status != 'activa' %}
+      <div class="box-head">{{ icon("pause") }} Campaña en pausa</div>
+      <p class="box-body muted">Ahora mismo no acepta clips. Vuelve a mirar más tarde.</p>
+    {% elif not member %}
+      <div class="box-head">{{ icon("plus") }} Únete a esta campaña</div>
+      <div class="box-body st-row">
+        <p class="muted">Solicita entrar{% if camp.question_list %} respondiendo a unas preguntas del equipo{% endif %}. Cuando te acepten, añadirás la cuenta con la que vas a publicar.</p>
+        <button type="button" class="btn accent" data-open="join-dialog">Solicitar entrar</button>
       </div>
-      {{ budget(camp, st) }}
-      {% if camp.status == 'finalizada' or st.exhausted %}
-        <p class="sub"><b style="color:#fff">Campaña completada.</b> Se ha repartido todo el presupuesto y ya no acepta clips nuevos.</p>
-      {% elif camp.status != 'activa' %}
-        <p class="sub">Esta campaña está en pausa y no acepta clips ahora mismo.</p>
-      {% elif not accepted %}
-        {% if not member %}
-          <p class="sub">Para participar, solicita entrar respondiendo a las preguntas. Cuando te acepten, añadirás la cuenta con la que vas a publicar.</p>
-        {% elif member.status == 'pendiente' %}
-          <div class="join-wait"><b>Solicitud enviada</b><p>El equipo está revisando tus respuestas. Te avisaremos cuando te acepten.</p></div>
-        {% elif member.status == 'rechazada' %}
-          <div class="join-wait"><b>Solicitud no aceptada</b><p>Esta vez no has entrado en esta campaña.</p></div>
-        {% else %}
-          <div class="join-wait"><b>¡Estás dentro!</b><p>Añade abajo la cuenta con la que vas a publicar y verifícala con el código en su bio. Después podrás subir tus clips aquí.</p></div>
-        {% endif %}
-      {% else %}
-        <form method="post" class="form-stack">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <div class="field">
-            <label for="clip-url">Enlace de tu clip</label>
-            <input id="clip-url" name="url" placeholder="https://www.tiktok.com/@tu_cuenta/video/…" required>
-            <span class="hint">El enlace del vídeo, no del perfil. Las vistas se cuentan solas.</span>
-          </div>
-          <button class="btn accent block">Enviar clip {{ icon("arrow") }}</button>
-        </form>
-      {% endif %}
-    </div>
-
-    {% if camp.status == 'activa' and not st.exhausted and (not member or member.status != 'rechazada') %}
-    <div class="card form-stack join-card">
-      {% if not member %}
-      <div>
-        <h3>Únete a esta campaña</h3>
-        <p class="small muted" style="margin-top:4px">Solicita entrar{% if camp.question_list %} respondiendo a unas preguntas del equipo{% endif %}. Cuando te acepten, añadirás tu cuenta.</p>
-      </div>
-      <button type="button" class="btn accent block" data-open="join-dialog">Solicitar entrar</button>
-      {% elif member.status == 'pendiente' %}
-      <div>
-        <h3>Únete a esta campaña</h3>
-        <p class="small muted" style="margin-top:4px">El equipo está revisando tus respuestas. Te avisaremos cuando te acepten.</p>
-      </div>
-      <button type="button" class="btn soft block" disabled>✓ Solicitud enviada</button>
-      {% else %}
-      <div>
-        <h3>Tus cuentas en esta campaña</h3>
-        <p class="small muted" style="margin-top:4px">Añade la cuenta con la que vas a publicar (puede ser una nueva solo para esta campaña) y verifícala con el código en su bio.</p>
-      </div>
+    {% elif member.status == 'pendiente' %}
+      <div class="box-head st-wait">{{ icon("clock") }} Solicitud enviada</div>
+      <p class="box-body muted">El equipo está revisando tus respuestas. Te avisaremos cuando te acepten.</p>
+    {% elif member.status == 'rechazada' %}
+      <div class="box-head st-no">{{ icon("x") }} Solicitud no aceptada</div>
+      <p class="box-body muted">Esta vez no has entrado en esta campaña.</p>
+    {% else %}
+      <div class="box-head st-ok">{{ icon("ok") }} Solicitud aprobada</div>
+      <p class="box-body muted">{% if accepted %}Ya puedes enviar clips para esta campaña.{% else %}Añade la cuenta con la que vas a publicar (puede ser una nueva solo para esta campaña) y verifícala con el código en su bio.{% endif %}</p>
       {% if accounts %}
-      <ul class="handle-list">
+      <ul class="acc-rows">
         {% for a in accounts %}
-        <li class="acc-item">
+        <li class="acc-row">
           <div class="acc-top">{{ icon(a.platform) }} <b>@{{ a.handle }}</b><span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></div>
           {% if a.status == 'pendiente' %}
           <div class="bio-box">
@@ -118,48 +52,113 @@
             {% if a.bio_status %}<p class="small {{ 'muted' if a.bio_status == 'Comprobando…' else 'bio-warn' }}">{{ a.bio_status }}</p>{% endif %}
             <form method="post" action="{{ url_for('verify_bio', cid=camp.id, aid=a.id) }}">
               <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-              <button class="btn accent block">{{ "Volver a comprobar" if a.bio_status else "Ya lo he puesto, comprobar" }}</button>
+              <button class="btn accent">{{ "Volver a comprobar" if a.bio_status else "Ya lo he puesto, comprobar" }}</button>
             </form>
           </div>
-          {% elif a.status == 'aceptada' %}
-          <p class="small acc-ok">✓ Verificada. Ya puedes quitar el código de la bio y subir clips desde esta cuenta.</p>
           {% endif %}
         </li>
         {% endfor %}
       </ul>
       {% endif %}
-      {% if accounts|length < 5 %}
-      <form method="post" action="{{ url_for('add_campaign_account', cid=camp.id) }}" class="form-stack">
+      {% if accepted %}
+      <form method="post" class="box-body clip-send">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-        <div class="join-row">
-          <select name="platform" aria-label="Red social">
-            {% for p in camp.platform_list %}<option value="{{ p }}">{{ PLATFORMS[p] }}</option>{% endfor %}
-          </select>
-          <div class="handle-input"><span>@</span><input name="handle" placeholder="tu_usuario" required autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Usuario"></div>
-        </div>
-        <button class="btn {{ 'soft' if accounts else 'accent' }} block">{{ "Añadir otra cuenta" if accounts else "Añadir cuenta" }}</button>
+        <input id="clip-url" name="url" placeholder="Pega aquí el enlace de tu clip" required aria-label="Enlace de tu clip">
+        <button class="btn accent">Enviar clip {{ icon("arrow") }}</button>
       </form>
       {% endif %}
-      {% endif %}
-    </div>
-    {% endif %}
-
-    {% if mine %}
-    <div class="card">
-      <h3>Tus clips aquí</h3>
-      <div class="clip-list">
-        {% for s in mine %}
-        <div class="clip">
-          <span class="pi">{{ icon(s.platform) }}</span>
-          <div class="meta"><a href="{{ s.url }}" target="_blank" rel="noopener">{{ PLATFORMS[s.platform] }}</a><span class="small muted">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</span></div>
-          <div><div class="views tnum">{{ s.views|short }}{% if s.status == "aprobado" %} · {{ s.earned|money }}{% endif %}</div><span class="status {{ s.status }}">{{ s.status|capitalize }}</span></div>
-        </div>
-        {% endfor %}
+      <div class="box-foot">
+        <span class="small muted">{{ accounts|length }} {{ "cuenta" if accounts|length == 1 else "cuentas" }} en tu solicitud</span>
+        {% if accounts|length < 5 %}<button type="button" class="btn soft sm" data-open="acc-dialog">Añadir cuentas</button>{% endif %}
       </div>
-    </div>
     {% endif %}
-  </aside>
+  </section>
+
+  {# ---------- pago de cada red #}
+  <div class="pay-grid">
+    {% for p, r, lo, hi in camp.pay_rows %}
+    <section class="card box">
+      <div class="box-head">{{ icon(p) }} {{ PLATFORMS[p] }}</div>
+      <div class="pay-cells">
+        <div><span>Por cada 1.000 vistas</span><b class="tnum">{{ r|rate_k }}</b></div>
+        <div><span>Pago mínimo</span><b class="tnum">{% if lo %}{{ lo|money }}{% else %}Sin mínimo{% endif %}</b></div>
+        <div><span>Pago máximo</span><b class="tnum">{% if hi %}{{ hi|money }}{% else %}Sin máximo{% endif %}</b></div>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+
+  {# ---------- presupuesto y materiales #}
+  {% set mats = camp.material_list %}
+  <div class="duo{% if not mats %} solo{% endif %}">
+    <section class="card box">
+      <div class="box-head">{{ icon("cash") }} Presupuesto</div>
+      <div class="box-body bud">
+        <div class="bud-top"><span class="bud-big tnum"><b>{{ st.spent|money(0) }}</b> / {{ camp.budget|money(0) }}</span><span class="small"><b class="tnum">{{ st.remaining|money(0) }}</b> restantes</span></div>
+        <div class="budget-bar" role="progressbar" aria-label="Presupuesto repartido" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ st.pct }}"><span style="width:{{ st.pct }}%"></span></div>
+      </div>
+      <p class="box-foot small">{% if st.exhausted or camp.status == 'finalizada' %}Se ha repartido todo el presupuesto.{% elif st.left_pct >= 50 %}<b class="money-txt tnum">{{ st.remaining|money(0) }}</b> todavía disponibles, hay mucho margen para unirte.{% elif st.left_pct >= 20 %}<b class="money-txt tnum">{{ st.remaining|money(0) }}</b> todavía disponibles, aún estás a tiempo.{% else %}Quedan solo <b class="tnum">{{ st.remaining|money(0) }}</b>, date prisa.{% endif %}</p>
+    </section>
+    {% if mats %}
+    <section class="card box mats">
+      <div class="box-head">{{ icon("stack") }} Materiales de la campaña</div>
+      {% for name, url, kind in mats %}
+      <a class="mat-row" href="{{ url }}" target="_blank" rel="noopener">
+        <span class="mat-ico">{{ icon(kind if kind in ("tiktok", "instagram", "youtube") else ("folder" if kind == "drive" else "link")) }}</span>
+        <span class="mat-name">{{ name }}</span>
+        <span class="mat-out">{{ icon("out") }}</span>
+      </a>
+      {% endfor %}
+    </section>
+    {% endif %}
+  </div>
+
+  {# ---------- reglas #}
+  {% set rules_all = camp.rules_text %}
+  {% if rules_all %}
+  <section class="card box">
+    <div class="box-head">{{ icon("doc") }} Reglas de la campaña</div>
+    <div class="box-body rules">{{ rules_all }}</div>
+  </section>
+  {% endif %}
+
+  {% if mine %}
+  <section class="card box">
+    <div class="box-head">{{ icon("film") }} Tus clips aquí</div>
+    <div class="box-body clip-list">
+      {% for s in mine %}
+      <div class="clip">
+        <span class="pi">{{ icon(s.platform) }}</span>
+        <div class="meta"><a href="{{ s.url }}" target="_blank" rel="noopener">{{ PLATFORMS[s.platform] }}</a><span class="small muted">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</span></div>
+        <div><div class="views tnum">{{ s.views|short }}{% if s.status == "aprobado" %} · {{ s.earned|money }}{% endif %}</div><span class="status {{ s.status }}">{{ s.status|capitalize }}</span></div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
 </div>
+
+{% if open_camp and member and member.status == 'aceptada' and accounts|length < 5 %}
+<dialog class="wd-dialog" id="acc-dialog" aria-labelledby="acc-title">
+  <form method="post" action="{{ url_for('add_campaign_account', cid=camp.id) }}" class="form-stack">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div>
+      <h2 id="acc-title">Añadir cuenta</h2>
+      <p class="small muted" style="margin-top:4px">La cuenta con la que vas a publicar. Después la verificarás con un código en su bio.</p>
+    </div>
+    <div class="join-row">
+      <select name="platform" aria-label="Red social">
+        {% for p in camp.platform_list %}<option value="{{ p }}">{{ PLATFORMS[p] }}</option>{% endfor %}
+      </select>
+      <div class="handle-input"><span>@</span><input name="handle" placeholder="tu_usuario" required autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Usuario"></div>
+    </div>
+    <div class="wd-actions">
+      <button type="button" class="btn soft" data-close>Cancelar</button>
+      <button class="btn accent">Añadir cuenta</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
 {% if camp.status == 'activa' and not st.exhausted and not member %}
 <dialog class="wd-dialog join-dialog" id="join-dialog" aria-labelledby="join-title">
   <form method="post" action="{{ url_for('join_campaign', cid=camp.id) }}" class="form-stack">

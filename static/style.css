@@ -611,8 +611,15 @@ details.answers[open] summary::before{content:"▾ "}
 
 /* formulario de campaña: una fila por red con su pago */
 .rate-rows{display:flex;flex-direction:column;gap:8px}
-.rate-row{display:grid;grid-template-columns:180px minmax(0,160px);gap:12px;align-items:center}
-@media (max-width:640px){.rate-row{grid-template-columns:1fr 120px}}
+.rate-row{display:grid;grid-template-columns:150px repeat(3,minmax(0,1fr));gap:10px;align-items:center}
+.rate-head span{font-size:12px;color:var(--muted);font-weight:500}
+@media (max-width:640px){
+  .rate-head span:first-child{display:none}
+  .rate-head{border-bottom:0;padding-bottom:0}
+  .rate-row{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .rate-row .check{grid-column:1/-1}
+  .rate-row input::placeholder{font-size:13px}
+}
 
 /* reglas de la campaña y pago de cada red */
 .rule-block{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:16px;background:var(--soft)}
@@ -703,10 +710,7 @@ details.answers[open] summary::before{content:"▾ "}
 .paym-logo.whop{background:url("whop.png") center/cover no-repeat;color:transparent}
 
 /* materiales de referencia de la campaña */
-.card.mats{padding:0;overflow:hidden}
-.mats-head{display:flex;align-items:center;gap:8px;padding:16px 22px;font-family:var(--display);font-weight:600;font-size:15px;color:var(--ink);border-bottom:1px solid var(--line)}
-.mats-head svg{width:16px;height:16px;color:var(--ink-2)}
-.mat-row{display:flex;align-items:center;gap:12px;padding:15px 22px;color:var(--ink);text-decoration:none;font-weight:600;transition:background .15s}
+.mat-row{display:flex;align-items:center;gap:12px;padding:14px 20px;color:var(--ink);text-decoration:none;font-weight:600;transition:background .15s}
 .mat-row + .mat-row{border-top:1px solid var(--line)}
 .mat-row:hover{background:var(--soft)}
 .mat-ico{display:grid;place-items:center;width:22px;height:22px;flex:none}
@@ -714,3 +718,45 @@ details.answers[open] summary::before{content:"▾ "}
 .mat-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mat-out{display:grid;place-items:center;color:var(--ink-3,#9a9aa3)}
 .mat-out svg{width:16px;height:16px}
+
+/* ---------- página de campaña: tarjetas con cabecera (estilo lista) */
+.cdetail{display:flex;flex-direction:column;gap:16px}
+.cdetail > .album{margin-bottom:8px}
+.card.box{padding:0;overflow:hidden}
+.box-head{display:flex;align-items:center;gap:8px;padding:14px 20px;font-family:var(--display);font-weight:600;font-size:15px;color:var(--ink);border-bottom:1px solid var(--line)}
+.box-head svg{width:17px;height:17px;flex:none;color:var(--ink-2)}
+.box-head.st-ok svg{color:var(--money)}
+.box-head.st-wait svg{color:#f79009}
+.box-head.st-no svg{color:#f04438}
+.box-body{padding:16px 20px}
+.box-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;border-top:1px solid var(--line);color:var(--ink-2)}
+.st-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.st-row p{max-width:560px}
+.acc-rows{list-style:none;margin:0;padding:0 20px 4px;display:flex;flex-direction:column;gap:10px}
+.acc-row{border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+.acc-row .bio-box{margin-top:10px}
+.clip-send{display:flex;gap:10px;border-top:1px solid var(--line)}
+.clip-send input{flex:1;min-width:0}
+.pay-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.pay-cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.pay-cells > div{padding:14px 16px;display:flex;flex-direction:column;gap:8px;justify-content:space-between}
+.pay-cells > div + div{border-left:1px solid var(--line)}
+.pay-cells span{font-size:12px;line-height:1.3;color:var(--muted)}
+.pay-cells b{font:700 17px/1.2 var(--display);letter-spacing:-.01em;color:var(--ink)}
+.duo{display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+.duo.solo{grid-template-columns:1fr}
+.bud{display:flex;flex-direction:column;gap:12px}
+.bud-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.bud-big{font:700 26px/1.1 var(--display);letter-spacing:-.02em;color:var(--muted)}
+.bud-big b{color:var(--ink)}
+.money-txt{color:var(--money-ink)}
+.box .clip-list{margin:0}
+@media (max-width:760px){
+  .duo{grid-template-columns:1fr}
+  .st-row{flex-direction:column;align-items:stretch}
+  .clip-send{flex-direction:column}
+  .pay-cells b{font-size:15px}
+}
+.acc-top svg{width:16px;height:16px;flex:none}
+.acc-top b{font-size:14px}
+p.box-foot{display:block}

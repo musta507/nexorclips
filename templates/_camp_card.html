@@ -8,7 +8,7 @@
     </div>
   </div>
   <p class="ddesc">{{ c.song }}</p>
-  <div class="drange">{% if c.min_views %}<span>Mín. {{ min_pay(c)|money }} por clip</span>{% endif %}<span>{% if c.max_per_video %}Máx. {{ c.max_per_video|money }} por clip{% else %}Sin máximo por clip{% endif %}</span></div>
+  {% set lo, hi = c.min_range %}{% set top = c.top_max %}<div class="drange">{% if hi %}<span>Mín. {% if lo != hi %}hasta {{ hi|money }}{% else %}{{ hi|money }} por clip{% endif %}</span>{% endif %}<span>{% if top %}Máx. {% if c.maxs_vary %}hasta {{ top|money }}{% else %}{{ top|money }} por clip{% endif %}{% else %}Sin máximo por clip{% endif %}</span></div>
   <div class="dbudget">
     <div class="dbar"><span style="width:{{ st.left_pct }}%"></span></div>
     <span><b>{{ st.remaining|money(0) }}</b> disponibles de {{ c.budget|money(0) }}</span>

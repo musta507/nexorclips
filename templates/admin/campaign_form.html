@@ -24,29 +24,29 @@
     </div>
 
     <div class="field">
-      <span class="label">Redes y pago por cada 1.000 vistas ({{ CUR_CODE }})</span>
+      <span class="label">Redes y pago ({{ CUR_CODE }})</span>
       <div class="rate-rows">
+        <div class="rate-row rate-head" aria-hidden="true"><span></span><span>Por 1.000 vistas</span><span>Mínimo por clip</span><span>Máximo por clip</span></div>
         {% for key, label in PLATFORMS.items() %}
+        {% set on = key in camp.platform_list %}
         <div class="rate-row">
-          <label class="check"><input type="checkbox" name="pf_{{ key }}" {% if key in camp.platform_list %}checked{% endif %}> {{ label }}</label>
-          <input name="rate_k_{{ key }}" value="{{ '%g'|format(camp.rate_for(key) / 1000) if camp.rate and key in camp.platform_list else '' }}" inputmode="decimal" placeholder="1.00" aria-label="Pago en {{ label }} por cada 1.000 vistas">
+          <label class="check"><input type="checkbox" name="pf_{{ key }}" {% if on %}checked{% endif %}> {{ label }}</label>
+          <input name="rate_k_{{ key }}" value="{{ '%g'|format(camp.rate_for(key) / 1000) if camp.rate and on else '' }}" inputmode="decimal" placeholder="1.00" aria-label="{{ label }}: pago por cada 1.000 vistas">
+          <input name="min_k_{{ key }}" value="{{ '%g'|format(camp.min_for(key)) if on and camp.rate and camp.min_for(key) else '' }}" inputmode="decimal" placeholder="Sin mínimo" aria-label="{{ label }}: pago mínimo por clip">
+          <input name="max_k_{{ key }}" value="{{ '%g'|format(camp.max_for(key)) if on and camp.max_for(key) else '' }}" inputmode="decimal" placeholder="Sin máximo" aria-label="{{ label }}: pago máximo por clip">
         </div>
         {% endfor %}
       </div>
-      <span class="hint">Marca las redes que acepta la campaña y pon lo que se paga en cada una. Por fuera se enseña el pago más alto.</span>
+      <span class="hint">Marca las redes que acepta la campaña. Cada clip cobra según la red donde está publicado: empieza a cobrar al llegar al mínimo y no pasa del máximo. Vacío = sin mínimo / sin máximo. Por fuera se enseña el valor más alto con «hasta».</span>
     </div>
 
-    <div class="form-grid">
-      <div class="field"><label for="budget">Presupuesto total ({{ CUR_CODE }})</label><input id="budget" name="budget" value="{{ '%g'|format(camp.budget) if camp.budget else '' }}" inputmode="decimal" placeholder="2000" required>{% if editing and camp.spent %}<span class="hint">Ya repartido: {{ camp.spent|money }}. No puede ser menor.</span>{% endif %}</div>
-      <div class="field"><label for="min_pay">Pago mínimo por clip ({{ CUR_CODE }})</label><input id="min_pay" name="min_pay" value="{{ '%g'|format(min_pay(camp)) if camp.min_views and camp.rate else '' }}" inputmode="decimal" placeholder="5"><span class="hint">Un clip empieza a cobrar cuando su valor llega a esa cantidad. Igual para todas las redes.</span></div>
-      <div class="field"><label for="max_per_video">Pago máximo por clip ({{ CUR_CODE }}, vacío = sin tope)</label><input id="max_per_video" name="max_per_video" value="{{ '%g'|format(camp.max_per_video) if camp.max_per_video else '' }}" inputmode="decimal"></div>
-    </div>
+    <div class="field" style="max-width:320px"><label for="budget">Presupuesto total ({{ CUR_CODE }})</label><input id="budget" name="budget" value="{{ '%g'|format(camp.budget) if camp.budget else '' }}" inputmode="decimal" placeholder="2000" required>{% if editing and camp.spent %}<span class="hint">Ya repartido: {{ camp.spent|money }}. No puede ser menor.</span>{% endif %}</div>
 
     <div class="field"><label for="rules">Reglas de la campaña</label>
       <textarea id="rules" name="rules" rows="7" placeholder="Qué publicar, hashtags y menciones obligatorias, lo que está prohibido…">{{ camp.rules_text }}</textarea>
       <span class="hint">Se ven en la página de la campaña tal cual las escribas.</span></div>
 
-    <div class="field"><label for="materials">Materiales de referencia (uno por línea)</label>
+    <div class="field"><label for="materials">Materiales de la campaña (uno por línea)</label>
       <textarea id="materials" name="materials" rows="4" placeholder="Instagram | https://instagram.com/…&#10;Drive con los vídeos | https://drive.google.com/…">{% for n, u, k in camp.material_list %}{{ n }} | {{ u }}
 {% endfor %}</textarea>
       <span class="hint">Escribe «Nombre | enlace». Si pones solo el enlace, el nombre y el icono se ponen solos (Instagram, YouTube, TikTok, Drive).</span></div>
