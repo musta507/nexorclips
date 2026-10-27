@@ -1,5 +1,5 @@
 /* ClipProfit Hispano — base: estilo iPhone en azul medianoche con zafiro: fondo agrupado de iOS, tarjetas blancas sin bordes, cristal esmerilado, controles segmentados y la fuente del sistema (SF Pro; Inter fuera de Apple). */
-@font-face{font-family:"Inter";src:url("fonts/inter.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:"Inter";src:url("fonts/inter.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:block}
 :root{
   color-scheme: light;
   --bg:#f2f2f7; --card:#ffffff; --soft:#ececf1; --soft-2:#e5e5ea; --line:rgba(60,60,67,.12);
@@ -734,7 +734,7 @@ a,button,.btn,.tab,label,summary{touch-action:manipulation}
 }
 
 /* ================= Tema ClipProfit (demo): cercano, con personalidad, sin perder calidad ================= */
-@font-face{font-family:"Poppins";font-weight:500;font-display:swap;src:url("fonts/poppins-500.woff2") format("woff2")}@font-face{font-family:"Poppins";font-weight:600;font-display:swap;src:url("fonts/poppins-600.woff2") format("woff2")}@font-face{font-family:"Poppins";font-weight:700;font-display:swap;src:url("fonts/poppins-700.woff2") format("woff2")}@font-face{font-family:"Poppins";font-weight:800;font-style:italic;font-display:swap;src:url("fonts/poppins-800-italic.woff2") format("woff2")}
+@font-face{font-family:"Poppins";font-weight:500;font-display:block;src:url("fonts/poppins-500.woff2") format("woff2")}@font-face{font-family:"Poppins";font-weight:600;font-display:block;src:url("fonts/poppins-600.woff2") format("woff2")}@font-face{font-family:"Poppins";font-weight:700;font-display:block;src:url("fonts/poppins-700.woff2") format("woff2")}@font-face{font-family:"Poppins";font-weight:800;font-style:italic;font-display:block;src:url("fonts/poppins-800-italic.woff2") format("woff2")}
 :root{
   --font:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
   --display:"Poppins",system-ui,-apple-system,sans-serif;
