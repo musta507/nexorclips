@@ -223,8 +223,11 @@ document.addEventListener("click", function (e) {
 });
 
 // ---------------------------------------------------------------- pastilla negra que se desliza en los selectores
+// En los menús que cambian de página, la web recuerda dónde estaba la pastilla antes del clic:
+// la página nueva la pinta en ese sitio y la desliza hasta la opción nueva. No se espera nada antes de cambiar de página.
 (function () {
-  function setup(box, sel) {
+  var KEY = "pill-from:";
+  function setup(box, sel, name) {
     if (box.dataset.pill) return;
     box.dataset.pill = "1";
     var pill = document.createElement("span");
@@ -240,21 +243,41 @@ document.addEventListener("click", function (e) {
       pill.style.opacity = 1;
       if (!animate) { void pill.offsetWidth; pill.style.transition = ""; }
     }
-    place(box.querySelector(sel + ".on"), false);
+    var cur = box.querySelector(sel + ".on");
+    var from = null;
+    if (name) { try { from = JSON.parse(sessionStorage.getItem(KEY + name) || "null"); sessionStorage.removeItem(KEY + name); } catch (e) { from = null; } }
+    if (from && cur && Math.abs(from.x - cur.offsetLeft) > 2) {
+      pill.style.transition = "none";
+      pill.style.width = from.w + "px";
+      pill.style.height = cur.offsetHeight + "px";
+      pill.style.transform = "translate(" + from.x + "px," + cur.offsetTop + "px)";
+      pill.style.opacity = 1;
+      void pill.offsetWidth;
+      pill.style.transition = "";
+      requestAnimationFrame(function () { place(cur, true); });
+    } else {
+      place(cur, false);
+    }
     box.classList.add("pill-ready");
     box.addEventListener("click", function (e) {
       var it = e.target.closest(sel);
       if (!it || !box.contains(it)) return;
-      box.querySelectorAll(sel + ".on").forEach(function (x) { x.classList.remove("on"); });
+      var was = box.querySelector(sel + ".on");
+      if (name && was && it.tagName === "A") {
+        try { sessionStorage.setItem(KEY + name, JSON.stringify({ x: was.offsetLeft, w: was.offsetWidth })); } catch (err) {}
+      }
+      if (was) was.classList.remove("on");
       it.classList.add("on");
-      place(it, it.tagName !== "A");          // en enlaces se cambia de página al momento, sin esperar
+      place(it, true);
     });
     window.addEventListener("resize", function () { place(box.querySelector(sel + ".on"), false); });
+    if (document.fonts && document.fonts.ready) {       // si la letra termina de llegar después, se recoloca sin animación
+      document.fonts.ready.then(function () { setTimeout(function () { place(box.querySelector(sel + ".on"), false); }, 400); });
+    }
   }
-  // Solo en «Más nuevas / Más presupuesto / Mejor pago», que no cambia de página.
-  // En los menús que cambian de página, la opción marcada ya viene negra desde el servidor: nada que mover ni medir.
-  function init() { document.querySelectorAll(".sortbar").forEach(function (b) { setup(b, "button"); }); }
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(init); else init();   // se mide con la letra ya cargada
+  document.querySelectorAll(".sortbar").forEach(function (b) { setup(b, "button"); });
+  document.querySelectorAll(".seg").forEach(function (b, i) { setup(b, "a", "seg" + i); });
+  if (window.matchMedia("(min-width:641px)").matches) document.querySelectorAll(".topbar .tabs").forEach(function (b) { setup(b, ".tab", "tabs"); });
 })();
 
 // ---------------------------------------------------------------- campañas: al ordenar, las tarjetas se mueven suave
