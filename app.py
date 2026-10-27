@@ -245,6 +245,16 @@ class Campaign(db.Model):
         return round((self.min_views or 0) / 1_000_000 * (self.rate or 0), 2)   # en céntimos, como se escribió
 
     @property
+    def rules_text(self):
+        """Todas las reglas en un solo texto (las campañas antiguas tenían 3 apartados separados)."""
+        parts = [(self.rules or "").strip()]
+        if (self.rules_required or "").strip():
+            parts.append("Obligatorio:\n" + self.rules_required.strip())
+        if (self.rules_forbidden or "").strip():
+            parts.append("Prohibido:\n" + self.rules_forbidden.strip())
+        return "\n\n".join(p for p in parts if p)
+
+    @property
     def question_list(self):
         return [q.strip() for q in (self.join_questions or "").splitlines() if q.strip()][:MAX_QUESTIONS]
 
@@ -1786,9 +1796,9 @@ def _campaign_from_form(camp):
     camp.cover_url = cover_url if cover_url.startswith("https://") else ""
     sound_url = request.form.get("sound_url", "").strip()[:500]
     camp.sound_url = sound_url if sound_url.startswith(("https://", "http://")) else ""
-    camp.rules = request.form.get("rules", "").strip()[:5000]
-    camp.rules_required = request.form.get("rules_required", "").strip()[:3000]
-    camp.rules_forbidden = request.form.get("rules_forbidden", "").strip()[:3000]
+    camp.rules = request.form.get("rules", "").strip()[:8000]
+    camp.rules_required = ""      # ahora todo va en un solo campo
+    camp.rules_forbidden = ""
     qs = [q.strip()[:300] for q in (request.form.get("join_questions") or "").splitlines() if q.strip()]
     camp.join_questions = "\n".join(qs[:MAX_QUESTIONS])
     chosen = [p for p in PLATFORMS if request.form.get(f"pf_{p}")] or ["tiktok"]

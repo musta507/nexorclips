@@ -23,15 +23,11 @@
       <div class="fact"><b>{% if st.views %}{{ st.views|short }}{% else %}Nueva{% endif %}</b><span>{% if st.views %}vistas generadas{% else %}aún sin vistas{% endif %}</span></div>
     </div>
 
-    {% if camp.rules or camp.rules_required or camp.rules_forbidden or camp.sound_url %}
+    {% set rules_all = camp.rules_text %}
+    {% if rules_all or camp.sound_url %}
     <div class="card form-stack">
       <h3>Reglas de la campaña</h3>
-      {% for icon_, title, text in [("✅", "Qué publicar", camp.rules), ("#️⃣", "Obligatorio", camp.rules_required), ("❌", "Prohibido", camp.rules_forbidden)] if text %}
-      <div class="rule-block">
-        <span class="rule-ico" aria-hidden="true">{{ icon_ }}</span>
-        <div><b>{{ title }}</b><div class="rules">{{ text }}</div></div>
-      </div>
-      {% endfor %}
+      {% if rules_all %}<div class="rules">{{ rules_all }}</div>{% endif %}
       {% if camp.sound_url %}<a class="btn soft" href="{{ camp.sound_url }}" target="_blank" rel="noopener">Descargar el material oficial</a>{% endif %}
     </div>
     {% endif %}

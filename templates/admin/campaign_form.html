@@ -42,14 +42,9 @@
       <div class="field"><label for="max_per_video">Pago máximo por clip ({{ CUR_CODE }}, vacío = sin tope)</label><input id="max_per_video" name="max_per_video" value="{{ '%g'|format(camp.max_per_video) if camp.max_per_video else '' }}" inputmode="decimal"></div>
     </div>
 
-    <div class="field"><span class="label">Reglas de la campaña</span>
-      <span class="hint">Se ven en la página de la campaña. Deja vacío lo que no necesites.</span></div>
-    <div class="field"><label for="rules">✅ Qué publicar</label>
-      <textarea id="rules" name="rules" rows="3" placeholder="Tipo de clips, duración, formato vertical…">{{ camp.rules or '' }}</textarea></div>
-    <div class="field"><label for="rules_required">#️⃣ Obligatorio</label>
-      <textarea id="rules_required" name="rules_required" rows="2" placeholder="Hashtags, mención al creador, sonido…">{{ camp.rules_required or '' }}</textarea></div>
-    <div class="field"><label for="rules_forbidden">❌ Prohibido</label>
-      <textarea id="rules_forbidden" name="rules_forbidden" rows="2" placeholder="Lo que hace que se rechace un clip…">{{ camp.rules_forbidden or '' }}</textarea></div>
+    <div class="field"><label for="rules">Reglas de la campaña</label>
+      <textarea id="rules" name="rules" rows="7" placeholder="Qué publicar, hashtags y menciones obligatorias, lo que está prohibido…">{{ camp.rules_text }}</textarea>
+      <span class="hint">Se ven en la página de la campaña tal cual las escribas.</span></div>
 
     <div class="field"><label for="sound_url">Enlace al material oficial</label>
       <input id="sound_url" name="sound_url" value="{{ camp.sound_url or '' }}" placeholder="Carpeta de Drive con los vídeos, guías…"></div>
