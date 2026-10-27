@@ -251,13 +251,10 @@ document.addEventListener("click", function (e) {
     });
     window.addEventListener("resize", function () { place(box.querySelector(sel + ".on"), false); });
   }
-  function init() {
-    document.querySelectorAll(".sortbar").forEach(function (b) { setup(b, "button"); });
-    document.querySelectorAll(".seg").forEach(function (b) { setup(b, "a"); });
-    if (window.matchMedia("(min-width:641px)").matches) document.querySelectorAll(".topbar .tabs").forEach(function (b) { setup(b, ".tab"); });
-  }
-  init();
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.dispatchEvent(new Event("resize")); });
+  // Solo en «Más nuevas / Más presupuesto / Mejor pago», que no cambia de página.
+  // En los menús que cambian de página, la opción marcada ya viene negra desde el servidor: nada que mover ni medir.
+  function init() { document.querySelectorAll(".sortbar").forEach(function (b) { setup(b, "button"); }); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(init); else init();   // se mide con la letra ya cargada
 })();
 
 // ---------------------------------------------------------------- campañas: al ordenar, las tarjetas se mueven suave
