@@ -31,7 +31,7 @@
             <a href="{{ url_for('support') }}">Soporte{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
           {% endif %}
           <a href="{{ url_for('terms') }}">Términos</a>
-          <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+          <a href="{{ url_for('logout') }}" data-turbo="false">Cerrar sesión</a>
         </div>
       </details>
     </div>

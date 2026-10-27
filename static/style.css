@@ -604,3 +604,6 @@ details.answers[open] summary::before{content:"▾ "}
   *{transition:none!important}
   .btn.busy::after,.chat-fab.has-unread,#contenido{animation:none}
 }
+
+/* barra de carga de Turbo: solo aparece si una página tarda mucho */
+.turbo-progress-bar{height:2px;background:var(--ink)}

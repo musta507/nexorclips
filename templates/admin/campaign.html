@@ -8,7 +8,7 @@
     <h1 style="margin-top:8px">{{ camp.song }} - {{ camp.artist }}</h1>
   </div>
   <div class="inline" style="flex-wrap:wrap">
-    <a class="btn soft" href="{{ url_for('admin_campaign_csv', cid=camp.id) }}">Descargar CSV</a>
+    <a class="btn soft" href="{{ url_for('admin_campaign_csv', cid=camp.id) }}" data-turbo="false">Descargar CSV</a>
     <a class="btn soft" href="{{ url_for('campaign', cid=camp.id) }}">Ver como clipper</a>
     <a class="btn" href="{{ url_for('admin_campaign_form', cid=camp.id) }}">Editar</a>
     {% if camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_close', cid=camp.id) }}" data-confirm="¿Cerrar «{{ camp.song }}»? Dejará de aceptar clips y los clippers podrán retirar lo que ganaron."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn red">Cerrar campaña</button></form>{% endif %}

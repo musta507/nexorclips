@@ -16,5 +16,6 @@
   <link rel="preload" href="{{ url_for('static', filename='fonts/poppins-500.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="{{ url_for('static', filename='fonts/poppins-600.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="{{ url_for('static', filename='fonts/poppins-700.woff2') }}" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="{{ static_url('style.css') }}">
-  <script src="{{ static_url('app.js') }}" defer></script>
+  <link rel="stylesheet" href="{{ static_url('style.css') }}" data-turbo-track="reload">
+  <script src="{{ static_url('turbo.js') }}" defer data-turbo-track="reload"></script>
+  <script src="{{ static_url('app.js') }}" defer data-turbo-track="reload"></script>

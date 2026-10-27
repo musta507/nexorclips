@@ -20,6 +20,7 @@ from flask_login import (LoginManager, UserMixin, current_user, login_required,
                          login_user, logout_user)
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect as sa_inspect, text
+from sqlalchemy.orm import joinedload, selectinload
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -734,9 +735,6 @@ def security_headers(resp):
     resp.headers.setdefault("Content-Security-Policy", CSP)
     if getattr(g, "_t0", None):     # cuánto tarda el servidor en preparar la página (sin contar internet)
         resp.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - g._t0) * 1000:.0f}"
-    if resp.mimetype == "text/html":
-        # Chrome/Android: prepara la página siguiente en cuanto el dedo o el ratón van hacia un enlace
-        resp.headers.setdefault("Speculation-Rules", '"/reglas-precarga.json"')
     if PRODUCTION:
         resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return resp
@@ -904,7 +902,8 @@ def datetime_f(dt):
 
 def active_campaigns():
     """Campañas activas: la destacada primero, después la música y luego el resto, de más nueva a más antigua."""
-    camps = Campaign.query.filter_by(status="activa").order_by(Campaign.created_at.desc()).all()
+    camps = (Campaign.query.filter_by(status="activa").options(selectinload(Campaign.submissions))
+             .order_by(Campaign.created_at.desc()).all())     # los clips de todas las campañas en una sola consulta
     return sorted(camps, key=lambda c: (not c.featured, c.category != "musica"))
 
 
@@ -1499,9 +1498,10 @@ def account():
 @app.route("/admin")
 @admin_required
 def admin_home():
-    camps = Campaign.query.order_by(Campaign.created_at.desc()).all()
+    camps = Campaign.query.options(selectinload(Campaign.submissions)).order_by(Campaign.created_at.desc()).all()
     cards = [(c, campaign_stats(c)) for c in camps]
-    pending = Submission.query.filter_by(status="pendiente").order_by(Submission.created_at).all()
+    pending = (Submission.query.filter_by(status="pendiente").options(joinedload(Submission.user), joinedload(Submission.campaign))
+               .order_by(Submission.created_at).all())
     open_payouts = Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).all()
     kpis = {
         "budget_live": cents(sum(c.budget for c in camps if c.status == "activa")),
@@ -1514,7 +1514,9 @@ def admin_home():
         "pending": len(pending),
         "flagged": sum(1 for s in pending if s.flag_list),
     }
-    joins = CampaignAccount.query.filter_by(status="pendiente").order_by(CampaignAccount.created_at).all()
+    joins = (CampaignAccount.query.filter_by(status="pendiente")
+             .options(joinedload(CampaignAccount.user), joinedload(CampaignAccount.campaign))
+             .order_by(CampaignAccount.created_at).all())
     whop = {"key": bool(WHOP_API_KEY), "company": whop_company_id() if WHOP_API_KEY else "",
             "error": _whop_company.get("error", ""), "from_env": bool(WHOP_COMPANY_ID)}
     return render_template("admin/home.html", whop=whop, cards=cards, pending=pending, kpis=kpis, joins=joins,
@@ -1940,9 +1942,11 @@ def admin_clippers():
     release_stuck_payouts()
     failed = (Payout.query.filter(Payout.status == "rechazado", Payout.error != "")
               .order_by(Payout.created_at.desc()).limit(5).all())
-    open_requests = Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).order_by(Payout.created_at).all()
+    open_requests = (Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).options(joinedload(Payout.user))
+                     .order_by(Payout.created_at).all())
     q = request.args.get("q", "").strip().lower()
-    users = User.query.order_by(User.created_at.desc()).all()
+    users = (User.query.options(selectinload(User.submissions).joinedload(Submission.campaign), selectinload(User.payouts))
+             .order_by(User.created_at.desc()).all())          # todo en 3 consultas aunque haya miles de clippers
     if q:
         users = [u for u in users if q in u.email.lower() or q in u.name.lower()
                  or any(q in h for p in PLATFORMS for h in u.handles(p))]

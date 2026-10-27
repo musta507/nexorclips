@@ -15,7 +15,7 @@
       {% with msgs = get_flashed_messages(with_categories=true) %}
         {% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}
       {% endwith %}
-      <a class="btn google block" href="{{ url_for('login_google', next=request.args.get('next', '')) }}">{{ icon("google") }} Continuar con Google</a>
+      <a class="btn google block" data-turbo="false" href="{{ url_for('login_google', next=request.args.get('next', '')) }}">{{ icon("google") }} Continuar con Google</a>
       <div class="or">o con tu correo</div>
       {% if mode == "registro" %}
       <form method="post" action="{{ url_for('register') }}" class="form-stack">

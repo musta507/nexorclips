@@ -1,26 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
-{% block title %}Ganancias · {{ APP_NAME }}{% if current_user.payout_ready and not m.open_payout and m.available >= 0.01 %}
-<dialog class="wd-dialog" id="wd-dialog" aria-labelledby="wd-title">
-  <form method="post" action="{{ url_for('withdraw') }}" class="form-stack">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <div>
-      <h2 id="wd-title">¿Cuánto quieres retirar?</h2>
-      <p class="small muted" style="margin-top:4px">Tienes <b>{{ m.available|money }}</b> disponibles.</p>
-    </div>
-    <div class="wd-row">
-      <div class="wd-input"><input id="wd-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" value="{{ m.available|amount }}" required aria-label="Cantidad"><span>{{ CUR }}</span></div>
-      <button type="button" class="btn soft wd-all" data-all="{{ m.available|amount }}">Todo</button>
-    </div>
-    <p class="small muted">Llega al instante a tu Whop <b>@{{ current_user.whop_username }}</b>.</p>
-    <div class="wd-actions">
-      <button type="button" class="btn soft" data-close>Cancelar</button>
-      <button class="btn accent">Confirmar retiro</button>
-    </div>
-  </form>
-</dialog>
-{% endif %}
-{% endblock %}
+{% block title %}Ganancias · {{ APP_NAME }}{% endblock %}
 {% block content %}
 <div class="stats four">
   <div class="card stat hero">
