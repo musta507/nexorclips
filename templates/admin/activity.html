@@ -9,7 +9,7 @@
 <div class="table-card">
   {% if logs %}
   <div class="table-scroll"><table class="rt">
-    <thead><tr><th>Fecha (UTC)</th><th>Quién</th><th>Acción</th><th>Detalle</th></tr></thead>
+    <thead><tr><th>Fecha (UTC)</th><th>Quién</th><th>Acción</th><th>Detalle</th><th></th></tr></thead>
     <tbody>
     {% for l in logs %}
     <tr>
@@ -17,6 +17,7 @@
       <td data-label="Quién" class="small">{{ l.admin.name if l.admin else "Sistema" }}</td>
       <td data-label="Acción"><span class="chip">{{ l.action|replace("_", " ")|capitalize }}</span></td>
       <td data-label="Detalle" class="small">{{ l.detail }}</td>
+      <td class="r"><form method="post" action="{{ url_for('admin_activity_delete', lid=l.id) }}" data-confirm="¿Borrar este registro de la actividad?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft" aria-label="Borrar registro">Borrar</button></form></td>
     </tr>
     {% endfor %}
     </tbody>

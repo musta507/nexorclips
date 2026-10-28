@@ -1139,3 +1139,13 @@ def test_admin_delete_clipper_account(monkeypatch):
         admin_id = A.User.query.filter_by(is_admin=True).first().id
     r = post(admin, f"/admin/clipper/{admin_id}/eliminar", confirm="ELIMINAR")
     assert "administrador" in r.get_data(as_text=True)
+
+
+def test_admin_delete_activity_entry(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    with A.app.app_context():
+        e = A.AuditLog(action="clipper_eliminado", detail="borrame@test.com"); A.db.session.add(e); A.db.session.commit(); lid = e.id
+    assert "borrame@test.com" in admin.get("/admin/actividad").get_data(as_text=True)
+    assert c.post(f"/admin/actividad/{lid}/borrar", data={"_csrf": "t"}).status_code in (302, 403, 404)
+    r = post(admin, f"/admin/actividad/{lid}/borrar")
+    assert "Registro borrado" in r.get_data(as_text=True) and "borrame@test.com" not in r.get_data(as_text=True)

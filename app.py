@@ -2455,6 +2455,16 @@ def admin_activity():
     return render_template("admin/activity.html", logs=logs)
 
 
+@app.route("/admin/actividad/<int:lid>/borrar", methods=["POST"])
+@admin_required
+def admin_activity_delete(lid):
+    entry = db.session.get(AuditLog, lid) or abort(404)
+    db.session.delete(entry)
+    db.session.commit()
+    flash("Registro borrado.", "ok")
+    return redirect(url_for("admin_activity"))
+
+
 # ---------------------------------------------------------------- chat de soporte
 MAX_MESSAGE_LEN = 2000
 MAX_MESSAGES_HOUR = int(os.environ.get("MAX_MESSAGES_HOUR", "30"))
