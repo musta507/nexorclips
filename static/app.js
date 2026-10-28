@@ -55,7 +55,10 @@ document.addEventListener("click", function (e) {
   Array.prototype.forEach.call(grid.children, function (el) { before.set(el, el.getBoundingClientRect()); });
   var k = b.dataset.sort;
   Array.prototype.slice.call(grid.children)
-    .sort(function (x, y) { return parseFloat(y.dataset[k] || 0) - parseFloat(x.dataset[k] || 0); })
+    .sort(function (x, y) {
+      var f = (x.dataset.full === "1") - (y.dataset.full === "1");    // las de plazas completas siempre al final
+      return f || parseFloat(y.dataset[k] || 0) - parseFloat(x.dataset[k] || 0);
+    })
     .forEach(function (el) { grid.appendChild(el); });
   Array.prototype.forEach.call(grid.children, function (el) {
     var a = before.get(el), n = el.getBoundingClientRect();

@@ -1107,3 +1107,14 @@ def test_whop_app_test_box(monkeypatch):
     bad = post(admin, "/admin/ajustes/probar-app-whop", company="biz_abc", username="pepe", amount="50").get_data(as_text=True)
     assert "entre 0,01 y 5" in bad
     assert c.post("/admin/ajustes/probar-app-whop", data={"_csrf": "t", "company": "biz_abc", "username": "x", "amount": "1"}).status_code in (302, 403, 404)
+
+
+def test_full_campaigns_go_last_on_home(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    with A.app.app_context():
+        a = A.Campaign(song="Primera Llena", artist="X", rate=1000, budget=100, status="activa", full=True)
+        b = A.Campaign(song="Segunda Abierta", artist="Y", rate=1000, budget=100, status="activa")
+        A.db.session.add_all([a, b]); A.db.session.commit()
+    html = client_for("mira-orden@test.com").get("/").get_data(as_text=True)
+    grid = html[html.index("Campañas para ti"):]
+    assert grid.index("Segunda Abierta") < grid.index("Primera Llena")

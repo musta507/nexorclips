@@ -1392,6 +1392,7 @@ def index():
     cards = [x for x in all_cards if not cat or x[0].category == cat]
     counts = {k: sum(1 for c, _ in all_cards if c.category == k) for k in CATEGORIES}
     my_join = {m.campaign_id: m.status for m in CampaignMember.query.filter_by(user_id=current_user.id).all()}
+    cards.sort(key=lambda x: bool(x[0].full and x[0].id not in my_join))   # plazas completas (si no estás dentro) al final
     return render_template("home.html", cards=cards, featured=featured, cat=cat, counts=counts,
                            total=len(all_cards), new_user=not current_user.submissions, my_join=my_join)
 

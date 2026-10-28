@@ -1,5 +1,5 @@
 {% from "_icons.html" import icon %}
-<a class="dcard" href="{{ url_for('campaign', cid=c.id) }}" data-new="{{ c.created_at.timestamp()|int }}" data-budget="{{ st.remaining }}" data-rate="{{ c.rate }}">
+<a class="dcard" href="{{ url_for('campaign', cid=c.id) }}" data-new="{{ c.created_at.timestamp()|int }}" data-budget="{{ st.remaining }}" data-rate="{{ c.rate }}" data-full="{{ 1 if c.full and not (my_join is defined and my_join.get(c.id)) else 0 }}">
   <div class="dcard-top">
     {% set _t, lqip = cover_meta(c) %}<span class="dthumb"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="62" height="62" loading="lazy" decoding="async">{% endif %}</span>
     <div class="dhead">
