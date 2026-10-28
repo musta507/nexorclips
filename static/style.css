@@ -229,7 +229,7 @@ input:focus,textarea:focus,select:focus{outline:none;background:#fff;border-colo
 .dhead h3 span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dhead h3 svg{width:17px;height:17px;flex:none;color:var(--ink)}
 .dmeta{font-size:13px;color:var(--muted)}
-.dmeta .dj{font-weight:600;color:var(--ink)}
+.dmeta .dj{display:block;margin-top:2px;font-weight:600;color:var(--ink)}
 .dmeta .dj.ok{color:var(--money-ink)}
 .dmeta .dj.full{color:var(--red-ink)}
 .ddesc{font-size:15px;font-weight:500;color:var(--ink-2);line-height:1.45;min-height:22px}
