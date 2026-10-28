@@ -233,9 +233,14 @@ function pastillaOrden() {
     document.querySelectorAll(g[0]).forEach(function (box) { montarPastilla(box, g[1], g[2]); });
   });
 }
+var pastillasMontadas = new WeakSet();
 function montarPastilla(box, sel, name) {
-  if (box.dataset.pill) return;
-  box.dataset.pill = "1";
+  if (pastillasMontadas.has(box)) return;
+  pastillasMontadas.add(box);
+  // Una página restaurada por Turbo (atrás / volver) trae la pastilla vieja pero sin sus escuchas: se rehace de cero
+  box.querySelectorAll(":scope > .pill").forEach(function (old) { old.remove(); });
+  box.classList.remove("has-pill", "pill-ready");
+  delete box.dataset.pill;
   var pill = document.createElement("span");
   pill.className = "pill";
   box.insertBefore(pill, box.firstChild);
