@@ -503,9 +503,13 @@ class Setting(db.Model):
 @login_manager.user_loader
 def load_user(uid):
     try:
-        return db.session.get(User, int(uid))
+        user = db.session.get(User, int(uid))
     except (TypeError, ValueError):
         return None
+    if user and user.is_admin and (user.email or "").lower() not in ADMIN_EMAILS:
+        user.is_admin = False      # su correo ya no está en ADMIN_EMAIL: deja de ser admin al momento
+        db.session.commit()
+    return user
 
 
 def ensure_schema():

@@ -1046,3 +1046,12 @@ def test_admin_wipe_keeps_campaigns(monkeypatch):
         assert A.Submission.query.count() == 0 and A.Payout.query.count() == 0 and A.Message.query.count() == 0
         assert A.CampaignMember.query.count() == 0 and A.CampaignAccount.query.count() == 0
         assert [u.email for u in A.User.query.all()] == ["admin@test.com"]
+
+
+def test_admin_removed_from_env_loses_access(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    assert admin.get("/admin").status_code == 200
+    monkeypatch.setattr(A, "ADMIN_EMAILS", set())
+    assert admin.get("/admin").status_code in (302, 403, 404)
+    with A.app.app_context():
+        assert not A.User.query.filter_by(email="admin@test.com").first().is_admin
