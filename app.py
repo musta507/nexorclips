@@ -2392,12 +2392,37 @@ def admin_clippers():
     return render_template("admin/clippers.html", rows=rows, q=q)
 
 
+def delete_user_account(user):
+    """Borra un clipper y todo lo suyo. Lo que ganó vuelve al presupuesto de cada campaña."""
+    subs = Submission.query.filter_by(user_id=user.id).all()
+    for s in subs:
+        if s.earned and s.campaign:
+            s.campaign.spent = max(0.0, cents((s.campaign.spent or 0) - s.earned))
+    sub_ids = [s.id for s in subs]
+    if sub_ids:
+        ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(sub_ids)).delete(synchronize_session=False)
+    for model in (Submission, Payout, CampaignAccount, CampaignMember, Message):
+        model.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+    Message.query.filter_by(sender_id=user.id).update({"sender_id": None}, synchronize_session=False)
+    AuditLog.query.filter_by(admin_id=user.id).update({"admin_id": None}, synchronize_session=False)
+    db.session.delete(user)
+
+
 @app.route("/admin/clipper/<int:uid>/<accion>", methods=["POST"])
 @admin_required
 def admin_ban(uid, accion):
     user = db.session.get(User, uid) or abort(404)
     if user.is_admin:
-        flash("No puedes bloquear a un administrador.", "error")
+        flash("No puedes bloquear ni eliminar a un administrador.", "error")
+    elif accion == "eliminar":
+        if (request.form.get("confirm") or "").strip().upper() != "ELIMINAR":
+            flash("Para eliminar la cuenta, escribe ELIMINAR en la casilla.", "error")
+            return redirect(url_for("admin_clipper", uid=uid))
+        delete_user_account(user)
+        audit("clipper_eliminado", user.email)
+        db.session.commit()
+        flash(f"La cuenta de {user.name} se ha eliminado con todos sus datos.", "ok")
+        return redirect(url_for("admin_clippers"))
     elif accion == "bloquear":
         user.is_banned, user.ban_reason = True, request.form.get("reason", "").strip()[:255] or "Incumplimiento de los términos"
         audit("clipper_bloqueado", f"{user.email} · {user.ban_reason}")

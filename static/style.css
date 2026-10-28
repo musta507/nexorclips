@@ -761,3 +761,7 @@ details.answers[open] summary::before{content:"▾ "}
 .acc-top svg{width:16px;height:16px;flex:none}
 .acc-top b{font-size:14px}
 p.box-foot{display:block}
+
+/* eliminar cuenta de un clipper */
+.del-acc summary{list-style:none;cursor:pointer}
+.del-acc summary::-webkit-details-marker{display:none}

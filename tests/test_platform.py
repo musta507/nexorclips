@@ -1118,3 +1118,24 @@ def test_full_campaigns_go_last_on_home(monkeypatch):
     html = client_for("mira-orden@test.com").get("/").get_data(as_text=True)
     grid = html[html.index("Campañas para ti"):]
     assert grid.index("Segunda Abierta") < grid.index("Primera Llena")
+
+
+def test_admin_delete_clipper_account(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    post(c, "/soporte", body="hola")
+    with A.app.app_context():
+        u = A.User.query.filter(A.User.is_admin.is_(False)).first()
+        uid, camp = u.id, A.Campaign.query.first()
+        cid, earned = camp.id, sum(s.earned or 0 for s in u.submissions)
+        spent_before = camp.spent
+    r = post(admin, f"/admin/clipper/{uid}/eliminar", confirm="no")
+    assert "escribe ELIMINAR" in r.get_data(as_text=True)
+    r = post(admin, f"/admin/clipper/{uid}/eliminar", confirm="ELIMINAR")
+    assert "se ha eliminado" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.db.session.get(A.User, uid) is None
+        assert A.Submission.query.filter_by(user_id=uid).count() == 0 and A.Message.query.filter_by(user_id=uid).count() == 0
+        assert abs(A.db.session.get(A.Campaign, cid).spent - max(0, spent_before - earned)) < 0.01
+        admin_id = A.User.query.filter_by(is_admin=True).first().id
+    r = post(admin, f"/admin/clipper/{admin_id}/eliminar", confirm="ELIMINAR")
+    assert "administrador" in r.get_data(as_text=True)
