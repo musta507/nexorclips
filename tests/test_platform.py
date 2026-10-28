@@ -1055,3 +1055,20 @@ def test_admin_removed_from_env_loses_access(monkeypatch):
     assert admin.get("/admin").status_code in (302, 403, 404)
     with A.app.app_context():
         assert not A.User.query.filter_by(email="admin@test.com").first().is_admin
+
+
+def test_auto_refresh_every_6_hours(monkeypatch):
+    from datetime import datetime, timedelta
+    monkeypatch.setattr(A.viewcounter, "APIFY_TOKEN", "x")
+    monkeypatch.setattr(A, "REFRESH_HOURS", 6)
+    with A.app.app_context():
+        A.set_setting("last_refresh_at", "")
+        assert A._refresh_due()                     # nunca se ha hecho
+        now = datetime.utcnow()
+        A.set_setting("last_refresh_at", (now - timedelta(hours=5)).isoformat())
+        assert not A._refresh_due(now)
+        A.set_setting("last_refresh_at", (now - timedelta(hours=6, minutes=1)).isoformat())
+        assert A._refresh_due(now)
+    monkeypatch.setattr(A.viewcounter, "APIFY_TOKEN", "")
+    with A.app.app_context():
+        assert not A._refresh_due()                 # sin Apify no hace nada

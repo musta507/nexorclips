@@ -831,6 +831,7 @@ def refresh_views():
             msg += " Errores: " + " | ".join(errors)
         log.info(msg)
         set_setting("last_refresh", datetime.utcnow().strftime("%d/%m/%Y %H:%M") + " UTC · " + msg)
+        set_setting("last_refresh_at", datetime.utcnow().isoformat())   # el reloj interno cuenta desde aquí
         return msg
     except Exception:  # noqa: BLE001
         db.session.rollback()
@@ -849,6 +850,39 @@ def refresh_in_background():
             except Exception:  # noqa: BLE001
                 pass
     threading.Thread(target=run, daemon=True).start()
+
+
+REFRESH_HOURS = parse_float(os.environ.get("REFRESH_HOURS"), 6) or 0   # cada cuántas horas se cuentan las vistas solas (0 = nunca)
+
+
+def _refresh_due(now=None):
+    """¿Toca contar vistas? Sí si nunca se ha hecho o hace más de REFRESH_HOURS horas."""
+    if REFRESH_HOURS <= 0 or not viewcounter.APIFY_TOKEN:
+        return False
+    now = now or datetime.utcnow()
+    try:
+        last = datetime.fromisoformat(get_setting("last_refresh_at", ""))
+    except ValueError:
+        return True
+    return now - last >= timedelta(hours=REFRESH_HOURS)
+
+
+def _auto_refresh_loop():
+    """Reloj interno: cada 10 minutos mira si toca contar vistas (cada REFRESH_HOURS horas)."""
+    time.sleep(90)                          # deja arrancar la web primero
+    while True:
+        try:
+            with app.app_context():
+                if _refresh_due():
+                    set_setting("last_refresh_at", datetime.utcnow().isoformat())
+                    refresh_views()
+        except Exception:  # noqa: BLE001
+            log.exception("Fallo en la actualización automática de vistas")
+        time.sleep(600)
+
+
+if PRODUCTION and REFRESH_HOURS > 0 and not os.environ.get("PYTEST_CURRENT_TEST"):
+    threading.Thread(target=_auto_refresh_loop, daemon=True, name="auto-refresh").start()
 
 
 # ---------------------------------------------------------------- seguridad
@@ -1024,7 +1058,7 @@ def inject_globals():
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year,
-            "REFRESH_DAYS": REFRESH_DAYS, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads}
+            "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads}
 
 
 @app.template_filter("rate_k")

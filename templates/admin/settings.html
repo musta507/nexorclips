@@ -8,7 +8,7 @@
   <div>
     <h3>Contador de vistas (Apify)</h3>
     <p class="small muted">Última actualización: {{ last_refresh }}</p>
-    <p class="small muted">Las vistas se actualizan solas una vez al día{% if REFRESH_DAYS %}, durante los primeros {{ REFRESH_DAYS }} días de cada clip{% else %} hasta que termina cada campaña{% endif %}.</p>
+    <p class="small muted">Las vistas se actualizan solas {% if REFRESH_HOURS %}cada {{ '%g'|format(REFRESH_HOURS) }} horas{% else %}solo cuando pulsas «Actualizar vistas ahora»{% endif %}{% if REFRESH_DAYS %}, durante los primeros {{ REFRESH_DAYS }} días de cada clip{% else %} hasta que termina cada campaña{% endif %}.</p>
     {% if not has_token %}<p class="small" style="color:var(--red)">Falta APIFY_TOKEN en las variables de Railway.</p>{% endif %}
   </div>
   <div class="inline" style="flex-wrap:wrap">
