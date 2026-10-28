@@ -17,6 +17,29 @@
   </div>
 </div>
 
+<div class="card tight form-stack" id="app-whop">
+  <h3 class="whop-h"><span class="whop-ico" aria-hidden="true"></span>Probar app de Whop (pagos desde el Whop del creador)</h3>
+  {% if not has_app_key %}
+    <p class="small" style="color:var(--red)">Falta WHOP_APP_API_KEY en las variables de Railway (la clave de la app, no la de la empresa).</p>
+  {% else %}
+    <p class="small muted">Instala la app en la empresa que hace de creador, pon aquí su código biz_ y envía una cantidad pequeña a un usuario de Whop. Solo es una prueba: no toca los retiros de los clippers.</p>
+    <form method="post" action="{{ url_for('admin_whop_app_test') }}" class="inline" style="flex-wrap:wrap;gap:10px" data-confirm="¿Enviar este pago de prueba con dinero real?">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input name="company" placeholder="biz_… de la empresa del creador" value="{{ app_test.company if app_test else '' }}" autocomplete="off" style="max-width:260px" aria-label="Empresa del creador" required>
+      <input name="username" placeholder="@usuario que recibe" value="{{ app_test.username if app_test else '' }}" autocomplete="off" autocapitalize="none" style="max-width:200px" aria-label="Usuario de Whop" required>
+      <input name="amount" placeholder="0,50" value="{{ app_test.amount if app_test else '' }}" inputmode="decimal" style="max-width:90px" aria-label="Cantidad" required>
+      <button class="btn">Enviar prueba</button>
+    </form>
+    {% if app_test %}
+      <p class="small" style="font-weight:600;color:{{ 'var(--money-ink)' if app_test.success else 'var(--red-ink)' }}">{{ "✓ Funciona: Whop ha aceptado el pago desde la empresa del creador." if app_test.success else "✗ No ha funcionado. Mira la respuesta de Whop:" }}</p>
+      {% for title, ok, code, body in app_test.steps %}
+        <details {% if not ok %}open{% endif %}><summary class="small"><b>{{ title }}</b> · {{ "OK" if ok else "Error" }} ({{ code }})</summary>
+          <pre class="small selectable" style="white-space:pre-wrap;word-break:break-all;background:var(--soft);padding:10px;border-radius:10px;margin-top:6px">{{ body }}</pre></details>
+      {% endfor %}
+    {% endif %}
+  {% endif %}
+</div>
+
 <div class="card tight">
   <h3 class="whop-h"><span class="whop-ico" aria-hidden="true"></span>Pagos por Whop</h3>
   {% if not whop.key %}<p class="small" style="color:var(--red)">Falta WHOP_API_KEY en las variables de Railway.</p>

@@ -92,6 +92,7 @@ NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()           # avisos al móv
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 WHOP_API_KEY = os.environ.get("WHOP_API_KEY", "").strip()
 WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
+WHOP_APP_API_KEY = os.environ.get("WHOP_APP_API_KEY", "").strip()   # prueba de la opción 2: la app de Whop que instalan los creadores
 WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip("/")
 WHOP_AUTO_MAX = float(os.environ.get("WHOP_AUTO_MAX", "0"))     # 0 = siempre automático; si se pone, por encima lo aprueba un admin
 WHOP_USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,40}$")
@@ -1872,11 +1873,45 @@ def admin_payouts():
 
 @app.route("/admin/ajustes")
 @admin_required
-def admin_settings():
+def admin_settings(app_test=None):
     whop = {"key": bool(WHOP_API_KEY), "company": whop_company_id() if WHOP_API_KEY else "",
             "error": _whop_company.get("error", ""), "from_env": bool(WHOP_COMPANY_ID)}
     return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"),
-                           has_token=bool(viewcounter.APIFY_TOKEN))
+                           has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test)
+
+
+@app.route("/admin/ajustes/probar-app-whop", methods=["POST"])
+@admin_required
+def admin_whop_app_test():
+    """Prueba de la opción 2: pagar con la clave de la APP desde el saldo de la empresa del creador que la instaló."""
+    if not WHOP_APP_API_KEY:
+        flash("Falta WHOP_APP_API_KEY en las variables de Railway.", "error")
+        return redirect(url_for("admin_settings"))
+    biz = (request.form.get("company") or "").strip()
+    username = (request.form.get("username") or "").strip().lstrip("@")
+    amount = parse_float(request.form.get("amount"), 0) or 0
+    if not biz.startswith("biz_") or not re.fullmatch(r"[A-Za-z0-9_.-]{1,60}", username) or not (0 < amount <= 5):
+        flash("Pon el código biz_ de la empresa, un usuario de Whop y una cantidad entre 0,01 y 5 $.", "error")
+        return redirect(url_for("admin_settings"))
+    auth = {"Authorization": f"Bearer {WHOP_APP_API_KEY}"}
+    steps = []
+    ok, code, data = whop_call("GET", f"/users/{username}", headers=auth)
+    steps.append(("1. Buscar al usuario que recibe", ok, code, data))
+    user_id = str(data.get("id", "")) if ok and isinstance(data, dict) else ""
+    if user_id.startswith("user_"):
+        key = f"apptest-{secrets.token_hex(8)}"
+        body = {"type": "balance", "amount": round(amount, 2), "currency": "usd", "origin_id": biz,
+                "destination_id": user_id, "notes": f"Prueba app · {APP_NAME}"[:50], "idempotence_key": key}
+        ok2, code2, data2 = whop_call("POST", "/transfers", json=body, headers={**auth, "Idempotency-Key": key})
+        steps.append(("2. Enviar el pago desde la empresa del creador", ok2, code2, data2))
+        success = ok2 and str((data2 or {}).get("status", "")).lower() != "failed"
+    else:
+        success = False
+    audit("Prueba app de Whop", f"{biz} → @{username} {amount} $ · {'OK' if success else 'falló'}")
+    db.session.commit()
+    result = {"success": success, "steps": [(t, o, c, json.dumps(d, ensure_ascii=False, indent=2)[:3000]) for t, o, c, d in steps],
+              "company": biz, "username": username, "amount": amount}
+    return admin_settings(app_test=result)
 
 
 def process_cover(file):

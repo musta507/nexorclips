@@ -1087,3 +1087,23 @@ def test_campaign_full_blocks_new_requests(monkeypatch):
     assert "plazas de esta campaña están completas" in r.get_data(as_text=True)
     with A.app.app_context():
         assert A.CampaignMember.query.filter_by(campaign_id=cid).join(A.User).filter(A.User.email == "nuevo-full@test.com").count() == 0
+
+
+def test_whop_app_test_box(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    monkeypatch.setattr(A, "WHOP_APP_API_KEY", "apik_test")
+    calls = []
+
+    def fake(method, path, **kw):
+        calls.append((method, path, kw.get("headers", {}).get("Authorization"), kw.get("json")))
+        if path.startswith("/users/"):
+            return True, 200, {"id": "user_123", "username": "pepe"}
+        return True, 200, {"id": "ctt_1", "status": "completed"}
+    monkeypatch.setattr(A, "whop_call", fake)
+    html = post(admin, "/admin/ajustes/probar-app-whop", company="biz_abc", username="@pepe", amount="0,5").get_data(as_text=True)
+    assert "Funciona" in html
+    assert calls[1][1] == "/transfers" and calls[1][2] == "Bearer apik_test"
+    assert calls[1][3]["origin_id"] == "biz_abc" and calls[1][3]["amount"] == 0.5
+    bad = post(admin, "/admin/ajustes/probar-app-whop", company="biz_abc", username="pepe", amount="50").get_data(as_text=True)
+    assert "entre 0,01 y 5" in bad
+    assert c.post("/admin/ajustes/probar-app-whop", data={"_csrf": "t", "company": "biz_abc", "username": "x", "amount": "1"}).status_code in (302, 403, 404)
