@@ -464,6 +464,25 @@ class CampaignMember(db.Model):
             return []
 
 
+class CampaignWaitlist(db.Model):
+    """Clippers que quieren que les avisemos cuando una campaña con plazas completas vuelva a abrir."""
+    __table_args__ = (db.UniqueConstraint("user_id", "campaign_id", name="uq_campaign_waitlist"),)
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+def notify_waitlist(camp, sender_id=None):
+    """La campaña vuelve a tener plazas: aviso por el chat a todos los que lo pidieron y se vacía la lista."""
+    rows = CampaignWaitlist.query.filter_by(campaign_id=camp.id).all()
+    for w in rows:
+        db.session.add(Message(user_id=w.user_id, from_admin=True, sender_id=sender_id, read_by_admin=True, read_by_user=False,
+                               body=f"¡Hay plazas en «{camp.song}»! Ya puedes solicitar entrar en la campaña."))
+        db.session.delete(w)
+    return len(rows)
+
+
 def campaign_member(user_id, campaign_id):
     return CampaignMember.query.filter_by(user_id=user_id, campaign_id=campaign_id).first()
 
@@ -1448,8 +1467,25 @@ def campaign(cid):
                   key=lambda s: s.created_at, reverse=True)
     accounts = campaign_accounts(current_user.id, camp.id)
     accepted = [a for a in accounts if a.status == "aceptada"]
+    waiting = bool(CampaignWaitlist.query.filter_by(user_id=current_user.id, campaign_id=camp.id).first())
     return render_template("campaign.html", camp=camp, st=st, mine=mine, accounts=accounts, accepted=accepted,
-                           member=campaign_member(current_user.id, camp.id), join_statuses=JOIN_STATUSES)
+                           member=campaign_member(current_user.id, camp.id), join_statuses=JOIN_STATUSES, waiting=waiting)
+
+
+@app.route("/campana/<int:cid>/avisame", methods=["POST"])
+@login_required
+def campaign_waitlist(cid):
+    """Apuntarse (o desapuntarse) para que te avisen cuando haya plazas."""
+    camp = db.session.get(Campaign, cid) or abort(404)
+    row = CampaignWaitlist.query.filter_by(user_id=current_user.id, campaign_id=cid).first()
+    if row:
+        db.session.delete(row)
+        flash("Ya no te avisaremos de esta campaña.", "info")
+    elif camp.full and not campaign_member(current_user.id, cid):
+        db.session.add(CampaignWaitlist(user_id=current_user.id, campaign_id=cid))
+        flash("¡Hecho! Te avisaremos por mensaje cuando haya plazas.", "ok")
+    db.session.commit()
+    return redirect(url_for("campaign", cid=cid))
 
 
 @app.route("/campana/<int:cid>/unirme", methods=["POST"])
@@ -1993,7 +2029,11 @@ def _campaign_from_form(camp):
         close_campaign(camp, current_user.id)          # al cerrarla, los clippers ya pueden retirar
     camp.status = status
     camp.featured = bool(request.form.get("featured"))
-    camp.full = bool(request.form.get("full"))
+    was_full, camp.full = bool(camp.full), bool(request.form.get("full"))
+    if was_full and not camp.full and camp.id:
+        n = notify_waitlist(camp, current_user.id)      # vuelven a abrirse las plazas: avisamos a los que esperaban
+        if n:
+            flash(f"Hemos avisado a {n} {'clipper' if n == 1 else 'clippers'} de que hay plazas.", "ok")
     cat = request.form.get("category", "musica")
     camp.category = cat if cat in CATEGORIES else "otro"
     file = request.files.get("cover_file")
@@ -2328,7 +2368,7 @@ def admin_wipe():
     if current_user.id not in admin_ids:
         admin_ids.append(current_user.id)
     keep_campaigns = request.form.get("mode") == "keep_campaigns"
-    models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, Message, CampaignLead, Campaign, AuditLog, Setting)
+    models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, CampaignLead, Campaign, AuditLog, Setting)
     for model in models:
         if keep_campaigns and model is Campaign:
             continue
@@ -2401,7 +2441,7 @@ def delete_user_account(user):
     sub_ids = [s.id for s in subs]
     if sub_ids:
         ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(sub_ids)).delete(synchronize_session=False)
-    for model in (Submission, Payout, CampaignAccount, CampaignMember, Message):
+    for model in (Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message):
         model.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     Message.query.filter_by(sender_id=user.id).update({"sender_id": None}, synchronize_session=False)
     AuditLog.query.filter_by(admin_id=user.id).update({"admin_id": None}, synchronize_session=False)

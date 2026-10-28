@@ -1149,3 +1149,29 @@ def test_admin_delete_activity_entry(monkeypatch):
     assert c.post(f"/admin/actividad/{lid}/borrar", data={"_csrf": "t"}).status_code in (302, 403, 404)
     r = post(admin, f"/admin/actividad/{lid}/borrar")
     assert "Registro borrado" in r.get_data(as_text=True) and "borrame@test.com" not in r.get_data(as_text=True)
+
+
+def test_waitlist_notifies_when_places_open(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    with A.app.app_context():
+        camp = A.Campaign(song="Lista Espera", artist="Z", rate=1000, budget=100, status="activa", full=True)
+        A.db.session.add(camp); A.db.session.commit(); cid = camp.id
+    w = client_for("espera@test.com")
+    assert "Avísame cuando haya plazas" in w.get(f"/campana/{cid}").get_data(as_text=True)
+    r = post(w, f"/campana/{cid}/avisame")
+    assert "Te avisaremos" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.CampaignWaitlist.query.filter_by(campaign_id=cid).count() == 1
+    # el admin quita «plazas completas» guardando la campaña
+    with A.app.app_context():
+        camp = A.db.session.get(A.Campaign, cid)
+        camp.full = True
+        with A.app.test_request_context(method="POST", data={"status": "activa"}):
+            from flask_login import login_user
+            login_user(A.User.query.filter_by(is_admin=True).first())
+            assert A.notify_waitlist(camp) == 1
+        A.db.session.commit()
+        uid = A.User.query.filter_by(email="espera@test.com").first().id
+        msgs = A.Message.query.filter_by(user_id=uid).all()
+        assert any("Hay plazas" in m.body for m in msgs)
+        assert A.CampaignWaitlist.query.filter_by(campaign_id=cid).count() == 0
