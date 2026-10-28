@@ -28,11 +28,12 @@
 
 <details class="card wipe">
   <summary><b>Empezar de cero</b> <span class="small muted">· borrar todos los datos de prueba</span></summary>
-  <p class="small muted" style="margin:10px 0 14px">Borra todas las campañas, clips, retiros, mensajes, solicitudes, el registro de actividad y las cuentas de los clippers. Los administradores se quedan. <b>No se puede deshacer.</b></p>
+  <p class="small muted" style="margin:10px 0 14px">Borra todas las campañas, clips, retiros, mensajes, solicitudes, el registro de actividad y las cuentas de los clippers. Los administradores se quedan. Con «Borrar todo menos las campañas» las campañas se quedan, pero vacías (sin clips ni dinero repartido). <b>No se puede deshacer.</b></p>
   <form method="post" action="{{ url_for('admin_wipe') }}" class="inline" style="flex-wrap:wrap;gap:10px" data-confirm="¿Seguro? Se borrará todo y no se puede deshacer.">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <input name="confirm" placeholder="Escribe BORRAR" autocomplete="off" style="max-width:220px" aria-label="Confirmación">
-    <button class="btn red">Borrar todo</button>
+    <button class="btn red" name="mode" value="keep_campaigns" data-confirm="¿Seguro? Se borran los clips, retiros, mensajes, solicitudes y las cuentas de los clippers. Las campañas se quedan. No se puede deshacer.">Borrar todo menos las campañas</button>
+    <button class="btn red" name="mode" value="all" data-confirm="¿Seguro? Se borra TODO, también las campañas. No se puede deshacer.">Borrar todo</button>
   </form>
 </details>
 {% endblock %}

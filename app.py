@@ -2248,8 +2248,15 @@ def admin_wipe():
     admin_ids = [u.id for u in User.query.filter_by(is_admin=True).all()]
     if current_user.id not in admin_ids:
         admin_ids.append(current_user.id)
-    for model in (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, Message, CampaignLead, Campaign, AuditLog, Setting):
+    keep_campaigns = request.form.get("mode") == "keep_campaigns"
+    models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, Message, CampaignLead, Campaign, AuditLog, Setting)
+    for model in models:
+        if keep_campaigns and model is Campaign:
+            continue
         model.query.delete(synchronize_session=False)
+    if keep_campaigns:      # las campañas se quedan como nuevas: sin nada repartido
+        for c in Campaign.query.all():
+            c.spent = 0.0
     User.query.filter(~User.id.in_(admin_ids)).delete(synchronize_session=False)
     for u in User.query.all():   # los admins se quedan, pero sin cuentas ni datos de cobro de prueba
         u.payout_method = u.payout_details = u.whop_user_id = u.whop_username = ""
@@ -2257,7 +2264,8 @@ def admin_wipe():
             setattr(u, f"{p}_handles", "")
     db.session.commit()
     log.warning("Datos de prueba borrados por %s", current_user.email)
-    flash("Listo: se han borrado todas las campañas, clips, retiros, mensajes y clippers de prueba.", "ok")
+    flash("Listo: se han borrado los clips, retiros, mensajes, solicitudes y clippers de prueba. Las campañas se quedan." if keep_campaigns
+          else "Listo: se han borrado todas las campañas, clips, retiros, mensajes y clippers de prueba.", "ok")
     return redirect(url_for("admin_home"))
 
 

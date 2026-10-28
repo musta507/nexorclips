@@ -1032,3 +1032,17 @@ def test_admin_sections_render():
         assert r.status_code == 200, url
         assert 'class="adm-side"' in r.get_data(as_text=True), url          # menú lateral en todas
     assert 'class="adm-side"' not in client_for("c@test.com").get("/").get_data(as_text=True)
+
+
+
+def test_admin_wipe_keeps_campaigns(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    post(c, "/soporte", body="hola")
+    r = post(admin, "/admin/borrar-datos", confirm="BORRAR", mode="keep_campaigns")
+    assert "Las campañas se quedan" in r.get_data(as_text=True)
+    with A.app.app_context():
+        camps = A.Campaign.query.all()
+        assert len(camps) == 1 and camps[0].spent == 0
+        assert A.Submission.query.count() == 0 and A.Payout.query.count() == 0 and A.Message.query.count() == 0
+        assert A.CampaignMember.query.count() == 0 and A.CampaignAccount.query.count() == 0
+        assert [u.email for u in A.User.query.all()] == ["admin@test.com"]

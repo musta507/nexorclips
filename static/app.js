@@ -18,7 +18,7 @@ if (window.Turbo) {
 document.addEventListener("submit", function (e) {
   var form = e.target;
   if (form.hasAttribute("data-chat-form")) return;   // el chat se envía por su cuenta
-  var confirmMsg = form.getAttribute("data-confirm");
+  var confirmMsg = (e.submitter && e.submitter.getAttribute("data-confirm")) || form.getAttribute("data-confirm");
   if (confirmMsg && !window.confirm(confirmMsg)) { e.preventDefault(); return; }
   if (form.dataset.sending === "1") { e.preventDefault(); return; }
   form.dataset.sending = "1";
