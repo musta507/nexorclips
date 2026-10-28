@@ -18,7 +18,7 @@
     {% for c, st in cards %}
     <tr>
       <td data-label="Campaña"><a class="adm-camp-cell" href="{{ url_for('admin_campaign', cid=c.id) }}">{% set _t, lqip = cover_meta(c) %}<span class="dthumb sm"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="44" height="44" loading="lazy">{% endif %}</span><span><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<span class="small muted" style="display:block">{{ c.artist }}</span></span></a></td>
-      <td data-label="Estado"><span class="status {{ c.status }}">{{ c.status|capitalize }}</span></td>
+      <td data-label="Estado"><span class="status {{ c.status }}">{{ c.status|capitalize }}</span>{% if c.full %} <span class="small muted">· Plazas completas</span>{% endif %}</td>
       <td data-label="Pago / 1.000" class="r tnum">{% if c.rates_vary %}<span class="small muted">hasta </span>{% endif %}{{ c.rate|rate_k }}</td>
       <td data-label="Repartido" class="tnum"><span class="small">{{ st.spent|money(0) }} / {{ c.budget|money(0) }}</span><div class="bar mini-bar" style="margin-top:6px"><span style="width:{{ st.pct }}%"></span></div></td>
       <td data-label="Vistas" class="r tnum">{{ st.views|short }}</td>

@@ -1072,3 +1072,18 @@ def test_auto_refresh_every_6_hours(monkeypatch):
     monkeypatch.setattr(A.viewcounter, "APIFY_TOKEN", "")
     with A.app.app_context():
         assert not A._refresh_due()                 # sin Apify no hace nada
+
+
+def test_campaign_full_blocks_new_requests(monkeypatch):
+    c, admin = _clipper_with_balance(monkeypatch)
+    with A.app.app_context():
+        camp = A.Campaign.query.first()
+        camp.full, camp.status, cid = True, "activa", camp.id
+        A.db.session.commit()
+    new = client_for("nuevo-full@test.com")
+    html = new.get(f"/campana/{cid}").get_data(as_text=True)
+    assert "Plazas completas" in html and 'data-open="join-dialog"' not in html
+    r = post(new, f"/campana/{cid}/unirme")
+    assert "plazas de esta campaña están completas" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.CampaignMember.query.filter_by(campaign_id=cid).join(A.User).filter(A.User.email == "nuevo-full@test.com").count() == 0

@@ -62,7 +62,8 @@
             <option value="{{ s }}" {% if camp.status == s %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select></div>
-      <div class="field" style="justify-content:flex-end"><label class="check"><input type="checkbox" name="featured" {% if camp.featured %}checked{% endif %}> Mostrar como campaña destacada</label></div>
+      <div class="field" style="justify-content:flex-end;gap:10px"><label class="check"><input type="checkbox" name="featured" {% if camp.featured %}checked{% endif %}> Mostrar como campaña destacada</label>
+        <label class="check"><input type="checkbox" name="full" {% if camp.full %}checked{% endif %}> Plazas completas (no se aceptan solicitudes nuevas)</label></div>
     </div>
 
     <button class="btn accent">Guardar campaña</button>

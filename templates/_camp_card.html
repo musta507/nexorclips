@@ -4,7 +4,7 @@
     {% set _t, lqip = cover_meta(c) %}<span class="dthumb"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="62" height="62" loading="lazy" decoding="async">{% endif %}</span>
     <div class="dhead">
       <h3><span>{{ c.artist }}</span> {{ icon("check") }}</h3>
-      <span class="dmeta">{{ c.created_at|ago }} · Por 1.000 vistas{% if my_join is defined and my_join.get(c.id) == 'aceptada' %} · <b class="dj ok">Ya participas</b>{% elif my_join is defined and my_join.get(c.id) == 'pendiente' %} · <b class="dj">Pendiente</b>{% endif %}</span>
+      <span class="dmeta">{{ c.created_at|ago }} · Por 1.000 vistas{% if my_join is defined and my_join.get(c.id) == 'aceptada' %} · <b class="dj ok">Ya participas</b>{% elif my_join is defined and my_join.get(c.id) == 'pendiente' %} · <b class="dj">Pendiente</b>{% elif c.full %} · <b class="dj full">Plazas completas</b>{% endif %}</span>
     </div>
   </div>
   <p class="ddesc">{{ c.song }}</p>

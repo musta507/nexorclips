@@ -226,6 +226,7 @@ class Campaign(db.Model):
     platforms = db.Column(db.String(100), default="tiktok,instagram,youtube")
     status = db.Column(db.String(20), default="activa")     # activa / pausada / finalizada
     featured = db.Column(db.Boolean, default=False)
+    full = db.Column(db.Boolean, default=False)              # plazas completas: no se aceptan solicitudes nuevas
     category = db.Column(db.String(20), default="musica")
     join_questions = db.Column(db.Text, default="")         # preguntas para unirse, una por línea
     report_token = db.Column(db.String(40), unique=True, nullable=True)
@@ -1461,6 +1462,9 @@ def join_campaign(cid):
     if campaign_member(current_user.id, cid):
         flash("Ya enviaste tu solicitud para esta campaña.", "info")
         return back
+    if camp.full:
+        flash("Las plazas de esta campaña están completas. Vuelve a mirar más tarde.", "error")
+        return back
     answers = []
     for i, q in enumerate(camp.question_list):
         a = (request.form.get(f"q_{i}") or "").strip()[:1500]
@@ -1953,6 +1957,7 @@ def _campaign_from_form(camp):
         close_campaign(camp, current_user.id)          # al cerrarla, los clippers ya pueden retirar
     camp.status = status
     camp.featured = bool(request.form.get("featured"))
+    camp.full = bool(request.form.get("full"))
     cat = request.form.get("category", "musica")
     camp.category = cat if cat in CATEGORIES else "otro"
     file = request.files.get("cover_file")

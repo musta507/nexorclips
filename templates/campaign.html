@@ -25,6 +25,9 @@
     {% elif camp.status != 'activa' %}
       <div class="box-head">{{ icon("pause") }} Campaña en pausa</div>
       <p class="box-body muted">Ahora mismo no acepta clips. Vuelve a mirar más tarde.</p>
+    {% elif not member and camp.full %}
+      <div class="box-head">{{ icon("users") }} Plazas completas</div>
+      <p class="box-body muted">Esta campaña no acepta clippers nuevos ahora mismo. Vuelve a mirar más tarde.</p>
     {% elif not member %}
       <div class="box-head">{{ icon("plus") }} Únete a esta campaña</div>
       <div class="box-body st-row">
