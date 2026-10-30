@@ -124,6 +124,16 @@ LIKE_KEYS = {
     "instagram": ["likesCount", "likes"],
     "youtube": ["likes", "likeCount"],
 }
+COMMENT_KEYS = {
+    "tiktok": ["commentCount", "comments", "stats.commentCount"],
+    "instagram": ["commentsCount", "comments"],
+    "youtube": ["commentsCount", "commentCount", "comments"],
+}
+SHARE_KEYS = {
+    "tiktok": ["shareCount", "shares", "stats.shareCount"],
+    "instagram": ["sharesCount", "reshareCount"],
+    "youtube": ["sharesCount"],
+}
 AUTHOR_KEYS = {
     "tiktok": ["authorMeta.name", "author.uniqueId", "authorMeta.uniqueId", "author"],
     "instagram": ["ownerUsername", "owner.username"],
@@ -147,9 +157,11 @@ def _ids_from_item(item):
 def parse_item(platform, item):
     views = _to_int(_first(item, VIEW_KEYS[platform]))
     likes = _to_int(_first(item, LIKE_KEYS[platform]))
+    comments = _to_int(_first(item, COMMENT_KEYS[platform]))
+    shares = _to_int(_first(item, SHARE_KEYS[platform]))
     author = _first(item, AUTHOR_KEYS[platform])
     author = clean_handle(author) if isinstance(author, str) else ""
-    return {"views": views, "likes": likes, "author": author}
+    return {"views": views, "likes": likes, "comments": comments, "shares": shares, "author": author}
 
 
 def fetch_items(platform, urls):

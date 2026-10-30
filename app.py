@@ -345,6 +345,8 @@ class Submission(db.Model):
     video_key = db.Column(db.String(120), unique=True, nullable=False)  # evita repetir vídeos
     views = db.Column(db.Integer, default=0)
     likes = db.Column(db.Integer, nullable=True)
+    comments = db.Column(db.Integer, nullable=True)
+    shares = db.Column(db.Integer, nullable=True)
     author = db.Column(db.String(80), default="")
     earned = db.Column(db.Float, default=0.0)              # dinero asignado a este clip; nunca baja solo
     flags = db.Column(db.String(200), default="")
@@ -372,6 +374,9 @@ class ViewSnapshot(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     submission_id = db.Column(db.Integer, db.ForeignKey("submission.id"), nullable=False, index=True)
     views = db.Column(db.Integer, nullable=False)
+    likes = db.Column(db.Integer, nullable=True)
+    comments = db.Column(db.Integer, nullable=True)
+    shares = db.Column(db.Integer, nullable=True)
     taken_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -701,6 +706,58 @@ def campaign_stats(camp):
     }
 
 
+METRICS = ("views", "likes", "comments", "shares")
+
+
+def campaign_analytics(camp, max_days=180):
+    """Estadísticas de una campaña para el panel: totales, por red y la evolución día a día de cada métrica.
+    Los días sin lectura arrastran la última conocida. Si un clip no tiene historial de me gusta / comentarios /
+    compartidos (se empezaron a guardar después), se estiman en proporción a sus vistas de ese momento."""
+    subs = [s for s in camp.submissions if s.status == "aprobado"]
+    totals = {m: sum(getattr(s, m) or 0 for s in subs) for m in METRICS}
+    spent = cents(camp.spent)
+    by_platform = [{"key": p, "name": PLATFORMS[p],
+                    "views": sum(s.views or 0 for s in subs if s.platform == p),
+                    "posts": sum(1 for s in subs if s.platform == p)} for p in camp.platform_list]
+    out = {"totals": totals, "spent": spent, "posts": len(subs),
+           "ecpm": spent / totals["views"] * 1000 if totals["views"] else 0,
+           "cpm": (camp.rate or 0) / 1000,
+           "engagement": (totals["likes"] + totals["comments"] + totals["shares"]) / totals["views"] * 100 if totals["views"] else 0,
+           "by_platform": by_platform, "series": None}
+    if not subs:
+        return out
+    snaps = {}
+    for sn in (ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_([s.id for s in subs]))
+               .order_by(ViewSnapshot.taken_at).all()):
+        snaps.setdefault(sn.submission_id, []).append(sn)
+    today = datetime.utcnow().date()
+    start = max(min(s.created_at.date() for s in subs), today - timedelta(days=max_days - 1))
+    days = [start + timedelta(days=i) for i in range((today - start).days + 1)]
+    cum = {m: [0] * len(days) for m in METRICS}
+    for s in subs:
+        cur_views = s.views or 0
+        ratio = {m: (getattr(s, m) or 0) / cur_views if cur_views else 0 for m in METRICS[1:]}
+        points = [(s.created_at, {m: 0 for m in METRICS})]
+        for sn in snaps.get(s.id, []):
+            vals = {"views": sn.views or 0}
+            for m in METRICS[1:]:
+                v = getattr(sn, m)
+                vals[m] = v if v is not None else round(vals["views"] * ratio[m])
+            points.append((sn.taken_at, vals))
+        points.append((datetime.utcnow(), {m: getattr(s, m) or 0 for m in METRICS}))   # la lectura de ahora
+        j, last = 0, points[0][1]
+        for i, d in enumerate(days):
+            end = datetime.combine(d, datetime.max.time())
+            while j < len(points) and points[j][0] <= end:
+                last = points[j][1]
+                j += 1
+            for m in METRICS:
+                cum[m][i] += last[m]
+    daily = {m: [max(0, cum[m][i] - (cum[m][i - 1] if i else 0)) for i in range(len(days))] for m in METRICS}
+    out["series"] = {"labels": [d.isoformat() for d in days], "cumulative": cum, "daily": daily}
+    return out
+
+
 def user_money(user):
     """Disponible = ganado en clips aprobados de campañas ya cerradas − retirado.
     En curso = ganado en campañas que siguen abiertas (se libera al cerrarse). Pendiente = clips en revisión."""
@@ -791,20 +848,29 @@ def apply_reading(sub, info, now):
     views = info["views"] if isinstance(info, dict) else int(info)
     likes = info.get("likes") if isinstance(info, dict) else None
     author = info.get("author") if isinstance(info, dict) else ""
+    comments = info.get("comments") if isinstance(info, dict) else None
+    shares = info.get("shares") if isinstance(info, dict) else None
     sub.checked_at = now
     sub.views_error = ""
     if author:
         sub.author = author
+    engaged = any(v is not None and v != getattr(sub, k) for k, v in (("likes", likes), ("comments", comments), ("shares", shares)))
     if likes is not None:
         sub.likes = likes
+    if comments is not None:
+        sub.comments = comments
+    if shares is not None:
+        sub.shares = shares
     check_author(sub)
     if views > (sub.views or 0):
         check_growth(sub, views, likes)
         sub.views = views
         sub.views_updated_at = now
-        db.session.add(ViewSnapshot(submission_id=sub.id, views=views, taken_at=now))
     elif likes is not None:
         check_growth(sub, sub.views or 0, likes)
+    if views > 0 and (sub.views_updated_at == now or engaged):     # historial para las gráficas
+        db.session.add(ViewSnapshot(submission_id=sub.id, views=sub.views or 0, likes=sub.likes,
+                                    comments=sub.comments, shares=sub.shares, taken_at=now))
 
 
 def refresh_views():
@@ -1353,7 +1419,7 @@ def report(token):
         by_platform[s.platform]["clips"] += 1
         by_platform[s.platform]["views"] += s.views or 0
     resp = Response(render_template("report.html", camp=camp, st=st, top=approved[:20], by_platform=by_platform,
-                                    creators=len({s.user_id for s in approved})))
+                                    creators=len({s.user_id for s in approved}), an=campaign_analytics(camp)))
     resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     return resp
 
@@ -2121,7 +2187,8 @@ def admin_campaign(cid):
     elif filt:
         subs = [s for s in subs if s.status == filt]
     report_url = (BASE_URL or request.host_url.rstrip("/")) + url_for("report", token=camp.report_token)
-    return render_template("admin/campaign.html", camp=camp, st=st, subs=subs, filt=filt, report_url=report_url)
+    return render_template("admin/campaign.html", camp=camp, st=st, subs=subs, filt=filt, report_url=report_url,
+                           an=campaign_analytics(camp))
 
 
 @app.route("/admin/campana/<int:cid>/clips.csv")

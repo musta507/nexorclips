@@ -15,12 +15,9 @@
   </div>
 </div>
 
-<div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
-  <div class="card stat"><span class="l">Repartido</span><span class="v">{{ st.spent|money(0) }}</span><span class="small muted">de {{ camp.budget|money(0) }} · quedan {{ st.remaining|money(0) }}</span></div>
-  <div class="card stat"><span class="l">Vistas aprobadas</span><span class="v">{{ st.views|short }}</span><span class="small muted">{{ st.clips }} clips</span></div>
-  <div class="card stat"><span class="l">Coste real por 1.000</span><span class="v">{% if st.views %}{{ (st.effective_cpm / 1000)|money }}{% else %}—{% endif %}</span><span class="small muted">tarifa: {{ camp.rate|rate_k }}</span></div>
-</div>
 {% if camp.status == 'finalizada' %}<div class="flash ok">Campaña completada{% if camp.ended_at %} el {{ camp.ended_at|date }}{% endif %}. Ya no acepta clips ni se actualizan sus vistas, y los clippers ya pueden retirar lo que ganaron. Para reabrirla, sube el presupuesto y ponla en «Activa».</div>{% endif %}
+
+{% include "_analytics.html" %}
 
 <div class="card tight report-link">
   <div>

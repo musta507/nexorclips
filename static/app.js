@@ -140,6 +140,99 @@ var limpiar = [];   // cosas que hay que parar al salir de la página (temporiza
 function pagina() {
   iniciarChat();
   pastillaOrden();
+  graficas();
+}
+
+// =============================================================== gráfica de estadísticas (informe y panel)
+var MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+var METRICA = { views: "Visualizaciones", likes: "Me gusta", comments: "Comentarios", shares: "Compartidos" };
+function numES(v) { return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
+function corto(v) {                // 12,5M · 380K · 2,5K: hasta un decimal, sin «,0»
+  var f = function (x) { return (Math.round(x * 10) / 10).toString().replace(".", ","); };
+  if (v >= 1e6) return f(v / 1e6) + "M";
+  if (v >= 1e3) return f(v / 1e3) + "K";
+  return f(v);
+}
+function fechaCorta(iso) { var p = iso.split("-"); return parseInt(p[2], 10) + " " + MESES[parseInt(p[1], 10) - 1]; }
+function ejeY(max) {                // escalones «redondos» (1, 2 o 5 × potencia de 10), como mucho 5 líneas
+  if (max <= 0) return { step: 1, top: 4 };
+  var raw = max / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+  var step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+  return { step: step, top: Math.ceil(max / step) * step };
+}
+function graficas() {
+  document.querySelectorAll("[data-chart]").forEach(function (box) {
+    if (box.dataset.ready) return;
+    var src = box.querySelector("[data-chart-data]"), plot = box.querySelector("[data-chart-plot]");
+    if (!src || !plot) return;
+    box.dataset.ready = "1";
+    var data = JSON.parse(src.textContent), state = { mode: "cumulative", metric: "views" };
+    var NS = "http://www.w3.org/2000/svg";
+    function el(tag, attrs, parent) {
+      var e = document.createElementNS(NS, tag);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      if (parent) parent.appendChild(e);
+      return e;
+    }
+    function draw() {
+      var labels = data.series.labels, vals = data.series[state.mode][state.metric];
+      var W = plot.clientWidth || 600, H = W < 560 ? 220 : 300, L = 44, R = 12, T = 12, B = 30;
+      var iw = W - L - R, ih = H - T - B, n = vals.length, eje = ejeY(Math.max.apply(null, vals.concat([0]))), max = eje.top;
+      var x = function (i) { return L + (n > 1 ? i / (n - 1) : 0.5) * iw; };
+      var y = function (v) { return T + ih - (v / max) * ih; };
+      plot.innerHTML = "";
+      var svg = el("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img",
+        "aria-label": METRICA[state.metric] + " " + (state.mode === "daily" ? "por día" : "acumuladas") }, plot);
+      for (var gv = 0; gv <= max + eje.step / 2; gv += eje.step) {   // rejilla y eje Y
+        var gy = y(gv);
+        el("line", { x1: L, x2: W - R, y1: gy, y2: gy, class: "an-grid" }, svg);
+        el("text", { x: L - 8, y: gy + 4, class: "an-axis", "text-anchor": "end" }, svg).textContent = corto(gv);
+      }
+      var step = Math.max(1, Math.ceil(n / (W < 560 ? 4 : 7)));   // fechas del eje X
+      for (var i = 0; i < n; i += step) el("text", { x: x(i), y: H - 8, class: "an-axis", "text-anchor": "middle" }, svg).textContent = fechaCorta(labels[i]);
+      if (state.mode === "daily") {                        // barras por día
+        var bw = Math.max(2, Math.min(18, iw / n * 0.7));
+        vals.forEach(function (v, i) { if (v > 0) el("rect", { x: x(i) - bw / 2, y: y(v), width: bw, height: Math.max(1, T + ih - y(v)), rx: Math.min(4, bw / 2), class: "an-barv" }, svg); });
+      } else {                                             // línea con relleno
+        var d = vals.map(function (v, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); }).join(" ");
+        var defs = el("defs", {}, svg), grad = el("linearGradient", { id: "an-fill-g", x1: 0, x2: 0, y1: 0, y2: 1 }, defs);
+        el("stop", { offset: "0%", class: "an-g0" }, grad); el("stop", { offset: "100%", class: "an-g1" }, grad);
+        el("path", { d: d + " L" + x(n - 1).toFixed(1) + " " + (T + ih) + " L" + x(0).toFixed(1) + " " + (T + ih) + " Z", fill: "url(#an-fill-g)" }, svg);
+        el("path", { d: d, class: "an-line" }, svg);
+      }
+      var guide = el("line", { y1: T, y2: T + ih, class: "an-guide", visibility: "hidden" }, svg);
+      var dot = el("circle", { r: 5, class: "an-dot", visibility: "hidden" }, svg);
+      var tip = document.createElement("div"); tip.className = "an-tip"; tip.hidden = true; plot.appendChild(tip);
+      function move(ev) {
+        var r = svg.getBoundingClientRect(), px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+        var i = Math.round((px * W / r.width - L) / iw * (n - 1)); i = Math.max(0, Math.min(n - 1, i));
+        var cx = x(i), cy = y(vals[i]);
+        guide.setAttribute("x1", cx); guide.setAttribute("x2", cx); guide.setAttribute("visibility", "visible");
+        dot.setAttribute("cx", cx); dot.setAttribute("cy", cy); dot.setAttribute("visibility", "visible");
+        tip.innerHTML = "<b>" + numES(vals[i]) + "</b><span>" + fechaCorta(labels[i]) + "</span>";
+        tip.hidden = false;
+        var tx = cx * r.width / W, left = Math.min(Math.max(tx - tip.offsetWidth / 2, 0), r.width - tip.offsetWidth);
+        tip.style.left = left + "px"; tip.style.top = Math.max(0, cy * r.height / H - tip.offsetHeight - 12) + "px";
+      }
+      function leave() { guide.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); tip.hidden = true; }
+      svg.addEventListener("mousemove", move); svg.addEventListener("touchmove", move, { passive: true });
+      svg.addEventListener("mouseleave", leave); svg.addEventListener("touchend", leave);
+      box.querySelector("[data-chart-total]").textContent = numES(data.totals[state.metric] || 0);
+      box.querySelector("[data-chart-label]").textContent = METRICA[state.metric];
+    }
+    box.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-chart-mode],[data-chart-metric]");
+      if (!b) return;
+      var key = b.hasAttribute("data-chart-mode") ? "mode" : "metric";
+      state[key] = b.getAttribute(key === "mode" ? "data-chart-mode" : "data-chart-metric");
+      b.parentNode.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
+      draw();
+    });
+    draw();
+    var redraw = function () { draw(); };
+    window.addEventListener("resize", redraw);
+    limpiar.push(function () { window.removeEventListener("resize", redraw); });
+  });
 }
 
 // Chat de soporte

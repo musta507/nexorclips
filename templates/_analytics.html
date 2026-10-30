@@ -1,0 +1,61 @@
+{# Panel de estadísticas de una campaña: lo usan el informe del creador y el panel de admin. Necesita `an` = campaign_analytics(camp). #}
+{% from "_icons.html" import icon %}
+<section class="an" aria-label="Estadísticas de la campaña">
+  <div class="an-kpis">
+    <div class="an-kpi k-views"><span class="an-ico">{{ icon("eye") }}</span><div><b class="tnum">{{ an.totals.views|short }}</b><span>Visualizaciones</span></div></div>
+    <div class="an-kpi k-spent"><span class="an-ico">{{ icon("cash") }}</span><div><b class="tnum">{{ an.spent|money(0) }}</b><span>Gasto de {{ camp.budget|money(0) }}</span></div></div>
+    <div class="an-kpi k-cpm"><span class="an-ico">{{ icon("pulse") }}</span>
+      <div><b class="tnum">{{ an.ecpm|money }}</b><span>eCPM</span></div>
+      <div class="an-split"><b class="tnum">{{ an.cpm|money }}</b><span>CPM</span></div>
+    </div>
+    <div class="an-kpi k-posts"><span class="an-ico">{{ icon("film") }}</span><div><b class="tnum">{{ an.posts|num }}</b><span>Publicaciones</span></div></div>
+  </div>
+
+  <div class="card an-chart" data-chart>
+    <div class="an-chart-head">
+      <div class="an-total"><b class="tnum" data-chart-total>{{ an.totals.views|num }}</b> <span data-chart-label>Visualizaciones</span></div>
+      <div class="an-toggles">
+        <div class="an-tg" role="group" aria-label="Forma de ver">
+          <button type="button" data-chart-mode="daily">Diario</button>
+          <button type="button" data-chart-mode="cumulative" class="on">Acumulado</button>
+        </div>
+        <div class="an-tg" role="group" aria-label="Métrica">
+          <button type="button" data-chart-metric="views" class="on">Visualizaciones</button>
+          <button type="button" data-chart-metric="likes">Me gusta</button>
+          <button type="button" data-chart-metric="comments">Comentarios</button>
+          <button type="button" data-chart-metric="shares">Compartidos</button>
+        </div>
+      </div>
+    </div>
+    {% if an.series %}
+    <script type="application/json" data-chart-data>{{ {"series": an.series, "totals": an.totals}|tojson }}</script>
+    <div class="an-plot" data-chart-plot></div>
+    {% else %}
+    <div class="empty"><h3>Aún no hay datos</h3><p class="muted">La gráfica aparece en cuanto haya clips aprobados con sus vistas.</p></div>
+    {% endif %}
+  </div>
+
+  <div class="an-split-cards">
+    {% set maxv = an.by_platform|map(attribute="views")|max if an.by_platform else 0 %}
+    {% set maxp = an.by_platform|map(attribute="posts")|max if an.by_platform else 0 %}
+    <div class="card an-bars">
+      <h3>Visualizaciones</h3>
+      {% for p in an.by_platform %}
+      <div class="an-bar"><span class="an-fill" style="width:{{ (p.views / maxv * 100)|round(1) if maxv else 0 }}%"></span><span class="an-name">{{ icon(p.key) }} {{ p.name }}</span><b class="tnum">{{ p.views|short }}</b></div>
+      {% endfor %}
+    </div>
+    <div class="card an-bars">
+      <h3>Publicaciones</h3>
+      {% for p in an.by_platform %}
+      <div class="an-bar"><span class="an-fill" style="width:{{ (p.posts / maxp * 100)|round(1) if maxp else 0 }}%"></span><span class="an-name">{{ icon(p.key) }} {{ p.name }}</span><b class="tnum">{{ p.posts|num }}</b></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="an-mini">
+    <div><b class="tnum">{{ an.totals.likes|short }}</b><span>Me gusta</span></div>
+    <div><b class="tnum">{{ an.totals.comments|short }}</b><span>Comentarios</span></div>
+    <div><b class="tnum">{{ an.totals.shares|short }}</b><span>Compartidos</span></div>
+    <div><b class="tnum">{{ "%.1f"|format(an.engagement)|replace(".", ",") }} %</b><span>Engagement</span></div>
+  </div>
+</section>

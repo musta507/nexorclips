@@ -1175,3 +1175,30 @@ def test_waitlist_notifies_when_places_open(monkeypatch):
         msgs = A.Message.query.filter_by(user_id=uid).all()
         assert any("Hay plazas" in m.body for m in msgs)
         assert A.CampaignWaitlist.query.filter_by(campaign_id=cid).count() == 0
+
+
+def test_campaign_analytics_series(monkeypatch):
+    from datetime import datetime, timedelta
+    c, admin = _clipper_with_balance(monkeypatch)
+    with A.app.app_context():
+        camp = A.Campaign.query.first()
+        s = next(x for x in camp.submissions if x.status == "aprobado")
+        base = datetime.utcnow() - timedelta(days=3)
+        s.created_at = base
+        A.ViewSnapshot.query.filter_by(submission_id=s.id).delete()
+        A.db.session.add_all([
+            A.ViewSnapshot(submission_id=s.id, views=1000, taken_at=base + timedelta(days=1)),            # sin likes: se estiman
+            A.ViewSnapshot(submission_id=s.id, views=3000, likes=300, comments=30, shares=3, taken_at=base + timedelta(days=2)),
+        ])
+        s.views, s.likes, s.comments, s.shares = 4000, 400, 40, 4
+        A.db.session.commit()
+        an = A.campaign_analytics(camp)
+        ser = an["series"]
+        assert len(ser["labels"]) >= 4
+        cum = ser["cumulative"]["views"]
+        assert cum == sorted(cum) and cum[-1] == an["totals"]["views"]          # acumulado nunca baja y acaba en el total
+        assert sum(ser["daily"]["views"]) == cum[-1]
+        assert an["posts"] >= 1 and an["cpm"] == camp.rate / 1000
+    html = client_for("cualquiera@test.com").get(f"/informe/{camp.report_token}" if camp.report_token else "/").get_data(as_text=True)
+    page = admin.get(f"/admin/campana/{camp.id}").get_data(as_text=True)
+    assert "data-chart-data" in page and "eCPM" in page

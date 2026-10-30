@@ -14,22 +14,9 @@
   </div>
 </header>
 
-<div class="stats report-stats">
-  <div class="card stat hero"><span class="l">Vistas generadas</span><span class="v">{{ st.views|short }}</span><span class="small muted">{{ st.views|num }} vistas en clips aprobados</span></div>
-  <div class="card stat"><span class="l">Clips publicados</span><span class="v">{{ st.clips }}</span><span class="small muted">por {{ creators }} {{ "creador" if creators == 1 else "creadores" }}</span></div>
-  <div class="card stat"><span class="l">Coste por 1.000 vistas</span><span class="v">{% if st.views %}{{ (st.spent / st.views * 1000)|money }}{% else %}—{% endif %}</span><span class="small muted">{{ st.spent|money(0) }} invertidos</span></div>
-</div>
+{% include "_analytics.html" %}
 
 <div class="card">{{ budget(camp, st) }}</div>
-
-<section>
-  <div class="section-head"><h2>Por red social</h2></div>
-  <div class="facts">
-    {% for p, d in by_platform.items() %}
-    <div class="fact"><b>{{ d.views|short }}</b><span>{{ icon(p) }} {{ PLATFORMS[p] }} · {{ d.clips }} {{ "clip" if d.clips == 1 else "clips" }}</span></div>
-    {% endfor %}
-  </div>
-</section>
 
 <section>
   <div class="section-head"><h2>Clips con más vistas</h2><p class="muted">Enlaces directos a cada vídeo publicado.</p></div>

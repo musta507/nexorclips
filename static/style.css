@@ -765,3 +765,67 @@ p.box-foot{display:block}
 /* eliminar cuenta de un clipper */
 .del-acc summary{list-style:none;cursor:pointer}
 .del-acc summary::-webkit-details-marker{display:none}
+
+/* =============================================================== panel de estadísticas de campaña */
+.an{display:flex;flex-direction:column;gap:16px}
+.an-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.an-kpi{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius-sm);padding:14px 18px;box-shadow:var(--shadow);min-width:0}
+.an-kpi b{display:block;font-family:var(--display);font-size:21px;line-height:1.15;letter-spacing:-.02em;white-space:nowrap}
+.an-kpi span{font-size:13px;color:var(--muted)}
+.an-ico{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;flex:none}
+.an-ico svg{width:20px;height:20px}
+.k-views .an-ico{background:#e8f0ff;color:#2563eb}
+.k-spent .an-ico{background:var(--money-soft);color:var(--money-ink)}
+.k-cpm .an-ico{background:#fff1e6;color:#c2410c}
+.k-posts .an-ico{background:#fdecf3;color:#be185d}
+.an-split{padding-left:14px;border-left:1px solid var(--line)}
+.an-chart{padding:22px 22px 14px}
+.an-chart-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;margin-bottom:10px}
+.an-total b{font-family:var(--display);font-size:clamp(26px,3.4vw,38px);letter-spacing:-.03em}
+.an-total span{font-size:17px;color:var(--muted);margin-left:4px}
+.an-toggles{display:flex;flex-wrap:wrap;gap:8px}
+.an-tg{display:inline-flex;gap:2px;background:var(--soft);border-radius:999px;padding:3px;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.an-tg button{border:0;background:transparent;font:500 13.5px/1 var(--font);color:var(--muted);padding:9px 14px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.an-tg button:hover{color:var(--ink)}
+.an-tg button.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(16,24,40,.1)}
+.an-plot{position:relative;width:100%}
+.an-plot svg{display:block;width:100%;height:auto;overflow:visible}
+.an-grid{stroke:var(--line);stroke-width:1}
+.an-axis{fill:var(--muted);font:12px var(--font)}
+.an-line{fill:none;stroke:var(--money);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.an-g0{stop-color:var(--money);stop-opacity:.22}
+.an-g1{stop-color:var(--money);stop-opacity:0}
+.an-barv{fill:var(--money)}
+.an-guide{stroke:var(--ink-2);stroke-width:1;stroke-dasharray:3 3}
+.an-dot{fill:var(--card);stroke:var(--money);stroke-width:2.5}
+.an-tip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;border-radius:10px;padding:7px 11px;font-size:12.5px;line-height:1.3;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+.an-tip b{display:block;font-size:14px}
+.an-tip span{color:#c9cad1}
+.an-split-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.an-bars{display:flex;flex-direction:column;gap:10px}
+.an-bars h3{font-size:15px;color:var(--muted);font-family:var(--font);font-weight:500;margin-bottom:4px}
+.an-bar{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:0 4px 0 14px}
+.an-fill{position:absolute;left:0;top:0;bottom:0;background:var(--soft);border-radius:12px;min-width:44px}
+.an-name{position:relative;display:inline-flex;align-items:center;gap:8px;font-weight:600}
+.an-name svg{width:16px;height:16px}
+.an-bar b{position:relative}
+.an-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.an-mini div{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px 16px}
+.an-mini b{display:block;font-family:var(--display);font-size:18px}
+.an-mini span{font-size:12.5px;color:var(--muted)}
+@media (max-width:900px){
+  .an-kpis,.an-mini{grid-template-columns:1fr 1fr}
+  .an-split-cards{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .an-ico{display:none}
+  .an-kpi{padding:12px 14px}
+  .an-kpi b{font-size:17px}
+  .an-split{padding-left:10px}
+}
+@media (max-width:420px){
+  .an-kpi{padding:12px;gap:10px}
+  .an-ico{width:36px;height:36px}
+  .an-kpi b{font-size:17px}
+  .an-split{padding-left:10px}
+}
