@@ -1608,3 +1608,9 @@ def test_demo_data_loads_and_removes_cleanly():
     with A.app.app_context():
         assert A.Submission.query.count() == 0 and A.User.query.count() == 1
         assert get(A.Campaign, cid).spent == 0
+
+
+def test_demo_and_notify_cards_visible_in_production(monkeypatch):
+    monkeypatch.setattr(A, "ALLOW_WIPE", False)
+    page = client_for("admin@test.com").get("/admin/ajustes").get_data(as_text=True)
+    assert "Cargar datos de demostración" in page and "Avisos a los clippers" in page
