@@ -1591,3 +1591,20 @@ def test_campaign_tabs():
     assert "Menciona a @marca" in a.get(f"/campana/{cid}?tab=normas").get_data(as_text=True)
     assert "Nuevo material" in a.get(f"/campana/{cid}?tab=anuncios").get_data(as_text=True)
     assert "Reacción" in a.get(f"/campana/{cid}?tab=ideas").get_data(as_text=True)
+
+
+def test_demo_data_loads_and_removes_cleanly():
+    cid = make_campaign(budget=5000, min_tiktok=0.5, join_questions="¿Cuánto llevas?")
+    admin = client_for("admin@test.com")
+    msg = flashes(post(admin, "/admin/ajustes/demo", accion="cargar"))
+    assert msg and "Demo cargada" in msg[0][1]
+    with A.app.app_context():
+        c = get(A.Campaign, cid)
+        assert c.status == "activa" and 0 < c.spent <= 5000 * .56
+        assert A.ViewSnapshot.query.count() > 50 and A.Submission.query.filter_by(status="aprobado").count() > 5
+    assert "Ranking" in admin.get("/ranking").get_data(as_text=True)
+    assert admin.get("/admin").status_code == 200 and admin.get(f"/admin/campana/{cid}").status_code == 200
+    post(admin, "/admin/ajustes/demo", accion="quitar")
+    with A.app.app_context():
+        assert A.Submission.query.count() == 0 and A.User.query.count() == 1
+        assert get(A.Campaign, cid).spent == 0

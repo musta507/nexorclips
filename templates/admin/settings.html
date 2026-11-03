@@ -63,6 +63,17 @@
   {% if not VAPID_ON %}<form method="post" action="{{ url_for('admin_vapid_keys') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Generar la clave de avisos</button></form>{% endif %}
 </div>
 
+<div class="card tight toolbar">
+  <div>
+    <h3>Datos de demostración</h3>
+    <p class="small muted">{% if demo_n %}Ahora hay {{ demo_n }} clippers de demostración con sus clips y estadísticas. Al quitarlos, se borra solo lo inventado.{% else %}Llena la web con 25 clippers inventados y clips de los últimos 30 días para enseñarla. Se quita con un botón y no toca lo real.{% endif %}</p>
+  </div>
+  <form method="post" action="{{ url_for('admin_demo') }}"{% if demo_n %} data-confirm="¿Quitar todos los datos de demostración?"{% endif %}>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="{{ 'quitar' if demo_n else 'cargar' }}">
+    <button class="btn {{ 'soft' if demo_n else 'accent' }}">{{ "Quitar datos de demostración" if demo_n else "Cargar datos de demostración" }}</button>
+  </form>
+</div>
+
 <details class="card wipe">
   <summary><b>Empezar de cero</b> <span class="small muted">· borrar todos los datos de prueba</span></summary>
   <p class="small muted" style="margin:10px 0 14px">Borra todas las campañas, clips, retiros, mensajes, solicitudes, el registro de actividad y las cuentas de los clippers. Los administradores se quedan. Con «Borrar todo menos las campañas» las campañas se quedan, pero vacías (sin clips ni dinero repartido). <b>No se puede deshacer.</b></p>

@@ -1231,6 +1231,13 @@ def check_growth(sub, new_views, likes):
 _refresh_lock = GlobalLock(731902)       # un solo recuento de vistas a la vez, aunque haya varios procesos
 
 
+DEMO_DOMAIN = "@demo.clipprofit.app"     # los clippers de demostración tienen este correo (no existe)
+
+
+def is_demo(user):
+    return bool(user and (user.email or "").endswith(DEMO_DOMAIN))
+
+
 def apply_reading(sub, info, now):
     """Guarda una lectura de Apify en el clip: vistas, likes, autor, historial y avisos."""
     views = info["views"] if isinstance(info, dict) else int(info)
@@ -1276,7 +1283,7 @@ def refresh_views():
         subs = q.order_by(Submission.created_at).all()
         apply_schedule()
         now0 = datetime.utcnow()
-        subs = [s for s in subs if not s.campaign.exhausted and not earn_window_closed(s, now0)]
+        subs = [s for s in subs if not s.campaign.exhausted and not earn_window_closed(s, now0) and not is_demo(s.user)]
         read, errors = 0, []
         for platform in PLATFORMS:
             group = [s for s in subs if s.platform == platform]
@@ -1307,6 +1314,8 @@ def refresh_views():
         pend = (Submission.query.join(Campaign)
                 .filter(Campaign.status == "activa", Submission.status == "pendiente").all())
         for s in pend:                                   # reglas automáticas (también caduca lo que no llegó al mínimo)
+            if is_demo(s.user):
+                continue
             r = auto_review(s)
             if r:
                 auto[r] += 1
@@ -2677,7 +2686,195 @@ def admin_settings(app_test=None):
     whop = {"key": bool(WHOP_API_KEY), "company": whop_company_id() if WHOP_API_KEY else "",
             "error": _whop_company.get("error", ""), "from_env": bool(WHOP_COMPANY_ID)}
     return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"), allow_wipe=ALLOW_WIPE,
-                           has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test)
+                           has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
+                           demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count())
+
+
+DEMO_NAMES = ["Lucía Fernández", "Mateo Rodríguez", "Valentina Gómez", "Hugo Martín", "Camila Torres", "Leo Sánchez",
+              "Sofía Ramírez", "Daniel Ruiz", "Martina López", "Pablo Navarro", "Isabella Castro", "Álvaro Moreno",
+              "Emma Herrera", "Diego Vargas", "Julia Ortega", "Thiago Medina", "Paula Romero", "Bruno Silva",
+              "Carla Molina", "Adrián Rojas", "Lola Delgado", "Gael Morales", "Noa Jiménez", "Iker Peña", "Elena Ríos"]
+DEMO_COUNTRIES = ["ES", "ES", "ES", "MX", "MX", "AR", "CO", "CL", "PE", "ES", "MX", "ES", "AR", "CO", "ES",
+                  "AR", "ES", "UY", "ES", "CL", "ES", "MX", "ES", "ES", "VE"]
+DEMO_QUESTIONS_ANSWERS = ["Llevo un año haciendo clips de streamers", "Puedo subir 3 al día", "TikTok e Instagram"]
+
+
+def _demo_avatar(name, seed):
+    """Foto de perfil inventada: degradado de color con la inicial (sin fotos de personas reales)."""
+    from PIL import Image, ImageDraw
+    import colorsys
+    import random as rnd
+    r = rnd.Random(seed)
+    h = r.random()
+    c1 = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(h, .55, .95))
+    c2 = tuple(int(x * 255) for x in colorsys.hsv_to_rgb((h + .12) % 1, .75, .65))
+    img = Image.new("RGB", (256, 256))
+    d = ImageDraw.Draw(img)
+    for y in range(256):
+        t = y / 255
+        d.line([(0, y), (256, y)], fill=tuple(int(c1[i] * (1 - t) + c2[i] * t) for i in range(3)))
+    try:
+        from PIL import ImageFont
+        font = ImageFont.load_default(size=120)
+    except (TypeError, OSError):
+        font = None
+    d.text((128, 128), name[:1].upper(), fill="white", anchor="mm", font=font)
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=85)
+    return out.getvalue()
+
+
+def load_demo(days=30, seed=7):
+    """Llena la web con clippers y estadísticas de demostración de los últimos días. Se quita con remove_demo()."""
+    import random as rnd
+    r = rnd.Random(seed)
+    now = datetime.utcnow()
+    camps = [c for c in Campaign.query.order_by(Campaign.id).all() if c.status != "finalizada" and not c.exhausted]
+    if not camps:
+        return "No hay campañas activas con presupuesto: crea alguna antes."
+    users = []
+    for i, name in enumerate(DEMO_NAMES):
+        handle = viewcounter.clean_handle(name.split()[0] + "." + name.split()[1][:4] + str(r.randint(1, 99)))
+        handle = handle.encode("ascii", "ignore").decode() or f"clipper{i}"
+        u = User(email=f"demo{i + 1}{DEMO_DOMAIN}", name=name, country=DEMO_COUNTRIES[i % len(DEMO_COUNTRIES)],
+                 languages="es", created_at=now - timedelta(days=days + r.randint(1, 15), hours=r.randint(0, 23)),
+                 onboarded_at=now - timedelta(days=days), accepted_terms_at=now - timedelta(days=days),
+                 last_seen_at=now - timedelta(hours=r.randint(1, 70)), tiktok_handles=handle,
+                 instagram_handles=handle if r.random() < .6 else "", youtube_handles=handle if r.random() < .35 else "",
+                 trusted=r.random() < .2)
+        db.session.add(u)
+        db.session.flush()
+        u.avatar_data, u.avatar_ver = _demo_avatar(name, i), 1
+        u.avatar_url = f"/foto/{u.id}?v=1"
+        users.append((u, handle, 0.4 + r.random() * 2.2))        # cada uno con su «talento»
+    db.session.flush()
+    plan = []                                                  # (sub, vistas finales)
+    n = 0
+    for u, handle, skill in users:
+        mine = r.sample(camps, k=min(len(camps), r.randint(1, 3)))
+        for c in mine:
+            joined = now - timedelta(days=days - r.randint(0, 6), hours=r.randint(0, 23))
+            db.session.add(CampaignMember(user_id=u.id, campaign_id=c.id, status="aceptada", created_at=joined,
+                                          decided_at=joined + timedelta(hours=r.randint(1, 20)),
+                                          answers=json.dumps([[q, a] for q, a in zip(c.question_list, DEMO_QUESTIONS_ANSWERS)],
+                                                             ensure_ascii=False)))
+            plats = [p for p in c.platform_list if u.handles(p)] or c.platform_list[:1]
+            for p in plats:
+                db.session.add(CampaignAccount(user_id=u.id, campaign_id=c.id, platform=p, handle=handle, status="aceptada",
+                                               bio_verified=True, bio_status="Verificada", created_at=joined, decided_at=joined))
+            for _ in range(r.randint(2, 7)):
+                created = joined + timedelta(hours=r.randint(6, max(7, int((now - joined).total_seconds() // 3600) - 2)))
+                if created > now - timedelta(hours=3):
+                    created = now - timedelta(hours=r.randint(3, 40))
+                p = r.choice(plats)
+                n += 1
+                vid = str(7400000000000000000 + seed * 100000 + n) if p == "tiktok" else f"DEMO{seed}x{n}"
+                url = {"tiktok": f"https://www.tiktok.com/@{handle}/video/{vid}",
+                       "instagram": f"https://www.instagram.com/reel/{vid}/",
+                       "youtube": f"https://www.youtube.com/shorts/{vid}"}[p]
+                age = (now - created).total_seconds() / 86400
+                viral = r.random() < .08
+                final = int(r.lognormvariate(9.6, 1.1) * skill * (8 if viral else 1) * min(1, .35 + age / 6))
+                minv = c.min_views_for(p)
+                if minv and final < minv and age >= 2 and r.random() < .75:       # la mayoría de los antiguos llegan al mínimo
+                    final = int(minv * r.uniform(1.1, 5))
+                s_ = Submission(user_id=u.id, campaign_id=c.id, url=url, platform=p, video_key=f"{p}:{vid}", author=handle,
+                                created_at=created, posted_at=created - timedelta(minutes=r.randint(5, 300)), views=final)
+                db.session.add(s_)
+                plan.append((s_, final, created))
+    db.session.flush()
+    caps = {c.id: (c.spent or 0) + c.remaining * .55 for c in camps}   # no gastar más del 55 % de lo que queda
+    # Historial día a día (curva que sube rápido al principio y se va frenando)
+    for s_, _, created in plan:
+        final = s_.views or 0
+        age_h = max(1, (now - created).total_seconds() / 3600)
+        speed = r.uniform(18, 60)
+        t = created
+        while True:
+            t += timedelta(hours=r.choice((6, 12, 24)))
+            if t >= now:
+                break
+            h = (t - created).total_seconds() / 3600
+            frac = (1 - math.exp(-h / speed)) / (1 - math.exp(-age_h / speed))
+            v = int(final * min(1, frac))
+            db.session.add(ViewSnapshot(submission_id=s_.id, views=v, likes=int(v * .062), comments=int(v * .004),
+                                        shares=int(v * .006), taken_at=t))
+        s_.likes, s_.comments, s_.shares = int(final * r.uniform(.04, .09)), int(final * r.uniform(.002, .006)), int(final * r.uniform(.003, .01))
+        s_.views_updated_at = s_.checked_at = now - timedelta(hours=r.randint(1, 5))
+    db.session.flush()
+    # Estados: los que llegaron al mínimo y llevan tiempo, casi todos aprobados; algunos rechazados; el resto, en curso
+    reasons = ["reglas", "menciones", "audio", "calidad", "duplicado"]
+    for s_, _, created in sorted(plan, key=lambda x: x[2]):
+        c = s_.campaign
+        old = (now - created).days >= 2
+        if not reached_min(s_, c):
+            if old and r.random() < .25:
+                s_.status, s_.reject_code = "rechazado", "caducado"
+                s_.reject_reason = reject_text("caducado", "No llegó al pago mínimo a tiempo.")
+            continue
+        if old and r.random() < .1:
+            code = r.choice(reasons)
+            s_.status, s_.reject_code, s_.reject_reason = "rechazado", code, reject_text(code)
+            s_.reviewed_at = created + timedelta(hours=r.randint(5, 30))
+            if r.random() < .3:
+                s_.appeal_text, s_.appeal_status = "Creo que sí cumple, puse la mención en la descripción.", "pendiente"
+                s_.appeal_at = s_.reviewed_at + timedelta(hours=3)
+        elif (old or r.random() < .4) and (c.spent or 0) + raw_earning(s_, c) <= caps[c.id]:
+            s_.status, s_.reviewed_at = "aprobado", created + timedelta(hours=r.randint(4, 30))
+            accrue(s_)
+    # Unos cuantos que quieren entrar en una campaña (para la bandeja de solicitudes)
+    for u, _, _ in r.sample(users, k=min(4, len(users))):
+        free = [c for c in camps if not campaign_member(u.id, c.id)]
+        if free:
+            c = r.choice(free)
+            db.session.add(CampaignMember(user_id=u.id, campaign_id=c.id, status="pendiente",
+                                          created_at=now - timedelta(hours=r.randint(2, 30)),
+                                          answers=json.dumps([[q, a] for q, a in zip(c.question_list, DEMO_QUESTIONS_ANSWERS)],
+                                                             ensure_ascii=False)))
+            db.session.flush()
+    # Algún mensaje de soporte y progreso en la formación
+    for u, _, _ in r.sample(users, k=min(3, len(users))):
+        db.session.add(Message(user_id=u.id, from_admin=False, sender_id=u.id, read_by_admin=False, read_by_user=True,
+                               body=r.choice(["¿Cuándo se actualizan las vistas de mi último clip?",
+                                              "Hola, ¿puedo usar el mismo audio en Instagram?",
+                                              "¿Cuánto tarda en llegar el retiro a Whop?"]),
+                               created_at=now - timedelta(hours=r.randint(1, 20))))
+    lessons = [ls for c in Course.query.filter_by(published=True).all() for ls in c.visible_lessons]
+    for u, _, _ in users:
+        for ls in lessons[:r.randint(0, len(lessons))]:
+            db.session.add(LessonProgress(user_id=u.id, lesson_id=ls.id, completed_at=now - timedelta(days=r.randint(0, days))))
+    db.session.commit()
+    total = len(plan)
+    return f"Demo cargada: {len(users)} clippers y {total} clips de los últimos {days} días."
+
+
+def remove_demo():
+    demo = User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).all()
+    for u in demo:
+        LessonProgress.query.filter_by(user_id=u.id).delete(synchronize_session=False)
+        PushSub.query.filter_by(user_id=u.id).delete(synchronize_session=False)
+        delete_user_account(u)
+    db.session.commit()
+    return len(demo)
+
+
+@app.route("/admin/ajustes/demo", methods=["POST"])
+@admin_required
+def admin_demo():
+    if request.form.get("accion") == "quitar":
+        n = remove_demo()
+        audit("demo_quitada", f"{n} clippers")
+        db.session.commit()
+        flash(f"Datos de demostración quitados ({n} clippers). Lo real sigue igual.", "ok")
+    else:
+        if User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).first():
+            flash("Ya hay datos de demostración. Quítalos primero si quieres volver a cargarlos.", "error")
+        else:
+            msg = load_demo()
+            audit("demo_cargada", msg)
+            db.session.commit()
+            flash(msg, "ok")
+    return redirect(url_for("admin_settings"))
 
 
 @app.route("/admin/ajustes/probar-app-whop", methods=["POST"])
@@ -3770,6 +3967,9 @@ def _spawn(fn, *args):
 def notify_user(user_id, event, title, body, path=""):
     """Aviso personal a un clipper (además del mensaje en la web, si lo hay)."""
     if not (push_ready() or whatsapp_ready()):
+        return
+    u = db.session.get(User, user_id)
+    if is_demo(u):
         return
     base = BASE_URL or (request.host_url.rstrip("/") if has_request_context() else "")
     _spawn(_deliver, user_id, event, title[:80], body[:300], (base + path) if path else base)
