@@ -462,14 +462,14 @@ def test_support_chat_flow():
     assert r.get_json()["ok"] and r.get_json()["message"]["mine"]
     assert 'class="count"' not in admin.get("/admin/mensajes").get_data(as_text=True)   # leído al abrirlo
     home = a.get("/").get_data(as_text=True)
-    assert 'class="msg-notice"' in home and "te ha escrito" in home and "<title>(1)" in home   # aviso visible
+    assert 'class="msg-notice"' not in home and "1 mensaje del equipo" in home and "<title>(1)" in home   # en la campanita
     n = a.get("/avisos").get_json()
     assert n["unread"] == 1 and n["url"] == "/soporte" and "7 días" in n["body"]
     page = a.get("/soporte").get_data(as_text=True)
     assert "En 7 días hábiles &lt;b&gt;ok&lt;/b&gt;" in page                        # sin HTML inyectado
     home = a.get("/").get_data(as_text=True)
-    assert 'class="msg-notice"' not in home and "<title>(" not in home
-    assert a.get("/avisos").get_json() == {"unread": 0}
+    assert "mensaje del equipo" not in home and "<title>(" not in home
+    assert a.get("/avisos").get_json() == {"unread": 0, "bell": 0}
     data = a.get("/soporte/mensajes?after=0").get_json()["messages"]
     assert [m["mine"] for m in data] == [True, False]
     assert "cuándo pagáis" not in b.get("/soporte").get_data(as_text=True)          # conversaciones privadas
@@ -1090,6 +1090,7 @@ def test_campaign_full_blocks_new_requests(monkeypatch):
 
 
 def test_whop_app_test_box(monkeypatch):
+    monkeypatch.setattr(A, "CREATORS_ENABLED", True)
     c, admin = _clipper_with_balance(monkeypatch)
     monkeypatch.setattr(A, "WHOP_APP_API_KEY", "apik_test")
     calls = []
@@ -1244,6 +1245,7 @@ def _two_creator_setup(monkeypatch):
 
 
 def test_withdraw_splits_by_creator_wallet(monkeypatch):
+    monkeypatch.setattr(A, "CREATORS_ENABLED", True)
     c, admin, crid, before = _two_creator_setup(monkeypatch)
     assert before["by_creator"].get(crid) == 40
     calls = _whop_fake(monkeypatch)
@@ -1261,6 +1263,7 @@ def test_withdraw_splits_by_creator_wallet(monkeypatch):
 
 
 def test_creator_without_key_keeps_money_reserved(monkeypatch):
+    monkeypatch.setattr(A, "CREATORS_ENABLED", True)
     c, admin, crid, before = _two_creator_setup(monkeypatch)
     monkeypatch.delenv("WHOP_KEY_PABLO")
     _whop_fake(monkeypatch)
@@ -1273,6 +1276,7 @@ def test_creator_without_key_keeps_money_reserved(monkeypatch):
 
 
 def test_creators_page_and_roles(monkeypatch):
+    monkeypatch.setattr(A, "CREATORS_ENABLED", True)
     c, admin, crid, before = _two_creator_setup(monkeypatch)
     html = admin.get("/admin/creadores").get_data(as_text=True)
     assert "Pablo" in html and "Conectado" in html
@@ -1313,41 +1317,14 @@ def test_clip_counts_views_until_minimum_then_goes_to_review(monkeypatch):
     assert "1 de 1" in page and "tiktok.com/embed/v2/" + _vid(1) in page
 
 
-def test_clip_expires_when_minimum_not_reached(monkeypatch):
-    cid = make_campaign(min_tiktok=1.0, expire_days=3)
-    a = client_for("a@test.com", tiktok="ana")
-    post(a, f"/campana/{cid}", url=tt("ana", 1))
-    with A.app.app_context():
-        s = A.Submission.query.one()
-        s.created_at = datetime.utcnow() - timedelta(days=4)
-        A.db.session.commit()
-    _refresh_with(monkeypatch, {_vid(1): {"views": 100}})
-    with A.app.app_context():
-        s = A.Submission.query.one()
-        assert s.status == "rechazado" and s.reject_code == "caducado"
-
-
-def test_video_posted_before_joining_is_auto_rejected(monkeypatch):
-    cid = make_campaign(auto_reject_old=True)
+def test_video_posted_before_joining_is_flagged(monkeypatch):
+    cid = make_campaign()
     a = client_for("a@test.com", tiktok="ana")
     post(a, f"/campana/{cid}", url=tt("ana", 1))
     _refresh_with(monkeypatch, {_vid(1): {"views": 100, "posted_at": datetime.utcnow() - timedelta(days=30)}})
     with A.app.app_context():
         s = A.Submission.query.one()
-        assert s.status == "rechazado" and s.reject_code == "antiguo" and "publicado_antes" in s.flag_list
-
-
-def test_trusted_clipper_is_auto_approved(monkeypatch):
-    cid = make_campaign(auto_approve_trusted=True)
-    a = client_for("a@test.com", tiktok="ana")
-    post(a, f"/campana/{cid}", url=tt("ana", 1))
-    with A.app.app_context():
-        A.User.query.filter_by(email="a@test.com").one().trusted = True
-        A.db.session.commit()
-    _refresh_with(monkeypatch, {_vid(1): {"views": 10000}})
-    with A.app.app_context():
-        s = A.Submission.query.one()
-        assert s.status == "aprobado" and s.earned == 2.0
+        assert s.status == "pendiente" and "publicado_antes" in s.flag_list
 
 
 def test_reject_with_fixed_reason_and_appeal_once():
@@ -1399,16 +1376,9 @@ def test_duplicate_pause_and_add_budget():
         assert c.status == "pausada" and c.budget == 1100
 
 
-def test_campaign_start_date_and_places_and_countries():
-    cid = make_campaign(starts_at=datetime.utcnow() + timedelta(days=2), max_members=1, countries="MX")
+def test_campaign_places_fill_up_and_toggle():
+    cid = make_campaign(max_members=1)
     a = client_for("a@test.com", tiktok="ana", verify=False)
-    b = client_for("b@test.com", verify=False)
-    assert "Indica tu país" in post(a, f"/campana/{cid}/unirme").get_data(as_text=True)
-    with A.app.app_context():
-        A.User.query.filter_by(email="a@test.com").one().country = "MX"
-        A.User.query.filter_by(email="b@test.com").one().country = "ES"
-        A.db.session.commit()
-    assert "solo para clippers de: México" in post(b, f"/campana/{cid}/unirme").get_data(as_text=True)
     post(a, f"/campana/{cid}/unirme")
     admin = client_for("admin@test.com")
     with A.app.app_context():
@@ -1416,31 +1386,33 @@ def test_campaign_start_date_and_places_and_countries():
     post(admin, f"/admin/solicitud/{mid}/aceptar")
     with A.app.app_context():
         assert get(A.Campaign, cid).full
-    AUTO_ACCEPT.add("a@test.com")
-    assert "La campaña empieza el" in post(a, f"/campana/{cid}", url=tt("ana", 1)).get_data(as_text=True)
-
-
-def test_bonus_per_clip_and_campaign_closes_on_end_date(monkeypatch):
-    cid = make_campaign(bonus_per_clip=0.5, ends_on=datetime.utcnow() - timedelta(minutes=1))
+    post(admin, f"/admin/campana/{cid}/estado", accion="plazas")
     with A.app.app_context():
-        s = A.Submission(user_id=1, campaign_id=cid, url="x", platform="tiktok", video_key="tiktok:1", views=10000)
-        assert A.raw_earning(s, get(A.Campaign, cid)) == 2.5
-    _refresh_with(monkeypatch, {})
+        assert not get(A.Campaign, cid).full
+
+
+def test_campaign_announcements_and_ideas_one_by_one():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))          # le acepta en la campaña
+    post(admin, f"/admin/campana/{cid}/contenido", accion="anuncio", text="Nuevo material en el Drive")
+    post(admin, f"/admin/campana/{cid}/contenido", accion="idea", text="Top 3 frases")
+    post(admin, f"/admin/campana/{cid}/contenido", accion="idea", text="Reacción")
+    post(admin, f"/admin/campana/{cid}/contenido", accion="borrar_idea", i="0")
     with A.app.app_context():
-        assert get(A.Campaign, cid).status == "finalizada"
+        c = get(A.Campaign, cid)
+        assert c.idea_list == ["Reacción"] and c.announcement_list[0][1] == "Nuevo material en el Drive"
+        ana = A.User.query.filter_by(email="a@test.com").one()
+        assert A.Notice.query.filter_by(kind="anuncio", user_id=ana.id).count() == 1
 
-
-def test_wizard_saves_new_options():
+def test_wizard_saves_campaign():
     admin = client_for("admin@test.com")
     post(admin, "/admin/campana/nueva", wizard="1", song="Nueva", artist="Pablo", pf_tiktok="on", rate_k_tiktok="1,5",
-         min_k_tiktok="", max_k_tiktok="", budget="5.000", kind="ugc", bonus_per_clip="2", max_members="20",
-         countries=["ES", "MX"], earn_days="10", expire_days="7", review_at_min="on", status="activa",
-         starts_at="2030-01-01T10:00", ends_on="2030-02-01T10:00", ideas="Idea uno\nIdea dos")
+         min_k_tiktok="", max_k_tiktok="", budget="5.000", max_members="20", status="activa")
     with A.app.app_context():
         c = A.Campaign.query.one()
-        assert (c.kind, c.bonus_per_clip, c.max_members, c.countries, c.earn_days, c.expire_days) == ("clipping", 2.0, 20, "ES,MX", 10, 7)
-        assert c.rate == 1500 and c.budget == 5000 and c.starts_at.year == 2030 and c.idea_list == ["Idea uno", "Idea dos"]
-
+        assert (c.kind, c.max_members, c.rate, c.budget) == ("clipping", 20, 1500, 5000)
 
 def test_publish_date_parsed_from_apify():
     assert V.parse_item("tiktok", {"playCount": 5, "createTime": 1700000000})["posted_at"].year == 2023
@@ -1461,10 +1433,10 @@ def test_onboarding_three_steps():
     a = client_for("a@test.com", verify=False)
     post(a, "/bienvenida?paso=1", name="Ana García", tiktok="@anag")
     post(a, "/bienvenida?paso=2", country="MX", languages=["es", "en"])
-    post(a, "/bienvenida?paso=3", whatsapp="+52 55 1234 5678")
+    post(a, "/bienvenida?paso=3")
     with A.app.app_context():
         u = A.User.query.filter_by(email="a@test.com").one()
-        assert (u.name, u.country, u.languages, u.whatsapp) == ("Ana García", "MX", "es,en", "+525512345678")
+        assert (u.name, u.country, u.languages) == ("Ana García", "MX", "es,en")
         assert u.onboarded_at and "anag" in u.handles("tiktok")
     assert "Primeros pasos" in a.get("/").get_data(as_text=True)
 
@@ -1614,3 +1586,15 @@ def test_demo_and_notify_cards_visible_in_production(monkeypatch):
     monkeypatch.setattr(A, "ALLOW_WIPE", False)
     page = client_for("admin@test.com").get("/admin/ajustes").get_data(as_text=True)
     assert "Cargar datos de demostración" in page and "Avisos a los clippers" in page
+
+
+def test_tech_panel_only_for_tech_email(monkeypatch):
+    monkeypatch.setattr(A, "TECH_EMAILS", {"yo@test.com"})
+    monkeypatch.setattr(A, "ADMIN_EMAILS", {"admin@test.com", "yo@test.com"})
+    felipe = client_for("admin@test.com")
+    yo = client_for("yo@test.com")
+    assert felipe.get("/admin/ajustes").status_code == 403
+    assert felipe.get("/admin/actividad").status_code == 403
+    assert "Panel técnico" not in felipe.get("/admin").get_data(as_text=True)
+    assert "Avisos técnicos" in yo.get("/admin/ajustes").get_data(as_text=True)
+    assert felipe.get("/admin/creadores").status_code == 403

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import av %}
 {% import "admin/_ui.html" as ui %}
 {% block title %}Clips por revisar · Admin{% endblock %}
 {% block content %}
@@ -37,7 +38,7 @@
       <li class="rv-item{% if sel and s.id == sel.id %} on{% endif %}{% if s.flag_list %} flagged{% endif %}">
         {% if tab == 'revisar' %}<input type="checkbox" name="ids" value="{{ s.id }}" form="bulk" aria-label="Marcar clip de {{ s.user.name }}">{% endif %}
         <a href="{{ url_for('admin_clips', tab=tab, c=cid or None, avisos=1 if avisos else None, sel=s.id) }}"{% if sel and s.id == sel.id %} aria-current="true"{% endif %}>
-          <span class="rv-top"><b>{{ s.user.name }}</b><span class="tnum">{{ s.views|short }}</span></span>
+          <span class="rv-top"><span class="who-cell">{{ av(s.user) }}<b>{{ s.user.name }}</b></span><span class="tnum">{{ s.views|short }}</span></span>
           <span class="rv-sub small muted">{{ PLATFORMS[s.platform] }}{% if s.author %} · @{{ s.author }}{% endif %} · {{ s.campaign.song }}</span>
           <span class="rv-sub small muted">{{ (s.appeal_at if tab == 'apelaciones' else s.created_at)|ago }}{% if s.flag_list %} · <span class="warn-txt">⚠ {{ s.flag_list|length }} aviso{{ 's' if s.flag_list|length > 1 }}</span>{% endif %}</span>
         </a>
@@ -61,7 +62,7 @@
         <a class="link small" href="{{ s.url }}" target="_blank" rel="noopener">Abrir en {{ PLATFORMS[s.platform] }} ↗</a>
       </div>
       <div class="rv-info">
-        <h2><a class="link" href="{{ url_for('admin_clipper', uid=s.user_id) }}">{{ s.user.name }}</a>{% if s.user.trusted %} <span class="pill-ok">De confianza</span>{% endif %}</h2>
+        <h2 class="who-cell">{{ av(s.user, "") }}<a class="link" href="{{ url_for('admin_clipper', uid=s.user_id) }}">{{ s.user.name }}</a></h2>
         <p class="small muted">{{ s.user.email }}</p>
         <dl class="rv-dl">
           <dt>Campaña</dt><dd><a class="link" href="{{ url_for('admin_campaign', cid=s.campaign_id) }}">{{ s.campaign.song }}</a></dd>
@@ -93,7 +94,7 @@
         {% elif tab == 'revisar' %}
         <div class="rv-actions">{% include "admin/_review_buttons.html" %}</div>
         {% else %}
-        <p class="small muted">Aún no llega al pago mínimo ({{ s.campaign.min_for(s.platform)|money }}). Pasará a «Por revisar» solo cuando lo alcance{% if s.campaign.expire_days %}; si no lo hace en {{ s.campaign.expire_days }} días se rechaza solo{% endif %}.</p>
+        <p class="small muted">Aún no llega al pago mínimo ({{ s.campaign.min_for(s.platform)|money }}). Pasará a «Por revisar» solo cuando lo alcance.</p>
         <div class="rv-actions">{% include "admin/_review_buttons.html" %}</div>
         {% endif %}
       </div>

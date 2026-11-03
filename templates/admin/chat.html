@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon %}
+{% from "_icons.html" import icon, av %}
 {% block title %}{{ user.name }} · Mensajes{% endblock %}
 {% block content %}
 <a class="back" href="{{ url_for('admin_inbox') }}">← Mensajes</a>
@@ -7,7 +7,7 @@
   <div class="chat-wrap card">
     <div class="chat-head">
       <span class="avatar">{% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ user.initial }}{% endif %}</span>
-      <div><b>{{ user.name }}</b><div class="small muted">{{ user.email }}</div></div>
+      {{ av(user) }}<div><b>{{ user.name }}</b><div class="small muted">{{ user.email }}</div></div>
     </div>
     {% with viewer_admin=true, post_url=url_for('admin_chat', uid=user.id), poll_url=url_for('admin_chat_poll', uid=user.id),
             empty_text="Aún no habéis hablado. Escríbele el primer mensaje." %}

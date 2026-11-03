@@ -11,7 +11,7 @@
   <input type="hidden" name="category" value="streamer">
   <div class="wz" data-wizard{% if editing %} data-editing{% endif %}>
     <ol class="wz-steps" aria-label="Pasos">
-      {% for label in ["Básico", "Pago", "Contenido", "Requisitos", "Publicar"] %}
+      {% for label in ["Básico", "Pago", "Contenido", "Publicar"] %}
       <li><button type="button" data-wz-go class="wz-pill"><b>{{ loop.index }}</b><span>{{ label }}</span></button></li>
       {% endfor %}
     </ol>
@@ -25,19 +25,16 @@
             <div class="field"><label for="song">Nombre de la campaña</label><input id="song" name="song" value="{{ camp.song or '' }}" placeholder="Ej.: Mejores momentos del directo" required maxlength="200"></div>
             <div class="field"><label for="artist">Creador</label><input id="artist" name="artist" value="{{ camp.artist or '' }}" placeholder="Ej.: Rafa Gaming" required maxlength="200"></div>
           </div>
-          <div class="field"><label for="creator_id">Paga desde el Whop de</label>
-            <select id="creator_id" name="creator_id">
-              <option value="">Cuenta principal de la agencia</option>
-              {% for cr in creators %}<option value="{{ cr.id }}" {% if camp.creator_id == cr.id %}selected{% endif %}>{{ cr.name }}</option>{% endfor %}
-            </select>
-            <span class="hint">Los retiros de esta campaña salen del Whop de este creador. Se añaden en <a class="link" href="{{ url_for('admin_creators') }}">Creadores</a>.</span></div>
           <div class="field">
-            <label for="cover_file">Portada</label>
-            {% if cover_src(camp) %}<img src="{{ cover_src(camp, 720) }}" alt="Portada actual" style="width:120px;aspect-ratio:1;object-fit:cover;border-radius:14px">{% endif %}
-            <input id="cover_file" type="file" name="cover_file" accept="image/*">
-            <span class="hint">Imagen cuadrada (JPG, PNG o WEBP, máx. 8 MB). O pega un enlace que empiece por https://</span>
-            <input id="cover_url" name="cover_url" value="{{ camp.cover_url or '' }}" placeholder="https://…/portada.jpg" aria-label="Enlace de la portada">
-            {% if camp.cover_version %}<label class="check"><input type="checkbox" name="remove_cover"> Quitar la imagen subida</label>{% endif %}
+            <span class="label">Portada</span>
+            <div class="cover-pick">
+              <span class="cover-prev" data-cover-prev{% if cover_src(camp) %} style="background-image:url('{{ cover_src(camp, 720) }}')"{% endif %}>{% if not cover_src(camp) %}{{ icon("plus") }}{% endif %}</span>
+              <div class="form-stack" style="gap:6px">
+                <label class="btn soft sm file-btn">{{ "Cambiar imagen" if cover_src(camp) else "Subir imagen" }}<input id="cover_file" type="file" name="cover_file" accept="image/*" data-cover-input></label>
+                <span class="hint">Imagen cuadrada. JPG, PNG o WEBP, máx. 8 MB.</span>
+                {% if camp.cover_version %}<label class="check"><input type="checkbox" name="remove_cover"> Quitar la imagen</label>{% endif %}
+              </div>
+            </div>
           </div>
         </fieldset>
 
@@ -59,10 +56,7 @@
             </div>
             <span class="hint">Cada clip cobra según la red donde está publicado: empieza a cobrar al llegar al mínimo y no pasa del máximo. Vacío = sin mínimo / sin máximo.</span>
           </div>
-          <div class="form-grid">
-            <div class="field"><label for="budget">Presupuesto total ({{ CUR_CODE }})</label><input id="budget" name="budget" value="{{ '%g'|format(camp.budget) if camp.budget else '' }}" inputmode="decimal" placeholder="2000" required>{% if editing and camp.spent %}<span class="hint">Ya repartido: {{ camp.spent|money }}. No puede ser menor.</span>{% endif %}</div>
-            <div class="field"><label for="bonus_per_clip">Extra fijo por clip ({{ CUR_CODE }})</label><input id="bonus_per_clip" name="bonus_per_clip" value="{{ '%g'|format(camp.bonus_per_clip) if camp.bonus_per_clip else '' }}" inputmode="decimal" placeholder="Sin extra"><span class="hint">Se suma a cada clip aprobado que llega al mínimo.</span></div>
-          </div>
+          <div class="field" style="max-width:340px"><label for="budget">Presupuesto total ({{ CUR_CODE }})</label><input id="budget" name="budget" value="{{ '%g'|format(camp.budget) if camp.budget else '' }}" inputmode="decimal" placeholder="2000" required>{% if editing and camp.spent %}<span class="hint">Ya repartido: {{ camp.spent|money }}. No puede ser menor.</span>{% endif %}</div>
         </fieldset>
 
         <fieldset class="wz-step form-stack">
@@ -74,55 +68,23 @@
             <textarea id="materials" name="materials" rows="4" placeholder="Instagram | https://instagram.com/…&#10;Drive con los vídeos | https://drive.google.com/…">{% for n, u, k in camp.material_list %}{{ n }} | {{ u }}
 {% endfor %}</textarea>
             <span class="hint">«Nombre | enlace». Si pones solo el enlace, el nombre y el icono se ponen solos.</span></div>
-          <div class="field"><label for="ideas">Ideas de clips (una por línea)</label>
-            <textarea id="ideas" name="ideas" rows="4" placeholder="Reacción al momento del gol&#10;Top 3 frases del directo">{{ camp.ideas or '' }}</textarea></div>
-          <div class="field"><label for="announcements">Anuncios (uno por línea)</label>
-            <textarea id="announcements" name="announcements" rows="3" placeholder="12/11 | Nuevo material subido al Drive">{{ camp.announcements or '' }}</textarea>
-            <span class="hint">Salen en la pestaña «Anuncios» de la campaña. Puedes poner «fecha | texto».</span></div>
         </fieldset>
 
         <fieldset class="wz-step form-stack">
-          <legend>Quién puede participar</legend>
+          <legend>Quién entra y publicar</legend>
           <div class="field"><label for="join_questions">Preguntas para unirse (una por línea)</label>
             <textarea id="join_questions" name="join_questions" rows="4">{{ camp.join_questions or '' }}</textarea>
             <span class="hint">Las ves antes de aceptar a cada clipper. Vacío = sin preguntas.</span></div>
           <div class="form-grid">
             <div class="field"><label for="max_members">Plazas</label><input id="max_members" name="max_members" value="{{ camp.max_members or '' }}" inputmode="numeric" placeholder="Sin límite"><span class="hint">Al aceptar a ese número de clippers pasa sola a «plazas completas».</span></div>
-            <div class="field"><label for="countries">Países permitidos</label>
-              <select id="countries" name="countries" multiple size="5">
-                {% for k, label in COUNTRIES.items() %}<option value="{{ k }}" {% if k in camp.country_list %}selected{% endif %}>{{ label }}</option>{% endfor %}
-              </select><span class="hint">Sin marcar ninguno = todos. Ctrl/⌘ para marcar varios.</span></div>
-          </div>
-          <div class="form-grid">
-            <div class="field"><label for="starts_at">Empieza (hora UTC)</label><input id="starts_at" type="datetime-local" name="starts_at" value="{{ camp.starts_at.strftime('%Y-%m-%dT%H:%M') if camp.starts_at else '' }}"><span class="hint">Vacío = desde ya. Antes no se aceptan clips.</span></div>
-            <div class="field"><label for="ends_on">Termina (hora UTC)</label><input id="ends_on" type="datetime-local" name="ends_on" value="{{ camp.ends_on.strftime('%Y-%m-%dT%H:%M') if camp.ends_on else '' }}"><span class="hint">Vacío = hasta agotar el presupuesto.</span></div>
-          </div>
-          <div class="form-grid">
-            <div class="field"><label for="earn_days">Días que cada clip suma vistas</label><input id="earn_days" name="earn_days" value="{{ camp.earn_days or '' }}" inputmode="numeric" placeholder="Hasta el final"><span class="hint">Desde que se envía. Después sus vistas se congelan.</span></div>
-            <div class="field"><label for="expire_days">Días para llegar al mínimo</label><input id="expire_days" name="expire_days" value="{{ camp.expire_days or '' }}" inputmode="numeric" placeholder="Sin límite"><span class="hint">Si no llega en ese tiempo, se rechaza solo.</span></div>
-          </div>
-          <div class="field"><span class="label">Revisión automática</span>
-            <label class="check"><input type="checkbox" name="review_at_min" {% if camp.review_at_min is none or camp.review_at_min %}checked{% endif %}> Revisar los clips solo cuando lleguen al pago mínimo</label>
-            <label class="check"><input type="checkbox" name="auto_reject_old" {% if camp.auto_reject_old or not editing %}checked{% endif %}> Rechazar solos los vídeos publicados antes de unirse a la campaña</label>
-            <label class="check"><input type="checkbox" name="auto_reject_unverified" {% if camp.auto_reject_unverified %}checked{% endif %}> Rechazar solos los clips de cuentas sin verificar</label>
-            <label class="check"><input type="checkbox" name="auto_approve_trusted" {% if camp.auto_approve_trusted %}checked{% endif %}> Aprobar solos los clips sin avisos de clippers de confianza</label>
-            <label class="check"><input type="checkbox" name="new_accounts_only" {% if camp.new_accounts_only %}checked{% endif %}> Exigir una cuenta nueva, usada solo en esta campaña</label>
-          </div>
-        </fieldset>
-
-        <fieldset class="wz-step form-stack">
-          <legend>Revisar y publicar</legend>
-          <div class="form-grid">
             <div class="field"><label for="status">Estado</label>
               <select id="status" name="status">
                 {% for s, label in [("activa", "Activa: visible y acepta clips"), ("pausada", "Pausada: oculta"), ("finalizada", "Finalizada: vistas congeladas")] %}
                   <option value="{{ s }}" {% if camp.status == s %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
               </select></div>
-            <div class="field" style="justify-content:flex-end;gap:10px"><label class="check"><input type="checkbox" name="featured" {% if camp.featured %}checked{% endif %}> Mostrar como campaña destacada</label>
-              <label class="check"><input type="checkbox" name="full" {% if camp.full %}checked{% endif %}> Plazas completas (no se aceptan solicitudes nuevas)</label></div>
           </div>
-          <p class="small muted">Mira la vista previa: así verán los clippers la tarjeta de la campaña. Puedes volver a cualquier paso antes de guardar.</p>
+          <p class="small muted">Mira la vista previa: así verán los clippers la tarjeta de la campaña.</p>
         </fieldset>
 
         <div class="wz-foot">
@@ -140,7 +102,6 @@
             <b data-pv="name">{{ camp.song or "Nombre de la campaña" }}</b>
             <span class="small muted" data-pv="artist">{{ camp.artist or "Creador" }}</span>
             <span class="wz-pv-cpm tnum" data-pv="cpm">—</span>
-            <span class="small wz-pv-bonus" data-pv="bonus" hidden></span>
             <span class="wz-pv-pf">{% for key, label in PLATFORMS.items() %}<span class="small" data-pv-pf="{{ key }}">{{ label }}</span>{% endfor %}</span>
             <span class="small muted">Presupuesto <b class="tnum" data-pv="budget">—</b></span>
           </div>

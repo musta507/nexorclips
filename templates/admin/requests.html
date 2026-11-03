@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import av %}
 {% import "admin/_ui.html" as ui %}
 {% block title %}Solicitudes · Admin{% endblock %}
 {% block content %}
@@ -15,9 +16,9 @@
       <tbody>
       {% for a in joins %}
       <tr>
-        <td data-label="Clipper"><a class="link" href="{{ url_for('admin_clipper', uid=a.user_id) }}"><b>{{ a.user.name }}</b></a><div class="small muted">{{ a.user.email }}</div></td>
+        <td data-label="Clipper">{{ av(a.user) }} <a class="link" href="{{ url_for('admin_clipper', uid=a.user_id) }}"><b>{{ a.user.name }}</b></a><div class="small muted">{{ a.user.email }}</div></td>
         <td data-label="Campaña">{{ a.campaign.song }}{% if a.answer_list %}
-          <details class="answers"{% if estado == "pendiente" %} open{% endif %}><summary>Respuestas ({{ a.answer_list|length }})</summary>
+          <details class="answers"><summary>Respuestas ({{ a.answer_list|length }})</summary>
             {% for q, ans in a.answer_list %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}
           </details>{% endif %}</td>
         <td data-label="Pidió" class="small muted">{{ a.created_at|ago }}</td>

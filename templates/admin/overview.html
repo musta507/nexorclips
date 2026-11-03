@@ -13,7 +13,7 @@
   <div class="kpi"><span>Pagado a clippers</span><b class="tnum">{{ kpis.paid|money(0) }}</b></div>
   <div class="kpi{% if kpis.open_payouts_n %} warn{% endif %}"><span>Retiros en curso</span><b class="tnum">{{ kpis.open_payouts|money(0) }}</b>{% if kpis.open_payouts_n %}<a href="{{ url_for('admin_payouts') }}">{{ kpis.open_payouts_n }} {{ "retiro" if kpis.open_payouts_n == 1 else "retiros" }} →</a>{% endif %}</div>
   <div class="kpi"><span>Vistas aprobadas</span><b class="tnum">{{ kpis.views|short }}</b></div>
-  <div class="kpi"><span>Clippers con clips</span><b class="tnum">{{ kpis.clippers }}</b></div>
+  <div class="kpi"><span>Vistas últimos 7 días</span><b class="tnum">{{ kpis.week.views|short }}</b>{% if kpis.week.change is not none %}<small class="trend {{ 'up' if kpis.week.change >= 0 else 'down' }}">{{ "▲" if kpis.week.change >= 0 else "▼" }} {{ kpis.week.change|abs }} % frente a la semana pasada</small>{% else %}<small class="muted">Aún sin semana anterior para comparar</small>{% endif %}</div>
 </div>
 
 <div class="adm-grid">

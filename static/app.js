@@ -7,8 +7,8 @@
 // =============================================================== Turbo
 if (window.Turbo) {
   Turbo.session.drive = true;
-  // Los formularios se envían de la forma normal (más seguro con la web tal como está); los enlaces, con Turbo.
-  if (Turbo.config && Turbo.config.forms) Turbo.config.forms.mode = "off"; else if (Turbo.setFormMode) Turbo.setFormMode("off");
+  // Los formularios también van con Turbo: al pulsar un botón no se recarga la página entera ni se vuelve arriba
+  if (Turbo.config && Turbo.config.forms) Turbo.config.forms.mode = "on"; else if (Turbo.setFormMode) Turbo.setFormMode("on");
   if (Turbo.setProgressBarDelay) Turbo.setProgressBarDelay(400);   // la barra de carga solo aparece si algo tarda mucho
 }
 
@@ -25,6 +25,11 @@ document.addEventListener("submit", function (e) {
   var btn = e.submitter || form.querySelector("button[type=submit], button:not([type])");
   if (btn) { btn.setAttribute("aria-busy", "true"); btn.classList.add("busy"); }
   setTimeout(function () { form.dataset.sending = ""; if (btn) { btn.classList.remove("busy"); btn.removeAttribute("aria-busy"); } }, 8000);
+}, true);   // antes que Turbo: si se cancela la confirmación, no se envía
+document.addEventListener("turbo:submit-end", function (e) {
+  var form = e.target;
+  form.dataset.sending = "";
+  form.querySelectorAll(".btn.busy").forEach(function (b) { b.classList.remove("busy"); b.removeAttribute("aria-busy"); });
 });
 
 // Copiar enlaces
@@ -41,7 +46,7 @@ document.addEventListener("click", function (e) {
 
 // Cerrar el menú de usuario al hacer clic fuera
 document.addEventListener("click", function (e) {
-  document.querySelectorAll("details.user-menu[open]").forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute("open"); });
+  document.querySelectorAll("details.user-menu[open], details.bell-menu[open]").forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute("open"); });
 });
 
 // Ordenar campañas (Más nuevas / Más presupuesto / Mejor pago), con las tarjetas moviéndose suave
@@ -94,6 +99,8 @@ document.addEventListener("click", function (e) {
     if (count) { count.textContent = n; count.hidden = !n; }
     if (fab) fab.classList.toggle("has-unread", !!n);
     if (dot) dot.hidden = !n;
+    var bell = document.getElementById("bell-n");
+    if (bell && typeof d.bell === "number") { bell.textContent = d.bell > 99 ? "99+" : d.bell; bell.hidden = !d.bell; }
     var slot = document.getElementById("msg-notice");
     if (!slot) return;
     if (!n) { slot.innerHTML = ""; return; }
@@ -120,7 +127,10 @@ document.addEventListener("click", function (e) {
     fetch(url, { headers: { "X-Requested-With": "fetch" }, credentials: "same-origin" })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
-        if (!d || (d.unread || 0) === shown) return;
+        if (!d) return;
+        var bell = document.getElementById("bell-n");
+        if (bell && typeof d.bell === "number") { bell.textContent = d.bell > 99 ? "99+" : d.bell; bell.hidden = !d.bell; }
+        if ((d.unread || 0) === shown) return;
         var more = (d.unread || 0) > shown;
         shown = d.unread || 0;
         paint(d);
@@ -145,6 +155,7 @@ function pagina() {
   avisosPush();
   subidaVideo();
   progresoLeccion();
+  desplegables();
 }
 
 // =============================================================== gráfica de estadísticas (informe y panel)
@@ -373,10 +384,9 @@ function montarPastilla(box, sel, name) {
     var it = e.target.closest(sel);
     if (!it || !box.contains(it) || e.metaKey || e.ctrlKey || e.shiftKey) return;
     var was = box.querySelector(sel + ".on");
-    if (name && was && it !== was) {
-      try { sessionStorage.setItem(PILL_KEY + name, JSON.stringify({ x: was.offsetLeft, w: was.offsetWidth })); } catch (err) {}
-    }
-    if (it.tagName !== "A") place(it, true);    // en los enlaces, la página nueva hace el deslizamiento
+    if (was && was !== it) { was.classList.remove("on"); was.removeAttribute("aria-current"); }
+    it.classList.add("on");
+    place(it, true);                            // la pastilla se mueve al momento; la página nueva ya la trae en su sitio
   });
   var onResize = function () { place(box.querySelector(sel + ".on"), false); };
   window.addEventListener("resize", onResize);
@@ -402,6 +412,8 @@ if (window.Turbo) {
   document.addEventListener("turbo:before-render", function (e) {
     var misma = pathNuevo !== null && pathNuevo === pathActual;
     scrollGuardado = misma ? window.scrollY : null;
+    // Misma página (pestaña, filtro o un botón que vuelve aquí): Turbo no la sube arriba, así no salta
+    try { var v = Turbo.session.navigator.currentVisit; if (misma && v) { v.scrolled = true; scrollGuardado = null; } } catch (err) {}
     var main = e.detail.newBody && e.detail.newBody.querySelector("#contenido");
     if (main && !misma) main.classList.add("entra");
   });
@@ -526,19 +538,7 @@ function asistente() {
     pv.querySelector("[data-pv=cpm]").textContent = top ? money(top) + " / 1K vistas" : "— / 1K vistas";
     pv.querySelector("[data-pv=budget]").textContent = num(val("budget")) ? money(num(val("budget"))) : "—";
     pv.querySelectorAll("[data-pv-pf]").forEach(function (i) { i.hidden = on.indexOf(i.getAttribute("data-pv-pf")) < 0; });
-    var bonus = num(val("bonus_per_clip"));
-    var b = pv.querySelector("[data-pv=bonus]"); b.hidden = !bonus; b.textContent = "+" + money(bonus) + " por clip";
-    var url = val("cover_url"), img = pv.querySelector("[data-pv=cover]");
-    if (url.indexOf("https://") === 0) img.style.backgroundImage = "url('" + url.replace(/'/g, "") + "')";
   }
-  var file = wz.querySelector("input[name=cover_file]");
-  if (file && pv) file.addEventListener("change", function () {
-    var f = file.files && file.files[0];
-    if (f && /^image\//.test(f.type)) {
-      var u = URL.createObjectURL(f);
-      pv.querySelector("[data-pv=cover]").style.backgroundImage = "url('" + u + "')";
-    }
-  });
   wz.addEventListener("input", preview);
   wz.addEventListener("change", preview);
   show(0);
@@ -679,4 +679,94 @@ function progresoLeccion() {
 // Botón «Descargar PDF / imprimir» del informe (el navegador deja guardarlo como PDF)
 document.addEventListener("click", function (e) {
   if (e.target.closest("[data-print]")) window.print();
+});
+
+// Portada de la campaña: vista previa al elegir la imagen
+document.addEventListener("change", function (e) {
+  var inp = e.target.closest("[data-cover-input]");
+  if (!inp || !inp.files || !inp.files[0]) return;
+  var prev = document.querySelector("[data-cover-prev]");
+  if (prev) { prev.style.backgroundImage = "url('" + URL.createObjectURL(inp.files[0]) + "')"; prev.textContent = ""; }
+  var pv = document.querySelector("[data-pv=cover]");
+  if (pv) pv.style.backgroundImage = "url('" + URL.createObjectURL(inp.files[0]) + "')";
+});
+
+// =============================================================== desplegables con el diseño de la web
+// Cada <select> se queda (escondido) para que el formulario funcione igual; encima va un botón y una lista propia.
+// En el móvil se usa el selector del teléfono, que es más cómodo con el dedo.
+function desplegables() {
+  if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return;
+  document.querySelectorAll("select:not([multiple]):not([data-native])").forEach(function (sel) {
+    if (sel.closest(".dd")) return;
+    var box = document.createElement("div");
+    box.className = "dd";
+    var btn = document.createElement("button");
+    btn.type = "button"; btn.className = "dd-btn";
+    btn.setAttribute("aria-haspopup", "listbox"); btn.setAttribute("aria-expanded", "false");
+    var lab = sel.getAttribute("aria-label") || (sel.id && document.querySelector("label[for='" + sel.id + "']") || {}).textContent || "";
+    if (lab) btn.setAttribute("aria-label", lab.trim());
+    var list = document.createElement("ul");
+    list.className = "dd-list"; list.setAttribute("role", "listbox"); list.hidden = true;
+    sel.parentNode.insertBefore(box, sel);
+    box.appendChild(sel); box.appendChild(btn); box.appendChild(list);
+    sel.classList.add("dd-native"); sel.tabIndex = -1;
+    function paint() {
+      var o = sel.options[sel.selectedIndex];
+      btn.innerHTML = "";
+      var t = document.createElement("span"); t.textContent = o ? o.text : ""; btn.appendChild(t);
+      list.innerHTML = "";
+      Array.prototype.forEach.call(sel.options, function (op, i) {
+        var li = document.createElement("li");
+        li.setAttribute("role", "option"); li.textContent = op.text; li.dataset.i = i;
+        if (i === sel.selectedIndex) { li.className = "on"; li.setAttribute("aria-selected", "true"); }
+        if (op.disabled) li.setAttribute("aria-disabled", "true");
+        list.appendChild(li);
+      });
+    }
+    var hi = -1;
+    function mark(i) {
+      var items = list.children; if (!items.length) return;
+      hi = Math.max(0, Math.min(items.length - 1, i));
+      Array.prototype.forEach.call(items, function (li, j) { li.classList.toggle("hi", j === hi); });
+      items[hi].scrollIntoView({ block: "nearest" });
+    }
+    function open() {
+      document.querySelectorAll(".dd.open").forEach(function (d) { if (d !== box) d.ddClose(); });
+      paint(); list.hidden = false; box.classList.add("open"); btn.setAttribute("aria-expanded", "true");
+      var r = box.getBoundingClientRect();
+      box.classList.toggle("up", window.innerHeight - r.bottom < Math.min(280, list.scrollHeight + 16) && r.top > 300);
+      mark(sel.selectedIndex);
+    }
+    function close() { list.hidden = true; box.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); }
+    box.ddClose = close;
+    function choose(i) {
+      if (sel.options[i] && !sel.options[i].disabled && i !== sel.selectedIndex) {
+        sel.selectedIndex = i;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      paint(); close(); btn.focus();
+    }
+    btn.addEventListener("click", function () { list.hidden ? open() : close(); });
+    list.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    list.addEventListener("click", function (e) { var li = e.target.closest("li"); if (li) choose(parseInt(li.dataset.i, 10)); });
+    btn.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (list.hidden) open(); else mark(hi + (e.key === "ArrowDown" ? 1 : -1)); }
+      else if (e.key === "Enter" || e.key === " ") { if (!list.hidden && hi >= 0) { e.preventDefault(); choose(hi); } }
+      else if (e.key === "Escape" || e.key === "Tab") close();
+    });
+    btn.addEventListener("blur", function () { setTimeout(function () { if (!box.contains(document.activeElement)) close(); }, 120); });
+    sel.addEventListener("change", paint);
+    if (sel.disabled) btn.disabled = true;
+    paint();
+  });
+}
+document.addEventListener("click", function (e) {
+  document.querySelectorAll(".dd.open").forEach(function (d) { if (!d.contains(e.target)) d.ddClose(); });
+});
+document.addEventListener("turbo:before-cache", function () {
+  document.querySelectorAll(".dd").forEach(function (d) {
+    var sel = d.querySelector("select");
+    if (sel) { sel.classList.remove("dd-native"); sel.removeAttribute("tabindex"); d.parentNode.insertBefore(sel, d); }
+    d.remove();
+  });
 });

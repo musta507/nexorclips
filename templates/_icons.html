@@ -50,3 +50,8 @@
   <div class="budget-bar" role="progressbar" aria-label="Presupuesto repartido" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ st.pct }}"><span style="width:{{ st.pct }}%"></span></div>
 </div>
 {%- endmacro %}
+
+{# Foto de perfil pequeña del clipper (o su inicial) #}
+{% macro av(u, cls="sm") -%}
+<span class="avatar {{ cls }}" aria-hidden="true">{% if u and u.avatar_url %}<img src="{{ u.avatar_url }}" alt="" referrerpolicy="no-referrer" loading="lazy">{% else %}{{ (u.name or u.email or "?")[:1]|upper if u else "?" }}{% endif %}</span>
+{%- endmacro %}

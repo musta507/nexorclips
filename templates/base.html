@@ -23,6 +23,21 @@
       </nav>
       {% endif %}
       {% set unread = unread_messages() %}
+      {% set bell = bell_data() %}
+      <div class="top-right">
+      <details class="bell-menu" data-bell>
+        <summary class="bell-btn" aria-label="Notificaciones{% if bell.unread %} · {{ bell.unread }} sin leer{% endif %}">{{ icon("bell") }}<span class="bell-n" id="bell-n"{% if not bell.unread %} hidden{% endif %}>{{ bell.unread if bell.unread < 100 else "99+" }}</span></summary>
+        <div class="bell-panel">
+          <div class="bell-head"><b>Notificaciones</b>{% if bell.unread and not current_user.is_admin %}<form method="post" action="{{ url_for('read_notices') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link small">Marcar todo como leído</button></form>{% endif %}</div>
+          {% if bell.rows %}
+          <ul class="bell-list">
+            {% for it in bell.rows %}
+            <li class="{{ 'unread' if it.unread }}"><a href="{{ it.url }}"><span class="bell-ico">{{ icon(it.icon) }}</span><span class="bell-txt"><b>{{ it.title }}</b>{% if it.body %}<span>{{ it.body }}</span>{% endif %}{% if it.ago %}<small>{{ it.ago }}</small>{% endif %}</span></a></li>
+            {% endfor %}
+          </ul>
+          {% else %}<p class="bell-empty small muted">No tienes notificaciones.</p>{% endif %}
+        </div>
+      </details>
       <details class="user-menu">
         <summary class="avatar" aria-label="Tu cuenta{% if unread %} · {{ unread }} mensajes sin leer{% endif %}"><span class="dot" id="avatar-dot" aria-hidden="true"{% if not unread %} hidden{% endif %}></span>
           {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}
@@ -43,6 +58,7 @@
           <a href="{{ url_for('logout') }}" data-turbo="false">Cerrar sesión</a>
         </div>
       </details>
+      </div>
     </div>
   </header>
   {% if admin_page %}
@@ -63,21 +79,12 @@
           ("admin_notify", ["admin_notify"], "Avisos", "bell", 0),
           ("admin_leads", ["admin_leads"], "Creadores interesados", "megaphone", nc.leads),
           ("admin_activity", ["admin_activity"], "Actividad", "pulse", 0),
-          ("admin_settings", ["admin_settings", "admin_probe"], "Ajustes", "gear", 0)] %}
+          ("admin_settings", ["admin_settings", "admin_probe"], "Panel técnico", "gear", nc.tech)] %}
         {% if admin_can(e) %}<a class="adm-link{% if ep in eps %} on{% endif %}" href="{{ url_for(e) }}"{% if ep in eps %} aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span>{% if n %}<b class="adm-n">{{ n }}</b>{% endif %}</a>{% endif %}
         {% endfor %}
       </nav>
     </aside>
     <main class="adm-main" id="contenido">
-    <div id="msg-notice" class="msg-notice-slot">
-    {% if note.unread and ep not in ["support", "admin_chat", "admin_inbox"] %}
-      <a class="msg-notice" href="{{ note.url }}" role="status">
-        <span class="mn-ico"><span class="logo-mark"></span></span>
-        <span class="mn-txt"><span class="mn-top"><b>{{ note.title }}</b><span>{{ note.ago }}</span></span><span class="mn-body">{{ note.body }}</span></span>
-        <span class="mn-btn">{{ "Abrir" if current_user.is_admin else "Responder" }}</span>
-      </a>
-    {% endif %}
-    </div>
     {% with msgs = get_flashed_messages(with_categories=true) %}
       {% if msgs %}<div class="flashes">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}</div>{% endif %}
     {% endwith %}
@@ -86,15 +93,6 @@
   </div>
   {% else %}
   <main class="wrap" id="contenido">
-    <div id="msg-notice" class="msg-notice-slot">
-    {% if note.unread and ep not in ["support", "admin_chat", "admin_inbox"] %}
-      <a class="msg-notice" href="{{ note.url }}" role="status">
-        <span class="mn-ico"><span class="logo-mark"></span></span>
-        <span class="mn-txt"><span class="mn-top"><b>{{ note.title }}</b><span>{{ note.ago }}</span></span><span class="mn-body">{{ note.body }}</span></span>
-        <span class="mn-btn">{{ "Abrir" if current_user.is_admin else "Responder" }}</span>
-      </a>
-    {% endif %}
-    </div>
     {% with msgs = get_flashed_messages(with_categories=true) %}
       {% if msgs %}<div class="flashes">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}</div>{% endif %}
     {% endwith %}

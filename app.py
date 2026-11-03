@@ -90,6 +90,9 @@ ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").spl
 REVIEWER_EMAILS = {e.strip().lower() for e in os.environ.get("REVIEWER_EMAILS", "").split(",") if e.strip()}   # revisan clips y solicitudes
 SUPPORT_EMAILS = {e.strip().lower() for e in os.environ.get("SUPPORT_EMAILS", "").split(",") if e.strip()}     # atienden mensajes
 ADMIN_ROLES = {"owner": "Dueño", "reviewer": "Revisor", "support": "Soporte"}
+# Panel técnico (claves, errores, Apify, Whop, copias…): solo estos correos. Vacío = cualquier dueño (hasta configurarlo)
+TECH_EMAILS = {e.strip().lower() for e in os.environ.get("TECH_EMAILS", "").split(",") if e.strip()}
+CREATORS_ENABLED = False          # pagos desde el Whop de cada creador: en pausa hasta hablarlo con el cliente
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
@@ -644,6 +647,18 @@ class CampaignLead(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 
+class Notice(db.Model):
+    """Aviso de la campanita de un clipper."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    kind = db.Column(db.String(30), default="")
+    title = db.Column(db.String(120), default="")
+    body = db.Column(db.String(400), default="")
+    url = db.Column(db.String(300), default="")
+    read = db.Column(db.Boolean, default=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
 class PushSub(db.Model):
     """Un navegador o móvil del clipper que aceptó recibir avisos."""
     id = db.Column(db.Integer, primary_key=True)
@@ -928,7 +943,7 @@ def raw_earning(sub, camp):
     top = camp.max_for(sub.platform)
     if top:
         amount = min(amount, top)
-    return cents(amount + (camp.bonus_per_clip or 0))
+    return cents(amount)
 
 
 def reached_min(sub, camp=None):
@@ -943,15 +958,15 @@ def clip_stage(sub):
     if sub.status != "pendiente":
         return sub.status
     camp = sub.campaign
-    return "revisar" if (not camp.review_at_min or reached_min(sub, camp)) else "contando"
+    return "revisar" if reached_min(sub, camp) else "contando"
 
 
 STAGE_LABELS = {"contando": "Contando vistas", "revisar": "En revisión", "aprobado": "Aprobado", "rechazado": "Rechazado"}
 
 
 def earn_window_closed(sub, now=None):
-    camp = sub.campaign
-    return bool(camp.earn_days) and sub.created_at < (now or datetime.utcnow()) - timedelta(days=camp.earn_days)
+    """(Opción quitada: los clips suman vistas hasta que termina la campaña.)"""
+    return False
 
 
 def join_date(user_id, camp):
@@ -987,27 +1002,11 @@ def reject_sub(sub, code, message="", by="admin"):
 
 
 def auto_review(sub, now=None):
-    """Reglas automáticas de la campaña sobre un clip pendiente. Devuelve lo que hizo (o "")."""
+    """Marca con un aviso los vídeos publicados antes de unirse a la campaña (decide el admin). Devuelve ""."""
     if sub.status != "pendiente":
         return ""
-    camp, now = sub.campaign, now or datetime.utcnow()
-    if sub.posted_at and sub.posted_at < join_date(sub.user_id, camp) - timedelta(hours=1):
+    if sub.posted_at and sub.posted_at < join_date(sub.user_id, sub.campaign) - timedelta(hours=1):
         sub.add_flag("publicado_antes")
-        if camp.auto_reject_old:
-            reject_sub(sub, "antiguo", by="auto")
-            return "rechazado"
-    stage = clip_stage(sub)
-    if stage == "contando":
-        if camp.expire_days and sub.created_at < now - timedelta(days=camp.expire_days):
-            reject_sub(sub, "caducado", f"No llegó al pago mínimo en {camp.expire_days} días.", by="auto")
-            return "rechazado"
-        return ""
-    if camp.auto_reject_unverified and not account_verified(sub):
-        reject_sub(sub, "cuenta", by="auto")
-        return "rechazado"
-    if camp.auto_approve_trusted and sub.user.trusted and not sub.flag_list and account_verified(sub):
-        approve_sub(sub, by="auto")
-        return "aprobado"
     return ""
 
 
@@ -1156,10 +1155,12 @@ def user_money(user):
     # Saldo por creador: cada creador paga desde su Whop lo que se ganó en SUS campañas
     by_creator = {}
     for s_, a in earned_rows:
-        by_creator[s_.campaign.creator_id] = by_creator.get(s_.campaign.creator_id, 0) + a
+        k = s_.campaign.creator_id if CREATORS_ENABLED else None
+        by_creator[k] = by_creator.get(k, 0) + a
     for p in user.payouts:
         if p.status in PAYOUT_OPEN + ("pagado",):
-            by_creator[p.creator_id] = by_creator.get(p.creator_id, 0) - p.amount
+            k = p.creator_id if CREATORS_ENABLED else None
+            by_creator[k] = by_creator.get(k, 0) - p.amount
     by_creator = {k: cents(v) for k, v in by_creator.items() if cents(v) >= CENT}
     return {
         "by_creator": by_creator,
@@ -1345,7 +1346,7 @@ def apply_schedule():
     """Cierra las campañas cuya fecha de fin ya pasó."""
     now = datetime.utcnow()
     closed = 0
-    for c in Campaign.query.filter(Campaign.status == "activa", Campaign.ends_on.isnot(None), Campaign.ends_on <= now).all():
+    for c in []:                                       # (opción de fecha de fin quitada)
         close_campaign(c)
         audit("campaña_cerrada_fecha", f"#{c.id} {c.song}")
         closed += 1
@@ -1396,7 +1397,7 @@ def check_creator_balances():
     if get_setting("creators_checked", "") == today:
         return
     set_setting("creators_checked", today)
-    for r in creators_overview():
+    for r in (creators_overview() if CREATORS_ENABLED else []):
         if r["missing"]:
             notify_phone(f"⚠️ A {r['c'].name} le falta saldo en Whop",
                          f"Debe {money(r['owed'])} a clippers y tiene {money(r['balance'])}. Faltan {money(r['missing'])}.", tags="warning")
@@ -1464,6 +1465,10 @@ def security_headers(resp):
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     resp.headers.setdefault("Content-Security-Policy", CSP)
+    # Con Turbo, un formulario que responde con una página (sin redirigir) tiene que llevar un código 4xx para que se pinte
+    if (request.method == "POST" and resp.status_code == 200 and request.headers.get("X-Turbo-Request-Id")
+            and resp.mimetype == "text/html"):
+        resp.status_code = 422
     if getattr(g, "_t0", None):     # cuánto tarda el servidor en preparar la página (sin contar internet)
         resp.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - g._t0) * 1000:.0f}"
     if PRODUCTION:
@@ -1502,10 +1507,25 @@ ROLE_ENDPOINTS = {
 }
 
 
+TECH_ENDPOINTS = {"admin_settings", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
+                  "admin_demo", "admin_wipe", "admin_activity", "admin_activity_delete", "admin_creators", "admin_creator_form"}
+
+
+def is_tech(user=None):
+    user = user or current_user
+    if not getattr(user, "is_admin", False) or (user.admin_role or "owner") != "owner":
+        return False
+    return (user.email or "").lower() in TECH_EMAILS if TECH_EMAILS else True
+
+
 def admin_can(endpoint, user=None):
     user = user or current_user
     if not getattr(user, "is_admin", False):
         return False
+    if endpoint in ("admin_creators", "admin_creator_form") and not CREATORS_ENABLED:
+        return False
+    if endpoint in TECH_ENDPOINTS:
+        return is_tech(user)
     role = user.admin_role or "owner"
     return role == "owner" or endpoint in ROLE_ENDPOINTS.get(role, set())
 
@@ -1591,7 +1611,7 @@ def static_url(filename):
 
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": csrf_token, "admin_can": admin_can, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
+    return {"csrf_token": csrf_token, "admin_can": admin_can, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
@@ -1600,7 +1620,7 @@ def inject_globals():
             "REJECT_REASONS": REJECT_REASONS, "COUNTRIES": COUNTRIES, "LANGUAGES": LANGUAGES, "CAMPAIGN_KINDS": CAMPAIGN_KINDS,
             "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "reached_min": reached_min,
             "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
-            "VAPID_ON": bool(VAPID_PUBLIC_KEY), "WHATSAPP_ON": bool(WHATSAPP_TOKEN and WHATSAPP_PHONE_ID),
+            "VAPID_ON": bool(VAPID_PUBLIC_KEY), "WHATSAPP_ON": whatsapp_ready(),
             "WHATSAPP_TEMPLATE": WHATSAPP_TEMPLATE}
 
 
@@ -1949,7 +1969,7 @@ def submit_clip(camp, raw_url):
     """Valida y guarda un clip. Devuelve (ok, mensaje)."""
     if camp.status != "activa" or camp.exhausted:
         return False, "Esta campaña ya no acepta clips."
-    if camp.not_started:
+    if False and camp.not_started:                     # (opción de fecha de inicio quitada)
         return False, f"La campaña empieza el {camp.starts_at.strftime('%d/%m/%Y a las %H:%M')} (hora UTC). Podrás subir clips desde entonces."
     today = datetime.utcnow() - timedelta(hours=24)
     if MAX_CLIPS_DAY > 0 and Submission.query.filter(Submission.user_id == current_user.id, Submission.created_at >= today).count() >= MAX_CLIPS_DAY:
@@ -1980,7 +2000,7 @@ def submit_clip(camp, raw_url):
     db.session.add(Submission(user_id=current_user.id, campaign_id=camp.id, url=url, platform=platform,
                               video_key=f"{platform}:{vid}", author=author))
     db.session.commit()
-    if camp.review_at_min and any(camp.min_for(p) for p in camp.platform_list):
+    if any(camp.min_for(p) for p in camp.platform_list):
         return True, "¡Clip enviado! Ya está contando vistas. Lo revisaremos cuando llegue al pago mínimo."
     return True, "¡Clip enviado! Lo revisaremos y empezará a sumar vistas."
 
@@ -2040,13 +2060,6 @@ def join_campaign(cid):
     if camp.full or (camp.max_members and camp.members_accepted >= camp.max_members):
         flash("Las plazas de esta campaña están completas. Vuelve a mirar más tarde.", "error")
         return back
-    if camp.country_list:
-        if not current_user.country:
-            flash("Esta campaña es solo para algunos países. Indica tu país en «Mi cuenta» y vuelve a intentarlo.", "error")
-            return back
-        if current_user.country not in camp.country_list:
-            flash("Esta campaña es solo para clippers de: " + ", ".join(COUNTRIES[c] for c in camp.country_list) + ".", "error")
-            return back
     answers = []
     for i, q in enumerate(camp.question_list):
         a = (request.form.get(f"q_{i}") or "").strip()[:1500]
@@ -2084,7 +2097,7 @@ def add_campaign_account(cid):
     if handle_owner(platform, handle, exclude_user_id=current_user.id):
         flash(f"La cuenta @{handle} ya está vinculada a otro clipper.", "error")
         return back
-    if camp.new_accounts_only:
+    if False and camp.new_accounts_only:               # (opción quitada)
         used = (CampaignAccount.query.filter(CampaignAccount.platform == platform, CampaignAccount.handle == handle,
                                              CampaignAccount.campaign_id != cid).first()
                 or Submission.query.filter(Submission.platform == platform, Submission.author == handle,
@@ -2314,11 +2327,6 @@ def onboarding():
             u.country = c
             u.languages = ",".join(x for x in request.form.getlist("languages") if x in LANGUAGES)[:60]
         else:
-            wa = re.sub(r"[^\d+]", "", request.form.get("whatsapp", ""))[:20]
-            if wa and not re.match(r"^\+?\d{8,15}$", wa):
-                flash("Escribe tu WhatsApp con el prefijo del país, por ejemplo +34 600 000 000.", "error")
-                return redirect(url_for("onboarding", paso=3))
-            u.whatsapp = wa
             username = (request.form.get("whop_username") or "").strip().lstrip("@")
             if username and whop_enabled() and WHOP_USERNAME_RE.match(username):
                 uid, uname = whop_find_user(username)
@@ -2552,7 +2560,8 @@ def admin_counts():
         "payouts": Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).count(),
         "messages": Message.query.filter_by(from_admin=False, read_by_admin=False).count(),
         "leads": CampaignLead.query.filter_by(status="nueva").count(),
-        "creators_alert": sum(1 for c in Creator.query.all() if not creator_key(c)) + int(get_setting("creators_short", "0") or 0),
+        "creators_alert": 0,
+        "tech": tech_alert_count(),
     }
 
 
@@ -2567,6 +2576,38 @@ def daily_series(rows, days=30):
     return [(d, totals[d]) for d in sorted(totals)]
 
 
+def views_at(subs, snaps, when):
+    """Vistas que tenían los clips en un momento dado (la última lectura anterior; 0 si aún no existían)."""
+    total = 0
+    for s_ in subs:
+        if s_.created_at > when:
+            continue
+        last = 0
+        for t, v in snaps.get(s_.id, ()):
+            if t <= when:
+                last = v
+            else:
+                break
+        total += last
+    return total
+
+
+def views_week():
+    """Vistas conseguidas en los últimos 7 días y el cambio frente a los 7 anteriores."""
+    subs = Submission.query.filter(Submission.status == "aprobado").all()
+    if not subs:
+        return {"views": 0, "change": None}
+    now = datetime.utcnow()
+    snaps = {}
+    for sn in (db.session.query(ViewSnapshot.submission_id, ViewSnapshot.taken_at, ViewSnapshot.views)
+               .filter(ViewSnapshot.submission_id.in_([x.id for x in subs])).order_by(ViewSnapshot.taken_at)):
+        snaps.setdefault(sn[0], []).append((sn[1], sn[2] or 0))
+    a, b, c = (views_at(subs, snaps, now - timedelta(days=14)), views_at(subs, snaps, now - timedelta(days=7)),
+               sum(x.views or 0 for x in subs))
+    this, prev = max(0, c - b), max(0, b - a)
+    return {"views": this, "change": round((this - prev) / prev * 100) if prev else None}
+
+
 def admin_kpis(camps):
     open_payouts = Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).all()
     return {
@@ -2575,7 +2616,7 @@ def admin_kpis(camps):
         "paid": cents(db.session.query(db.func.coalesce(db.func.sum(Payout.amount), 0)).filter(Payout.status == "pagado").scalar()),
         "open_payouts": cents(sum(p.amount for p in open_payouts)),
         "open_payouts_n": len(open_payouts),
-        "clippers": db.session.query(db.func.count(db.distinct(Submission.user_id))).scalar() or 0,
+        "week": views_week(),
         "views": db.session.query(db.func.coalesce(db.func.sum(Submission.views), 0)).filter(Submission.status == "aprobado").scalar() or 0,
         "live_camps": sum(1 for c in camps if c.status == "activa"),
     }
@@ -2686,6 +2727,7 @@ def admin_settings(app_test=None):
     whop = {"key": bool(WHOP_API_KEY), "company": whop_company_id() if WHOP_API_KEY else "",
             "error": _whop_company.get("error", ""), "from_env": bool(WHOP_COMPANY_ID)}
     return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"), allow_wipe=ALLOW_WIPE,
+                           alerts=tech_alerts(), creators_on=CREATORS_ENABLED, tech_set=bool(TECH_EMAILS),
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count())
 
@@ -2696,7 +2738,20 @@ DEMO_NAMES = ["Lucía Fernández", "Mateo Rodríguez", "Valentina Gómez", "Hugo
               "Carla Molina", "Adrián Rojas", "Lola Delgado", "Gael Morales", "Noa Jiménez", "Iker Peña", "Elena Ríos"]
 DEMO_COUNTRIES = ["ES", "ES", "ES", "MX", "MX", "AR", "CO", "CL", "PE", "ES", "MX", "ES", "AR", "CO", "ES",
                   "AR", "ES", "UY", "ES", "CL", "ES", "MX", "ES", "ES", "VE"]
-DEMO_QUESTIONS_ANSWERS = ["Llevo un año haciendo clips de streamers", "Puedo subir 3 al día", "TikTok e Instagram"]
+DEMO_ANSWERS = [   # (palabra de la pregunta, respuestas posibles): cada respuesta encaja con su pregunta
+    ("tiempo", ["Llevo un año haciendo clips de streamers", "Unos 6 meses", "Empecé este verano, pero subo todos los días"]),
+    ("enlace", ["https://www.tiktok.com/@miscuts/video/7301234567890", "Mi mejor clip tiene 1,2M: https://www.tiktok.com/@clipsdiarios/video/7309876543210"]),
+    ("día", ["3 al día", "Entre 2 y 4", "5 o más si hay directo largo"]),
+    ("redes", ["TikTok e Instagram", "TikTok, Instagram y YouTube Shorts", "Sobre todo TikTok"]),
+]
+
+
+def demo_answers(questions, r):
+    out = []
+    for q in questions:
+        opts = next((a for k, a in DEMO_ANSWERS if k in q.lower()), ["Sí, sin problema"])
+        out.append([q, r.choice(opts)])
+    return json.dumps(out, ensure_ascii=False)
 
 
 def _demo_avatar(name, seed):
@@ -2756,8 +2811,7 @@ def load_demo(days=30, seed=7):
             joined = now - timedelta(days=days - r.randint(0, 6), hours=r.randint(0, 23))
             db.session.add(CampaignMember(user_id=u.id, campaign_id=c.id, status="aceptada", created_at=joined,
                                           decided_at=joined + timedelta(hours=r.randint(1, 20)),
-                                          answers=json.dumps([[q, a] for q, a in zip(c.question_list, DEMO_QUESTIONS_ANSWERS)],
-                                                             ensure_ascii=False)))
+                                          answers=demo_answers(c.question_list, r)))
             plats = [p for p in c.platform_list if u.handles(p)] or c.platform_list[:1]
             for p in plats:
                 db.session.add(CampaignAccount(user_id=u.id, campaign_id=c.id, platform=p, handle=handle, status="aceptada",
@@ -2829,8 +2883,7 @@ def load_demo(days=30, seed=7):
             c = r.choice(free)
             db.session.add(CampaignMember(user_id=u.id, campaign_id=c.id, status="pendiente",
                                           created_at=now - timedelta(hours=r.randint(2, 30)),
-                                          answers=json.dumps([[q, a] for q, a in zip(c.question_list, DEMO_QUESTIONS_ANSWERS)],
-                                                             ensure_ascii=False)))
+                                          answers=demo_answers(c.question_list, r)))
             db.session.flush()
     # Algún mensaje de soporte y progreso en la formación
     for u, _, _ in r.sample(users, k=min(3, len(users))):
@@ -2875,6 +2928,59 @@ def admin_demo():
             db.session.commit()
             flash(msg, "ok")
     return redirect(url_for("admin_settings"))
+
+
+def owed_total():
+    """Lo que la plataforma aún tiene que pagar a los clippers por Whop (ganado en clips aprobados − ya enviado)."""
+    earned = (db.session.query(db.func.coalesce(db.func.sum(Submission.earned), 0))
+              .filter(Submission.status == "aprobado").scalar() or 0)
+    sent = (db.session.query(db.func.coalesce(db.func.sum(Payout.amount), 0))
+            .filter(Payout.status.in_(("pagado", "procesando"))).scalar() or 0)
+    return cents(float(earned) - float(sent))
+
+
+def tech_alerts():
+    """Avisos técnicos para el panel técnico: [(nivel, título, texto)]. Nivel: error · aviso."""
+    out = []
+    if not viewcounter.APIFY_TOKEN:
+        out.append(("error", "Falta la clave de Apify", "Sin APIFY_TOKEN no se leen las vistas de los clips."))
+    if not WHOP_API_KEY:
+        out.append(("error", "Falta la clave de Whop", "Sin WHOP_API_KEY los clippers no pueden cobrar."))
+    elif whop_company_id():
+        bal, err = whop_balance(None)
+        owed = owed_total()
+        if bal is not None and bal + CENT < owed:
+            out.append(("error", "Pendiente de saldo en Whop",
+                        f"Tu Whop tiene {money(bal)} y se deben {money(owed)} a los clippers. Faltan {money(cents(owed - bal))}: "
+                        "los retiros esperarán hasta que recargues."))
+        elif bal is None and err:
+            out.append(("aviso", "No se puede leer el saldo de Whop", err))
+    last = get_setting("last_refresh_at", "")
+    try:
+        if REFRESH_HOURS and last and datetime.utcnow() - datetime.fromisoformat(last) > timedelta(hours=REFRESH_HOURS * 2 + 1):
+            out.append(("aviso", "Las vistas llevan tiempo sin actualizarse", f"Última lectura: {get_setting('last_refresh', '—')}"))
+    except ValueError:
+        pass
+    bad = Submission.query.filter(Submission.views_error != "", Submission.status != "rechazado").count()
+    if bad:
+        out.append(("aviso", f"{bad} clips sin poder leer sus vistas", "Puede ser un vídeo borrado o privado, o un fallo de Apify. Míralos en «Clips por revisar»."))
+    failed = Payout.query.filter(Payout.error != "", Payout.created_at >= datetime.utcnow() - timedelta(days=7)).count()
+    if failed:
+        out.append(("aviso", f"{failed} pagos de Whop fallidos esta semana", "El motivo está en Retiros → «Últimos pagos que Whop no pudo enviar»."))
+    if not VAPID_PUBLIC_KEY:
+        out.append(("aviso", "Avisos al móvil sin activar", "Genera la clave de avisos abajo y ponla en Railway."))
+    if not bunny_ready():
+        out.append(("aviso", "Vídeos sin activar (Bunny)", "Faltan BUNNY_LIBRARY_ID y BUNNY_API_KEY: la formación y la vista previa de los clips usan el reproductor de cada red."))
+    if not TECH_EMAILS:
+        out.append(("aviso", "Panel técnico abierto a todos los dueños", "Pon tu correo en la variable TECH_EMAILS de Railway para que solo lo veas tú."))
+    return out
+
+
+def tech_alert_count():
+    try:
+        return sum(1 for lvl, _, _ in tech_alerts() if lvl == "error") if is_tech() else 0
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 @app.route("/admin/ajustes/probar-app-whop", methods=["POST"])
@@ -2931,8 +3037,9 @@ def process_cover(file):
 def _campaign_from_form(camp):
     camp.song = request.form.get("song", "").strip()[:200]
     camp.artist = request.form.get("artist", "").strip()[:200]
-    cover_url = request.form.get("cover_url", "").strip()[:500]
-    camp.cover_url = cover_url if cover_url.startswith("https://") else ""
+    if "cover_url" in request.form:                    # (antes se podía pegar un enlace; ahora solo se sube la imagen)
+        cover_url = request.form.get("cover_url", "").strip()[:500]
+        camp.cover_url = cover_url if cover_url.startswith("https://") else ""
     mats = []
     for line in request.form.get("materials", "").splitlines()[:12]:
         url = line.rpartition("|")[2].strip() if "|" in line else line.strip()
@@ -2988,34 +3095,12 @@ def _campaign_from_form(camp):
     if status == "finalizada" and camp.id and camp.status != "finalizada":
         close_campaign(camp, current_user.id)          # al cerrarla, los clippers ya pueden retirar
     camp.status = status
-    crid = request.form.get("creator_id", type=int)
-    camp.creator_id = crid if crid and db.session.get(Creator, crid) else None
-    camp.featured = bool(request.form.get("featured"))
-    was_full, camp.full = bool(camp.full), bool(request.form.get("full"))
-    if was_full and not camp.full and camp.id:
-        n = notify_waitlist(camp, current_user.id)      # vuelven a abrirse las plazas: avisamos a los que esperaban
-        if n:
-            flash(f"Hemos avisado a {n} {'clipper' if n == 1 else 'clippers'} de que hay plazas.", "ok")
-    camp.category = "streamer"
+    if not request.form.get("wizard"):                 # el formulario antiguo traía estas casillas
+        camp.featured = bool(request.form.get("featured"))
+        camp.full = bool(request.form.get("full"))
     if request.form.get("wizard"):                     # opciones del asistente de campaña
-        camp.kind = "clipping"
-        bonus = parse_float(request.form.get("bonus_per_clip"))
-        camp.bonus_per_clip = round(bonus, 2) if bonus and bonus > 0 else None
-        camp.starts_at = parse_dt(request.form.get("starts_at"))
-        camp.ends_on = parse_dt(request.form.get("ends_on"))
+        camp.kind, camp.category = "clipping", "streamer"
         camp.max_members = max(int(parse_float(request.form.get("max_members"), 0) or 0), 0)
-        camp.countries = ",".join(c for c in request.form.getlist("countries") if c in COUNTRIES)
-        camp.new_accounts_only = bool(request.form.get("new_accounts_only"))
-        camp.earn_days = max(int(parse_float(request.form.get("earn_days"), 0) or 0), 0)
-        camp.expire_days = max(int(parse_float(request.form.get("expire_days"), 0) or 0), 0)
-        camp.review_at_min = bool(request.form.get("review_at_min"))
-        camp.auto_approve_trusted = bool(request.form.get("auto_approve_trusted"))
-        camp.auto_reject_old = bool(request.form.get("auto_reject_old"))
-        camp.auto_reject_unverified = bool(request.form.get("auto_reject_unverified"))
-        camp.announcements = "\n".join(l.strip()[:600] for l in request.form.get("announcements", "").splitlines() if l.strip())[:6000]
-        camp.ideas = "\n".join(l.strip()[:300] for l in request.form.get("ideas", "").splitlines() if l.strip())[:6000]
-        if camp.starts_at and camp.ends_on and camp.ends_on <= camp.starts_at:
-            return "La fecha de fin tiene que ser posterior a la de inicio."
         if not camp.low_budget:
             camp.low_alert_sent = False
     file = request.files.get("cover_file")
@@ -3126,6 +3211,13 @@ def admin_campaign_state(cid):
             return redirect(url_for("admin_campaign", cid=cid))
         camp.status = "activa"
         flash("Campaña activa otra vez.", "ok")
+    elif accion == "plazas":
+        camp.full = not camp.full
+        if not camp.full:
+            n = notify_waitlist(camp, current_user.id)
+            flash("Plazas abiertas." + (f" Hemos avisado a {n} {'clipper' if n == 1 else 'clippers'} que esperaban." if n else ""), "ok")
+        else:
+            flash("Plazas completas: ya no se aceptan solicitudes nuevas.", "ok")
     elif accion == "presupuesto":
         extra = parse_float(request.form.get("amount"), 0) or 0
         if extra <= 0:
@@ -3157,6 +3249,36 @@ def announce_campaign(camp):
                     f"{rate_k_filter(camp.rate)} por cada 1.000 vistas. Entra y pide unirte.", f"/campana/{camp.id or ''}")
         n += 1
     return n
+
+
+@app.route("/admin/campana/<int:cid>/contenido", methods=["POST"])
+@admin_required
+def admin_campaign_content(cid):
+    """Anuncios e ideas de la campaña, que se van añadiendo uno a uno."""
+    camp = db.session.get(Campaign, cid) or abort(404)
+    accion = request.form.get("accion", "")
+    text_ = " ".join((request.form.get("text") or "").split())
+    i = request.form.get("i", type=int)
+    if accion == "anuncio" and text_:
+        line = f"{datetime.utcnow().strftime('%d/%m/%Y')} | {text_[:600]}"
+        camp.announcements = "\n".join([x for x in (camp.announcements or "").splitlines() if x.strip()] + [line])
+        ids = [m.user_id for m in CampaignMember.query.filter_by(campaign_id=camp.id, status="aceptada")]
+        for uid in ids:
+            notify_user(uid, "anuncio", f"Anuncio en «{camp.song}»", text_[:200], url_for("campaign", cid=camp.id, tab="anuncios"))
+        flash(f"Anuncio publicado. Lo verán {len(ids)} {'clipper' if len(ids) == 1 else 'clippers'}.", "ok")
+    elif accion == "idea" and text_:
+        camp.ideas = "\n".join(camp.idea_list + [text_[:300]])
+        flash("Idea añadida.", "ok")
+    elif accion in ("borrar_anuncio", "borrar_idea") and i is not None:
+        field = "announcements" if accion == "borrar_anuncio" else "ideas"
+        lines = [x for x in (getattr(camp, field) or "").splitlines() if x.strip()]
+        if 0 <= i < len(lines):
+            lines.pop(i)
+            setattr(camp, field, "\n".join(lines))
+    else:
+        abort(400)
+    db.session.commit()
+    return redirect(url_for("admin_campaign", cid=cid))
 
 
 # ---------------------------------------------------------------- creadores (pagan desde su propio Whop)
@@ -3544,7 +3666,7 @@ def creator_company_id(creator):
 
 def wallet(creator_id):
     """(clave, empresa, nombre) del Whop del que sale el dinero de un creador; sin creador = la cuenta principal."""
-    if creator_id:
+    if creator_id and CREATORS_ENABLED:
         c = db.session.get(Creator, creator_id)
         if c:
             return creator_key(c), creator_company_id(c), c.name
@@ -3584,7 +3706,7 @@ def whop_enabled():
     """¿Se puede pagar por Whop? Con la cuenta principal o con el Whop de algún creador."""
     if WHOP_API_KEY and whop_company_id():
         return True
-    return any(creator_key(c) for c in Creator.query.all())
+    return CREATORS_ENABLED and any(creator_key(c) for c in Creator.query.all())
 
 
 def whop_lookup_key():
@@ -3904,9 +4026,11 @@ NOTIFY_EVENTS = {
     "campana_nueva": "Cuando sale una campaña nueva",
     "plazas": "Cuando se abren plazas en una campaña que esperas",
     "retiro": "Cuando te llega un retiro",
+    "anuncio": "Anuncios de tus campañas",
     "mensaje": "Mensajes y avisos del equipo",
 }
-NOTIFY_CHANNELS = {"push": "En este móvil u ordenador", "whatsapp": "Por WhatsApp"}
+WHATSAPP_ENABLED = False          # WhatsApp en pausa hasta hablarlo con el cliente (el código se queda listo)
+NOTIFY_CHANNELS = {"push": "En este móvil u ordenador"}
 
 
 def push_ready():
@@ -3914,7 +4038,7 @@ def push_ready():
 
 
 def whatsapp_ready():
-    return bool(WHATSAPP_TOKEN and WHATSAPP_PHONE_ID)
+    return WHATSAPP_ENABLED and bool(WHATSAPP_TOKEN and WHATSAPP_PHONE_ID)
 
 
 def wants(user, event, channel):
@@ -3962,12 +4086,14 @@ def _spawn(fn, *args):
     threading.Thread(target=fn, args=args, daemon=True).start()
 
 
-def notify_user(user_id, event, title, body, path=""):
-    """Aviso personal a un clipper (además del mensaje en la web, si lo hay)."""
-    if not (push_ready() or whatsapp_ready()):
-        return
+def notify_user(user_id, event, title, body, path="", bell=True):
+    """Aviso personal a un clipper: siempre en su campanita y, si lo tiene activado, en su móvil."""
     u = db.session.get(User, user_id)
-    if is_demo(u):
+    if not u or is_demo(u):
+        return
+    if bell:                                       # los mensajes del chat ya salen en la campanita por su cuenta
+        db.session.add(Notice(user_id=user_id, kind=event, title=title[:120], body=body[:400], url=(path or "")[:300]))
+    if not push_ready():
         return
     base = BASE_URL or (request.host_url.rstrip("/") if has_request_context() else "")
     _spawn(_deliver, user_id, event, title[:80], body[:300], (base + path) if path else base)
@@ -4383,7 +4509,8 @@ def admin_notify():
             if request.form.get("chat"):
                 db.session.add(Message(user_id=u.id, from_admin=True, sender_id=current_user.id, body=text_,
                                        read_by_admin=True, read_by_user=False))
-            notify_user(u.id, "mensaje", render_for(title, u), text_, request.form.get("path", "")[:200] or "/")
+            notify_user(u.id, "mensaje", render_for(title, u), text_, request.form.get("path", "")[:200] or "/",
+                        bell=not request.form.get("chat"))
         audit("aviso_enviado", f"{audience} · {len(users)} clippers · {title}")
         db.session.commit()
         flash(f"Aviso enviado a {len(users)} {'clipper' if len(users) == 1 else 'clippers'}.", "ok" if users else "error")
@@ -4400,10 +4527,71 @@ def admin_vapid_keys():
     return render_template("admin/vapid.html", priv=priv, pub=pub)
 
 
+BELL_ICONS = {"clip_aprobado": "ok", "clip_rechazado": "x", "campana_nueva": "flag", "plazas": "users", "retiro": "cash",
+              "mensaje": "chat", "anuncio": "megaphone", "destacado": "megaphone"}
+
+
+def bell_data():
+    """Lo que sale en la campanita: lista de avisos y cuántos hay sin leer."""
+    if not current_user.is_authenticated:
+        return {"rows": [], "unread": 0}
+    items = []
+    if current_user.is_admin:
+        nc = admin_counts()
+        appeals = Submission.query.filter_by(appeal_status="pendiente").count()
+        for n, ico, one, many, ep in [
+                (nc["clips"] - appeals, "film", "clip por revisar", "clips por revisar", "admin_clips"),
+                (appeals, "flag", "apelación pendiente", "apelaciones pendientes", "admin_clips"),
+                (nc["requests"], "inbox", "solicitud para unirse", "solicitudes para unirse", "admin_requests"),
+                (nc["payouts"], "cash", "retiro en curso", "retiros en curso", "admin_payouts"),
+                (nc["messages"], "chat", "mensaje sin leer", "mensajes sin leer", "admin_inbox"),
+                (nc["leads"], "megaphone", "creador interesado", "creadores interesados", "admin_leads")]:
+            if n > 0 and admin_can(ep):
+                url = url_for(ep, tab="apelaciones") if one.startswith("apel") else url_for(ep)
+                items.append({"id": None, "icon": ico, "title": f"{n} {one if n == 1 else many}", "body": "", "url": url,
+                              "ago": "", "unread": True})
+        return {"rows": items, "unread": len(items)}
+    msgs = unread_messages()
+    if msgs:
+        items.append({"id": None, "icon": "chat", "title": f"{msgs} mensaje{'s' if msgs > 1 else ''} del equipo", "body": "",
+                      "url": url_for("support"), "ago": "", "unread": True})
+    rows = Notice.query.filter_by(user_id=current_user.id).order_by(Notice.created_at.desc()).limit(20).all()
+    for n in rows:
+        items.append({"id": n.id, "icon": BELL_ICONS.get(n.kind, "bell"), "title": n.title, "body": n.body,
+                      "url": url_for("open_notice", nid=n.id), "ago": ago(n.created_at), "unread": not n.read})
+    unread = Notice.query.filter_by(user_id=current_user.id, read=False).count() + (1 if msgs else 0)
+    return {"rows": items, "unread": unread}
+
+
+@app.route("/avisos/<int:nid>")
+@login_required
+def open_notice(nid):
+    n = db.session.get(Notice, nid)
+    if not n or n.user_id != current_user.id:
+        abort(404)
+    if not n.read:
+        n.read = True
+        db.session.commit()
+    url = n.url or "/"
+    return redirect(url if url.startswith("/") and not url.startswith("//") else "/")
+
+
+@app.route("/avisos/leer", methods=["POST"])
+@login_required
+def read_notices():
+    Notice.query.filter_by(user_id=current_user.id, read=False).update({"read": True})
+    db.session.commit()
+    if wants_json():
+        return {"ok": True}
+    return redirect(request.referrer or url_for("index"))
+
+
 @app.route("/avisos")
 @login_required
 def notices():
-    return notice_data()
+    d = notice_data()
+    d["bell"] = bell_data()["unread"]
+    return d
 
 
 def message_json(m, viewer_is_admin):
@@ -4461,7 +4649,7 @@ def post_message(owner_id, from_admin):
     if not from_admin:
         notify_phone(f"💬 {current_user.name}", body or "📷 Ha enviado una foto", url_for("admin_chat", uid=owner_id))
     else:
-        notify_user(owner_id, "mensaje", "Mensaje del equipo", body[:200] or "Te hemos enviado una foto", "/soporte")
+        notify_user(owner_id, "mensaje", "Mensaje del equipo", body[:200] or "Te hemos enviado una foto", "/soporte", bell=False)
     return m, None
 
 

@@ -1,8 +1,17 @@
 {% extends "base.html" %}
 {% import "admin/_ui.html" as ui %}
-{% block title %}Ajustes · Admin{% endblock %}
+{% block title %}Panel técnico · Admin{% endblock %}
 {% block content %}
-{% call ui.head("Ajustes", "Conexiones de la web y herramientas.") %}{% endcall %}
+{% call ui.head("Panel técnico", "Solo lo ves tú: conexiones, errores, claves y herramientas.") %}{% endcall %}
+
+<div class="card tight form-stack">
+  <h3>Avisos técnicos</h3>
+  {% if alerts %}
+  <ul class="tech-alerts">
+    {% for lvl, title, text in alerts %}<li class="ta {{ lvl }}"><b>{{ title }}</b><span>{{ text }}</span></li>{% endfor %}
+  </ul>
+  {% else %}<p class="small" style="color:var(--money-ink)">✓ Todo en orden.</p>{% endif %}
+</div>
 
 <div class="card tight toolbar">
   <div>
@@ -17,7 +26,7 @@
   </div>
 </div>
 
-<div class="card tight form-stack" id="app-whop">
+{% if creators_on %}<div class="card tight form-stack" id="app-whop">
   <h3 class="whop-h"><span class="whop-ico" aria-hidden="true"></span>Probar app de Whop (pagos desde el Whop del creador)</h3>
   {% if not has_app_key %}
     <p class="small" style="color:var(--red)">Falta WHOP_APP_API_KEY en las variables de Railway (la clave de la app, no la de la empresa).</p>
@@ -40,6 +49,7 @@
   {% endif %}
 </div>
 
+{% endif %}
 <div class="card tight">
   <h3 class="whop-h"><span class="whop-ico" aria-hidden="true"></span>Pagos por Whop</h3>
   {% if not whop.key %}<p class="small" style="color:var(--red)">Falta WHOP_API_KEY en las variables de Railway.</p>
@@ -57,8 +67,7 @@
 
 <div class="card tight form-stack">
   <h3>Avisos a los clippers</h3>
-  <p class="small">{% if VAPID_ON %}✓ Avisos al móvil y al ordenador activados.{% else %}Avisos al móvil: falta la variable <code>VAPID_PRIVATE_KEY</code> en Railway.{% endif %}
-    · {% if WHATSAPP_ON %}✓ WhatsApp activado.{% else %}WhatsApp: faltan <code>WHATSAPP_TOKEN</code> y <code>WHATSAPP_PHONE_ID</code> (API oficial de Meta, con una plantilla aprobada llamada <code>{{ WHATSAPP_TEMPLATE }}</code> con un hueco {{ '{{1}}' }}).{% endif %}</p>
+  <p class="small">{% if VAPID_ON %}✓ Avisos al móvil y al ordenador activados.{% else %}Avisos al móvil: falta la variable <code>VAPID_PRIVATE_KEY</code> en Railway.{% endif %}</p>
   {% if not VAPID_ON %}<form method="post" action="{{ url_for('admin_vapid_keys') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Generar la clave de avisos</button></form>{% endif %}
 </div>
 

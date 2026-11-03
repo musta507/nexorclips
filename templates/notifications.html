@@ -3,8 +3,8 @@
 {% block title %}Notificaciones · {{ APP_NAME }}{% endblock %}
 {% block content %}
 <a class="back" href="{{ url_for('account') }}">← Mi cuenta</a>
-<div class="section-head" style="margin:0"><h1>Notificaciones</h1><p class="muted">Elige qué avisos quieres y por dónde. También te dejamos siempre un mensaje en la web.</p></div>
-{% if not push_ready and not whatsapp_ready %}
+<div class="section-head" style="margin:0"><h1>Notificaciones</h1><p class="muted">Todos los avisos te llegan a la campanita de arriba. Aquí eliges cuáles quieres también en tu móvil u ordenador.</p></div>
+{% if not push_ready %}
 <div class="card tight"><p class="muted small">Los avisos al móvil aún no están activados en la plataforma. Puedes dejar elegido lo que quieres y te llegará cuando se activen.</p></div>
 {% endif %}
 {% if push_ready %}
@@ -27,9 +27,6 @@
     {% endfor %}
     </tbody>
   </table></div>
-  <div class="field" style="max-width:340px"><label for="whatsapp">Tu WhatsApp</label>
-    <input id="whatsapp" name="whatsapp" inputmode="tel" placeholder="+34 600 000 000" value="{{ current_user.whatsapp or '' }}" autocomplete="tel">
-    <span class="hint">Con el prefijo del país. Déjalo vacío para no recibir nada por WhatsApp.</span></div>
   <button class="btn accent" style="align-self:flex-start">Guardar</button>
 </form>
 {% endblock %}

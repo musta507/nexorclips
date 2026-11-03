@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import av %}
 {% block title %}{{ camp.song }} · Admin{% endblock %}
 {% block content %}
 <a class="back" href="{{ url_for('admin_campaigns') }}">← Campañas</a>
@@ -13,14 +14,13 @@
     <a class="btn" href="{{ url_for('admin_campaign_form', cid=camp.id) }}">Editar</a>
     <form method="post" action="{{ url_for('admin_campaign_duplicate', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">Duplicar</button></form>
     {% if camp.status in ('activa', 'pausada') %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="{{ 'pausar' if camp.status == 'activa' else 'reanudar' }}"><button class="btn soft">{{ "Pausar" if camp.status == 'activa' else "Reanudar" }}</button></form>{% endif %}
+    {% if camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="plazas"><button class="btn soft">{{ "Abrir plazas" if camp.full else "Marcar plazas completas" }}</button></form>{% endif %}
     {% if camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_close', cid=camp.id) }}" data-confirm="¿Cerrar «{{ camp.song }}»? Dejará de aceptar clips y los clippers podrán retirar lo que ganaron."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn red">Cerrar campaña</button></form>{% endif %}
   </div>
 </div>
 
 {% if camp.status == 'finalizada' %}<div class="flash ok">Campaña completada{% if camp.ended_at %} el {{ camp.ended_at|date }}{% endif %}. Ya no acepta clips ni se actualizan sus vistas, y los clippers ya pueden retirar lo que ganaron. Para reabrirla, sube el presupuesto y ponla en «Activa».</div>{% endif %}
 
-{% if shortfall %}<div class="flash error">Pendiente de saldo: el Whop de {{ camp.creator.name if camp.creator else "la cuenta principal" }} tiene {{ shortfall.balance|money }} y debe {{ shortfall.owed|money }} a los clippers. Le faltan <b>{{ shortfall.missing|money }}</b>: los retiros quedarán esperando hasta que recargue.</div>{% endif %}
-{% if camp.not_started %}<div class="flash info">Empieza el {{ camp.starts_at|datetime }} (UTC). Hasta entonces se puede pedir entrar, pero no subir clips.</div>{% endif %}
 <div class="card tight camp-budget">
   <div class="camp-budget-top">
     <div><span class="small muted">Presupuesto</span><b class="tnum">{{ st.spent|money }} <span class="muted">de {{ camp.budget|money }}</span></b>{% if camp.low_budget %} <span class="flag serious">Queda poco: {{ camp.remaining|money }}</span>{% endif %}</div>
@@ -33,11 +33,36 @@
   <div class="dbar" role="img" aria-label="{{ st.pct }} % gastado"><span style="width:{{ st.pct }}%"></span></div>
   <div class="small muted camp-meta">
     Clipping{% if camp.max_members %} · Plazas: {{ camp.members_accepted }} de {{ camp.max_members }}{% endif %}
-    {% if camp.ends_on %} · Termina el {{ camp.ends_on|datetime }} UTC{% endif %}
-    {% if camp.earn_days %} · Cada clip suma {{ camp.earn_days }} días{% endif %}
-    {% if camp.expire_days %} · {{ camp.expire_days }} días para el mínimo{% endif %}
-    {% if camp.country_list %} · Países: {% for c in camp.country_list %}{{ COUNTRIES[c] }}{{ ", " if not loop.last }}{% endfor %}{% endif %}
   </div>
+</div>
+
+<div class="duo camp-extras">
+  <section class="card tight form-stack">
+    <h3>Anuncios para los clippers</h3>
+    <form method="post" action="{{ url_for('admin_campaign_content', cid=camp.id) }}" class="form-stack">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="anuncio">
+      <textarea name="text" rows="2" maxlength="600" required placeholder="Ej.: Nuevo material subido al Drive" aria-label="Texto del anuncio"></textarea>
+      <button class="btn sm" style="align-self:flex-start">Publicar anuncio</button>
+    </form>
+    {% set anns = camp.announcement_list %}
+    {% if anns %}<ul class="item-list">{% for d, t in anns|reverse %}{% set i = anns|length - loop.index %}
+      <li><div><span class="small muted">{{ d }}</span><p>{{ t }}</p></div>
+        <form method="post" action="{{ url_for('admin_campaign_content', cid=camp.id) }}" data-confirm="¿Borrar este anuncio?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="borrar_anuncio"><input type="hidden" name="i" value="{{ i }}"><button class="icon-btn" aria-label="Borrar anuncio">✕</button></form></li>
+    {% endfor %}</ul>{% else %}<p class="small muted">Aún no hay anuncios. Los clippers aceptados reciben un aviso en la campanita.</p>{% endif %}
+  </section>
+  <section class="card tight form-stack">
+    <h3>Ideas de clips</h3>
+    <form method="post" action="{{ url_for('admin_campaign_content', cid=camp.id) }}" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="idea">
+      <input name="text" maxlength="300" required placeholder="Ej.: Reacción al mejor momento del directo" aria-label="Idea de clip" style="flex:1">
+      <button class="btn sm">+ Añadir idea</button>
+    </form>
+    {% set ideas = camp.idea_list %}
+    {% if ideas %}<ul class="item-list">{% for t in ideas %}
+      <li><p>{{ t }}</p>
+        <form method="post" action="{{ url_for('admin_campaign_content', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="borrar_idea"><input type="hidden" name="i" value="{{ loop.index0 }}"><button class="icon-btn" aria-label="Borrar idea">✕</button></form></li>
+    {% endfor %}</ul>{% else %}<p class="small muted">Aún no hay ideas. Salen en la pestaña «Ideas» de la campaña.</p>{% endif %}
+  </section>
 </div>
 
 {% include "_analytics.html" %}
@@ -67,7 +92,7 @@
       <tbody>
       {% for s in subs %}
       <tr{% if s.flag_list %} class="row-flag"{% endif %}>
-        <td data-label="Clipper"><b>{{ s.user.name }}</b>{% if s.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">{{ s.created_at|ago }}</div></td>
+        <td data-label="Clipper">{{ av(s.user) }} <b>{{ s.user.name }}</b>{% if s.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">{{ s.created_at|ago }}</div></td>
         <td data-label="Clip"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">{{ PLATFORMS[s.platform] }}</a>{% include "admin/_flags.html" %}</td>
         <td data-label="Vistas">
           <form class="inline" method="post" action="{{ url_for('admin_review', sid=s.id, accion='visitas') }}" data-confirm="¿Corregir las vistas de este clip a mano? Su dinero se recalculará.">
