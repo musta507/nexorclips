@@ -1,4 +1,5 @@
 """ClipProfit Hispano — plataforma de clipping: campañas, clips, vistas y pagos."""
+import base64
 import csv
 import hashlib
 import io
@@ -122,7 +123,7 @@ DEV_LOGIN = os.environ.get("DEV_LOGIN") == "1" and not PRODUCTION   # nunca disp
 # «Empezar de cero» borra datos reales: en producción está apagado salvo que se active a propósito en Railway
 ALLOW_WIPE = os.environ.get("ALLOW_WIPE") == "1" or not PRODUCTION
 
-PLATFORMS = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube Shorts"}
+PLATFORMS = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube Shorts", "facebook": "Facebook Reels"}
 CATEGORIES = {"streamer": "Creadores"}          # todas las campañas son de clipping de creadores
 CATEGORY_ONE = {"streamer": "Creador"}
 USDT_METHOD = "Cripto (USDT · TRC20)"
@@ -198,6 +199,7 @@ class User(UserMixin, db.Model):
     tiktok_handles = db.Column(db.String(400), default="")
     instagram_handles = db.Column(db.String(400), default="")
     youtube_handles = db.Column(db.String(400), default="")
+    facebook_handles = db.Column(db.String(400), default="")
     verified_handles = db.Column(db.String(1200), default="")   # sin uso (de una versión antigua); se puede borrar más adelante
     verify_code = db.Column(db.String(12), default="")           # código que el clipper pone en su bio para verificar sus cuentas
     accepted_terms_at = db.Column(db.DateTime, nullable=True)
@@ -283,12 +285,15 @@ class Campaign(db.Model):
     rate_tiktok = db.Column(Rate, nullable=True)        # pago de cada red (vacío = el general)
     rate_instagram = db.Column(Rate, nullable=True)
     rate_youtube = db.Column(Rate, nullable=True)
+    rate_facebook = db.Column(Rate, nullable=True)
     min_tiktok = db.Column(Money, nullable=True)         # pago mínimo por clip de cada red en dinero (vacío = el general, 0 = sin mínimo)
     min_instagram = db.Column(Money, nullable=True)
     min_youtube = db.Column(Money, nullable=True)
+    min_facebook = db.Column(Money, nullable=True)
     max_tiktok = db.Column(Money, nullable=True)         # pago máximo por clip de cada red (vacío = el general, 0 = sin tope)
     max_instagram = db.Column(Money, nullable=True)
     max_youtube = db.Column(Money, nullable=True)
+    max_facebook = db.Column(Money, nullable=True)
     budget = db.Column(Money, nullable=False)
     spent = db.Column(Money, default=0.0)                # dinero ya asignado a clips (libro de cuentas)
     min_views = db.Column(db.Integer, default=0)            # mínimo para cobrar un vídeo
@@ -387,9 +392,10 @@ class Campaign(db.Model):
             host = urlparse(url).netloc.lower()
             kind = ("tiktok" if "tiktok." in host else "instagram" if "instagram." in host
                     else "youtube" if ("youtube." in host or "youtu.be" in host)
+                    else "facebook" if ("facebook." in host or "fb.watch" in host)
                     else "drive" if host.endswith(("drive.google.com", "docs.google.com")) else "link")
             if not name:
-                name = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube",
+                name = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube", "facebook": "Facebook",
                         "drive": "Google Drive"}.get(kind) or host.removeprefix("www.") or "Enlace"
             out.append((name[:80], url, kind))
         return out[:12]
@@ -474,6 +480,11 @@ class Submission(db.Model):
     appeal_text = db.Column(db.String(1000), default="")     # el clipper puede apelar un rechazo una sola vez
     appeal_status = db.Column(db.String(20), default="")     # "" · pendiente · aceptada · rechazada
     appeal_at = db.Column(db.DateTime, nullable=True)
+    review_since = db.Column(db.DateTime, nullable=True)    # cuándo llegó al mínimo y pasó a «Por revisar»
+    video_guid = db.Column(db.String(64), default="")        # copia del vídeo en Bunny para revisarlo
+    video_status = db.Column(db.String(20), default="")      # "" · subiendo · listo · error · borrado
+    video_tries = db.Column(db.Integer, default=0)
+    media_url = db.Column(db.String(1000), default="")       # enlace de descarga que da Apify (caduca)
     views_updated_at = db.Column(db.DateTime, nullable=True)
     checked_at = db.Column(db.DateTime, nullable=True)
     views_error = db.Column(db.String(255), default="")
@@ -728,7 +739,7 @@ class LessonProgress(db.Model):
 
 class Setting(db.Model):
     key = db.Column(db.String(60), primary_key=True)
-    value = db.Column(db.String(500), default="")
+    value = db.Column(db.Text, default="")
 
 
 @login_manager.user_loader
@@ -785,8 +796,8 @@ def ensure_schema():
 
 MONEY_COLUMNS = {
     "campaign": {"budget": 2, "spent": 2, "max_per_video": 2, "min_tiktok": 2, "min_instagram": 2, "min_youtube": 2,
-                 "max_tiktok": 2, "max_instagram": 2, "max_youtube": 2,
-                 "rate": 4, "rate_tiktok": 4, "rate_instagram": 4, "rate_youtube": 4},
+                 "min_facebook": 2, "max_tiktok": 2, "max_instagram": 2, "max_youtube": 2, "max_facebook": 2,
+                 "rate": 4, "rate_tiktok": 4, "rate_instagram": 4, "rate_youtube": 4, "rate_facebook": 4},
     "submission": {"earned": 2},
     "payout": {"amount": 2},
 }
@@ -805,6 +816,9 @@ def migrate_money_columns():
                     conn.execute(text(f'ALTER TABLE "{table}" ALTER COLUMN "{col}" TYPE NUMERIC(14,{scale}) '
                                       f'USING round("{col}"::numeric, {scale})'))
                     log.info("Dinero exacto: %s.%s pasa a NUMERIC", table, col)
+        kind = conn.execute(text("SELECT data_type FROM information_schema.columns WHERE table_name = 'setting' AND column_name = 'value'")).scalar()
+        if kind == "character varying":                 # los ajustes pueden ser largos (anuncio de inicio, su imagen)
+            conn.execute(text('ALTER TABLE "setting" ALTER COLUMN "value" TYPE TEXT'))
 
 
 def migrate_members():
@@ -1203,7 +1217,7 @@ def check_author(sub):
 
 def profile_url(platform, handle):
     return {"tiktok": f"https://www.tiktok.com/@{handle}", "instagram": f"https://www.instagram.com/{handle}/",
-            "youtube": f"https://www.youtube.com/@{handle}"}[platform]
+            "youtube": f"https://www.youtube.com/@{handle}", "facebook": f"https://www.facebook.com/{handle}"}[platform]
 
 
 def account_verified(sub):
@@ -1247,6 +1261,8 @@ def apply_reading(sub, info, now):
     comments = info.get("comments") if isinstance(info, dict) else None
     shares = info.get("shares") if isinstance(info, dict) else None
     posted = info.get("posted_at") if isinstance(info, dict) else None
+    if isinstance(info, dict) and info.get("video_url"):
+        sub.media_url = str(info["video_url"])[:1000]
     sub.checked_at = now
     sub.views_error = ""
     if posted and not sub.posted_at:
@@ -1315,6 +1331,8 @@ def refresh_views():
         pend = (Submission.query.join(Campaign)
                 .filter(Campaign.status == "activa", Submission.status == "pendiente").all())
         for s in pend:                                   # reglas automáticas (también caduca lo que no llegó al mínimo)
+            if not s.review_since and reached_min(s):
+                s.review_since = datetime.utcnow()
             if is_demo(s.user):
                 continue
             r = auto_review(s)
@@ -1324,6 +1342,10 @@ def refresh_views():
             assigned += accrue(s)
         db.session.commit()
         budget_alerts()
+        try:
+            copy_review_videos()
+        except Exception:  # noqa: BLE001
+            log.exception("Fallo copiando vídeos a Bunny")
         msg = f"Vistas leídas en {read} de {len(subs)} clips · {money(assigned)} repartidos."
         if auto["aprobado"] or auto["rechazado"]:
             msg += f" Automático: {auto['aprobado']} aprobados, {auto['rechazado']} rechazados."
@@ -1364,6 +1386,80 @@ def budget_alerts():
             notify_phone(f"💸 A «{c.song}» le queda poco presupuesto",
                          f"Quedan {money(c.remaining)} de {money(c.budget)}. Añade más si quieres que siga.",
                          url_for("admin_campaign", cid=c.id) if has_request_context() else "", tags="money_with_wings")
+
+
+VIDEO_KEEP_DAYS = int(os.environ.get("VIDEO_KEEP_DAYS", "7"))   # días que se guarda la copia tras revisar el clip
+
+
+def copy_review_videos(limit=30):
+    """Copia a Bunny el vídeo de los clips que esperan revisión, para verlos en el panel aunque la red falle.
+    Y borra las copias de los clips revisados hace más de VIDEO_KEEP_DAYS días."""
+    if not bunny_ready():
+        return 0
+    now = datetime.utcnow()
+    old = (Submission.query.filter(Submission.video_guid != "", Submission.status != "pendiente",
+                                   Submission.reviewed_at.isnot(None),
+                                   Submission.reviewed_at < now - timedelta(days=VIDEO_KEEP_DAYS)).limit(200).all())
+    for s_ in old:
+        try:
+            bunny_call("DELETE", f"/videos/{s_.video_guid}")
+        except requests.RequestException:
+            continue
+        s_.video_guid, s_.video_status = "", "borrado"
+    db.session.commit()
+    todo = (Submission.query.filter(Submission.status == "pendiente", Submission.review_since.isnot(None),
+                                    Submission.video_guid == "", Submission.video_tries < 3,
+                                    Submission.platform.in_(("tiktok", "instagram")))
+            .order_by(Submission.review_since).limit(limit).all())
+    todo = [s_ for s_ in todo if not is_demo(s_.user)]
+    tiktok = [s_ for s_ in todo if s_.platform == "tiktok" and not s_.media_url]
+    if tiktok:
+        try:
+            links = viewcounter.fetch_download_urls("tiktok", [s_.url for s_ in tiktok])
+        except Exception as e:  # noqa: BLE001
+            log.warning("Apify no dio los vídeos de TikTok: %s", e)
+            links = {}
+        for s_ in tiktok:
+            s_.media_url = (links.get(s_.video_key.split(":", 1)[1]) or "")[:1000]
+    done = 0
+    for s_ in todo:
+        s_.video_tries = (s_.video_tries or 0) + 1
+        if not s_.media_url:
+            continue
+        try:
+            r = requests.get(s_.media_url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code >= 400 or len(r.content) < 10_000 or len(r.content) > 300 * 1024 * 1024:
+                raise RuntimeError(f"descarga {r.status_code} · {len(r.content)} bytes")
+            ok, code, data = bunny_call("POST", "/videos", json={"title": f"Clip {s_.id} · {s_.campaign.song}"[:200]})
+            if not ok or not data.get("guid"):
+                raise RuntimeError(f"Bunny {code}")
+            guid = data["guid"]
+            up = requests.put(f"https://video.bunnycdn.com/library/{BUNNY_LIBRARY_ID}/videos/{guid}", data=r.content,
+                              headers={"AccessKey": BUNNY_API_KEY, "Content-Type": "application/octet-stream"}, timeout=180)
+            if up.status_code >= 300:
+                raise RuntimeError(f"subida {up.status_code}")
+            s_.video_guid, s_.video_status = guid, "subiendo"
+            done += 1
+        except Exception as e:  # noqa: BLE001
+            log.warning("No se pudo copiar el vídeo del clip %s: %s", s_.id, e)
+            s_.video_status = "error"
+        db.session.commit()
+    for s_ in Submission.query.filter(Submission.video_status == "subiendo").limit(100).all():
+        try:
+            ok, _, data = bunny_call("GET", f"/videos/{s_.video_guid}")
+            if ok:
+                s_.video_status = {4: "listo", 5: "error", 6: "error"}.get(data.get("status"), "subiendo")
+        except requests.RequestException:
+            pass
+    db.session.commit()
+    return done
+
+
+def clip_player(sub):
+    """Reproductor del clip en la revisión: la copia propia (Bunny) si ya está lista; si no, el de la red."""
+    if sub.video_guid and sub.video_status == "listo" and BUNNY_LIBRARY_ID:
+        return f"https://iframe.mediadelivery.net/embed/{BUNNY_LIBRARY_ID}/{sub.video_guid}?autoplay=false&preload=true&responsive=true", True
+    return viewcounter.embed_url(sub.platform, sub.url), False
 
 
 def refresh_in_background():
@@ -1454,7 +1550,7 @@ def before():
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
        "font-src 'self'; img-src 'self' data: https:; connect-src 'self' https://video.bunnycdn.com; "
        "frame-src https://www.tiktok.com https://www.instagram.com https://www.youtube-nocookie.com "
-       "https://iframe.mediadelivery.net https://player.vimeo.com; "
+       "https://iframe.mediadelivery.net https://player.vimeo.com https://www.facebook.com; "
        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 
 
@@ -1952,7 +2048,13 @@ def index():
     if not current_user.is_authenticated:
         return landing()
     all_cards = [(c, campaign_stats(c)) for c in active_campaigns()]
-    featured = all_cards[0] if all_cards else None
+    hf = home_feature()
+    if hf["mode"] == "campaign":
+        featured = next((x for x in all_cards if x[0].id == hf["campaign_id"]), None)
+    elif hf["mode"] in ("announce", "none"):
+        featured = None
+    else:
+        featured = all_cards[0] if all_cards else None
     cat = request.args.get("cat", "")
     cards = [x for x in all_cards if not cat or x[0].category == cat]
     counts = {k: sum(1 for c, _ in all_cards if c.category == k) for k in CATEGORIES}
@@ -1962,7 +2064,8 @@ def index():
     fs = first_steps(current_user) if not current_user.is_admin else None
     return render_template("home.html", cards=cards, featured=featured, cat=cat, counts=counts,
                            total=len(all_cards), new_user=not current_user.submissions, my_join=my_join,
-                           fs=fs, top5=ranking("semana", 5), week_clips=clips_of_week())
+                           fs=fs, top5=ranking("semana", 5), week_clips=clips_of_week(),
+                           announce=hf if hf["mode"] == "announce" else None)
 
 
 def submit_clip(camp, raw_url):
@@ -1998,7 +2101,8 @@ def submit_clip(camp, raw_url):
     if Submission.query.filter_by(video_key=f"{platform}:{vid}").first():
         return False, "Ese vídeo ya se envió antes."
     db.session.add(Submission(user_id=current_user.id, campaign_id=camp.id, url=url, platform=platform,
-                              video_key=f"{platform}:{vid}", author=author))
+                              video_key=f"{platform}:{vid}", author=author,
+                              review_since=None if camp.min_for(platform) else datetime.utcnow()))
     db.session.commit()
     if any(camp.min_for(p) for p in camp.platform_list):
         return True, "¡Clip enviado! Ya está contando vistas. Lo revisaremos cuando llegue al pago mínimo."
@@ -2204,8 +2308,8 @@ def clipper_stats(subs):
             if any(s.status in ("aprobado", "rechazado") for s in subs) else None}
 
 
-@app.route("/mis-clips", methods=["GET", "POST"])
 @app.route("/enviar", methods=["GET", "POST"])
+@app.route("/mis-clips", methods=["GET", "POST"])
 @login_required
 def my_clips():
     joined = {a.campaign_id for a in CampaignAccount.query.filter_by(user_id=current_user.id, status="aceptada")}
@@ -2678,12 +2782,71 @@ def admin_requests():
     return render_template("admin/requests.html", joins=joins, estado=estado)
 
 
+REVIEW_SLA_HOURS = int(os.environ.get("REVIEW_SLA_HOURS", "48"))   # a partir de aquí un clip sale como «atrasado»
+REVIEW_FILTERS = {"todos": ("Todos", "grid"), "atrasados": ("Atrasados", "clock"), "avisos": ("Con avisos", "flag"),
+                  "tiktok": ("TikTok", "tiktok"), "instagram": ("Instagram", "instagram"),
+                  "youtube": ("YouTube", "youtube"), "facebook": ("Facebook", "facebook")}
+
+
+def waiting_hours(sub):
+    since = sub.appeal_at if sub.appeal_status == "pendiente" else (sub.review_since or sub.created_at)
+    return (datetime.utcnow() - since).total_seconds() / 3600
+
+
+def clip_series(subs, days=30):
+    """Vistas, me gusta, comentarios y compartidos de cada clip, día a día (acumulado), para la gráfica de la revisión."""
+    if not subs:
+        return {}
+    snaps = {}
+    for sn in (ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_([x.id for x in subs]))
+               .order_by(ViewSnapshot.taken_at).all()):
+        snaps.setdefault(sn.submission_id, []).append(sn)
+    today = datetime.utcnow().date()
+    out = {}
+    for s_ in subs:
+        start = max(s_.created_at.date(), today - timedelta(days=days - 1))
+        n = (today - start).days + 1
+        cur = {"views": s_.views or 0, "likes": s_.likes or 0, "comments": s_.comments or 0, "shares": s_.shares or 0}
+        ser = {m: [0] * n for m in cur}
+        pts = [(sn.taken_at.date(), sn) for sn in snaps.get(s_.id, [])]
+        j, last = 0, {m: 0 for m in cur}
+        for i in range(n):
+            d = start + timedelta(days=i)
+            while j < len(pts) and pts[j][0] <= d:
+                sn = pts[j][1]
+                last = {"views": sn.views or 0, "likes": sn.likes or 0, "comments": sn.comments or 0, "shares": sn.shares or 0}
+                j += 1
+            for m in cur:
+                ser[m][i] = last[m] if i < n - 1 else cur[m]
+        out[s_.id] = {"labels": [(start + timedelta(days=i)).isoformat() for i in range(n)], **ser}
+    return out
+
+
+def bot_check(sub):
+    """Texto de la línea «Detección de bots» de cada clip, a partir de sus avisos y su interacción."""
+    v = sub.views or 0
+    if "subida_rapida" in sub.flag_list:
+        return "alerta", "Subida de vistas muy rápida en pocas horas: revisa que no sean vistas compradas."
+    if "pocos_likes" in sub.flag_list:
+        return "alerta", "Los me gusta no han ido acordes con las visualizaciones: posible actividad de bots."
+    if "cuenta_de_otro" in sub.flag_list:
+        return "alerta", "El vídeo es de una cuenta vinculada a otro clipper."
+    if v >= 5000 and sub.comments is not None and sub.comments == 0:
+        return "aviso", "Ningún comentario con muchas vistas: no confirmado como bots, pero conviene mirarlo."
+    if v and sub.likes is not None:
+        return "ok", f"Interacción normal ({(sub.likes + (sub.comments or 0) + (sub.shares or 0)) / v * 100:.1f} %): sin señales de bots."
+    return "ok", "Aún sin datos suficientes para analizarlo."
+
+
 @app.route("/admin/clips")
 @admin_required
 def admin_clips():
     cid = request.args.get("c", type=int)
     tab = request.args.get("tab", "revisar")
     tab = tab if tab in ("revisar", "contando", "apelaciones") else "revisar"
+    f = request.args.get("f", "todos")
+    f = f if f in REVIEW_FILTERS else "todos"
+    q = (request.args.get("q") or "").strip().lower().lstrip("@")
     rev, cnt = review_queue(cid)
     aq = (Submission.query.filter_by(appeal_status="pendiente")
           .options(joinedload(Submission.user), joinedload(Submission.campaign)).order_by(Submission.appeal_at))
@@ -2691,20 +2854,36 @@ def admin_clips():
         aq = aq.filter(Submission.campaign_id == cid)
     appeals = aq.all()
     rows = {"revisar": rev, "contando": cnt, "apelaciones": appeals}[tab]
-    avisos = bool(request.args.get("avisos"))
-    if avisos:
+    rows = sorted(rows, key=lambda s_: -waiting_hours(s_))            # lo que más espera, primero
+    counts = {k: 0 for k in REVIEW_FILTERS}
+    for s_ in rows:
+        counts["todos"] += 1
+        if tab != "contando" and waiting_hours(s_) >= REVIEW_SLA_HOURS:
+            counts["atrasados"] += 1
+        if s_.flag_list:
+            counts["avisos"] += 1
+        counts[s_.platform] = counts.get(s_.platform, 0) + 1
+    if f == "atrasados":
+        rows = [s_ for s_ in rows if waiting_hours(s_) >= REVIEW_SLA_HOURS]
+    elif f == "avisos" or request.args.get("avisos"):
         rows = [s_ for s_ in rows if s_.flag_list]
-    sel = None
-    sid = request.args.get("sel", type=int)
-    if rows:
-        sel = next((r for r in rows if r.id == sid), rows[0])
-    idx = rows.index(sel) if sel else -1
-    prev_ = rows[idx - 1] if idx > 0 else None
-    next_ = rows[idx + 1] if 0 <= idx < len(rows) - 1 else None
+    elif f in PLATFORMS:
+        rows = [s_ for s_ in rows if s_.platform == f]
+    if q:
+        rows = [s_ for s_ in rows if q in (s_.user.name or "").lower() or q in (s_.author or "").lower()
+                or q in (s_.user.email or "").lower() or q in (s_.campaign.song or "").lower()]
+    page = max(request.args.get("p", 1, type=int), 1)
+    per = 12
+    total = len(rows)
+    shown = rows[: page * per]
     camps = Campaign.query.order_by(Campaign.created_at.desc()).all()
-    return render_template("admin/clips.html", rows=rows, sel=sel, prev_=prev_, next_=next_, tab=tab, camps=camps,
-                           cid=cid, avisos=avisos, n={"revisar": len(rev), "contando": len(cnt), "apelaciones": len(appeals)},
-                           embed=viewcounter.embed_url(sel.platform, sel.url) if sel else "")
+    camp = db.session.get(Campaign, cid) if cid else None
+    return render_template("admin/clips.html", rows=shown, total=total, more=total > len(shown), page=page, tab=tab, f=f,
+                           q=request.args.get("q", ""), camps=camps, cid=cid, camp=camp, counts=counts,
+                           n={"revisar": len(rev), "contando": len(cnt), "apelaciones": len(appeals)},
+                           series=clip_series(shown), players={s_.id: clip_player(s_) for s_ in shown},
+                           bots={s_.id: bot_check(s_) for s_ in shown}, hours={s_.id: waiting_hours(s_) for s_ in shown},
+                           sla=REVIEW_SLA_HOURS, filters=REVIEW_FILTERS)
 
 
 @app.route("/admin/retiros")
@@ -2904,8 +3083,6 @@ def load_demo(days=30, seed=7):
 def remove_demo():
     demo = User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).all()
     for u in demo:
-        LessonProgress.query.filter_by(user_id=u.id).delete(synchronize_session=False)
-        PushSub.query.filter_by(user_id=u.id).delete(synchronize_session=False)
         delete_user_account(u)
     db.session.commit()
     return len(demo)
@@ -3173,6 +3350,83 @@ def admin_campaign_form(cid=None):
         if cid:
             camp = db.session.get(Campaign, cid)
     return render_template("admin/campaign_form.html", camp=camp, editing=bool(cid), creators=Creator.query.order_by(Creator.name).all())
+
+
+def home_feature():
+    """Qué sale en el bloque grande del Inicio: una campaña, un anuncio general o nada ("" = la campaña más nueva)."""
+    try:
+        d = json.loads(get_setting("home_feature", "") or "{}")
+    except ValueError:
+        d = {}
+    return {"mode": d.get("mode", ""), "campaign_id": d.get("campaign_id"), "title": d.get("title", ""),
+            "body": d.get("body", ""), "btn_text": d.get("btn_text", ""), "btn_url": d.get("btn_url", ""),
+            "image_v": d.get("image_v", 0)}
+
+
+@app.route("/admin/destacado", methods=["GET", "POST"])
+@admin_required
+def admin_featured():
+    hf = home_feature()
+    if request.method == "POST":
+        mode = request.form.get("mode", "")
+        if mode not in ("campaign", "announce", "none", ""):
+            abort(400)
+        new = dict(hf, mode=mode)
+        if mode == "campaign":
+            cid = request.form.get("campaign_id", type=int)
+            camp = db.session.get(Campaign, cid or 0)
+            if not camp:
+                flash("Elige una campaña.", "error")
+                return redirect(url_for("admin_featured"))
+            new["campaign_id"] = camp.id
+            Campaign.query.update({"featured": False})
+            camp.featured = True
+        elif mode == "announce":
+            new["title"] = (request.form.get("title") or "").strip()[:120]
+            new["body"] = (request.form.get("body") or "").strip()[:600]
+            new["btn_text"] = (request.form.get("btn_text") or "").strip()[:40]
+            url = (request.form.get("btn_url") or "").strip()[:300]
+            new["btn_url"] = url if url.startswith(("https://", "/")) and not url.startswith("//") else ""
+            if not new["title"]:
+                flash("Escribe el título del anuncio.", "error")
+                return redirect(url_for("admin_featured"))
+            f = request.files.get("image")
+            if f and f.filename:
+                data = process_cover(f)
+                if not data:
+                    flash("La imagen tiene que ser JPG, PNG o WEBP.", "error")
+                    return redirect(url_for("admin_featured"))
+                set_setting("home_feature_img", base64.b64encode(data).decode())
+                new["image_v"] = int(new.get("image_v") or 0) + 1
+            if request.form.get("remove_image"):
+                set_setting("home_feature_img", "")
+                new["image_v"] = 0
+            if request.form.get("notify"):
+                n = 0
+                for u in User.query.filter(User.is_admin.is_(False), User.is_banned.is_(False)).all():
+                    notify_user(u.id, "destacado", new["title"], new["body"][:200], "/")
+                    n += 1
+                flash(f"Avisados {n} clippers por la campanita.", "ok")
+        else:
+            Campaign.query.update({"featured": False})
+        set_setting("home_feature", json.dumps(new, ensure_ascii=False))
+        audit("destacado_cambiado", f"{mode or 'automático'} · {new.get('title') or new.get('campaign_id') or ''}")
+        db.session.commit()
+        flash("Inicio actualizado.", "ok")
+        return redirect(url_for("admin_featured"))
+    camps = Campaign.query.filter(Campaign.status != "finalizada").order_by(Campaign.created_at.desc()).all()
+    return render_template("admin/featured.html", hf=hf, camps=camps)
+
+
+@app.route("/destacado/imagen")
+@login_required
+def home_feature_image():
+    raw = get_setting("home_feature_img", "")
+    if not raw:
+        abort(404)
+    resp = Response(base64.b64decode(raw), mimetype="image/webp")
+    resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+    return resp
 
 
 COPY_SKIP = {"id", "spent", "report_token", "created_at", "ended_at", "status", "featured", "full", "low_alert_sent"}
@@ -3843,8 +4097,8 @@ def admin_wipe():
     if current_user.id not in admin_ids:
         admin_ids.append(current_user.id)
     keep_campaigns = request.form.get("mode") == "keep_campaigns"
-    models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, CampaignLead, Campaign,
-              Creator, AuditLog, Setting)
+    models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, CampaignLead,
+              Notice, PushSub, LessonProgress, Campaign, Creator, AuditLog, Setting)
     for model in models:
         if keep_campaigns and model in (Campaign, Creator):
             continue
@@ -3919,7 +4173,7 @@ def delete_user_account(user):
     sub_ids = [s.id for s in subs]
     if sub_ids:
         ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(sub_ids)).delete(synchronize_session=False)
-    for model in (Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message):
+    for model in (Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, Notice, PushSub, LessonProgress):
         model.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     Message.query.filter_by(sender_id=user.id).update({"sender_id": None}, synchronize_session=False)
     AuditLog.query.filter_by(admin_id=user.id).update({"admin_id": None}, synchronize_session=False)

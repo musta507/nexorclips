@@ -24,6 +24,17 @@
 {% endif %}
 
 
+{% if announce %}
+<section class="featured home-ann">
+  {% if announce.image_v %}<div class="art"><img src="{{ url_for('home_feature_image', v=announce.image_v) }}" alt="" width="330" height="330" decoding="async"></div>{% endif %}
+  <div class="info">
+    <span class="eyebrow">Anuncio</span>
+    <h2>{{ announce.title }}</h2>
+    {% if announce.body %}<p class="ann-body">{{ announce.body }}</p>{% endif %}
+    {% if announce.btn_text and announce.btn_url %}<a class="btn accent" href="{{ announce.btn_url }}"{% if announce.btn_url.startswith('https://') %} target="_blank" rel="noopener"{% endif %}>{{ announce.btn_text }} {{ icon("arrow") }}</a>{% endif %}
+  </div>
+</section>
+{% endif %}
 {% if featured %}
 {% set c, st = featured %}
 {% set tint, lqip = cover_meta(c) %}

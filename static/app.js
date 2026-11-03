@@ -9,7 +9,7 @@ if (window.Turbo) {
   Turbo.session.drive = true;
   // Los formularios también van con Turbo: al pulsar un botón no se recarga la página entera ni se vuelve arriba
   if (Turbo.config && Turbo.config.forms) Turbo.config.forms.mode = "on"; else if (Turbo.setFormMode) Turbo.setFormMode("on");
-  if (Turbo.setProgressBarDelay) Turbo.setProgressBarDelay(400);   // la barra de carga solo aparece si algo tarda mucho
+  if (Turbo.config && Turbo.config.drive) Turbo.config.drive.progressBarDelay = 400; else if (Turbo.setProgressBarDelay) Turbo.setProgressBarDelay(400);   // la barra de carga solo aparece si algo tarda mucho
 }
 
 // =============================================================== 1) escuchas globales
@@ -156,6 +156,8 @@ function pagina() {
   subidaVideo();
   progresoLeccion();
   desplegables();
+  destacado();
+  graficasClips();
 }
 
 // =============================================================== gráfica de estadísticas (informe y panel)
@@ -457,23 +459,102 @@ document.addEventListener("change", function (e) {
 });
 
 // =============================================================== revisión de clips: atajos de teclado
-// ← / → (o ↑ / ↓) cambian de clip · A aprueba · R va al motivo del rechazo. No hacen nada mientras escribes.
+// ← / → (o ↑ / ↓, J / K) cambian de clip · A aprueba el clip en el que estás · R abre el rechazo. No hacen nada mientras escribes.
+var clipActual = 0;
+function irAClip(i) {
+  var cards = document.querySelectorAll("[data-card]");
+  if (!cards.length) return;
+  clipActual = Math.max(0, Math.min(cards.length - 1, i));
+  cards.forEach(function (c, j) { c.classList.toggle("focus", j === clipActual); });
+  cards[clipActual].scrollIntoView({ behavior: "smooth", block: "start" });
+  cards[clipActual].focus({ preventScroll: true });
+}
 document.addEventListener("keydown", function (e) {
   if (!document.querySelector("[data-review]") || e.metaKey || e.ctrlKey || e.altKey) return;
   var t = e.target;
-  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
-  var k = e.key, el = null;
-  if (k === "ArrowRight" || k === "ArrowDown") el = document.querySelector("[data-key-next]");
-  else if (k === "ArrowLeft" || k === "ArrowUp") el = document.querySelector("[data-key-prev]");
-  if (el) { e.preventDefault(); el.click(); return; }
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable || t.closest(".dd"))) return;
+  var k = e.key;
+  if (k === "ArrowRight" || k === "ArrowDown" || k === "j") { e.preventDefault(); irAClip(clipActual + 1); return; }
+  if (k === "ArrowLeft" || k === "ArrowUp" || k === "k") { e.preventDefault(); irAClip(clipActual - 1); return; }
+  var card = document.querySelectorAll("[data-card]")[clipActual];
+  if (!card) return;
   if (k === "a" || k === "A") {
-    var b = document.querySelector(".rv-panel [data-key-approve]:not([disabled])");
+    var b = card.querySelector("[data-key-approve]:not([disabled])");
     if (b) { e.preventDefault(); b.form.requestSubmit ? b.form.requestSubmit(b) : b.click(); }
   } else if (k === "r" || k === "R") {
-    var s = document.querySelector(".rv-panel [data-key-reject]");
-    if (s) { e.preventDefault(); s.focus(); s.scrollIntoView({ block: "center" }); }
+    var r = card.querySelector("[data-key-reject]");
+    if (r) { e.preventDefault(); if (r.tagName === "SUMMARY") { r.parentNode.open = true; var sel = r.parentNode.querySelector(".dd-btn, select"); if (sel) sel.focus(); } else r.click(); }
   }
 });
+document.addEventListener("click", function (e) {
+  var n = e.target.closest("[data-next]");
+  if (!n) return;
+  e.preventDefault();
+  var cards = Array.prototype.slice.call(document.querySelectorAll("[data-card]"));
+  irAClip(cards.indexOf(n.closest("[data-card]")) + 1);
+});
+document.addEventListener("focusin", function (e) {
+  var c = e.target.closest && e.target.closest("[data-card]");
+  if (!c) return;
+  var cards = Array.prototype.slice.call(document.querySelectorAll("[data-card]"));
+  clipActual = cards.indexOf(c);
+});
+// Cerrar el «Rechazar» y el «···» al pulsar fuera
+document.addEventListener("click", function (e) {
+  document.querySelectorAll("details.cr-reject[open], details.cr-more[open]").forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute("open"); });
+});
+
+// Gráfica pequeña de cada clip en la revisión (vistas, me gusta, comentarios o compartidos día a día)
+function graficasClips() {
+  document.querySelectorAll("[data-mini-chart]").forEach(function (box) {
+    var data; try { data = JSON.parse(box.getAttribute("data-mini-chart")); } catch (e) { data = null; }
+    var card = box.closest("[data-card]");
+    var metric = "views";
+    function draw() {
+      box.innerHTML = "";
+      if (!data || !data.labels || data.labels.length < 2) { box.innerHTML = '<p class="small muted cr-nochart">La gráfica sale cuando haya lecturas de varios días.</p>'; return; }
+      var W = box.clientWidth || 500, H = box.clientHeight || 170, L = 8, R = 44, T = 10, B = 22;
+      var vals = data[metric] || [], n = vals.length, max = Math.max.apply(null, vals.concat([1]));
+      var ax = ejeY(max), top = ax.top || max, ticks = [];
+      for (var tv0 = 0; tv0 <= top + 1e-9; tv0 += ax.step) ticks.push(tv0);
+      var NS = "http://www.w3.org/2000/svg", svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("viewBox", "0 0 " + W + " " + H); svg.setAttribute("class", "cr-svg");
+      function el(tag, attrs) { var x = document.createElementNS(NS, tag); for (var k in attrs) x.setAttribute(k, attrs[k]); svg.appendChild(x); return x; }
+      var iw = W - L - R, ih = H - T - B;
+      var X = function (i) { return L + i / (n - 1) * iw; }, Y = function (v) { return T + ih - v / top * ih; };
+      ticks.forEach(function (tv) {
+        el("line", { x1: L, x2: L + iw, y1: Y(tv), y2: Y(tv), class: "cr-grid" });
+        var t = el("text", { x: W - 4, y: Y(tv) + 4, class: "cr-ax", "text-anchor": "end" }); t.textContent = corto(tv);
+      });
+      var step = Math.max(1, Math.ceil(n / 5));
+      for (var i = 0; i < n; i += step) { var t2 = el("text", { x: X(i), y: H - 4, class: "cr-ax", "text-anchor": i === 0 ? "start" : "middle" }); t2.textContent = fechaCorta(data.labels[i]); }
+      var d = vals.map(function (v, i) { return (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1); }).join(" ");
+      el("path", { d: d + " L" + X(n - 1) + " " + (T + ih) + " L" + X(0) + " " + (T + ih) + " Z", class: "cr-area" });
+      el("path", { d: d, class: "cr-line" });
+      var tip = document.createElement("div"); tip.className = "cr-tip"; tip.hidden = true;
+      box.appendChild(svg); box.appendChild(tip);
+      svg.addEventListener("mousemove", function (ev) {
+        var r = svg.getBoundingClientRect(), x = (ev.clientX - r.left) / r.width * W;
+        var i = Math.max(0, Math.min(n - 1, Math.round((x - L) / iw * (n - 1))));
+        tip.hidden = false; tip.textContent = fechaCorta(data.labels[i]) + " · " + numES(vals[i]);
+        tip.style.left = (X(i) / W * 100) + "%"; tip.style.top = (Y(vals[i]) / H * 100) + "%";
+      });
+      svg.addEventListener("mouseleave", function () { tip.hidden = true; });
+    }
+    if (card) card.querySelectorAll("[data-metric]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        metric = b.getAttribute("data-metric");
+        card.querySelectorAll("[data-metric]").forEach(function (x) { x.classList.toggle("on", x === b); });
+        draw();
+      });
+    });
+    draw();
+    var redraw = function () { draw(); };
+    window.addEventListener("resize", redraw);
+    limpiar.push(function () { window.removeEventListener("resize", redraw); });
+  });
+  clipActual = 0;
+}
 
 // Casilla «Todos»: marca o desmarca todas las de la lista
 document.addEventListener("change", function (e) {
@@ -712,8 +793,8 @@ function desplegables() {
     sel.classList.add("dd-native"); sel.tabIndex = -1;
     function paint() {
       var o = sel.options[sel.selectedIndex];
-      btn.innerHTML = "";
-      var t = document.createElement("span"); t.textContent = o ? o.text : ""; btn.appendChild(t);
+      var t = btn.firstChild || btn.appendChild(document.createElement("span"));   // sin rehacer el botón: el clic sigue «dentro»
+      t.textContent = o ? o.text : "";
       list.innerHTML = "";
       Array.prototype.forEach.call(sel.options, function (op, i) {
         var li = document.createElement("li");
@@ -770,3 +851,15 @@ document.addEventListener("turbo:before-cache", function () {
     d.remove();
   });
 });
+
+// Destacado de inicio: enseña solo los campos de la opción elegida
+function destacado() {
+  var radios = document.querySelectorAll("[data-feat-mode]");
+  if (!radios.length) return;
+  function show() {
+    var m = (document.querySelector("[data-feat-mode]:checked") || {}).value;
+    document.querySelectorAll("[data-feat]").forEach(function (b) { b.hidden = b.getAttribute("data-feat") !== m; });
+  }
+  radios.forEach(function (r) { r.addEventListener("change", show); });
+  show();
+}

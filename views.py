@@ -15,9 +15,11 @@ ACTORS = {
     "tiktok": os.environ.get("APIFY_ACTOR_TIKTOK", "clockworks~tiktok-scraper"),
     "instagram": os.environ.get("APIFY_ACTOR_INSTAGRAM", "apify~instagram-scraper"),
     "youtube": os.environ.get("APIFY_ACTOR_YOUTUBE", "streamers~youtube-scraper"),
+    "facebook": os.environ.get("APIFY_ACTOR_FACEBOOK", "apify~facebook-posts-scraper"),
 }
 
-SHORT_TIKTOK = re.compile(r"^https?://(?:vm|vt)\.tiktok\.com/|^https?://(?:www\.)?tiktok\.com/t/", re.I)
+SHORT_TIKTOK = re.compile(r"^https?://(?:vm|vt)\.tiktok\.com/|^https?://(?:www\.)?tiktok\.com/t/"
+                          r"|^https?://fb\.watch/|^https?://(?:www\.|m\.)?facebook\.com/share/", re.I)
 
 
 # ---------------------------------------------------------------- enlaces
@@ -32,6 +34,9 @@ def embed_url(platform, url):
         return f"https://www.instagram.com/reel/{vid}/embed/"
     if platform == "youtube":
         return f"https://www.youtube-nocookie.com/embed/{vid}"
+    if platform == "facebook":
+        from urllib.parse import quote
+        return f"https://www.facebook.com/plugins/video.php?href={quote(url, safe='')}&show_text=false"
     return ""
 
 
@@ -43,6 +48,8 @@ def detect_platform(url):
         return "instagram"
     if "youtube.com" in u or "youtu.be" in u:
         return "youtube"
+    if "facebook.com" in u or "fb.watch" in u:
+        return "facebook"
     return None
 
 
@@ -53,6 +60,10 @@ def video_id(url):
         r"tiktok\.com/.*?/(?:video|photo)/(\d+)",
         r"instagram\.com/(?:[^/]+/)?(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)",
         r"youtube\.com/shorts/([A-Za-z0-9_-]{6,})",
+        r"facebook\.com/(?:reel|reels)/(\d+)",
+        r"facebook\.com/.*?/videos/(?:[^/]+/)?(\d+)",
+        r"facebook\.com/watch/?\?v=(\d+)",
+        r"fb\.watch/([A-Za-z0-9_-]+)",
         r"[?&]v=([A-Za-z0-9_-]{6,})",
         r"youtu\.be/([A-Za-z0-9_-]{6,})",
     ]
@@ -70,7 +81,7 @@ def tiktok_handle_from_url(url):
 
 def clean_handle(h):
     h = (h or "").strip().lower()
-    h = re.sub(r"^https?://(www\.)?(tiktok|instagram|youtube)\.com/", "", h)
+    h = re.sub(r"^https?://(www\.|m\.)?(tiktok|instagram|youtube|facebook)\.com/", "", h)
     h = h.lstrip("@").strip("/ ")
     return re.sub(r"[^a-z0-9._-]", "", h)[:60]
 
@@ -103,6 +114,8 @@ def _build_input(platform, urls):
                 "shouldDownloadCovers": False, "shouldDownloadSubtitles": False}
     if platform == "instagram":
         return {"directUrls": urls, "resultsType": "posts", "resultsLimit": 1, "addParentData": False}
+    if platform == "facebook":
+        return {"startUrls": [{"url": u} for u in urls], "resultsLimit": 1}
     return {"startUrls": [{"url": u} for u in urls], "maxResults": 1, "maxResultsShorts": 1}
 
 
@@ -132,33 +145,43 @@ VIEW_KEYS = {
     "tiktok": ["playCount", "plays", "viewCount", "stats.playCount"],
     "instagram": ["videoPlayCount", "videoViewCount", "playCount", "viewCount"],
     "youtube": ["viewCount", "views"],
+    "facebook": ["viewsCount", "videoViewCount", "playCount", "views", "video_view_count", "playsCount"],
 }
 LIKE_KEYS = {
     "tiktok": ["diggCount", "likes", "stats.diggCount"],
     "instagram": ["likesCount", "likes"],
     "youtube": ["likes", "likeCount"],
+    "facebook": ["likes", "likesCount", "reactionsCount", "reactions"],
 }
 COMMENT_KEYS = {
     "tiktok": ["commentCount", "comments", "stats.commentCount"],
     "instagram": ["commentsCount", "comments"],
     "youtube": ["commentsCount", "commentCount", "comments"],
+    "facebook": ["comments", "commentsCount"],
 }
 SHARE_KEYS = {
     "tiktok": ["shareCount", "shares", "stats.shareCount"],
     "instagram": ["sharesCount", "reshareCount"],
     "youtube": ["sharesCount"],
+    "facebook": ["shares", "sharesCount"],
 }
 AUTHOR_KEYS = {
     "tiktok": ["authorMeta.name", "author.uniqueId", "authorMeta.uniqueId", "author"],
     "instagram": ["ownerUsername", "owner.username"],
     "youtube": ["channelUsername", "channelUrl", "channelName"],
+    "facebook": ["user.profileUrl", "pageName", "user.name", "ownerUsername", "author.name"],
 }
 
 
+VIDEO_URL_KEYS = {        # enlace para descargar el vídeo (para guardar una copia y revisarlo)
+    "tiktok": ["mediaUrls", "videoMeta.downloadAddr"],
+    "instagram": ["videoUrl", "video_url"],
+}
 DATE_KEYS = {
     "tiktok": ["createTimeISO", "createTime", "create_time"],
     "instagram": ["timestamp", "takenAtTimestamp", "taken_at_timestamp"],
     "youtube": ["date", "uploadDate", "publishedAt"],
+    "facebook": ["time", "timestamp", "date", "creation_time"],
 }
 
 
@@ -199,8 +222,11 @@ def parse_item(platform, item):
     author = _first(item, AUTHOR_KEYS[platform])
     author = clean_handle(author) if isinstance(author, str) else ""
     posted = _to_date(_first(item, DATE_KEYS[platform]))
+    video = _first(item, VIDEO_URL_KEYS.get(platform, []))
+    if isinstance(video, list):
+        video = video[0] if video else None
     return {"views": views, "likes": likes, "comments": comments, "shares": shares, "author": author,
-            "posted_at": posted}
+            "posted_at": posted, "video_url": video if isinstance(video, str) and video.startswith("https://") else ""}
 
 
 def fetch_items(platform, urls):
@@ -233,6 +259,27 @@ def info_by_id(platform, items):
             if not prev or info["views"] > prev["views"]:
                 result[vid] = info
     return result
+
+
+def fetch_download_urls(platform, urls):
+    """{video_id: enlace de descarga}. Solo TikTok necesita una llamada aparte (con la descarga activada)."""
+    if not APIFY_TOKEN or not urls:
+        return {}
+    body = _build_input(platform, urls)
+    if platform == "tiktok":
+        body["shouldDownloadVideos"] = True
+    resp = requests.post(f"https://api.apify.com/v2/acts/{ACTORS[platform]}/run-sync-get-dataset-items",
+                         params={"token": APIFY_TOKEN, "timeout": 280}, json=body, timeout=300)
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Apify respondió {resp.status_code}: {resp.text[:200]}")
+    out = {}
+    for item in resp.json() or []:
+        if isinstance(item, dict):
+            url = parse_item(platform, item).get("video_url")
+            if url:
+                for vid in _ids_from_item(item):
+                    out[vid] = url
+    return out
 
 
 def fetch_views(platform, urls):
@@ -273,6 +320,7 @@ BIO_KEYS = {
     "tiktok": ["authorMeta.signature", "author.signature", "signature", "bio"],
     "instagram": ["biography", "bio"],
     "youtube": ["channelDescription", "aboutChannelInfo.channelDescription", "description"],
+    "facebook": ["intro", "about", "info", "description"],
 }
 
 
@@ -286,6 +334,9 @@ def fetch_bio(platform, handle):
     elif platform == "instagram":
         actor, body = ACTORS["instagram"], {"directUrls": [f"https://www.instagram.com/{handle}/"],
                                             "resultsType": "details", "resultsLimit": 1}
+    elif platform == "facebook":
+        actor, body = (os.environ.get("APIFY_ACTOR_FACEBOOK_PAGE", "apify~facebook-pages-scraper"),
+                       {"startUrls": [{"url": f"https://www.facebook.com/{handle}"}]})
     else:
         actor, body = ACTORS["youtube"], {"startUrls": [{"url": f"https://www.youtube.com/@{handle}"}],
                                           "maxResults": 1, "maxResultsShorts": 0}

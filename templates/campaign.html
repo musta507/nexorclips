@@ -104,7 +104,7 @@
     <div class="box-head">{{ icon("stack") }} Materiales de la campaña</div>
     {% for name, url, kind in mats %}
     <a class="mat-row" href="{{ url }}" target="_blank" rel="noopener">
-      <span class="mat-ico">{{ icon(kind if kind in ("tiktok", "instagram", "youtube") else ("folder" if kind == "drive" else "link")) }}</span>
+      <span class="mat-ico">{{ icon(kind if kind in ("tiktok", "instagram", "youtube", "facebook") else ("folder" if kind == "drive" else "link")) }}</span>
       <span class="mat-name">{{ name }}</span>
       <span class="mat-out">{{ icon("out") }}</span>
     </a>

@@ -1314,7 +1314,7 @@ def test_clip_counts_views_until_minimum_then_goes_to_review(monkeypatch):
     assert "@ana" in admin.get("/admin/clips?tab=contando").get_data(as_text=True)
     _refresh_with(monkeypatch, {_vid(1): {"views": 6000}})
     page = admin.get("/admin/clips").get_data(as_text=True)
-    assert "1 de 1" in page and "tiktok.com/embed/v2/" + _vid(1) in page
+    assert 'data-card' in page and "tiktok.com/embed/v2/" + _vid(1) in page and "Detección de bots" in page
 
 
 def test_video_posted_before_joining_is_flagged(monkeypatch):
@@ -1598,3 +1598,71 @@ def test_tech_panel_only_for_tech_email(monkeypatch):
     assert "Panel técnico" not in felipe.get("/admin").get_data(as_text=True)
     assert "Avisos técnicos" in yo.get("/admin/ajustes").get_data(as_text=True)
     assert felipe.get("/admin/creadores").status_code == 403
+
+
+def test_facebook_is_off_by_default_but_works_when_enabled(monkeypatch):
+    admin = client_for("admin@test.com")
+    page = admin.get("/admin/campana/nueva").get_data(as_text=True)
+    assert 'name="pf_facebook"' in page and 'name="pf_facebook" checked' not in page
+    cid = make_campaign(platforms="tiktok,facebook")
+    a = client_for("a@test.com", facebook="mipagina")
+    r = post(a, f"/campana/{cid}", url="https://www.facebook.com/reel/1234567890123")
+    assert "Clip enviado" in r.get_data(as_text=True)
+    with A.app.app_context():
+        s = A.Submission.query.one()
+        assert s.platform == "facebook" and s.video_key == "facebook:1234567890123"
+    assert V.parse_item("facebook", {"viewsCount": 900, "likes": 12, "time": "2026-11-01T10:00:00Z"})["views"] == 900
+
+
+def test_home_feature_announcement_and_campaign():
+    cid = make_campaign(song="Campaña Uno")
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com")
+    post(admin, "/admin/destacado", mode="announce", title="Nueva forma de cobrar", body="Ya puedes cobrar al momento.",
+         btn_text="Ver más", btn_url="/ganancias", notify="on")
+    home = a.get("/").get_data(as_text=True)
+    assert "Nueva forma de cobrar" in home and 'class="featured home-ann"' in home
+    with A.app.app_context():
+        assert A.Notice.query.filter_by(kind="destacado").count() >= 1
+    post(admin, "/admin/destacado", mode="campaign", campaign_id=str(cid))
+    home = a.get("/").get_data(as_text=True)
+    assert "home-ann" not in home and "Campaña destacada" in home
+    post(admin, "/admin/destacado", mode="none")
+    assert "Campaña destacada" not in a.get("/").get_data(as_text=True)
+
+
+def test_review_cards_filters_and_video_copy(monkeypatch):
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana", instagram="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    post(a, f"/campana/{cid}", url="https://www.instagram.com/reel/ABCdef123/")
+    with A.app.app_context():
+        s1, s2 = A.Submission.query.order_by(A.Submission.id).all()
+        s1.review_since = datetime.utcnow() - timedelta(days=3)
+        s2.media_url = "https://cdn.example.com/v.mp4"
+        A.db.session.commit()
+        sid2 = s2.id
+    page = admin.get("/admin/clips?f=atrasados").get_data(as_text=True)
+    assert "atrasado" in page and page.count("data-card ") + page.count("data-card\n") >= 0 and page.count('class="cr-card"') == 1
+    assert admin.get("/admin/clips?f=instagram").get_data(as_text=True).count('class="cr-card"') == 1
+    assert admin.get("/admin/clips?q=canci%C3%B3n").get_data(as_text=True).count('class="cr-card"') == 2
+    # Copia del vídeo en Bunny
+    monkeypatch.setattr(A, "BUNNY_LIBRARY_ID", "1")
+    monkeypatch.setattr(A, "BUNNY_API_KEY", "k")
+    calls = []
+    def fake_bunny(m, path, **k):
+        calls.append((m, path))
+        return (True, 200, {"guid": "g-9"}) if m == "POST" else (True, 200, {"status": 4})
+    monkeypatch.setattr(A, "bunny_call", fake_bunny)
+    monkeypatch.setattr(V, "fetch_download_urls", lambda p, urls: {_vid(1): "https://cdn.example.com/t.mp4"})
+    class R:
+        status_code = 200
+        content = b"x" * 20000
+    monkeypatch.setattr(A.requests, "get", lambda *a_, **k: R())
+    monkeypatch.setattr(A.requests, "put", lambda *a_, **k: type("P", (), {"status_code": 200})())
+    with A.app.app_context():
+        assert A.copy_review_videos() == 2
+        s2 = get(A.Submission, sid2)
+        assert s2.video_guid == "g-9" and s2.video_status == "listo"
+    assert "iframe.mediadelivery.net/embed/1/g-9" in admin.get("/admin/clips").get_data(as_text=True)

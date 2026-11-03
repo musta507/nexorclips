@@ -21,7 +21,7 @@
 
 {% if camp.status == 'finalizada' %}<div class="flash ok">Campaña completada{% if camp.ended_at %} el {{ camp.ended_at|date }}{% endif %}. Ya no acepta clips ni se actualizan sus vistas, y los clippers ya pueden retirar lo que ganaron. Para reabrirla, sube el presupuesto y ponla en «Activa».</div>{% endif %}
 
-<div class="card tight camp-budget">
+<div class="card tight camp-budget" id="presupuesto">
   <div class="camp-budget-top">
     <div><span class="small muted">Presupuesto</span><b class="tnum">{{ st.spent|money }} <span class="muted">de {{ camp.budget|money }}</span></b>{% if camp.low_budget %} <span class="flag serious">Queda poco: {{ camp.remaining|money }}</span>{% endif %}</div>
     <form class="inline" method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}">

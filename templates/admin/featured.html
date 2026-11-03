@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Destacado de inicio · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Destacado de inicio", "Lo que ven los clippers en el bloque grande de arriba del Inicio.") %}{% endcall %}
+<form method="post" enctype="multipart/form-data" class="card form-stack" style="max-width:760px">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="field"><span class="label">Qué mostrar</span>
+    <div class="feat-modes">
+      {% for m, label, hint in [("campaign", "Una campaña", "La que elijas, en grande."), ("announce", "Un anuncio", "Un cambio en la plataforma o cualquier aviso."), ("none", "Nada", "El Inicio empieza directamente con las campañas.")] %}
+      <label class="wz-opt"><input type="radio" name="mode" value="{{ m }}" data-feat-mode {% if (hf.mode or 'campaign') == m %}checked{% endif %}><b>{{ label }}</b><span class="small muted">{{ hint }}</span></label>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="form-stack" data-feat="campaign">
+    <div class="field"><label for="campaign_id">Campaña</label>
+      <select id="campaign_id" name="campaign_id">
+        {% for c in camps %}<option value="{{ c.id }}"{% if hf.campaign_id == c.id or (not hf.campaign_id and c.featured) %} selected{% endif %}>{{ c.song }} - {{ c.artist }}{% if c.status != 'activa' %} ({{ c.status }}){% endif %}</option>{% endfor %}
+      </select></div>
+  </div>
+  <div class="form-stack" data-feat="announce">
+    <div class="field"><label for="title">Título</label><input id="title" name="title" maxlength="120" value="{{ hf.title }}" placeholder="Ej.: Nuevo: ya puedes cobrar al momento por Whop"></div>
+    <div class="field"><label for="body">Texto</label><textarea id="body" name="body" rows="3" maxlength="600" placeholder="Cuéntalo en dos frases.">{{ hf.body }}</textarea></div>
+    <div class="form-grid">
+      <div class="field"><label for="btn_text">Botón (opcional)</label><input id="btn_text" name="btn_text" maxlength="40" value="{{ hf.btn_text }}" placeholder="Ver más"></div>
+      <div class="field"><label for="btn_url">Enlace del botón</label><input id="btn_url" name="btn_url" maxlength="300" value="{{ hf.btn_url }}" placeholder="/formacion o https://…"></div>
+    </div>
+    <div class="field"><span class="label">Imagen (opcional)</span>
+      <div class="cover-pick">
+        <span class="cover-prev" data-cover-prev{% if hf.image_v %} style="background-image:url('{{ url_for('home_feature_image', v=hf.image_v) }}')"{% endif %}></span>
+        <div class="form-stack" style="gap:6px">
+          <label class="btn soft sm file-btn">Subir imagen<input type="file" name="image" accept="image/*" data-cover-input></label>
+          {% if hf.image_v %}<label class="check"><input type="checkbox" name="remove_image"> Quitar la imagen</label>{% endif %}
+        </div>
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" name="notify"> Avisar también a todos los clippers por la campanita</label>
+  </div>
+  <button class="btn accent" style="align-self:flex-start">Guardar</button>
+</form>
+{% endblock %}
