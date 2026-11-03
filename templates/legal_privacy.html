@@ -7,17 +7,27 @@
 
   <h2>Qué datos guardamos</h2>
   <ul>
-    <li><b>De tu cuenta de Google:</b> nombre, correo y foto de perfil. No recibimos tu contraseña.</li>
-    <li><b>Cuentas vinculadas:</b> los nombres de usuario de TikTok, Instagram y YouTube que añadas.</li>
-    <li><b>Clips:</b> los enlaces que envías y sus estadísticas públicas (vistas, likes y autor).</li>
-    <li><b>Cobros:</b> el método y los datos de pago que indiques (la dirección de tu wallet de USDT) y el historial de retiros.</li>
+    <li><b>Tu cuenta:</b> nombre, correo y foto de perfil. Si entras con Google, no recibimos tu contraseña de Google; si te registras con correo, guardamos tu contraseña cifrada, nunca en texto.</li>
+    <li><b>Cuentas vinculadas:</b> los nombres de usuario de TikTok, Instagram y YouTube que añadas y el resultado de la comprobación de su bio.</li>
+    <li><b>Solicitudes a campañas:</b> las respuestas que das a las preguntas de cada campaña.</li>
+    <li><b>Clips:</b> los enlaces que envías y sus estadísticas públicas (vistas, me gusta, comentarios, compartidos y autor).</li>
+    <li><b>Cobros:</b> tu usuario de Whop y el historial de tus retiros.</li>
+    <li><b>Mensajes:</b> lo que escribes y las fotos que envías por el chat de soporte.</li>
+    <li><b>Datos técnicos:</b> la dirección IP y registros del servidor, para la seguridad y para evitar abusos.</li>
   </ul>
 
   <h2>Para qué los usamos</h2>
-  <p>Para gestionar tu cuenta, contar las vistas de tus clips, calcular y pagar tus ganancias, prevenir el fraude y enviar a los artistas y marcas informes agregados de sus campañas. En esos informes aparecen los nombres de usuario públicos de los vídeos, nunca tu correo ni tus datos de pago.</p>
+  <p>Para gestionar tu cuenta, contar las vistas de tus clips, calcular y pagar tus ganancias, prevenir el fraude, atenderte por el chat y enviar a los artistas y marcas informes de sus campañas. En esos informes aparecen los nombres de usuario públicos de los vídeos, nunca tu correo ni tus datos de cobro.</p>
 
   <h2>Con quién se comparten</h2>
-  <p>Solo con los servicios necesarios para que la plataforma funcione: Google (inicio de sesión), nuestro proveedor de servidores y base de datos, el servicio que lee las estadísticas públicas de los vídeos y el método de pago que elijas para cobrar. No vendemos tus datos.</p>
+  <p>Solo con los servicios necesarios para que la plataforma funcione. No vendemos tus datos.</p>
+  <ul>
+    <li><b>Google:</b> inicio de sesión, si eliges entrar con Google.</li>
+    <li><b>Railway:</b> servidores y base de datos, alojados en la Unión Europea (Países Bajos).</li>
+    <li><b>Apify:</b> lee las estadísticas públicas de los vídeos y la bio pública de tus cuentas vinculadas.</li>
+    <li><b>Whop:</b> envía tus pagos; recibe tu usuario de Whop y el importe de cada retiro.</li>
+    <li><b>ntfy:</b> avisos internos al móvil del equipo (por ejemplo, «nuevo mensaje de soporte»), que pueden incluir tu nombre.</li>
+  </ul>
 
   <h2>Cuánto tiempo</h2>
   <p>Mientras tengas cuenta y, después, el tiempo que exijan las obligaciones legales y fiscales relacionadas con los pagos.</p>
@@ -26,6 +36,6 @@
   <p>Puedes pedir acceder a tus datos, corregirlos, llevártelos o borrar tu cuenta.{% if SUPPORT_EMAIL %} Escríbenos a <span class="selectable">{{ SUPPORT_EMAIL }}</span>.{% endif %} Si estás en la Unión Europea, también puedes reclamar ante la autoridad de protección de datos de tu país.</p>
 
   <h2>Cookies</h2>
-  <p>Usamos solo las cookies necesarias para mantener tu sesión iniciada y proteger los formularios. No usamos cookies de publicidad.</p>
+  <p>Usamos solo las cookies necesarias para mantener tu sesión iniciada y proteger los formularios, y el almacenamiento del navegador para recordar detalles de la pantalla. No usamos cookies de publicidad ni de seguimiento.</p>
 </article>
 {% endblock %}

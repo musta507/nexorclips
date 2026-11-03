@@ -81,7 +81,7 @@ SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "")
 CURRENCY = os.environ.get("CURRENCY", "$")
 CURRENCY_CODE = os.environ.get("CURRENCY_CODE", "USD")
 REFRESH_DAYS = int(os.environ.get("REFRESH_DAYS", "0"))        # 0 = se cuentan hasta que acaba la campaña
-MIN_WITHDRAW = float(os.environ.get("MIN_WITHDRAW", "0"))           # 0 = sin mínimo
+MIN_WITHDRAW = float(os.environ.get("MIN_WITHDRAW", "1"))           # Whop no envía pagos de menos de 1 $
 MAX_CLIPS_DAY = int(os.environ.get("MAX_CLIPS_DAY", "0"))      # 0 = sin límite de clips al día
 PAYOUT_DAYS = int(os.environ.get("PAYOUT_DAYS", "7"))          # plazo de pago que se promete al clipper
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").split(",") if e.strip()}
@@ -100,6 +100,8 @@ BASE_URL = os.environ.get("BASE_URL", "").strip().strip('"').rstrip("/")
 if BASE_URL and not BASE_URL.startswith("http"):
     BASE_URL = "https://" + BASE_URL
 DEV_LOGIN = os.environ.get("DEV_LOGIN") == "1" and not PRODUCTION   # nunca disponible en producción
+# «Empezar de cero» borra datos reales: en producción está apagado salvo que se active a propósito en Railway
+ALLOW_WIPE = os.environ.get("ALLOW_WIPE") == "1" or not PRODUCTION
 
 PLATFORMS = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube Shorts"}
 CATEGORIES = {"musica": "Música", "streamer": "Streamers", "marca": "Marcas", "infoproducto": "Infoproductos", "otro": "Otros"}
@@ -109,8 +111,7 @@ WHOP_METHOD = "Whop"
 PAYOUT_METHODS = [WHOP_METHOD]                                    # Whop es la única forma de cobro
 PAYOUT_AVAILABLE = {WHOP_METHOD}
 PAYOUT_OPEN = ("solicitado", "procesando")                        # retiros que aún no han terminado
-PAYOUT_ONLY_USDT_MSG = "Los pagos se hacen solo por Whop. Conecta tu usuario de Whop para cobrar."
-TRC20_RE = re.compile(r"^T[1-9A-HJ-NP-Za-km-z]{33}$")
+PAYOUT_ONLY_WHOP_MSG = "Los pagos se hacen solo por Whop. Conecta tu usuario de Whop para cobrar."
 FLAG_LABELS = {
     "cuenta_no_declarada": "Cuenta no vinculada",
     "cuenta_de_otro": "Cuenta de otro clipper",
@@ -128,6 +129,10 @@ DEFAULT_QUESTIONS = "\n".join([                 # preguntas que salen ya escrita
 CENT = 0.005
 
 db = SQLAlchemy(app)
+# Dinero: se guarda como número decimal exacto (NUMERIC), nunca como coma flotante. Python lo recibe como float
+# y cents() redondea cada operación al céntimo; así lo guardado siempre cuadra.
+Money = db.Numeric(14, 2, asdecimal=False)
+Rate = db.Numeric(14, 4, asdecimal=False)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 login_manager.login_message = None
@@ -151,8 +156,8 @@ class User(UserMixin, db.Model):
     tiktok_handles = db.Column(db.String(400), default="")
     instagram_handles = db.Column(db.String(400), default="")
     youtube_handles = db.Column(db.String(400), default="")
-    verified_handles = db.Column(db.String(1200), default="")   # sin uso: la verificación ahora es por campaña
-    verify_code = db.Column(db.String(12), default="")           # sin uso
+    verified_handles = db.Column(db.String(1200), default="")   # sin uso (de una versión antigua); se puede borrar más adelante
+    verify_code = db.Column(db.String(12), default="")           # código que el clipper pone en su bio para verificar sus cuentas
     accepted_terms_at = db.Column(db.DateTime, nullable=True)
     last_seen_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -210,20 +215,20 @@ class Campaign(db.Model):
     rules = db.Column(db.Text, default="")                 # reglas: qué publicar
     rules_required = db.Column(db.Text, default="")        # reglas: obligatorio
     rules_forbidden = db.Column(db.Text, default="")       # reglas: prohibido
-    rate = db.Column(db.Float, nullable=False)              # pago por cada 1.000.000 de vistas (el más alto de las redes)
-    rate_tiktok = db.Column(db.Float, nullable=True)        # pago de cada red (vacío = el general)
-    rate_instagram = db.Column(db.Float, nullable=True)
-    rate_youtube = db.Column(db.Float, nullable=True)
-    min_tiktok = db.Column(db.Float, nullable=True)         # pago mínimo por clip de cada red en dinero (vacío = el general, 0 = sin mínimo)
-    min_instagram = db.Column(db.Float, nullable=True)
-    min_youtube = db.Column(db.Float, nullable=True)
-    max_tiktok = db.Column(db.Float, nullable=True)         # pago máximo por clip de cada red (vacío = el general, 0 = sin tope)
-    max_instagram = db.Column(db.Float, nullable=True)
-    max_youtube = db.Column(db.Float, nullable=True)
-    budget = db.Column(db.Float, nullable=False)
-    spent = db.Column(db.Float, default=0.0)                # dinero ya asignado a clips (libro de cuentas)
+    rate = db.Column(Rate, nullable=False)              # pago por cada 1.000.000 de vistas (el más alto de las redes)
+    rate_tiktok = db.Column(Rate, nullable=True)        # pago de cada red (vacío = el general)
+    rate_instagram = db.Column(Rate, nullable=True)
+    rate_youtube = db.Column(Rate, nullable=True)
+    min_tiktok = db.Column(Money, nullable=True)         # pago mínimo por clip de cada red en dinero (vacío = el general, 0 = sin mínimo)
+    min_instagram = db.Column(Money, nullable=True)
+    min_youtube = db.Column(Money, nullable=True)
+    max_tiktok = db.Column(Money, nullable=True)         # pago máximo por clip de cada red (vacío = el general, 0 = sin tope)
+    max_instagram = db.Column(Money, nullable=True)
+    max_youtube = db.Column(Money, nullable=True)
+    budget = db.Column(Money, nullable=False)
+    spent = db.Column(Money, default=0.0)                # dinero ya asignado a clips (libro de cuentas)
     min_views = db.Column(db.Integer, default=0)            # mínimo para cobrar un vídeo
-    max_per_video = db.Column(db.Float, nullable=True)      # tope por vídeo (vacío = sin tope)
+    max_per_video = db.Column(Money, nullable=True)      # tope por vídeo (vacío = sin tope)
     platforms = db.Column(db.String(100), default="tiktok,instagram,youtube")
     status = db.Column(db.String(20), default="activa")     # activa / pausada / finalizada
     featured = db.Column(db.Boolean, default=False)
@@ -348,7 +353,7 @@ class Submission(db.Model):
     comments = db.Column(db.Integer, nullable=True)
     shares = db.Column(db.Integer, nullable=True)
     author = db.Column(db.String(80), default="")
-    earned = db.Column(db.Float, default=0.0)              # dinero asignado a este clip; nunca baja solo
+    earned = db.Column(Money, default=0.0)              # dinero asignado a este clip; nunca baja solo
     flags = db.Column(db.String(200), default="")
     status = db.Column(db.String(20), default="pendiente")  # pendiente / aprobado / rechazado
     reject_reason = db.Column(db.String(255), default="")
@@ -384,7 +389,7 @@ class Payout(db.Model):
     """Retiros: el clipper los solicita y el admin los marca como pagados."""
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(Money, nullable=False)
     method = db.Column(db.String(60), default="")
     details = db.Column(db.String(255), default="")
     status = db.Column(db.String(20), default="solicitado")  # solicitado / procesando / pagado / rechazado
@@ -561,6 +566,30 @@ def ensure_schema():
             log.info("Columna añadida: %s.%s", table.name, col.name)
 
 
+MONEY_COLUMNS = {
+    "campaign": {"budget": 2, "spent": 2, "max_per_video": 2, "min_tiktok": 2, "min_instagram": 2, "min_youtube": 2,
+                 "max_tiktok": 2, "max_instagram": 2, "max_youtube": 2,
+                 "rate": 4, "rate_tiktok": 4, "rate_instagram": 4, "rate_youtube": 4},
+    "submission": {"earned": 2},
+    "payout": {"amount": 2},
+}
+
+
+def migrate_money_columns():
+    """Las columnas de dinero eran coma flotante: en PostgreSQL se pasan a NUMERIC exacto, redondeando al céntimo (una sola vez)."""
+    if db.engine.dialect.name != "postgresql":
+        return
+    with db.engine.begin() as conn:
+        for table, cols in MONEY_COLUMNS.items():
+            for col, scale in cols.items():
+                kind = conn.execute(text("SELECT data_type FROM information_schema.columns WHERE table_name = :t AND column_name = :c"),
+                                    {"t": table, "c": col}).scalar()
+                if kind in ("double precision", "real"):
+                    conn.execute(text(f'ALTER TABLE "{table}" ALTER COLUMN "{col}" TYPE NUMERIC(14,{scale}) '
+                                      f'USING round("{col}"::numeric, {scale})'))
+                    log.info("Dinero exacto: %s.%s pasa a NUMERIC", table, col)
+
+
 def migrate_members():
     """Antes, la solicitud iba unida a la cuenta. Crea la solicitud de quien ya tenía cuentas en una campaña (solo una vez)."""
     if CampaignMember.query.first() or not CampaignAccount.query.first():
@@ -583,6 +612,7 @@ def migrate_members():
 
 with app.app_context():
     ensure_schema()
+    migrate_money_columns()
     migrate_members()
 
 
@@ -602,9 +632,27 @@ def get_setting(key, default=""):
     return row.value if row else default
 
 
+_THOUSANDS_DOT = re.compile(r"^-?[1-9]\d{0,2}(\.\d{3})+$")
+
+
 def parse_float(value, default=None):
+    """Lee números como los escribe alguien de España o Latinoamérica:
+    5000 · 5.000 · 5.000,50 · 1,5 · 1.5 · 1.500.000 · 5000 $  →  el número correcto.
+    Con punto y coma a la vez, el último es el decimal. Un punto seguido de grupos de 3 cifras es de miles."""
+    if value is None:
+        return default
+    t = str(value).strip().replace(" ", "").replace("\u00a0", "").replace("$", "").replace("€", "")
+    if not t:
+        return default
+    if "," in t and "." in t:
+        dec = "," if t.rfind(",") > t.rfind(".") else "."
+        t = t.replace("." if dec == "," else ",", "").replace(dec, ".")
+    elif "," in t:
+        t = t.replace(",", ".") if t.count(",") == 1 else t.replace(",", "")
+    elif _THOUSANDS_DOT.match(t):
+        t = t.replace(".", "")
     try:
-        v = float(str(value).replace(",", ".").strip())
+        v = float(t)
         return v if v == v and abs(v) < 1e12 else default   # descarta NaN y cifras absurdas
     except (TypeError, ValueError):
         return default
@@ -614,6 +662,41 @@ def csv_safe(v):
     """Evita que Excel o Google Sheets ejecuten como fórmula un texto que empiece por = + - @."""
     v = "" if v is None else str(v)
     return "'" + v if v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
+
+
+def lock_row(model, row_id):
+    """Bloquea la fila hasta el final de la transacción (SELECT … FOR UPDATE) y la relee de la base de datos.
+    Así dos procesos o servidores no pueden tocar a la vez el mismo saldo o presupuesto. En SQLite no hace falta."""
+    if db.engine.dialect.name != "postgresql":
+        return db.session.get(model, row_id)
+    return db.session.query(model).filter_by(id=row_id).with_for_update().populate_existing().one()
+
+
+class GlobalLock:
+    """Candado compartido entre procesos (pg_advisory_lock) para tareas que no deben correr dos veces a la vez."""
+    def __init__(self, key):
+        self.key, self.conn, self.local = key, None, threading.Lock()
+
+    def acquire(self):
+        if not self.local.acquire(blocking=False):
+            return False
+        if db.engine.dialect.name == "postgresql":
+            self.conn = db.engine.connect()
+            if not self.conn.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": self.key}).scalar():
+                self.conn.close()
+                self.conn = None
+                self.local.release()
+                return False
+        return True
+
+    def release(self):
+        if self.conn is not None:
+            try:
+                self.conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": self.key})
+            finally:
+                self.conn.close()
+                self.conn = None
+        self.local.release()
 
 
 def cents(v):
@@ -660,7 +743,7 @@ def accrue(sub, allow_decrease=False):
     """
     if sub.status != "aprobado":
         return 0.0
-    camp = sub.campaign
+    camp = lock_row(Campaign, sub.campaign_id)     # nadie más toca este presupuesto hasta guardar
     target = raw_earning(sub, camp)
     current = sub.earned or 0.0
     delta = cents(target - current)
@@ -680,7 +763,8 @@ def clawback(sub):
     """Quita al clip todo lo asignado (cuando el admin lo rechaza tras aprobarlo)."""
     amount = sub.earned or 0.0
     if amount:
-        sub.campaign.spent = cents(max((sub.campaign.spent or 0) - amount, 0))
+        camp = lock_row(Campaign, sub.campaign_id)
+        camp.spent = cents(max((camp.spent or 0) - amount, 0))
         sub.earned = 0.0
     return amount
 
@@ -840,7 +924,7 @@ def check_growth(sub, new_views, likes):
 
 
 # ---------------------------------------------------------------- actualizar vistas
-_refresh_lock = threading.Lock()
+_refresh_lock = GlobalLock(731902)       # un solo recuento de vistas a la vez, aunque haya varios procesos
 
 
 def apply_reading(sub, info, now):
@@ -875,7 +959,7 @@ def apply_reading(sub, info, now):
 
 def refresh_views():
     """Pide a Apify las vistas de los clips recientes de campañas activas y reparte el dinero."""
-    if not _refresh_lock.acquire(blocking=False):
+    if not _refresh_lock.acquire():
         return "Ya hay una actualización en marcha."
     try:
         q = (Submission.query.join(Campaign)
@@ -1017,22 +1101,6 @@ def security_headers(resp):
         resp.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - g._t0) * 1000:.0f}"
     if PRODUCTION:
         resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-    return resp
-
-
-# Páginas que NO se deben precargar: cierran sesión, marcan mensajes como leídos o hacen acciones.
-NO_PRELOAD = ["/salir", "/auth/*", "/login*", "/empezar*", "/cron/*", "/soporte*", "/admin/mensajes*",
-              "/avisos", "/static/*", "/admin/*csv*"]
-
-
-@app.route("/reglas-precarga.json")
-def speculation_rules():
-    rules = {"prerender": [{
-        "where": {"and": [{"href_matches": "/*"}, {"not": {"href_matches": NO_PRELOAD}},
-                          {"not": {"selector_matches": "[data-no-preload], [target=_blank], [download]"}}]},
-        "eagerness": "moderate"}]}
-    resp = app.response_class(json.dumps(rules), mimetype="application/speculationrules+json")
-    resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp
 
 
@@ -1734,6 +1802,7 @@ def withdraw():
         flash("Primero conecta tu usuario de Whop en «Mi cuenta».", "error")
         return redirect(url_for("account", _anchor="cobro"))
     with _withdraw_lock:
+        lock_row(User, current_user.id)          # dos retiros a la vez del mismo clipper: el segundo espera y ve el primero
         m = user_money(current_user)
         if m["open_payout"] or Payout.query.filter(Payout.user_id == current_user.id,
                                                    Payout.status.in_(PAYOUT_OPEN)).first():
@@ -1745,10 +1814,8 @@ def withdraw():
         if m["available"] < MIN_WITHDRAW:
             flash(f"El retiro mínimo es {money(MIN_WITHDRAW)}.", "error")
             return redirect(url_for("earnings", tab="retiros"))
-        asked = (request.form.get("amount") or "").strip().replace(" ", "").replace("$", "")
-        if "," in asked:                       # formato español: 1.234,56
-            asked = asked.replace(".", "").replace(",", ".")
-        amount = cents(parse_float(asked, 0) or 0) if asked not in (None, "") else m["available"]
+        asked = (request.form.get("amount") or "").strip()
+        amount = cents(parse_float(asked, 0) or 0) if asked else m["available"]
         if amount < 0.01:
             flash("Escribe cuánto quieres retirar.", "error")
             return redirect(url_for("earnings"))
@@ -1825,7 +1892,7 @@ def account():
                     flash(f"Whop conectado: @{uname}. Cuando retires, el dinero llegará al momento a tu saldo de Whop.", "ok")
             return redirect(url_for("account", _anchor="cobro"))
         if section == "cobro":
-            flash(PAYOUT_ONLY_USDT_MSG, "info")
+            flash(PAYOUT_ONLY_WHOP_MSG, "info")
             return redirect(url_for("account", _anchor="cobro"))
         if section == "redes":
             for p in PLATFORMS:
@@ -1979,7 +2046,7 @@ def admin_payouts():
 def admin_settings(app_test=None):
     whop = {"key": bool(WHOP_API_KEY), "company": whop_company_id() if WHOP_API_KEY else "",
             "error": _whop_company.get("error", ""), "from_env": bool(WHOP_COMPANY_ID)}
-    return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"),
+    return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"), allow_wipe=ALLOW_WIPE,
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test)
 
 
@@ -2424,10 +2491,45 @@ def whop_sync(payouts):
         db.session.commit()
 
 
+BACKUP_SKIP = {("campaign", "cover_data"), ("message", "image_data")}    # imágenes: pesan mucho y no son datos de negocio
+
+
+@app.route("/admin/copia-de-seguridad.json")
+@admin_required
+def admin_backup():
+    """Copia de todos los datos (sin imágenes) en un archivo JSON, para guardarla fuera de Railway."""
+    from base64 import b64encode
+    out = {"app": APP_NAME, "created_at": datetime.utcnow().isoformat() + "Z", "tables": {}}
+    with db.engine.connect() as conn:
+        for table in db.metadata.sorted_tables:
+            cols = [c for c in table.columns if (table.name, c.name) not in BACKUP_SKIP]
+            rows = []
+            for r in conn.execute(db.select(*cols)):
+                row = {}
+                for c, v in zip(cols, r):
+                    if isinstance(v, datetime):
+                        v = v.isoformat()
+                    elif isinstance(v, (bytes, bytearray, memoryview)):
+                        v = b64encode(bytes(v)).decode()
+                    elif v is not None and not isinstance(v, (int, float, str, bool)):
+                        v = str(v)
+                    row[c.name] = v
+                rows.append(row)
+            out["tables"][table.name] = rows
+    audit("copia_descargada", f"{sum(len(v) for v in out['tables'].values())} filas")
+    db.session.commit()
+    name = f"copia-{APP_NAME.lower().replace(' ', '-')}-{datetime.utcnow():%Y%m%d-%H%M}.json"
+    return Response(json.dumps(out, ensure_ascii=False), mimetype="application/json",
+                    headers={"Content-Disposition": f"attachment; filename={name}"})
+
+
 @app.route("/admin/borrar-datos", methods=["POST"])
 @admin_required
 def admin_wipe():
     """Borra todos los datos de prueba (campañas, clips, retiros, mensajes, clippers…). Solo quedan los admins."""
+    if not ALLOW_WIPE:
+        flash("Borrar datos está desactivado en la web real. Para activarlo, añade ALLOW_WIPE=1 en Railway.", "error")
+        return redirect(url_for("admin_settings"))
     if (request.form.get("confirm") or "").strip().upper() != "BORRAR":
         flash("Para borrar todo, escribe BORRAR en la casilla.", "error")
         return redirect(url_for("admin_settings"))
@@ -2504,7 +2606,8 @@ def delete_user_account(user):
     subs = Submission.query.filter_by(user_id=user.id).all()
     for s in subs:
         if s.earned and s.campaign:
-            s.campaign.spent = max(0.0, cents((s.campaign.spent or 0) - s.earned))
+            camp = lock_row(Campaign, s.campaign_id)
+            camp.spent = max(0.0, cents((camp.spent or 0) - s.earned))
     sub_ids = [s.id for s in subs]
     if sub_ids:
         ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(sub_ids)).delete(synchronize_session=False)

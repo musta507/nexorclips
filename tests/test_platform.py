@@ -1202,3 +1202,24 @@ def test_campaign_analytics_series(monkeypatch):
     html = client_for("cualquiera@test.com").get(f"/informe/{camp.report_token}" if camp.report_token else "/").get_data(as_text=True)
     page = admin.get(f"/admin/campana/{camp.id}").get_data(as_text=True)
     assert "data-chart-data" in page and "eCPM" in page
+
+
+def test_backup_and_wipe_blocked_in_production(monkeypatch):
+    import json as _json
+    c, admin = _clipper_with_balance(monkeypatch)
+    r = admin.get("/admin/copia-de-seguridad.json")
+    data = _json.loads(r.get_data(as_text=True))
+    assert r.status_code == 200 and "campaign" in data["tables"] and "user" in data["tables"]
+    assert all("cover_data" not in row for row in data["tables"]["campaign"])
+    assert c.get("/admin/copia-de-seguridad.json").status_code in (302, 403, 404)
+    monkeypatch.setattr(A, "ALLOW_WIPE", False)
+    r = post(admin, "/admin/borrar-datos", confirm="BORRAR", mode="all")
+    assert "desactivado" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.Campaign.query.count() == 1
+
+
+def test_parse_spanish_numbers():
+    assert A.parse_float("5.000") == 5000 and A.parse_float("5.000,50") == 5000.5
+    assert A.parse_float("1,5") == 1.5 and A.parse_float("1.5") == 1.5 and A.parse_float("0.150") == 0.15
+    assert A.parse_float("1.500.000") == 1_500_000 and A.parse_float("") is None and A.parse_float("abc", 0) == 0

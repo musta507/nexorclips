@@ -49,6 +49,13 @@
   {% endif %}
 </div>
 
+<div class="card tight">
+  <h3>Copia de seguridad</h3>
+  <p class="small muted" style="margin:6px 0 12px">Descarga todos los datos (campañas, clips, clippers, retiros, mensajes, actividad) en un archivo. Las imágenes no van incluidas. Guárdala en tu ordenador o en Drive de vez en cuando, además de las copias de Railway.</p>
+  <a class="btn soft" href="{{ url_for('admin_backup') }}" data-turbo="false">Descargar copia de seguridad</a>
+</div>
+
+{% if allow_wipe %}
 <details class="card wipe">
   <summary><b>Empezar de cero</b> <span class="small muted">· borrar todos los datos de prueba</span></summary>
   <p class="small muted" style="margin:10px 0 14px">Borra todas las campañas, clips, retiros, mensajes, solicitudes, el registro de actividad y las cuentas de los clippers. Los administradores se quedan. Con «Borrar todo menos las campañas» las campañas se quedan, pero vacías (sin clips ni dinero repartido). <b>No se puede deshacer.</b></p>
@@ -59,4 +66,7 @@
     <button class="btn red" name="mode" value="all" data-confirm="¿Seguro? Se borra TODO, también las campañas. No se puede deshacer.">Borrar todo</button>
   </form>
 </details>
+{% else %}
+<div class="card tight"><p class="small muted"><b>Empezar de cero</b> está desactivado en la web real para no borrar datos por error. Para activarlo, añade la variable <span class="selectable">ALLOW_WIPE=1</span> en Railway.</p></div>
+{% endif %}
 {% endblock %}
