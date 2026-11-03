@@ -157,7 +157,6 @@ function pagina() {
   progresoLeccion();
   desplegables();
   destacado();
-  graficasClips();
 }
 
 // =============================================================== gráfica de estadísticas (informe y panel)

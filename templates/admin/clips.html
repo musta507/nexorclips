@@ -88,18 +88,25 @@
             {% else %}<a class="cr-novideo" href="{{ s.url }}" target="_blank" rel="noopener">{{ icon(s.platform) }}<span>Ver en {{ PLATFORMS[s.platform] }}</span></a>{% endif %}
           </div>
           <div class="cr-stats">
-            {% set ser = series.get(s.id) %}
-            <div class="cr-pills" role="group" aria-label="Métrica">
-              <button type="button" class="cr-pill on" data-metric="views">{{ icon("eye") }} Visualizaciones <b class="tnum">{{ s.views|short }}</b></button>
-              <button type="button" class="cr-pill" data-metric="likes">♥ <b class="tnum">{{ (s.likes or 0)|short }}</b></button>
-              <button type="button" class="cr-pill" data-metric="comments">{{ icon("chat") }} <b class="tnum">{{ (s.comments or 0)|short }}</b></button>
-              <button type="button" class="cr-pill" data-metric="shares">{{ icon("arrow") }} <b class="tnum">{{ (s.shares or 0)|short }}</b></button>
+            {% set g = growth[s.id] %}
+            <div class="cr-tiles">
+              <div class="cr-tile main">
+                <span class="cr-tl">{{ icon("eye") }} Visualizaciones</span>
+                <b class="tnum">{{ s.views|num }}</b>
+                <span class="cr-delta{% if g.views %} up{% endif %}">{% if g.views %}+{{ g.views|short }} en las últimas 24 h{% else %}Sin cambios en 24 h{% endif %}</span>
+              </div>
+              <div class="cr-tile"><span class="cr-tl">♥ Me gusta</span><b class="tnum">{{ (s.likes or 0)|short }}</b>{% if g.likes %}<span class="cr-delta up">+{{ g.likes|short }}</span>{% endif %}</div>
+              <div class="cr-tile"><span class="cr-tl">{{ icon("chat") }} Comentarios</span><b class="tnum">{{ (s.comments or 0)|short }}</b>{% if g.comments %}<span class="cr-delta up">+{{ g.comments|short }}</span>{% endif %}</div>
+              <div class="cr-tile"><span class="cr-tl">{{ icon("arrow") }} Compartidos</span><b class="tnum">{{ (s.shares or 0)|short }}</b>{% if g.shares %}<span class="cr-delta up">+{{ g.shares|short }}</span>{% endif %}</div>
             </div>
-            <div class="cr-chart" data-mini-chart='{{ ser|tojson if ser else "null" }}'></div>
-            <div class="cr-foot">
-              <span>Interacción</span><b class="tnum">{% if s.views %}{{ '%.1f'|format(((s.likes or 0) + (s.comments or 0) + (s.shares or 0)) / s.views * 100) }} %{% else %}—{% endif %}</b>
-              <span>Pago</span><b class="tnum">{{ [s.campaign.remaining, raw_earning_of(s)]|min|money }}</b>
-            </div>
+            <dl class="cr-facts">
+              <div><dt>Interacción</dt><dd class="tnum">{% if s.views %}{{ '%.1f'|format(((s.likes or 0) + (s.comments or 0) + (s.shares or 0)) / s.views * 100) }} %{% else %}—{% endif %}</dd></div>
+              <div><dt>Pago si se aprueba</dt><dd class="tnum money-txt">{{ [s.campaign.remaining, raw_earning_of(s)]|min|money }}</dd></div>
+              <div><dt>Red</dt><dd>{{ icon(s.platform) }} {{ PLATFORMS[s.platform] }}</dd></div>
+              <div><dt>Publicado</dt><dd>{% if s.posted_at %}{{ s.posted_at|date }}{% else %}<span class="muted">—</span>{% endif %}</dd></div>
+              <div><dt>Enviado</dt><dd>{{ s.created_at|date }}</dd></div>
+              <div><dt>Vistas leídas</dt><dd>{{ s|checked }}</dd></div>
+            </dl>
           </div>
         </div>
 

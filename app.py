@@ -2822,6 +2822,29 @@ def clip_series(subs, days=30):
     return out
 
 
+def clip_growth(subs, hours=24):
+    """Lo que ha subido cada clip en las últimas 24 horas (vistas, me gusta, comentarios y compartidos)."""
+    out = {s_.id: {"views": 0, "likes": 0, "comments": 0, "shares": 0} for s_ in subs}
+    if not subs:
+        return out
+    since = datetime.utcnow() - timedelta(hours=hours)
+    before = {}
+    for sn in (ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_([x.id for x in subs]), ViewSnapshot.taken_at <= since)
+               .order_by(ViewSnapshot.taken_at).all()):
+        before[sn.submission_id] = sn                     # la última lectura de hace más de 24 h
+    for s_ in subs:
+        old = before.get(s_.id)
+        if s_.created_at > since and not old:            # clip de hoy: todo lo que tiene es de las últimas 24 h
+            base = {"views": 0, "likes": 0, "comments": 0, "shares": 0}
+        elif old:
+            base = {"views": old.views or 0, "likes": old.likes or 0, "comments": old.comments or 0, "shares": old.shares or 0}
+        else:
+            continue
+        for m in base:
+            out[s_.id][m] = max(0, (getattr(s_, m) or 0) - base[m])
+    return out
+
+
 def bot_check(sub):
     """Texto de la línea «Detección de bots» de cada clip, a partir de sus avisos y su interacción."""
     v = sub.views or 0
@@ -2881,7 +2904,7 @@ def admin_clips():
     return render_template("admin/clips.html", rows=shown, total=total, more=total > len(shown), page=page, tab=tab, f=f,
                            q=request.args.get("q", ""), camps=camps, cid=cid, camp=camp, counts=counts,
                            n={"revisar": len(rev), "contando": len(cnt), "apelaciones": len(appeals)},
-                           series=clip_series(shown), players={s_.id: clip_player(s_) for s_ in shown},
+                           growth=clip_growth(shown), players={s_.id: clip_player(s_) for s_ in shown},
                            bots={s_.id: bot_check(s_) for s_ in shown}, hours={s_.id: waiting_hours(s_) for s_ in shown},
                            sla=REVIEW_SLA_HOURS, filters=REVIEW_FILTERS)
 
