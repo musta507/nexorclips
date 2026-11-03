@@ -6,7 +6,7 @@
   <form method="post" class="form-stack">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <h2>{{ "Editar creador" if c.id else "Nuevo creador" }}</h2>
-    <div class="field"><label for="name">Nombre del creador o marca</label><input id="name" name="name" value="{{ c.name or '' }}" required placeholder="Ej.: Pablo Pérez"></div>
+    <div class="field"><label for="name">Nombre del creador</label><input id="name" name="name" value="{{ c.name or '' }}" required placeholder="Ej.: Pablo Pérez"></div>
     <div class="field"><label for="contact">Contacto</label><input id="contact" name="contact" value="{{ c.contact or '' }}" placeholder="Correo o WhatsApp, para avisarle si le falta saldo"></div>
     <div class="field"><label for="key_var">Variable de Railway con su clave de Whop</label>
       <input id="key_var" name="key_var" value="{{ c.key_var or '' }}" placeholder="WHOP_KEY_PABLO" list="env-keys" autocomplete="off" autocapitalize="characters" spellcheck="false">

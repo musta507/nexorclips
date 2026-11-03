@@ -8,7 +8,7 @@
 <form method="post" enctype="multipart/form-data">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <input type="hidden" name="wizard" value="1">
-  <input type="hidden" name="category" value="{{ camp.category or 'streamer' }}">
+  <input type="hidden" name="category" value="streamer">
   <div class="wz" data-wizard{% if editing %} data-editing{% endif %}>
     <ol class="wz-steps" aria-label="Pasos">
       {% for label in ["Básico", "Pago", "Contenido", "Requisitos", "Publicar"] %}
@@ -20,13 +20,7 @@
 
         <fieldset class="wz-step form-stack">
           <legend>Lo básico</legend>
-          <div class="field"><span class="label">Tipo de campaña</span>
-            <div class="wz-choice">
-              {% for k, label in CAMPAIGN_KINDS.items() %}
-              <label class="wz-opt"><input type="radio" name="kind" value="{{ k }}" data-label="{{ label }}" {% if (camp.kind or 'clipping') == k %}checked{% endif %}>
-                <b>{{ label }}</b><span class="small muted">{{ "Clips de contenido que ya existe (directos, vídeos, canciones)." if k == 'clipping' else "Vídeos nuevos grabados por el creador de contenido." }}</span></label>
-              {% endfor %}
-            </div></div>
+          <input type="hidden" name="kind" value="clipping">
           <div class="form-grid">
             <div class="field"><label for="song">Nombre de la campaña</label><input id="song" name="song" value="{{ camp.song or '' }}" placeholder="Ej.: Mejores momentos del directo" required maxlength="200"></div>
             <div class="field"><label for="artist">Creador</label><input id="artist" name="artist" value="{{ camp.artist or '' }}" placeholder="Ej.: Rafa Gaming" required maxlength="200"></div>
@@ -67,7 +61,7 @@
           </div>
           <div class="form-grid">
             <div class="field"><label for="budget">Presupuesto total ({{ CUR_CODE }})</label><input id="budget" name="budget" value="{{ '%g'|format(camp.budget) if camp.budget else '' }}" inputmode="decimal" placeholder="2000" required>{% if editing and camp.spent %}<span class="hint">Ya repartido: {{ camp.spent|money }}. No puede ser menor.</span>{% endif %}</div>
-            <div class="field"><label for="bonus_per_clip">Extra fijo por clip ({{ CUR_CODE }})</label><input id="bonus_per_clip" name="bonus_per_clip" value="{{ '%g'|format(camp.bonus_per_clip) if camp.bonus_per_clip else '' }}" inputmode="decimal" placeholder="Sin extra"><span class="hint">Se suma a cada clip aprobado que llega al mínimo. Útil en UGC.</span></div>
+            <div class="field"><label for="bonus_per_clip">Extra fijo por clip ({{ CUR_CODE }})</label><input id="bonus_per_clip" name="bonus_per_clip" value="{{ '%g'|format(camp.bonus_per_clip) if camp.bonus_per_clip else '' }}" inputmode="decimal" placeholder="Sin extra"><span class="hint">Se suma a cada clip aprobado que llega al mínimo.</span></div>
           </div>
         </fieldset>
 
@@ -143,7 +137,6 @@
         <div class="wz-pv card tight" data-wz-preview>
           <div class="wz-pv-cover" data-pv="cover"{% if cover_src(camp) %} style="background-image:url('{{ cover_src(camp, 720) }}')"{% endif %}></div>
           <div class="wz-pv-body">
-            <span class="wz-pv-kind small" data-pv="kind">{{ CAMPAIGN_KINDS[camp.kind or 'clipping'] }}</span>
             <b data-pv="name">{{ camp.song or "Nombre de la campaña" }}</b>
             <span class="small muted" data-pv="artist">{{ camp.artist or "Creador" }}</span>
             <span class="wz-pv-cpm tnum" data-pv="cpm">—</span>

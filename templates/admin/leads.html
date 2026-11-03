@@ -12,7 +12,7 @@
     <div class="lead-top">
       <div>
         <span class="status {{ 'pendiente' if l.status == 'nueva' else ('aprobado' if l.status in ['contactada', 'convertida'] else 'rechazado') }}">{{ statuses[l.status] }}</span>
-        <h3 style="margin-top:8px">{{ l.brand }} <span class="muted small">· {{ CATEGORY_ONE.get(l.category, l.category) }}</span></h3>
+        <h3 style="margin-top:8px">{{ l.brand }}</h3>
         <p class="small muted">{{ l.name }} · <span class="selectable">{{ l.email }}</span> · {{ l.created_at|ago }}</p>
       </div>
       {% if l.budget %}<div class="lead-budget"><span class="small muted">Presupuesto</span><b>{{ l.budget }}</b></div>{% endif %}

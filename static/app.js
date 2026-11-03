@@ -525,8 +525,6 @@ function asistente() {
     pv.querySelector("[data-pv=artist]").textContent = val("artist") || "Creador";
     pv.querySelector("[data-pv=cpm]").textContent = top ? money(top) + " / 1K vistas" : "— / 1K vistas";
     pv.querySelector("[data-pv=budget]").textContent = num(val("budget")) ? money(num(val("budget"))) : "—";
-    var k = wz.querySelector("[name=kind]:checked");
-    pv.querySelector("[data-pv=kind]").textContent = k ? k.getAttribute("data-label") : "Clipping";
     pv.querySelectorAll("[data-pv-pf]").forEach(function (i) { i.hidden = on.indexOf(i.getAttribute("data-pv-pf")) < 0; });
     var bonus = num(val("bonus_per_clip"));
     var b = pv.querySelector("[data-pv=bonus]"); b.hidden = !bonus; b.textContent = "+" + money(bonus) + " por clip";

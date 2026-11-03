@@ -120,8 +120,8 @@ DEV_LOGIN = os.environ.get("DEV_LOGIN") == "1" and not PRODUCTION   # nunca disp
 ALLOW_WIPE = os.environ.get("ALLOW_WIPE") == "1" or not PRODUCTION
 
 PLATFORMS = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube Shorts"}
-CATEGORIES = {"musica": "Música", "streamer": "Streamers", "marca": "Marcas", "infoproducto": "Infoproductos", "otro": "Otros"}
-CATEGORY_ONE = {"musica": "Música", "streamer": "Streamer", "marca": "Marca", "infoproducto": "Infoproducto", "otro": "Otro"}
+CATEGORIES = {"streamer": "Creadores"}          # todas las campañas son de clipping de creadores
+CATEGORY_ONE = {"streamer": "Creador"}
 USDT_METHOD = "Cripto (USDT · TRC20)"
 WHOP_METHOD = "Whop"
 PAYOUT_METHODS = [WHOP_METHOD]                                    # Whop es la única forma de cobro
@@ -139,7 +139,7 @@ FLAG_LABELS = {
 REJECT_REASONS = {
     "reglas": "No cumple las reglas de la campaña",
     "menciones": "Faltan las menciones o hashtags obligatorios",
-    "audio": "No usa el audio o el material de la campaña",
+    "audio": "No usa el material de la campaña",
     "calidad": "Calidad baja (imagen, audio o edición)",
     "duplicado": "Contenido repetido o reutilizado",
     "vistas": "Vistas no orgánicas o sospechosas",
@@ -148,7 +148,7 @@ REJECT_REASONS = {
     "otro": "Otro motivo",
 }
 SYSTEM_REASONS = {"caducado": "No llegó al pago mínimo a tiempo"}
-CAMPAIGN_KINDS = {"clipping": "Clipping", "ugc": "UGC"}
+CAMPAIGN_KINDS = {"clipping": "Clipping"}
 COUNTRIES = {
     "ES": "España", "MX": "México", "AR": "Argentina", "CO": "Colombia", "CL": "Chile", "PE": "Perú",
     "VE": "Venezuela", "EC": "Ecuador", "GT": "Guatemala", "CU": "Cuba", "BO": "Bolivia", "DO": "República Dominicana",
@@ -247,7 +247,7 @@ class User(UserMixin, db.Model):
 
 
 class Creator(db.Model):
-    """Creador o marca que paga sus campañas desde SU Whop. La clave nunca se guarda aquí:
+    """Creador que paga sus campañas desde SU Whop. La clave nunca se guarda aquí:
     va en una variable de Railway (p. ej. WHOP_KEY_PABLO) y aquí solo se guarda el NOMBRE de esa variable."""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
@@ -294,9 +294,9 @@ class Campaign(db.Model):
     status = db.Column(db.String(20), default="activa")     # activa / pausada / finalizada
     featured = db.Column(db.Boolean, default=False)
     full = db.Column(db.Boolean, default=False)              # plazas completas: no se aceptan solicitudes nuevas
-    category = db.Column(db.String(20), default="musica")
+    category = db.Column(db.String(20), default="streamer")
     join_questions = db.Column(db.Text, default="")         # preguntas para unirse, una por línea
-    kind = db.Column(db.String(20), default="clipping")      # clipping · ugc
+    kind = db.Column(db.String(20), default="clipping")      # siempre clipping
     bonus_per_clip = db.Column(Money, nullable=True)        # dinero fijo extra por clip aprobado que llega al mínimo
     starts_at = db.Column(db.DateTime, nullable=True)        # antes de esta fecha no se aceptan clips
     ends_on = db.Column(db.DateTime, nullable=True)          # al llegar, la campaña se cierra sola
@@ -630,12 +630,12 @@ def campaign_accounts(user_id, campaign_id, status=None, platform=None):
 
 
 class CampaignLead(db.Model):
-    """Solicitudes de artistas y marcas que quieren lanzar una campaña (desde la portada)."""
+    """Solicitudes de creadores que quieren lanzar una campaña (desde la portada)."""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(255), nullable=False)
-    brand = db.Column(db.String(200), nullable=False)          # artista, marca o creador
-    category = db.Column(db.String(20), default="musica")
+    brand = db.Column(db.String(200), nullable=False)          # nombre del creador o canal
+    category = db.Column(db.String(20), default="streamer")
     budget = db.Column(db.String(40), default="")
     link = db.Column(db.String(500), default="")
     message = db.Column(db.Text, default="")
@@ -1678,7 +1678,7 @@ def active_campaigns():
     """Campañas activas: la destacada primero, después la música y luego el resto, de más nueva a más antigua."""
     camps = (Campaign.query.filter_by(status="activa").options(selectinload(Campaign.submissions))
              .order_by(Campaign.created_at.desc()).all())     # los clips de todas las campañas en una sola consulta
-    return sorted(camps, key=lambda c: (not c.featured, c.category != "musica"))
+    return sorted(camps, key=lambda c: not c.featured)
 
 
 # ---------------------------------------------------------------- acceso con Google
@@ -2836,7 +2836,7 @@ def load_demo(days=30, seed=7):
     for u, _, _ in r.sample(users, k=min(3, len(users))):
         db.session.add(Message(user_id=u.id, from_admin=False, sender_id=u.id, read_by_admin=False, read_by_user=True,
                                body=r.choice(["¿Cuándo se actualizan las vistas de mi último clip?",
-                                              "Hola, ¿puedo usar el mismo audio en Instagram?",
+                                              "Hola, ¿puedo subir el mismo clip a Instagram?",
                                               "¿Cuánto tarda en llegar el retiro a Whop?"]),
                                created_at=now - timedelta(hours=r.randint(1, 20))))
     lessons = [ls for c in Course.query.filter_by(published=True).all() for ls in c.visible_lessons]
@@ -2996,11 +2996,9 @@ def _campaign_from_form(camp):
         n = notify_waitlist(camp, current_user.id)      # vuelven a abrirse las plazas: avisamos a los que esperaban
         if n:
             flash(f"Hemos avisado a {n} {'clipper' if n == 1 else 'clippers'} de que hay plazas.", "ok")
-    cat = request.form.get("category", "musica")
-    camp.category = cat if cat in CATEGORIES else "otro"
+    camp.category = "streamer"
     if request.form.get("wizard"):                     # opciones del asistente de campaña
-        kind = request.form.get("kind", "clipping")
-        camp.kind = kind if kind in CAMPAIGN_KINDS else "clipping"
+        camp.kind = "clipping"
         bonus = parse_float(request.form.get("bonus_per_clip"))
         camp.bonus_per_clip = round(bonus, 2) if bonus and bonus > 0 else None
         camp.starts_at = parse_dt(request.form.get("starts_at"))
@@ -3049,12 +3047,12 @@ def _campaign_from_form(camp):
 @admin_required
 def admin_campaign_form(cid=None):
     camp = db.session.get(Campaign, cid) if cid else Campaign(platforms="tiktok,instagram,youtube", status="activa",
-                                                              category="musica", spent=0.0)
+                                                              category="streamer", spent=0.0)
     lead = db.session.get(CampaignLead, request.args.get("solicitud", type=int) or 0) if not cid else None
     if not cid and request.method == "GET":
         camp.join_questions = DEFAULT_QUESTIONS
     if lead and request.method == "GET":       # crear campaña a partir de una solicitud
-        camp.song, camp.artist, camp.category = "", lead.brand, lead.category
+        camp.song, camp.artist = "", lead.brand
         camp.sound_url = lead.link if lead.link.startswith(("https://", "http://")) else ""
     if cid and not camp:
         abort(404)
@@ -4663,7 +4661,7 @@ def launch():
                                            CampaignLead.created_at >= datetime.utcnow() - timedelta(hours=1)).count()
         error = None
         if not form["name"] or not form["brand"]:
-            error = "Escribe tu nombre y el del artista o marca."
+            error = "Escribe tu nombre y el de tu canal."
         elif "@" not in form["email"] or "." not in form["email"].split("@")[-1]:
             error = "Escribe un correo válido para poder responderte."
         elif recent >= 5:
@@ -4673,12 +4671,12 @@ def launch():
         else:
             db.session.add(CampaignLead(
                 name=form["name"][:120], email=form["email"][:255].lower(), brand=form["brand"][:200],
-                category=form["category"] if form["category"] in CATEGORIES else "otro",
+                category="streamer",
                 budget=form["budget"] if form["budget"] in BUDGETS else "", link=form["link"][:500],
                 message=form["message"][:3000], ip=ip))
             db.session.commit()
             log.info("Nueva solicitud de campaña: %s", form["brand"])
-            notify_phone(f"🎵 Nueva campaña: {form['brand']}", f"{form['name']} · {form['email']} · {form['budget'] or 'sin presupuesto'}",
+            notify_phone(f"🎬 Nueva campaña: {form['brand']}", f"{form['name']} · {form['email']} · {form['budget'] or 'sin presupuesto'}",
                          url_for("admin_leads"), tags="moneybag")
             return redirect(url_for("launch_thanks"))
     return render_template("launch.html", form=form, budgets=BUDGETS)

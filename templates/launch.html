@@ -4,14 +4,14 @@
 {% block content %}
 <div class="launch">
   <div class="launch-copy form-stack">
-    <span class="path-tag">Para artistas y marcas</span>
+    <span class="path-tag">Para creadores</span>
     <h1>Lanza tu campaña de clipping</h1>
-    <p class="muted">Cuéntanos qué quieres promocionar y te respondemos por correo con una propuesta: pago por cada 1.000 vistas, presupuesto y redes.</p>
+    <p class="muted">Cuéntanos de tu canal y te respondemos por correo con una propuesta: pago por cada 1.000 vistas, presupuesto y redes.</p>
     <ul class="auth-points">
       <li>Pagas solo por vistas reales en clips aprobados</li>
       <li>Revisamos cada clip antes de pagarlo: nada de bots</li>
       <li>Informe privado en directo con vistas, clips y coste</li>
-      <li>Música, streamers, marcas o infoproductos</li>
+      <li>Clips de tus directos y vídeos en TikTok, Instagram y YouTube Shorts</li>
     </ul>
   </div>
   <div class="card">
@@ -25,19 +25,13 @@
         <div class="field"><label for="name">Tu nombre</label><input id="name" name="name" value="{{ form.name or '' }}" required maxlength="120" autocomplete="name"></div>
         <div class="field"><label for="email">Correo</label><input id="email" name="email" type="email" value="{{ form.email or '' }}" required maxlength="255" autocomplete="email"></div>
       </div>
-      <div class="form-grid">
-        <div class="field"><label for="brand">Artista, marca o creador</label><input id="brand" name="brand" value="{{ form.brand or '' }}" required maxlength="200"></div>
-        <div class="field"><label for="category">Tipo</label>
-          <select id="category" name="category">
-            {% for key, label in CATEGORY_ONE.items() %}<option value="{{ key }}" {% if (form.category or 'musica') == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
-          </select></div>
-      </div>
+      <div class="field"><label for="brand">Tu nombre de creador o canal</label><input id="brand" name="brand" value="{{ form.brand or '' }}" required maxlength="200"></div>
       <div class="field"><label for="budget">Presupuesto aproximado</label>
         <select id="budget" name="budget">
           {% for b in budgets %}<option {% if form.budget == b %}selected{% endif %}>{{ b }}</option>{% endfor %}
         </select></div>
-      <div class="field"><label for="link">Enlace a la canción, producto o canal (opcional)</label><input id="link" name="link" value="{{ form.link or '' }}" maxlength="500" placeholder="Spotify, TikTok, web…"></div>
-      <div class="field"><label for="message">Qué quieres conseguir (opcional)</label><textarea id="message" name="message" rows="4" maxlength="3000" placeholder="Ej.: lanzamiento el 20 de noviembre, queremos que el estribillo se haga viral en TikTok en LATAM…">{{ form.message or '' }}</textarea></div>
+      <div class="field"><label for="link">Enlace a tu canal (opcional)</label><input id="link" name="link" value="{{ form.link or '' }}" maxlength="500" placeholder="Twitch, YouTube, TikTok, Kick…"></div>
+      <div class="field"><label for="message">Qué quieres conseguir (opcional)</label><textarea id="message" name="message" rows="4" maxlength="3000" placeholder="Ej.: quiero que los mejores momentos de mis directos lleguen a TikTok en España y LATAM…">{{ form.message or '' }}</textarea></div>
       <button class="btn accent block">Enviar solicitud</button>
       <p class="hint">Te respondemos por correo en menos de 48 horas. Tus datos solo se usan para contestarte.</p>
     </form>

@@ -32,12 +32,11 @@
   </div>
   <div class="dbar" role="img" aria-label="{{ st.pct }} % gastado"><span style="width:{{ st.pct }}%"></span></div>
   <div class="small muted camp-meta">
-    {{ CAMPAIGN_KINDS[camp.kind or 'clipping'] }}
-    {% if camp.max_members %} · Plazas: {{ camp.members_accepted }} de {{ camp.max_members }}{% endif %}
+    Clipping{% if camp.max_members %} · Plazas: {{ camp.members_accepted }} de {{ camp.max_members }}{% endif %}
     {% if camp.ends_on %} · Termina el {{ camp.ends_on|datetime }} UTC{% endif %}
     {% if camp.earn_days %} · Cada clip suma {{ camp.earn_days }} días{% endif %}
     {% if camp.expire_days %} · {{ camp.expire_days }} días para el mínimo{% endif %}
-    {% if camp.country_list %} · Países: {{ camp.country_list|map('extract', COUNTRIES)|join(', ') }}{% endif %}
+    {% if camp.country_list %} · Países: {% for c in camp.country_list %}{{ COUNTRIES[c] }}{{ ", " if not loop.last }}{% endfor %}{% endif %}
   </div>
 </div>
 

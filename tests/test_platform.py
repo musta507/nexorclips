@@ -1438,7 +1438,7 @@ def test_wizard_saves_new_options():
          starts_at="2030-01-01T10:00", ends_on="2030-02-01T10:00", ideas="Idea uno\nIdea dos")
     with A.app.app_context():
         c = A.Campaign.query.one()
-        assert (c.kind, c.bonus_per_clip, c.max_members, c.countries, c.earn_days, c.expire_days) == ("ugc", 2.0, 20, "ES,MX", 10, 7)
+        assert (c.kind, c.bonus_per_clip, c.max_members, c.countries, c.earn_days, c.expire_days) == ("clipping", 2.0, 20, "ES,MX", 10, 7)
         assert c.rate == 1500 and c.budget == 5000 and c.starts_at.year == 2030 and c.idea_list == ["Idea uno", "Idea dos"]
 
 
