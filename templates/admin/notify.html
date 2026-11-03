@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Avisos · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Avisos a clippers", "Mensaje personalizado: {nombre} se cambia por el nombre de cada clipper.") %}{% endcall %}
+<div class="kpis k4">
+  <div class="kpi card tight"><span class="small muted">Web / móvil</span><b>{{ "Activo" if push_ready else "Sin activar" }}</b><span class="small muted">{{ devices }} dispositivos</span></div>
+  <div class="kpi card tight"><span class="small muted">WhatsApp</span><b>{{ "Activo" if whatsapp_ready else "Sin activar" }}</b><span class="small muted">{{ with_wa }} clippers con número</span></div>
+</div>
+<form method="post" class="card form-stack" style="max-width:720px">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="field"><label for="audience">Para</label>
+    <select id="audience" name="audience">
+      <option value="todos">Todos los clippers</option>
+      {% for c in camps %}<option value="c:{{ c.id }}">Aceptados en «{{ c.song }}»</option>{% endfor %}
+    </select>
+    <span class="hint">Para un solo clipper escribe en «Para» de abajo su correo.</span></div>
+  <div class="field"><label for="one">O a un clipper (correo)</label><input id="one" name="one" type="email" placeholder="clipper@correo.com" data-audience-one></div>
+  <div class="field"><label for="title">Título</label><input id="title" name="title" maxlength="80" placeholder="¡{nombre}, nueva campaña!"></div>
+  <div class="field"><label for="body">Mensaje</label><textarea id="body" name="body" rows="4" maxlength="1000" required placeholder="Hola {nombre}, ya puedes unirte a…"></textarea></div>
+  <div class="field"><label for="path">Al pulsar, abrir (opcional)</label><input id="path" name="path" placeholder="/campana/3"></div>
+  <label class="check"><input type="checkbox" name="chat" checked> Dejarlo también como mensaje en su chat de la web</label>
+  {% if not push_ready and not whatsapp_ready %}<p class="small muted">Sin claves de avisos ni de WhatsApp en Railway solo se deja el mensaje en el chat. Se activan en Ajustes.</p>{% endif %}
+  <button class="btn accent" style="align-self:flex-start" data-confirm="¿Enviar este aviso?">Enviar aviso</button>
+</form>
+{% endblock %}

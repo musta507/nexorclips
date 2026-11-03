@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
-{% block title %}Enviar clips · {{ APP_NAME }}{% endblock %}
+{% block title %}Mis clips · {{ APP_NAME }}{% endblock %}
 {% block content %}
 <div class="section-head" style="margin:0">
-  <h1>Enviar clips</h1>
-  <p class="muted">Pega el enlace de tu vídeo y elige para qué campaña es.</p>
+  <h1>Mis clips</h1>
+  <p class="muted">Pega el enlace de tu vídeo y sigue cómo va cada uno.</p>
 </div>
 
 <div class="card">
@@ -26,33 +26,65 @@
   </form>
   {% else %}
   <div class="form-stack" style="align-items:flex-start">
-    <p>Aún no estás aceptado en ninguna campaña. Entra en una, pulsa <b>Unirme a la campaña</b> con la cuenta con la que vas a publicar y te escribiremos para verificarla.</p>
+    <p>Aún no estás aceptado en ninguna campaña. Entra en una, pulsa <b>Solicitar entrar</b> y, cuando te acepten, añade y verifica la cuenta con la que vas a publicar.</p>
     <a class="btn accent" href="{{ url_for('index') }}">Ver campañas</a>
   </div>
   {% endif %}
 </div>
 
+<div class="kpis k4">
+  <div class="kpi card tight"><span class="small muted">Vistas</span><b class="tnum">{{ stats.views|short }}</b></div>
+  <div class="kpi card tight"><span class="small muted">Ganado</span><b class="tnum money-txt">{{ stats.earned|money }}</b></div>
+  <div class="kpi card tight"><span class="small muted">Enviados</span><b class="tnum">{{ stats.sent }}</b></div>
+  <div class="kpi card tight"><span class="small muted">Aprobados</span><b class="tnum">{{ stats.approved }}{% if stats.rate is not none %} <span class="small muted">· {{ stats.rate }} %</span>{% endif %}</b></div>
+</div>
+
 <section>
-  <div class="section-head"><h2>Tus clips</h2></div>
+  <nav class="seg" aria-label="Estado de los clips">
+    {% for t, label in [("todos", "Todos"), ("contando", "Contando vistas"), ("revisar", "En revisión"), ("aprobado", "Aprobados"), ("rechazado", "Rechazados")] %}
+    <a class="{% if tab == t %}on{% endif %}" href="{{ url_for('my_clips', tab=t, campana=fc or None, red=fp or None) }}">{{ label }} <b class="tnum">{{ counts[t] }}</b></a>
+    {% endfor %}
+  </nav>
+  {% if my_camps %}
+  <form method="get" class="adm-filters" data-autosubmit>
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <select name="campana" aria-label="Campaña"><option value="">Todas las campañas</option>{% for c in my_camps %}<option value="{{ c.id }}"{% if fc == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}</select>
+    <select name="red" aria-label="Red"><option value="">Todas las redes</option>{% for k, label in PLATFORMS.items() %}<option value="{{ k }}"{% if fp == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <noscript><button class="btn sm soft">Filtrar</button></noscript>
+  </form>
+  {% endif %}
   <div class="table-card">
     {% if subs %}
     <div class="table-scroll"><table class="rt">
       <thead><tr><th>Fecha</th><th>Clip</th><th>Campaña</th><th class="r">Vistas</th><th>Estado</th><th class="r">Ganado</th></tr></thead>
       <tbody>
       {% for s in subs %}
+      {% set stg = clip_stage(s) %}
       <tr>
         <td data-label="Fecha" class="small muted">{{ s.created_at|date }}</td>
         <td data-label="Clip"><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a></td>
-        <td data-label="Campaña">{{ s.campaign.song }}<div class="small muted">{{ s.campaign.artist }}</div></td>
-        <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b>{% set mv = s.campaign.min_views_for(s.platform) %}{% if s.views < mv %}<div class="small muted">mín. {{ mv|short }}</div>{% endif %}{% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}</td>
-        <td data-label="Estado"><span class="status {{ s.status }}">{{ s.status|capitalize }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
+        <td data-label="Campaña"><a class="link" href="{{ url_for('campaign', cid=s.campaign_id) }}">{{ s.campaign.song }}</a><div class="small muted">{{ s.campaign.artist }}</div></td>
+        <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b>{% set mv = s.campaign.min_views_for(s.platform) %}{% if stg == 'contando' and mv %}<div class="mini-bar" title="{{ s.views|num }} de {{ mv|num }}"><span style="width:{{ [100, ((s.views or 0) / mv * 100)|round]|min }}%"></span></div><div class="small muted">mín. {{ mv|short }}</div>{% endif %}{% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}</td>
+        <td data-label="Estado"><span class="status {{ 'pendiente' if stg in ('contando', 'revisar') else s.status }}{% if stg == 'contando' %} counting{% endif %}">{{ STAGE_LABELS[stg] }}</span>
+          {% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}
+          {% if s.status == 'rechazado' and not s.appeal_status and s.reject_code != 'caducado' %}
+          <details class="appeal"><summary class="link small">Apelar</summary>
+            <form method="post" action="{{ url_for('appeal_clip', sid=s.id) }}" class="form-stack">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <textarea name="text" rows="3" minlength="10" maxlength="1000" required placeholder="¿Por qué crees que cumple las reglas? Solo puedes apelar una vez."></textarea>
+              <button class="btn sm">Enviar apelación</button>
+            </form>
+          </details>
+          {% elif s.appeal_status == 'pendiente' %}<div class="small muted">Apelación en revisión</div>
+          {% elif s.appeal_status == 'rechazada' %}<div class="small muted">Apelación rechazada</div>{% endif %}
+        </td>
         <td data-label="Ganado" class="r tnum">{% if s.status == 'aprobado' %}<b>{{ s.earned|money }}</b>{% else %}<span class="muted">—</span>{% endif %}</td>
       </tr>
       {% endfor %}
       </tbody>
     </table></div>
     {% else %}
-    <div class="empty"><h3>Aún no has enviado clips</h3><p class="muted">Elige una campaña, publica tu vídeo y pega aquí el enlace.</p></div>
+    <div class="empty"><h3>{{ "Aún no has enviado clips" if tab == 'todos' and not fc and not fp else "Nada por aquí" }}</h3><p class="muted">{{ "Elige una campaña, publica tu vídeo y pega aquí el enlace." if tab == 'todos' else "No tienes clips con este filtro." }}</p></div>
     {% endif %}
   </div>
 </section>

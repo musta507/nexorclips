@@ -14,7 +14,25 @@
   </div>
 </header>
 
+<div class="report-actions no-print"><button type="button" class="btn soft sm" data-print>Descargar PDF / imprimir</button></div>
+
 {% include "_analytics.html" %}
+
+{% if best %}
+<section>
+  <div class="section-head"><h2>Lo mejor de la campaña</h2><p class="muted">Los {{ best|length }} clips con más vistas.</p></div>
+  <div class="best-grid">
+    {% for s, emb in best %}
+    <figure class="card tight best">
+      {% if emb %}<div class="best-video no-print"><iframe src="{{ emb }}" title="Clip de @{{ s.author or PLATFORMS[s.platform] }}" loading="lazy" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe></div>{% endif %}
+      <figcaption><b>#{{ loop.index }} · {% if s.author %}@{{ s.author }}{% else %}{{ PLATFORMS[s.platform] }}{% endif %}</b>
+        <span class="tnum">{{ s.views|num }} vistas{% if s.likes is not none %} · {{ s.likes|short }} me gusta{% endif %}</span>
+        <a class="link small" href="{{ s.url }}" target="_blank" rel="noopener">{{ s.url }}</a></figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <div class="card">{{ budget(camp, st) }}</div>
 
@@ -30,7 +48,7 @@
         <td data-label="#" class="tnum muted">{{ loop.index }}</td>
         <td data-label="Cuenta"><b>{% if s.author %}@{{ s.author }}{% else %}—{% endif %}</b></td>
         <td data-label="Red">{{ PLATFORMS[s.platform] }}</td>
-        <td data-label="Publicado" class="small muted">{{ s.created_at|date }}</td>
+        <td data-label="Publicado" class="small muted">{{ (s.posted_at or s.created_at)|date }}</td>
         <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b></td>
         <td data-label="" class="r"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver vídeo</a></td>
       </tr>

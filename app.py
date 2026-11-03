@@ -1,5 +1,6 @@
 """ClipProfit Hispano — plataforma de clipping: campañas, clips, vistas y pagos."""
 import csv
+import hashlib
 import io
 import json
 import logging
@@ -25,6 +26,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import push as webpush
 import views as viewcounter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -94,6 +96,17 @@ GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()           # avisos al móvil del admin con la app ntfy
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 WHOP_API_KEY = os.environ.get("WHOP_API_KEY", "").strip()
+# Avisos a los clippers: al navegador/móvil (Web Push) y por WhatsApp (API oficial de Meta, con plantilla aprobada)
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
+VAPID_PUBLIC_KEY = webpush.vapid_public(VAPID_PRIVATE_KEY) if VAPID_PRIVATE_KEY else ""
+WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "").strip()
+WHATSAPP_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID", "").strip()
+WHATSAPP_TEMPLATE = os.environ.get("WHATSAPP_TEMPLATE", "aviso_general").strip()
+WHATSAPP_LANG = os.environ.get("WHATSAPP_LANG", "es").strip()
+# Formación: los vídeos se suben a Bunny Stream (la clave solo vive en Railway; el navegador sube con una firma temporal)
+BUNNY_LIBRARY_ID = os.environ.get("BUNNY_LIBRARY_ID", "").strip()
+BUNNY_API_KEY = os.environ.get("BUNNY_API_KEY", "").strip()
+BUNNY_TOKEN_KEY = os.environ.get("BUNNY_TOKEN_KEY", "").strip()     # opcional: solo se ven los vídeos desde la web
 WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
 WHOP_APP_API_KEY = os.environ.get("WHOP_APP_API_KEY", "").strip()   # prueba de la opción 2: la app de Whop que instalan los creadores
 WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip("/")
@@ -120,7 +133,29 @@ FLAG_LABELS = {
     "cuenta_de_otro": "Cuenta de otro clipper",
     "subida_rapida": "Subida de vistas sospechosa",
     "pocos_likes": "Muy pocos likes para sus vistas",
+    "publicado_antes": "Publicado antes de unirse a la campaña",
 }
+# Motivos de rechazo fijos (el clipper ve el texto; se puede añadir un mensaje)
+REJECT_REASONS = {
+    "reglas": "No cumple las reglas de la campaña",
+    "menciones": "Faltan las menciones o hashtags obligatorios",
+    "audio": "No usa el audio o el material de la campaña",
+    "calidad": "Calidad baja (imagen, audio o edición)",
+    "duplicado": "Contenido repetido o reutilizado",
+    "vistas": "Vistas no orgánicas o sospechosas",
+    "antiguo": "Publicado antes de unirte a la campaña",
+    "cuenta": "La cuenta no está verificada en esta campaña",
+    "otro": "Otro motivo",
+}
+SYSTEM_REASONS = {"caducado": "No llegó al pago mínimo a tiempo"}
+CAMPAIGN_KINDS = {"clipping": "Clipping", "ugc": "UGC"}
+COUNTRIES = {
+    "ES": "España", "MX": "México", "AR": "Argentina", "CO": "Colombia", "CL": "Chile", "PE": "Perú",
+    "VE": "Venezuela", "EC": "Ecuador", "GT": "Guatemala", "CU": "Cuba", "BO": "Bolivia", "DO": "República Dominicana",
+    "HN": "Honduras", "PY": "Paraguay", "SV": "El Salvador", "NI": "Nicaragua", "CR": "Costa Rica", "PA": "Panamá",
+    "UY": "Uruguay", "PR": "Puerto Rico", "US": "Estados Unidos", "GQ": "Guinea Ecuatorial", "OT": "Otro país",
+}
+LANGUAGES = {"es": "Español", "en": "Inglés", "pt": "Portugués", "ca": "Catalán", "fr": "Francés", "it": "Italiano"}
 MAX_HANDLES = 5
 MAX_QUESTIONS = 10
 DEFAULT_QUESTIONS = "\n".join([                 # preguntas que salen ya escritas al crear una campaña
@@ -163,6 +198,14 @@ class User(UserMixin, db.Model):
     verified_handles = db.Column(db.String(1200), default="")   # sin uso (de una versión antigua); se puede borrar más adelante
     verify_code = db.Column(db.String(12), default="")           # código que el clipper pone en su bio para verificar sus cuentas
     accepted_terms_at = db.Column(db.DateTime, nullable=True)
+    trusted = db.Column(db.Boolean, default=False)                # de confianza: sus clips se pueden aprobar solos
+    country = db.Column(db.String(2), default="")
+    languages = db.Column(db.String(60), default="")
+    whatsapp = db.Column(db.String(30), default="")
+    onboarded_at = db.Column(db.DateTime, nullable=True)
+    notify_off = db.Column(db.String(400), default="")             # avisos apagados: «evento.canal» separados por comas
+    avatar_data = db.deferred(db.Column(db.LargeBinary, nullable=True))
+    avatar_ver = db.Column(db.Integer, default=0)
     last_seen_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -253,6 +296,22 @@ class Campaign(db.Model):
     full = db.Column(db.Boolean, default=False)              # plazas completas: no se aceptan solicitudes nuevas
     category = db.Column(db.String(20), default="musica")
     join_questions = db.Column(db.Text, default="")         # preguntas para unirse, una por línea
+    kind = db.Column(db.String(20), default="clipping")      # clipping · ugc
+    bonus_per_clip = db.Column(Money, nullable=True)        # dinero fijo extra por clip aprobado que llega al mínimo
+    starts_at = db.Column(db.DateTime, nullable=True)        # antes de esta fecha no se aceptan clips
+    ends_on = db.Column(db.DateTime, nullable=True)          # al llegar, la campaña se cierra sola
+    max_members = db.Column(db.Integer, default=0)           # plazas (0 = sin límite); al llenarse pasa a «plazas completas»
+    countries = db.Column(db.String(200), default="")        # países permitidos (vacío = todos)
+    new_accounts_only = db.Column(db.Boolean, default=False) # hay que usar una cuenta nueva, solo para esta campaña
+    earn_days = db.Column(db.Integer, default=0)             # días que un clip suma vistas desde que se envía (0 = hasta el final)
+    expire_days = db.Column(db.Integer, default=0)           # días para llegar al mínimo; si no, se rechaza solo (0 = nunca)
+    review_at_min = db.Column(db.Boolean, default=True)      # solo se revisa un clip cuando llega al pago mínimo
+    auto_approve_trusted = db.Column(db.Boolean, default=False)
+    auto_reject_old = db.Column(db.Boolean, default=False)   # rechaza solo los vídeos publicados antes de unirse
+    auto_reject_unverified = db.Column(db.Boolean, default=False)
+    low_alert_sent = db.Column(db.Boolean, default=False)    # ya se avisó de que queda poco presupuesto
+    announcements = db.Column(db.Text, default="")           # anuncios para los clippers («fecha | texto» por línea)
+    ideas = db.Column(db.Text, default="")                   # ideas de clips, una por línea
     report_token = db.Column(db.String(40), unique=True, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -358,6 +417,37 @@ class Campaign(db.Model):
     def exhausted(self):
         return (self.spent or 0) >= (self.budget or 0) - CENT
 
+    @property
+    def country_list(self):
+        return [c for c in (self.countries or "").split(",") if c in COUNTRIES]
+
+    @property
+    def not_started(self):
+        return bool(self.starts_at and self.starts_at > datetime.utcnow())
+
+    @property
+    def low_budget(self):
+        return bool(self.budget) and not self.exhausted and self.remaining <= self.budget * 0.2
+
+    @property
+    def members_accepted(self):
+        return CampaignMember.query.filter_by(campaign_id=self.id, status="aceptada").count() if self.id else 0
+
+    @property
+    def announcement_list(self):
+        out = []
+        for line in (self.announcements or "").splitlines():
+            d, sep, t = line.partition("|")
+            if sep and t.strip():
+                out.append((d.strip(), t.strip()))
+            elif line.strip():
+                out.append(("", line.strip()))
+        return out
+
+    @property
+    def idea_list(self):
+        return [i.strip() for i in (self.ideas or "").splitlines() if i.strip()][:30]
+
 
 class Submission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -375,6 +465,12 @@ class Submission(db.Model):
     flags = db.Column(db.String(200), default="")
     status = db.Column(db.String(20), default="pendiente")  # pendiente / aprobado / rechazado
     reject_reason = db.Column(db.String(255), default="")
+    reject_code = db.Column(db.String(20), default="")
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    posted_at = db.Column(db.DateTime, nullable=True)       # cuándo se publicó el vídeo (lo dice Apify)
+    appeal_text = db.Column(db.String(1000), default="")     # el clipper puede apelar un rechazo una sola vez
+    appeal_status = db.Column(db.String(20), default="")     # "" · pendiente · aceptada · rechazada
+    appeal_at = db.Column(db.DateTime, nullable=True)
     views_updated_at = db.Column(db.DateTime, nullable=True)
     checked_at = db.Column(db.DateTime, nullable=True)
     views_error = db.Column(db.String(255), default="")
@@ -509,6 +605,8 @@ def notify_waitlist(camp, sender_id=None):
     for w in rows:
         db.session.add(Message(user_id=w.user_id, from_admin=True, sender_id=sender_id, read_by_admin=True, read_by_user=False,
                                body=f"¡Hay plazas en «{camp.song}»! Ya puedes solicitar entrar en la campaña."))
+        notify_user(w.user_id, "plazas", f"Hay plazas en «{camp.song}»", "Entra ya y pide unirte antes de que se llenen.",
+                    f"/campana/{camp.id}")
         db.session.delete(w)
     return len(rows)
 
@@ -544,6 +642,73 @@ class CampaignLead(db.Model):
     status = db.Column(db.String(20), default="nueva")         # nueva / contactada / convertida / descartada
     ip = db.Column(db.String(64), default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class PushSub(db.Model):
+    """Un navegador o móvil del clipper que aceptó recibir avisos."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    endpoint = db.Column(db.String(800), unique=True, nullable=False)
+    p256dh = db.Column(db.String(200), nullable=False)
+    auth = db.Column(db.String(60), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Course(db.Model):
+    """Curso de formación: capítulos con lecciones (vídeo, texto y archivos)."""
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(160), nullable=False)
+    description = db.Column(db.Text, default="")
+    position = db.Column(db.Integer, default=0)
+    published = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    chapters = db.relationship("Chapter", backref="course", lazy=True, order_by="Chapter.position",
+                               cascade="all, delete-orphan")
+
+    @property
+    def lessons(self):
+        return [ls for ch in self.chapters for ls in ch.lessons]
+
+    @property
+    def visible_lessons(self):
+        return [ls for ls in self.lessons if ls.published]
+
+
+class Chapter(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False, index=True)
+    title = db.Column(db.String(160), nullable=False)
+    position = db.Column(db.Integer, default=0)
+    lessons = db.relationship("Lesson", backref="chapter", lazy=True, order_by="Lesson.position",
+                              cascade="all, delete-orphan")
+
+
+class Lesson(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    chapter_id = db.Column(db.Integer, db.ForeignKey("chapter.id"), nullable=False, index=True)
+    title = db.Column(db.String(160), nullable=False)
+    body = db.Column(db.Text, default="")                    # texto de la lección
+    video_guid = db.Column(db.String(64), default="")        # vídeo subido a Bunny Stream
+    video_url = db.Column(db.String(500), default="")        # o un enlace de YouTube / Vimeo
+    video_status = db.Column(db.String(20), default="")      # subiendo · procesando · listo
+    duration = db.Column(db.Integer, default=0)              # segundos
+    file_name = db.Column(db.String(160), default="")
+    file_mime = db.Column(db.String(80), default="")
+    file_data = db.deferred(db.Column(db.LargeBinary, nullable=True))
+    position = db.Column(db.Integer, default=0)
+    published = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    progress = db.relationship("LessonProgress", backref="lesson", lazy=True, cascade="all, delete-orphan")
+
+
+class LessonProgress(db.Model):
+    __table_args__ = (db.UniqueConstraint("user_id", "lesson_id", name="uq_lesson_progress"),)
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    lesson_id = db.Column(db.Integer, db.ForeignKey("lesson.id"), nullable=False, index=True)
+    seconds = db.Column(db.Integer, default=0)               # hasta dónde lo vio (para seguir)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Setting(db.Model):
@@ -672,6 +837,19 @@ def get_setting(key, default=""):
 _THOUSANDS_DOT = re.compile(r"^-?[1-9]\d{0,2}(\.\d{3})+$")
 
 
+def parse_dt(value):
+    """Fecha y hora de un <input type=datetime-local> (se guarda tal cual, como UTC). Vacío = None."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value[:16], fmt)
+        except ValueError:
+            pass
+    return None
+
+
 def parse_float(value, default=None):
     """Lee números como los escribe alguien de España o Latinoamérica:
     5000 · 5.000 · 5.000,50 · 1,5 · 1.5 · 1.500.000 · 5000 $  →  el número correcto.
@@ -750,7 +928,87 @@ def raw_earning(sub, camp):
     top = camp.max_for(sub.platform)
     if top:
         amount = min(amount, top)
-    return cents(amount)
+    return cents(amount + (camp.bonus_per_clip or 0))
+
+
+def reached_min(sub, camp=None):
+    """¿El clip ya vale el pago mínimo de su red?"""
+    camp = camp or sub.campaign
+    low = camp.min_for(sub.platform)
+    return not low or (sub.views or 0) / 1_000_000 * camp.rate_for(sub.platform) + 1e-9 >= low
+
+
+def clip_stage(sub):
+    """En qué punto está un clip: contando (aún no llega al mínimo), revisar, aprobado o rechazado."""
+    if sub.status != "pendiente":
+        return sub.status
+    camp = sub.campaign
+    return "revisar" if (not camp.review_at_min or reached_min(sub, camp)) else "contando"
+
+
+STAGE_LABELS = {"contando": "Contando vistas", "revisar": "En revisión", "aprobado": "Aprobado", "rechazado": "Rechazado"}
+
+
+def earn_window_closed(sub, now=None):
+    camp = sub.campaign
+    return bool(camp.earn_days) and sub.created_at < (now or datetime.utcnow()) - timedelta(days=camp.earn_days)
+
+
+def join_date(user_id, camp):
+    m = campaign_member(user_id, camp.id)
+    return m.created_at if m else camp.created_at
+
+
+def reject_text(code, message=""):
+    label = REJECT_REASONS.get(code) or SYSTEM_REASONS.get(code) or ""
+    message = (message or "").strip()
+    return (f"{label}: {message}" if label and message and code != "otro" else message or label)[:255]
+
+
+def approve_sub(sub, by="admin"):
+    sub.status, sub.reject_reason, sub.reject_code, sub.reviewed_at = "aprobado", "", "", datetime.utcnow()
+    added = accrue(sub)
+    audit("clip_aprobado" if by == "admin" else "clip_aprobado_auto",
+          f"#{sub.id} de {sub.user.email} en «{sub.campaign.song}» · {money(added)} asignados")
+    notify_user(sub.user_id, "clip_aprobado", "¡Clip aprobado!",
+                f"Tu clip en «{sub.campaign.song}» está aprobado y ya suma dinero.", "/mis-clips?tab=aprobado")
+    return added
+
+
+def reject_sub(sub, code, message="", by="admin"):
+    removed = clawback(sub) if sub.status == "aprobado" else 0
+    sub.status, sub.reject_code, sub.reviewed_at = "rechazado", code, datetime.utcnow()
+    sub.reject_reason = reject_text(code, message)
+    audit("clip_rechazado" if by == "admin" else "clip_rechazado_auto",
+          f"#{sub.id} de {sub.user.email} · motivo: {sub.reject_reason}" + (f" · {money(removed)} retirados" if removed else ""))
+    notify_user(sub.user_id, "clip_rechazado", "Clip rechazado",
+                f"Tu clip en «{sub.campaign.song}»: {sub.reject_reason}", "/mis-clips?tab=rechazado")
+    return removed
+
+
+def auto_review(sub, now=None):
+    """Reglas automáticas de la campaña sobre un clip pendiente. Devuelve lo que hizo (o "")."""
+    if sub.status != "pendiente":
+        return ""
+    camp, now = sub.campaign, now or datetime.utcnow()
+    if sub.posted_at and sub.posted_at < join_date(sub.user_id, camp) - timedelta(hours=1):
+        sub.add_flag("publicado_antes")
+        if camp.auto_reject_old:
+            reject_sub(sub, "antiguo", by="auto")
+            return "rechazado"
+    stage = clip_stage(sub)
+    if stage == "contando":
+        if camp.expire_days and sub.created_at < now - timedelta(days=camp.expire_days):
+            reject_sub(sub, "caducado", f"No llegó al pago mínimo en {camp.expire_days} días.", by="auto")
+            return "rechazado"
+        return ""
+    if camp.auto_reject_unverified and not account_verified(sub):
+        reject_sub(sub, "cuenta", by="auto")
+        return "rechazado"
+    if camp.auto_approve_trusted and sub.user.trusted and not sub.flag_list and account_verified(sub):
+        approve_sub(sub, by="auto")
+        return "aprobado"
+    return ""
 
 
 def finalize_if_exhausted(camp):
@@ -980,8 +1238,11 @@ def apply_reading(sub, info, now):
     author = info.get("author") if isinstance(info, dict) else ""
     comments = info.get("comments") if isinstance(info, dict) else None
     shares = info.get("shares") if isinstance(info, dict) else None
+    posted = info.get("posted_at") if isinstance(info, dict) else None
     sub.checked_at = now
     sub.views_error = ""
+    if posted and not sub.posted_at:
+        sub.posted_at = posted
     if author:
         sub.author = author
     engaged = any(v is not None and v != getattr(sub, k) for k, v in (("likes", likes), ("comments", comments), ("shares", shares)))
@@ -1013,7 +1274,9 @@ def refresh_views():
         if REFRESH_DAYS > 0:
             q = q.filter(Submission.created_at >= datetime.utcnow() - timedelta(days=REFRESH_DAYS))
         subs = q.order_by(Submission.created_at).all()
-        subs = [s for s in subs if not s.campaign.exhausted]
+        apply_schedule()
+        now0 = datetime.utcnow()
+        subs = [s for s in subs if not s.campaign.exhausted and not earn_window_closed(s, now0)]
         read, errors = 0, []
         for platform in PLATFORMS:
             group = [s for s in subs if s.platform == platform]
@@ -1040,10 +1303,20 @@ def refresh_views():
                 db.session.commit()
         # Reparto del dinero por orden de envío, hasta agotar cada presupuesto
         assigned = 0.0
+        auto = {"aprobado": 0, "rechazado": 0}
+        pend = (Submission.query.join(Campaign)
+                .filter(Campaign.status == "activa", Submission.status == "pendiente").all())
+        for s in pend:                                   # reglas automáticas (también caduca lo que no llegó al mínimo)
+            r = auto_review(s)
+            if r:
+                auto[r] += 1
         for s in sorted((s for s in subs if s.status == "aprobado"), key=lambda s: s.created_at):
             assigned += accrue(s)
         db.session.commit()
+        budget_alerts()
         msg = f"Vistas leídas en {read} de {len(subs)} clips · {money(assigned)} repartidos."
+        if auto["aprobado"] or auto["rechazado"]:
+            msg += f" Automático: {auto['aprobado']} aprobados, {auto['rechazado']} rechazados."
         if errors:
             msg += " Errores: " + " | ".join(errors)
         log.info(msg)
@@ -1057,6 +1330,30 @@ def refresh_views():
         raise
     finally:
         _refresh_lock.release()
+
+
+def apply_schedule():
+    """Cierra las campañas cuya fecha de fin ya pasó."""
+    now = datetime.utcnow()
+    closed = 0
+    for c in Campaign.query.filter(Campaign.status == "activa", Campaign.ends_on.isnot(None), Campaign.ends_on <= now).all():
+        close_campaign(c)
+        audit("campaña_cerrada_fecha", f"#{c.id} {c.song}")
+        closed += 1
+    if closed:
+        db.session.commit()
+    return closed
+
+
+def budget_alerts():
+    """Aviso al móvil cuando a una campaña le queda el 20 % del presupuesto (una vez)."""
+    for c in Campaign.query.filter_by(status="activa", low_alert_sent=False).all():
+        if c.low_budget:
+            c.low_alert_sent = True
+            db.session.commit()
+            notify_phone(f"💸 A «{c.song}» le queda poco presupuesto",
+                         f"Quedan {money(c.remaining)} de {money(c.budget)}. Añade más si quieres que siga.",
+                         url_for("admin_campaign", cid=c.id) if has_request_context() else "", tags="money_with_wings")
 
 
 def refresh_in_background():
@@ -1145,7 +1442,9 @@ def before():
 
 
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-       "font-src 'self'; img-src 'self' data: https:; connect-src 'self'; "
+       "font-src 'self'; img-src 'self' data: https:; connect-src 'self' https://video.bunnycdn.com; "
+       "frame-src https://www.tiktok.com https://www.instagram.com https://www.youtube-nocookie.com "
+       "https://iframe.mediadelivery.net https://player.vimeo.com; "
        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 
 
@@ -1188,7 +1487,7 @@ def unhandled_error(e):
 
 # Qué puede abrir cada rol. El dueño, todo. Lo que no está en la lista es solo para el dueño (dinero, campañas, ajustes…).
 ROLE_ENDPOINTS = {
-    "reviewer": {"admin_home", "admin_clips", "admin_requests", "admin_review", "admin_campaign_member",
+    "reviewer": {"admin_home", "admin_clips", "admin_requests", "admin_review", "admin_review_bulk", "admin_campaign_member",
                  "admin_campaign_account", "admin_campaign", "admin_campaigns", "admin_clipper"},
     "support": {"admin_home", "admin_inbox", "admin_chat", "admin_chat_poll", "admin_clipper"},
 }
@@ -1288,7 +1587,12 @@ def inject_globals():
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year,
-            "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads}
+            "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
+            "REJECT_REASONS": REJECT_REASONS, "COUNTRIES": COUNTRIES, "LANGUAGES": LANGUAGES, "CAMPAIGN_KINDS": CAMPAIGN_KINDS,
+            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "reached_min": reached_min,
+            "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
+            "VAPID_ON": bool(VAPID_PUBLIC_KEY), "WHATSAPP_ON": bool(WHATSAPP_TOKEN and WHATSAPP_PHONE_ID),
+            "WHATSAPP_TEMPLATE": WHATSAPP_TEMPLATE}
 
 
 @app.template_filter("rate_k")
@@ -1389,7 +1693,8 @@ def sign_in(email, name, avatar="", sub=None, password_user=None):
     if sub and not user.google_sub and user.password_hash:
         user.password_hash = ""      # Google confirma que el correo es suyo: la contraseña puesta por otro deja de valer
     user.google_sub = sub or user.google_sub
-    user.avatar_url = (avatar or user.avatar_url or "")[:500]
+    if not user.avatar_ver:                  # si subió su propia foto, no la cambiamos por la de Google
+        user.avatar_url = (avatar or user.avatar_url or "")[:500]
     if not user.accepted_terms_at:
         user.accepted_terms_at = datetime.utcnow()
     if role_for(email) and password_user is None:   # el admin solo se activa entrando con Google, nunca con contraseña
@@ -1479,8 +1784,8 @@ def register():
     session.pop("form_name", None)
     log.info("Nuevo usuario con correo: %s", email)
     sign_in(email, name, password_user=user)
-    flash(f"¡Bienvenido, {name}! Elige una campaña y pide unirte.", "ok")
-    return redirect(url_for("index"))
+    flash(f"¡Bienvenido, {name}! Completa tu perfil en 3 pasos.", "ok")
+    return redirect(url_for("onboarding"))
 
 
 @app.route("/login/google")
@@ -1517,7 +1822,9 @@ def google_callback():
     if not info.get("email") or not info.get("email_verified"):
         flash("Tu cuenta de Google no tiene un correo verificado.", "error")
         return redirect(url_for("login"))
-    sign_in(info["email"], info.get("name", ""), info.get("picture", ""), info.get("sub"))
+    u = sign_in(info["email"], info.get("name", ""), info.get("picture", ""), info.get("sub"))
+    if u and not u.is_admin and not u.onboarded_at and not u.submissions:
+        return redirect(url_for("onboarding"))
     return redirect(safe_next(session.pop("after_login", "")))
 
 
@@ -1561,7 +1868,8 @@ def report(token):
     for s in approved:
         by_platform[s.platform]["clips"] += 1
         by_platform[s.platform]["views"] += s.views or 0
-    resp = Response(render_template("report.html", camp=camp, st=st, top=approved[:20], by_platform=by_platform,
+    best = [(s, viewcounter.embed_url(s.platform, s.url)) for s in approved[:3] if (s.views or 0) > 0]
+    resp = Response(render_template("report.html", camp=camp, st=st, top=approved[:20], by_platform=by_platform, best=best,
                                     creators=len({s.user_id for s in approved}), an=campaign_analytics(camp)))
     resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     return resp
@@ -1621,14 +1929,19 @@ def index():
     counts = {k: sum(1 for c, _ in all_cards if c.category == k) for k in CATEGORIES}
     my_join = {m.campaign_id: m.status for m in CampaignMember.query.filter_by(user_id=current_user.id).all()}
     cards.sort(key=lambda x: bool(x[0].full and x[0].id not in my_join))   # plazas completas (si no estás dentro) al final
+    apply_schedule()
+    fs = first_steps(current_user) if not current_user.is_admin else None
     return render_template("home.html", cards=cards, featured=featured, cat=cat, counts=counts,
-                           total=len(all_cards), new_user=not current_user.submissions, my_join=my_join)
+                           total=len(all_cards), new_user=not current_user.submissions, my_join=my_join,
+                           fs=fs, top5=ranking("semana", 5), week_clips=clips_of_week())
 
 
 def submit_clip(camp, raw_url):
     """Valida y guarda un clip. Devuelve (ok, mensaje)."""
     if camp.status != "activa" or camp.exhausted:
         return False, "Esta campaña ya no acepta clips."
+    if camp.not_started:
+        return False, f"La campaña empieza el {camp.starts_at.strftime('%d/%m/%Y a las %H:%M')} (hora UTC). Podrás subir clips desde entonces."
     today = datetime.utcnow() - timedelta(hours=24)
     if MAX_CLIPS_DAY > 0 and Submission.query.filter(Submission.user_id == current_user.id, Submission.created_at >= today).count() >= MAX_CLIPS_DAY:
         return False, f"Has llegado al límite de {MAX_CLIPS_DAY} clips en 24 horas. Vuelve a intentarlo mañana."
@@ -1658,6 +1971,8 @@ def submit_clip(camp, raw_url):
     db.session.add(Submission(user_id=current_user.id, campaign_id=camp.id, url=url, platform=platform,
                               video_key=f"{platform}:{vid}", author=author))
     db.session.commit()
+    if camp.review_at_min and any(camp.min_for(p) for p in camp.platform_list):
+        return True, "¡Clip enviado! Ya está contando vistas. Lo revisaremos cuando llegue al pago mínimo."
     return True, "¡Clip enviado! Lo revisaremos y empezará a sumar vistas."
 
 
@@ -1677,8 +1992,12 @@ def campaign(cid):
     accounts = campaign_accounts(current_user.id, camp.id)
     accepted = [a for a in accounts if a.status == "aceptada"]
     waiting = bool(CampaignWaitlist.query.filter_by(user_id=current_user.id, campaign_id=camp.id).first())
+    winners = sorted((s for s in camp.submissions if s.status == "aprobado" and (s.views or 0) > 0),
+                     key=lambda s: -(s.views or 0))[:10]
+    ctab = request.args.get("tab", "resumen")
     return render_template("campaign.html", camp=camp, st=st, mine=mine, accounts=accounts, accepted=accepted,
-                           member=campaign_member(current_user.id, camp.id), join_statuses=JOIN_STATUSES, waiting=waiting)
+                           member=campaign_member(current_user.id, camp.id), join_statuses=JOIN_STATUSES, waiting=waiting,
+                           winners=winners, ctab=ctab)
 
 
 @app.route("/campana/<int:cid>/avisame", methods=["POST"])
@@ -1709,9 +2028,16 @@ def join_campaign(cid):
     if campaign_member(current_user.id, cid):
         flash("Ya enviaste tu solicitud para esta campaña.", "info")
         return back
-    if camp.full:
+    if camp.full or (camp.max_members and camp.members_accepted >= camp.max_members):
         flash("Las plazas de esta campaña están completas. Vuelve a mirar más tarde.", "error")
         return back
+    if camp.country_list:
+        if not current_user.country:
+            flash("Esta campaña es solo para algunos países. Indica tu país en «Mi cuenta» y vuelve a intentarlo.", "error")
+            return back
+        if current_user.country not in camp.country_list:
+            flash("Esta campaña es solo para clippers de: " + ", ".join(COUNTRIES[c] for c in camp.country_list) + ".", "error")
+            return back
     answers = []
     for i, q in enumerate(camp.question_list):
         a = (request.form.get(f"q_{i}") or "").strip()[:1500]
@@ -1749,6 +2075,14 @@ def add_campaign_account(cid):
     if handle_owner(platform, handle, exclude_user_id=current_user.id):
         flash(f"La cuenta @{handle} ya está vinculada a otro clipper.", "error")
         return back
+    if camp.new_accounts_only:
+        used = (CampaignAccount.query.filter(CampaignAccount.platform == platform, CampaignAccount.handle == handle,
+                                             CampaignAccount.campaign_id != cid).first()
+                or Submission.query.filter(Submission.platform == platform, Submission.author == handle,
+                                           Submission.campaign_id != cid).first())
+        if used:
+            flash(f"Esta campaña pide una cuenta nueva, solo para ella. @{handle} ya se usó en otra campaña.", "error")
+            return back
     existing = CampaignAccount.query.filter_by(campaign_id=cid, platform=platform, handle=handle).first()
     if existing:
         flash("Ya has añadido esa cuenta a esta campaña." if existing.user_id == current_user.id
@@ -1836,9 +2170,22 @@ def verify_bio(cid, aid):
     return redirect(url_for("campaign", cid=cid))
 
 
+CLIP_TABS = {"todos": "Todos", "contando": "Contando vistas", "revisar": "En revisión", "aprobado": "Aprobados", "rechazado": "Rechazados"}
+
+
+def clipper_stats(subs):
+    approved = [s for s in subs if s.status == "aprobado"]
+    return {"views": sum(s.views or 0 for s in subs if s.status != "rechazado"),
+            "earned": cents(sum(s.earned or 0 for s in approved)),
+            "sent": len(subs), "approved": len(approved),
+            "rate": round(len(approved) / len([s for s in subs if s.status in ("aprobado", "rechazado")]) * 100)
+            if any(s.status in ("aprobado", "rechazado") for s in subs) else None}
+
+
+@app.route("/mis-clips", methods=["GET", "POST"])
 @app.route("/enviar", methods=["GET", "POST"])
 @login_required
-def submit():
+def my_clips():
     joined = {a.campaign_id for a in CampaignAccount.query.filter_by(user_id=current_user.id, status="aceptada")}
     joined |= {m.campaign_id for m in CampaignMember.query.filter_by(user_id=current_user.id, status="aceptada")}
     camps = [c for c in active_campaigns() if c.id in joined]
@@ -1849,9 +2196,161 @@ def submit():
         else:
             ok, msg = submit_clip(camp, request.form.get("url", ""))
             flash(msg, "ok" if ok else "error")
-        return redirect(url_for("submit", c=request.form.get("campaign_id", "")))
-    subs = sorted(current_user.submissions, key=lambda s: s.created_at, reverse=True)
-    return render_template("submit.html", camps=camps, subs=subs, selected=request.args.get("c", type=int))
+        return redirect(url_for("my_clips", c=request.form.get("campaign_id", "")))
+    allsubs = sorted(current_user.submissions, key=lambda s: s.created_at, reverse=True)
+    tab = request.args.get("tab", "todos")
+    tab = tab if tab in CLIP_TABS else "todos"
+    fc = request.args.get("campana", type=int)
+    fp = request.args.get("red", "")
+    subs = [s for s in allsubs if (tab == "todos" or clip_stage(s) == tab)
+            and (not fc or s.campaign_id == fc) and (not fp or s.platform == fp)]
+    counts = {t: sum(1 for s in allsubs if clip_stage(s) == t) for t in CLIP_TABS if t != "todos"}
+    counts["todos"] = len(allsubs)
+    my_camps = sorted({s.campaign for s in allsubs}, key=lambda c: c.song.lower())
+    return render_template("submit.html", camps=camps, subs=subs, selected=request.args.get("c", type=int),
+                           tab=tab, counts=counts, stats=clipper_stats(allsubs), my_camps=my_camps, fc=fc, fp=fp)
+
+
+# ---------------------------------------------------------------- ranking
+RANK_PERIODS = {"semana": ("Esta semana", 7), "mes": ("Este mes", 30), "global": ("Siempre", 0)}
+
+
+def mask_name(name):
+    """«Ana García López» → «Ana G.» — en el ranking nadie ve el nombre completo de los demás."""
+    parts = (name or "Clipper").split()
+    return parts[0][:16] + (f" {parts[1][0].upper()}." if len(parts) > 1 and parts[1] else "")
+
+
+def ranking(period="semana", limit=50):
+    days = RANK_PERIODS.get(period, RANK_PERIODS["semana"])[1]
+    q = (db.session.query(Submission.user_id, db.func.sum(Submission.views), db.func.sum(Submission.earned),
+                          db.func.count(Submission.id))
+         .join(User, User.id == Submission.user_id)
+         .filter(Submission.status == "aprobado", User.is_banned.is_(False), User.is_admin.is_(False)))
+    if days:
+        q = q.filter(Submission.created_at >= datetime.utcnow() - timedelta(days=days))
+    rows = q.group_by(Submission.user_id).order_by(db.func.sum(Submission.views).desc()).limit(limit).all()
+    users = {u.id: u for u in User.query.filter(User.id.in_([r[0] for r in rows])).all()} if rows else {}
+    return [{"pos": i + 1, "user": users[r[0]], "name": mask_name(users[r[0]].name), "views": int(r[1] or 0),
+             "earned": cents(r[2]), "clips": r[3]} for i, r in enumerate(rows) if r[0] in users]
+
+
+@app.route("/ranking")
+@login_required
+def ranking_page():
+    period = request.args.get("p", "semana")
+    period = period if period in RANK_PERIODS else "semana"
+    rows = ranking(period)
+    me = next((r for r in rows if r["user"].id == current_user.id), None)
+    return render_template("ranking.html", rows=rows, period=period, me=me, periods=RANK_PERIODS)
+
+
+def first_steps(user):
+    """Los 4 primeros pasos del clipper, para la tarjeta de bienvenida."""
+    members = CampaignMember.query.filter_by(user_id=user.id).all()
+    steps = [
+        ("Completa tu perfil", bool(user.onboarded_at), url_for("onboarding")),
+        ("Únete a una campaña", any(m.status == "aceptada" for m in members), url_for("index", _anchor="campanas")),
+        ("Sube tu primer clip", bool(user.submissions), url_for("my_clips")),
+        ("Conecta Whop para cobrar", bool(user.whop_user_id), url_for("account", _anchor="cobro")),
+    ]
+    return {"steps": steps, "done": sum(1 for s in steps if s[1])}
+
+
+def clips_of_week(limit=3):
+    return (Submission.query.join(Campaign).join(User, User.id == Submission.user_id)
+            .filter(Submission.status == "aprobado", Submission.created_at >= datetime.utcnow() - timedelta(days=7),
+                    User.is_banned.is_(False))
+            .order_by(Submission.views.desc()).limit(limit).all())
+
+
+# ---------------------------------------------------------------- bienvenida (3 pasos)
+@app.route("/bienvenida", methods=["GET", "POST"])
+@login_required
+def onboarding():
+    step = request.args.get("paso", 1, type=int)
+    step = step if step in (1, 2, 3) else 1
+    u = current_user
+    if request.method == "POST":
+        if request.form.get("saltar"):
+            u.onboarded_at = u.onboarded_at or datetime.utcnow()
+            db.session.commit()
+            return redirect(url_for("index"))
+        if step == 1:
+            name = (request.form.get("name") or "").strip()[:120]
+            if len(name) < 2:
+                flash("Escribe tu nombre.", "error")
+                return redirect(url_for("onboarding", paso=1))
+            u.name = name
+            file = request.files.get("photo")
+            if file and file.filename:
+                data = process_avatar(file)
+                if not data:
+                    flash("La foto tiene que ser una imagen (JPG, PNG o WEBP).", "error")
+                    return redirect(url_for("onboarding", paso=1))
+                u.avatar_data, u.avatar_ver = data, (u.avatar_ver or 0) + 1
+                u.avatar_url = url_for("avatar", uid=u.id, v=u.avatar_ver)
+            tt_ = viewcounter.clean_handle(request.form.get("tiktok", ""))
+            if tt_ and tt_ not in u.handles("tiktok"):
+                if handle_owner("tiktok", tt_, exclude_user_id=u.id):
+                    flash(f"La cuenta @{tt_} ya está vinculada a otro clipper.", "error")
+                    return redirect(url_for("onboarding", paso=1))
+                if len(u.handles("tiktok")) < MAX_HANDLES:
+                    u.tiktok_handles = ",".join(u.handles("tiktok") + [tt_])
+        elif step == 2:
+            c = request.form.get("country", "")
+            if c not in COUNTRIES:
+                flash("Elige tu país.", "error")
+                return redirect(url_for("onboarding", paso=2))
+            u.country = c
+            u.languages = ",".join(x for x in request.form.getlist("languages") if x in LANGUAGES)[:60]
+        else:
+            wa = re.sub(r"[^\d+]", "", request.form.get("whatsapp", ""))[:20]
+            if wa and not re.match(r"^\+?\d{8,15}$", wa):
+                flash("Escribe tu WhatsApp con el prefijo del país, por ejemplo +34 600 000 000.", "error")
+                return redirect(url_for("onboarding", paso=3))
+            u.whatsapp = wa
+            username = (request.form.get("whop_username") or "").strip().lstrip("@")
+            if username and whop_enabled() and WHOP_USERNAME_RE.match(username):
+                uid, uname = whop_find_user(username)
+                if uid:
+                    u.whop_user_id, u.whop_username, u.payout_method = uid, uname[:80], WHOP_METHOD
+                else:
+                    flash(f"No encontramos @{username} en Whop. Puedes conectarlo más tarde en «Mi cuenta».", "info")
+            u.onboarded_at = datetime.utcnow()
+            db.session.commit()
+            flash("¡Perfil listo! Elige una campaña y pide unirte.", "ok")
+            return redirect(url_for("index"))
+        db.session.commit()
+        return redirect(url_for("onboarding", paso=step + 1))
+    return render_template("onboarding.html", step=step)
+
+
+def process_avatar(file):
+    """Foto de perfil: cuadrada, 256 px, JPEG limpio (sin datos de la cámara)."""
+    from PIL import Image, ImageOps, UnidentifiedImageError
+    try:
+        img = Image.open(file.stream)
+        img.verify()
+        file.stream.seek(0)
+        img = ImageOps.exif_transpose(Image.open(file.stream)).convert("RGB")
+    except (UnidentifiedImageError, OSError, ValueError):
+        return None
+    img = ImageOps.fit(img, (256, 256))
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=85, optimize=True)
+    return out.getvalue()
+
+
+@app.route("/foto/<int:uid>")
+@login_required
+def avatar(uid):
+    u = db.session.get(User, uid)
+    if not u or not u.avatar_data:
+        abort(404)
+    resp = Response(u.avatar_data, mimetype="image/jpeg")
+    resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+    return resp
 
 
 @app.route("/ganancias")
@@ -2020,11 +2519,27 @@ def account():
 
 
 # ---------------------------------------------------------------- panel de admin
+def review_queue(cid=None):
+    """Clips pendientes repartidos en «por revisar» y «contando vistas»."""
+    q = (Submission.query.filter_by(status="pendiente")
+         .options(joinedload(Submission.user), joinedload(Submission.campaign)).order_by(Submission.created_at))
+    if cid:
+        q = q.filter(Submission.campaign_id == cid)
+    rev, cnt = [], []
+    for s_ in q.all():
+        (rev if clip_stage(s_) == "revisar" else cnt).append(s_)
+    return rev, cnt
+
+
+def review_queue_count():
+    return len(review_queue()[0]) + Submission.query.filter_by(appeal_status="pendiente").count()
+
+
 def admin_counts():
     """Números del menú lateral del panel: lo que está esperando a que hagas algo."""
     return {
         "requests": CampaignMember.query.filter_by(status="pendiente").count(),
-        "clips": Submission.query.filter_by(status="pendiente").count(),
+        "clips": review_queue_count(),
         "payouts": Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).count(),
         "messages": Message.query.filter_by(from_admin=False, read_by_admin=False).count(),
         "leads": CampaignLead.query.filter_by(status="nueva").count(),
@@ -2116,17 +2631,30 @@ def admin_requests():
 @app.route("/admin/clips")
 @admin_required
 def admin_clips():
-    q = (Submission.query.filter_by(status="pendiente")
-         .options(joinedload(Submission.user), joinedload(Submission.campaign)).order_by(Submission.created_at))
     cid = request.args.get("c", type=int)
+    tab = request.args.get("tab", "revisar")
+    tab = tab if tab in ("revisar", "contando", "apelaciones") else "revisar"
+    rev, cnt = review_queue(cid)
+    aq = (Submission.query.filter_by(appeal_status="pendiente")
+          .options(joinedload(Submission.user), joinedload(Submission.campaign)).order_by(Submission.appeal_at))
     if cid:
-        q = q.filter(Submission.campaign_id == cid)
-    pending = q.all()
-    if request.args.get("avisos"):
-        pending = [s for s in pending if s.flag_list]
+        aq = aq.filter(Submission.campaign_id == cid)
+    appeals = aq.all()
+    rows = {"revisar": rev, "contando": cnt, "apelaciones": appeals}[tab]
+    avisos = bool(request.args.get("avisos"))
+    if avisos:
+        rows = [s_ for s_ in rows if s_.flag_list]
+    sel = None
+    sid = request.args.get("sel", type=int)
+    if rows:
+        sel = next((r for r in rows if r.id == sid), rows[0])
+    idx = rows.index(sel) if sel else -1
+    prev_ = rows[idx - 1] if idx > 0 else None
+    next_ = rows[idx + 1] if 0 <= idx < len(rows) - 1 else None
     camps = Campaign.query.order_by(Campaign.created_at.desc()).all()
-    return render_template("admin/clips.html", pending=pending, camps=camps, cid=cid,
-                           avisos=bool(request.args.get("avisos")))
+    return render_template("admin/clips.html", rows=rows, sel=sel, prev_=prev_, next_=next_, tab=tab, camps=camps,
+                           cid=cid, avisos=avisos, n={"revisar": len(rev), "contando": len(cnt), "apelaciones": len(appeals)},
+                           embed=viewcounter.embed_url(sel.platform, sel.url) if sel else "")
 
 
 @app.route("/admin/retiros")
@@ -2273,6 +2801,28 @@ def _campaign_from_form(camp):
             flash(f"Hemos avisado a {n} {'clipper' if n == 1 else 'clippers'} de que hay plazas.", "ok")
     cat = request.form.get("category", "musica")
     camp.category = cat if cat in CATEGORIES else "otro"
+    if request.form.get("wizard"):                     # opciones del asistente de campaña
+        kind = request.form.get("kind", "clipping")
+        camp.kind = kind if kind in CAMPAIGN_KINDS else "clipping"
+        bonus = parse_float(request.form.get("bonus_per_clip"))
+        camp.bonus_per_clip = round(bonus, 2) if bonus and bonus > 0 else None
+        camp.starts_at = parse_dt(request.form.get("starts_at"))
+        camp.ends_on = parse_dt(request.form.get("ends_on"))
+        camp.max_members = max(int(parse_float(request.form.get("max_members"), 0) or 0), 0)
+        camp.countries = ",".join(c for c in request.form.getlist("countries") if c in COUNTRIES)
+        camp.new_accounts_only = bool(request.form.get("new_accounts_only"))
+        camp.earn_days = max(int(parse_float(request.form.get("earn_days"), 0) or 0), 0)
+        camp.expire_days = max(int(parse_float(request.form.get("expire_days"), 0) or 0), 0)
+        camp.review_at_min = bool(request.form.get("review_at_min"))
+        camp.auto_approve_trusted = bool(request.form.get("auto_approve_trusted"))
+        camp.auto_reject_old = bool(request.form.get("auto_reject_old"))
+        camp.auto_reject_unverified = bool(request.form.get("auto_reject_unverified"))
+        camp.announcements = "\n".join(l.strip()[:600] for l in request.form.get("announcements", "").splitlines() if l.strip())[:6000]
+        camp.ideas = "\n".join(l.strip()[:300] for l in request.form.get("ideas", "").splitlines() if l.strip())[:6000]
+        if camp.starts_at and camp.ends_on and camp.ends_on <= camp.starts_at:
+            return "La fecha de fin tiene que ser posterior a la de inicio."
+        if not camp.low_budget:
+            camp.low_alert_sent = False
     file = request.files.get("cover_file")
     if file and file.filename:
         data = process_cover(file)
@@ -2331,6 +2881,8 @@ def admin_campaign_form(cid=None):
             from_lead = db.session.get(CampaignLead, request.args.get("solicitud", type=int) or 0) if not cid else None
             if from_lead:
                 from_lead.status = "convertida"
+            if not cid and camp.status == "activa":
+                announce_campaign(camp)
             audit("campaña_creada" if not cid else "campaña_editada",
                   f"#{camp.id} {camp.song} · {money(camp.rate, 0)}/1M · presupuesto {money(camp.budget, 0)} · {camp.status}")
             db.session.commit()
@@ -2341,6 +2893,75 @@ def admin_campaign_form(cid=None):
         if cid:
             camp = db.session.get(Campaign, cid)
     return render_template("admin/campaign_form.html", camp=camp, editing=bool(cid), creators=Creator.query.order_by(Creator.name).all())
+
+
+COPY_SKIP = {"id", "spent", "report_token", "created_at", "ended_at", "status", "featured", "full", "low_alert_sent"}
+
+
+@app.route("/admin/campana/<int:cid>/duplicar", methods=["POST"])
+@admin_required
+def admin_campaign_duplicate(cid):
+    """Copia una campaña (sin clips ni dinero gastado) y la deja pausada para revisarla."""
+    src = db.session.get(Campaign, cid) or abort(404)
+    camp = Campaign(status="pausada", spent=0.0, report_token=secrets.token_urlsafe(18))
+    for col in Campaign.__table__.columns:
+        if col.name not in COPY_SKIP:
+            setattr(camp, col.name, getattr(src, col.name))
+    camp.song = (src.song + " (copia)")[:200]
+    db.session.add(camp)
+    db.session.flush()
+    audit("campaña_duplicada", f"#{src.id} → #{camp.id}")
+    db.session.commit()
+    flash("Campaña duplicada. Está pausada: revisa los datos y actívala.", "ok")
+    return redirect(url_for("admin_campaign_form", cid=camp.id))
+
+
+@app.route("/admin/campana/<int:cid>/estado", methods=["POST"])
+@admin_required
+def admin_campaign_state(cid):
+    """Botones rápidos: pausar, reanudar o añadir presupuesto."""
+    camp = lock_row(Campaign, cid) or abort(404)
+    accion = request.form.get("accion", "")
+    if accion == "pausar" and camp.status == "activa":
+        camp.status = "pausada"
+        flash("Campaña pausada: ya no se ve ni acepta clips.", "ok")
+    elif accion == "reanudar" and camp.status == "pausada":
+        if camp.exhausted:
+            flash("No tiene presupuesto libre. Añade presupuesto primero.", "error")
+            return redirect(url_for("admin_campaign", cid=cid))
+        camp.status = "activa"
+        flash("Campaña activa otra vez.", "ok")
+    elif accion == "presupuesto":
+        extra = parse_float(request.form.get("amount"), 0) or 0
+        if extra <= 0:
+            flash("Escribe cuánto presupuesto quieres añadir.", "error")
+            return redirect(url_for("admin_campaign", cid=cid))
+        camp.budget = cents((camp.budget or 0) + extra)
+        if not camp.low_budget:
+            camp.low_alert_sent = False
+        if camp.status == "finalizada" and not camp.ended_at:
+            camp.status = "activa"
+        flash(f"Añadidos {money(extra)}. Presupuesto total: {money(camp.budget)}.", "ok")
+    else:
+        abort(400)
+    audit("campaña_" + accion, f"#{camp.id} {camp.song}" + (f" · +{request.form.get('amount')}" if accion == "presupuesto" else ""))
+    db.session.commit()
+    return redirect(url_for("admin_campaign", cid=cid))
+
+
+def announce_campaign(camp):
+    """Aviso de campaña nueva a los clippers que pueden entrar (país permitido)."""
+    if not (push_ready() or whatsapp_ready()):
+        return 0
+    q = User.query.filter(User.is_admin.is_(False), User.is_banned.is_(False))
+    n = 0
+    for u in q.all():
+        if camp.country_list and u.country and u.country not in camp.country_list:
+            continue
+        notify_user(u.id, "campana_nueva", f"Nueva campaña: {camp.song}", f"{camp.artist} paga hasta "
+                    f"{rate_k_filter(camp.rate)} por cada 1.000 vistas. Entra y pide unirte.", f"/campana/{camp.id or ''}")
+        n += 1
+    return n
 
 
 # ---------------------------------------------------------------- creadores (pagan desde su propio Whop)
@@ -2439,8 +3060,14 @@ def admin_campaign(cid):
     elif filt:
         subs = [s for s in subs if s.status == filt]
     report_url = (BASE_URL or request.host_url.rstrip("/")) + url_for("report", token=camp.report_token)
+    shortfall = None
+    if camp.status == "activa" and wallet_ready(camp.creator_id):
+        bal, _ = whop_balance(camp.creator_id)
+        owed = creator_owed(camp.creator_id)
+        if bal is not None and bal + CENT < owed:
+            shortfall = {"balance": bal, "owed": owed, "missing": cents(owed - bal)}
     return render_template("admin/campaign.html", camp=camp, st=st, subs=subs, filt=filt, report_url=report_url,
-                           an=campaign_analytics(camp))
+                           an=campaign_analytics(camp), shortfall=shortfall)
 
 
 @app.route("/admin/campana/<int:cid>/clips.csv")
@@ -2458,32 +3085,39 @@ def admin_campaign_csv(cid):
                     headers={"Content-Disposition": f"attachment; filename=campana-{camp.id}-clips.csv"})
 
 
+def _back():
+    return redirect(request.referrer or url_for("admin_clips"))
+
+
+def tell_clipper(user_id, body):
+    db.session.add(Message(user_id=user_id, from_admin=True, sender_id=current_user.id if current_user.is_authenticated else None,
+                           body=body, read_by_admin=True, read_by_user=False))
+
+
 @app.route("/admin/envio/<int:sid>/<accion>", methods=["POST"])
 @admin_required
 def admin_review(sid, accion):
     sub = db.session.get(Submission, sid) or abort(404)
     camp = sub.campaign
+    nxt = request.form.get("next", "")
     if accion == "aprobar":
         if not account_verified(sub):
             who = f"@{sub.author}" if sub.author else f"de {PLATFORMS[sub.platform]}"
             flash(f"No puedes aprobar este clip: la cuenta {who} de {sub.user.name} aún no está verificada. "
                   "Verifícala desde su chat.", "error")
-            return redirect(request.referrer or url_for("admin_home"))
-        sub.status, sub.reject_reason = "aprobado", ""
-        added = accrue(sub)
-        audit("clip_aprobado", f"#{sub.id} de {sub.user.email} en «{camp.song}» · {money(added)} asignados")
+            return _back()
+        approve_sub(sub)
         if camp.exhausted and not sub.earned:
             flash("Aprobado, pero la campaña ya no tiene presupuesto: este clip no suma dinero.", "error")
     elif accion == "rechazar":
-        if not request.form.get("reason", "").strip():
-            flash("Escribe el motivo del rechazo: el clipper lo verá.", "error")
-            return redirect(request.referrer or url_for("admin_home"))
-        was = sub.status
-        removed = clawback(sub) if was == "aprobado" else 0
-        sub.status = "rechazado"
-        sub.reject_reason = request.form.get("reason", "").strip()[:255]
-        audit("clip_rechazado", f"#{sub.id} de {sub.user.email} · motivo: {sub.reject_reason}"
-                                + (f" · {money(removed)} retirados" if removed else ""))
+        code = request.form.get("code", "")
+        message = request.form.get("reason", "").strip()
+        if code not in REJECT_REASONS:
+            code = "otro"
+        if code == "otro" and not message:
+            flash("Elige un motivo o escribe por qué lo rechazas: el clipper lo verá.", "error")
+            return _back()
+        removed = reject_sub(sub, code, message)
         if removed:
             flash(f"Clip rechazado. Se han retirado {money(removed)} de sus ganancias.", "ok")
     elif accion == "visitas":
@@ -2496,10 +3130,90 @@ def admin_review(sid, accion):
     elif accion == "quitar_avisos":
         sub.flags = ""
         audit("avisos_quitados", f"#{sub.id}")
+    elif accion in ("apelacion_aceptar", "apelacion_rechazar"):
+        if sub.appeal_status != "pendiente":
+            abort(400)
+        reply = request.form.get("reply", "").strip()[:500]
+        if accion == "apelacion_aceptar":
+            sub.appeal_status, sub.status, sub.reject_reason, sub.reject_code = "aceptada", "pendiente", "", ""
+            tell_clipper(sub.user_id, f"Hemos revisado tu apelación del clip en «{camp.song}» y te damos la razón: "
+                                      "vuelve a estar en revisión." + (f" {reply}" if reply else ""))
+            if clip_stage(sub) == "revisar" and account_verified(sub) and request.form.get("approve"):
+                approve_sub(sub)
+        else:
+            sub.appeal_status = "rechazada"
+            tell_clipper(sub.user_id, f"Hemos revisado tu apelación del clip en «{camp.song}» y mantenemos el rechazo."
+                                      + (f" {reply}" if reply else ""))
+        audit("apelacion_" + accion.split("_")[1][:-1] + "da", f"#{sub.id} de {sub.user.email}")
     else:
         abort(400)
     db.session.commit()
-    return redirect(request.referrer or url_for("admin_home"))
+    if nxt.startswith("/admin/"):
+        return redirect(nxt)
+    return _back()
+
+
+@app.route("/admin/clips/lote", methods=["POST"])
+@admin_required
+def admin_review_bulk():
+    """Aprobar o rechazar varios clips a la vez."""
+    ids = [int(x) for x in request.form.getlist("ids") if x.isdigit()][:200]
+    accion = request.form.get("accion", "")
+    code = request.form.get("code", "")
+    message = request.form.get("reason", "").strip()
+    if not ids:
+        flash("Marca al menos un clip.", "error")
+        return _back()
+    if accion == "rechazar" and (code not in REJECT_REASONS or (code == "otro" and not message)):
+        flash("Elige el motivo del rechazo.", "error")
+        return _back()
+    done = skipped = 0
+    for sub in Submission.query.filter(Submission.id.in_(ids)).all():
+        if sub.status != "pendiente":
+            skipped += 1
+        elif accion == "aprobar":
+            if account_verified(sub):
+                approve_sub(sub)
+                done += 1
+            else:
+                skipped += 1
+        elif accion == "rechazar":
+            reject_sub(sub, code, message)
+            done += 1
+        else:
+            abort(400)
+        db.session.flush()
+    db.session.commit()
+    verb = "aprobados" if accion == "aprobar" else "rechazados"
+    flash(f"{done} clips {verb}." + (f" {skipped} no se pudieron (cuenta sin verificar o ya revisados)." if skipped else ""),
+          "ok" if done else "error")
+    return _back()
+
+
+@app.route("/clip/<int:sid>/apelar", methods=["POST"])
+@login_required
+def appeal_clip(sid):
+    """El clipper pide que revisemos otra vez un clip rechazado (una sola vez por clip)."""
+    sub = db.session.get(Submission, sid)
+    if not sub or sub.user_id != current_user.id:
+        abort(404)
+    back = redirect(request.referrer or url_for("my_clips"))
+    text_ = request.form.get("text", "").strip()[:1000]
+    if sub.status != "rechazado" or sub.appeal_status:
+        flash("Este clip ya no se puede apelar.", "error")
+        return back
+    if sub.reject_code == "caducado":
+        flash("Los clips que no llegaron al mínimo a tiempo no se pueden apelar.", "error")
+        return back
+    if len(text_) < 10:
+        flash("Explica en una frase por qué crees que el clip cumple las reglas.", "error")
+        return back
+    sub.appeal_text, sub.appeal_status, sub.appeal_at = text_, "pendiente", datetime.utcnow()
+    db.session.commit()
+    notify_phone(f"⚖️ Apelación de {current_user.name}", f"«{sub.campaign.song}»: {text_[:120]}",
+                 url_for("admin_clips", tab="apelaciones"), tags="scales")
+    flash("Apelación enviada. La revisaremos y te contestaremos por el chat.", "ok")
+    return back
 
 
 @app.route("/admin/actualizar-visitas", methods=["POST"])
@@ -2717,6 +3431,7 @@ def _whop_apply(payout, ok, code, data):
     if ok and status not in ("failed", "processing", "pending", "created"):
         payout.status, payout.paid_at = "pagado", datetime.utcnow()
         payout.note = f"Enviado a tu Whop · {payout.ext_id}"[:255]
+        notify_user(payout.user_id, "retiro", "Retiro enviado", f"{money(payout.amount)} ya están en tu Whop.", "/ganancias?tab=retiros")
         return "pagado"
     if ok and status != "failed":
         payout.status, payout.note = "procesando", "Enviando a tu cuenta de Whop"
@@ -2858,6 +3573,7 @@ def admin_clippers():
         if request.form.get("action") == "pagar":
             payout.status, payout.paid_at, payout.note = "pagado", datetime.utcnow(), note
             audit("retiro_pagado", f"#{payout.id} {money(payout.amount)} a {payout.user.email} · {payout.method} · {note}")
+            notify_user(payout.user_id, "retiro", "Retiro pagado", f"Te hemos pagado {money(payout.amount)}.", "/ganancias?tab=retiros")
             flash(f"Retiro de {money(payout.amount)} marcado como pagado.", "ok")
         elif request.form.get("action") == "rechazar":
             payout.status, payout.note = "rechazado", note or "Rechazado"
@@ -2916,6 +3632,12 @@ def admin_ban(uid, accion):
         user.is_banned, user.ban_reason = False, ""
         audit("clipper_desbloqueado", user.email)
         flash(f"{user.name} vuelve a tener acceso.", "ok")
+    elif accion == "confianza":
+        user.trusted = not user.trusted
+        audit("clipper_confianza", f"{user.email} · {'sí' if user.trusted else 'no'}")
+        flash(f"{user.name} {'ahora es de confianza: en las campañas que lo permitan sus clips se aprueban solos' if user.trusted else 'ya no es de confianza'}.", "ok")
+    else:
+        abort(400)
     db.session.commit()
     return redirect(request.referrer or url_for("admin_clippers"))
 
@@ -2981,6 +3703,78 @@ def notify_phone(title, message, path="", tags="speech_balloon"):
     threading.Thread(target=send, daemon=True).start()
 
 
+NOTIFY_EVENTS = {
+    "clip_aprobado": "Cuando aprobamos un clip tuyo",
+    "clip_rechazado": "Cuando rechazamos un clip tuyo",
+    "campana_nueva": "Cuando sale una campaña nueva",
+    "plazas": "Cuando se abren plazas en una campaña que esperas",
+    "retiro": "Cuando te llega un retiro",
+    "mensaje": "Mensajes y avisos del equipo",
+}
+NOTIFY_CHANNELS = {"push": "En este móvil u ordenador", "whatsapp": "Por WhatsApp"}
+
+
+def push_ready():
+    return bool(VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY)
+
+
+def whatsapp_ready():
+    return bool(WHATSAPP_TOKEN and WHATSAPP_PHONE_ID)
+
+
+def wants(user, event, channel):
+    return f"{event}.{channel}" not in (user.notify_off or "").split(",")
+
+
+def whatsapp_send(phone, text):
+    """Mensaje por la API oficial de WhatsApp (Meta). Usa una plantilla aprobada con un solo hueco {{1}}."""
+    text = " ".join((text or "").split())[:1000]           # WhatsApp no deja saltos de línea en los huecos
+    r = requests.post(f"https://graph.facebook.com/v21.0/{WHATSAPP_PHONE_ID}/messages", timeout=12,
+                      headers={"Authorization": f"Bearer {WHATSAPP_TOKEN}"},
+                      json={"messaging_product": "whatsapp", "to": phone.lstrip("+"), "type": "template",
+                            "template": {"name": WHATSAPP_TEMPLATE, "language": {"code": WHATSAPP_LANG},
+                                         "components": [{"type": "body", "parameters": [{"type": "text", "text": text}]}]}})
+    return r.status_code
+
+
+def _deliver(user_id, event, title, body, url):
+    """Envía un aviso por los canales que el clipper tiene encendidos. Va en segundo plano."""
+    with app.app_context():
+        u = db.session.get(User, user_id)
+        if not u or u.is_banned:
+            return
+        if push_ready() and wants(u, event, "push"):
+            for sub in PushSub.query.filter_by(user_id=u.id).all():
+                try:
+                    code = webpush.send({"endpoint": sub.endpoint, "p256dh": sub.p256dh, "auth": sub.auth},
+                                        {"title": title, "body": body, "url": url}, VAPID_PRIVATE_KEY,
+                                        subject=f"mailto:{SUPPORT_EMAIL or 'soporte@clipprofit.app'}")
+                    if code in (404, 410):                  # el navegador ya no existe o quitó el permiso
+                        db.session.delete(sub)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("Aviso push no enviado: %s", e)
+            db.session.commit()
+        if whatsapp_ready() and u.whatsapp and wants(u, event, "whatsapp"):
+            try:
+                code = whatsapp_send(u.whatsapp, f"{title}. {body}")
+                if code >= 400:
+                    log.warning("WhatsApp respondió %s al avisar a %s", code, u.id)
+            except Exception as e:  # noqa: BLE001
+                log.warning("WhatsApp no enviado: %s", e)
+
+
+def _spawn(fn, *args):
+    threading.Thread(target=fn, args=args, daemon=True).start()
+
+
+def notify_user(user_id, event, title, body, path=""):
+    """Aviso personal a un clipper (además del mensaje en la web, si lo hay)."""
+    if not (push_ready() or whatsapp_ready()):
+        return
+    base = BASE_URL or (request.host_url.rstrip("/") if has_request_context() else "")
+    _spawn(_deliver, user_id, event, title[:80], body[:300], (base + path) if path else base)
+
+
 def notice_data():
     """Aviso de mensajes nuevos para el usuario actual: cuántos hay, de quién y el último texto."""
     n = unread_messages()
@@ -2999,6 +3793,413 @@ def notice_data():
     body = text_ if len(text_) <= 140 else text_[:137].rstrip() + "…"
     return {"unread": n, "id": last.id, "title": title, "who": who, "body": body, "url": url,
             "ago": ago(last.created_at)}
+
+
+# ---------------------------------------------------------------- formación (cursos con vídeo)
+def bunny_ready():
+    return bool(BUNNY_LIBRARY_ID and BUNNY_API_KEY)
+
+
+def bunny_call(method, path, **kw):
+    r = requests.request(method, f"https://video.bunnycdn.com/library/{BUNNY_LIBRARY_ID}{path}", timeout=20,
+                         headers={"AccessKey": BUNNY_API_KEY, "accept": "application/json"}, **kw)
+    try:
+        data = r.json()
+    except ValueError:
+        data = {}
+    return r.status_code < 300, r.status_code, data
+
+
+def lesson_embed(lesson):
+    """Reproductor de la lección: Bunny (subido desde el panel), YouTube o Vimeo."""
+    if lesson.video_guid and BUNNY_LIBRARY_ID:
+        url = f"https://iframe.mediadelivery.net/embed/{BUNNY_LIBRARY_ID}/{lesson.video_guid}?autoplay=false&preload=true&responsive=true"
+        if BUNNY_TOKEN_KEY:
+            exp = int(time.time()) + 6 * 3600
+            tok = hashlib.sha256(f"{BUNNY_TOKEN_KEY}{lesson.video_guid}{exp}".encode()).hexdigest()
+            url += f"&token={tok}&expires={exp}"
+        return url
+    u = lesson.video_url or ""
+    if "youtu" in u:
+        vid = viewcounter.video_id(u)
+        return f"https://www.youtube-nocookie.com/embed/{vid}" if vid else ""
+    m = re.search(r"vimeo\.com/(?:video/)?(\d+)", u)
+    if m:
+        return f"https://player.vimeo.com/video/{m.group(1)}"
+    return ""
+
+
+def course_progress(course, user_id):
+    ids = [ls.id for ls in course.visible_lessons]
+    done = {p.lesson_id for p in LessonProgress.query.filter(LessonProgress.user_id == user_id,
+                                                             LessonProgress.lesson_id.in_(ids or [0]),
+                                                             LessonProgress.completed_at.isnot(None))}
+    nxt = next((ls for ls in course.visible_lessons if ls.id not in done), None)
+    return {"total": len(ids), "done": len(done), "pct": round(len(done) / len(ids) * 100) if ids else 0,
+            "next": nxt or (course.visible_lessons[0] if ids else None), "done_ids": done, "finished": bool(ids) and not nxt}
+
+
+@app.route("/formacion")
+@login_required
+def courses():
+    rows = [(c, course_progress(c, current_user.id)) for c in
+            Course.query.filter_by(published=True).order_by(Course.position, Course.id).all()]
+    return render_template("courses.html", rows=[r for r in rows if r[1]["total"]])
+
+
+@app.route("/formacion/<int:cid>")
+@login_required
+def course(cid):
+    c = db.session.get(Course, cid)
+    if not c or (not c.published and not current_user.is_admin):
+        abort(404)
+    return render_template("course.html", c=c, pr=course_progress(c, current_user.id))
+
+
+@app.route("/formacion/leccion/<int:lid>")
+@login_required
+def lesson(lid):
+    ls = db.session.get(Lesson, lid)
+    if not ls or ((not ls.published or not ls.chapter.course.published) and not current_user.is_admin):
+        abort(404)
+    c = ls.chapter.course
+    order = c.visible_lessons if not current_user.is_admin else c.lessons
+    i = order.index(ls) if ls in order else 0
+    pr = course_progress(c, current_user.id)
+    mine = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=ls.id).first()
+    return render_template("lesson.html", ls=ls, c=c, pr=pr, embed=lesson_embed(ls), mine=mine,
+                           prev_=order[i - 1] if i > 0 else None, next_=order[i + 1] if i < len(order) - 1 else None)
+
+
+@app.route("/formacion/leccion/<int:lid>/progreso", methods=["POST"])
+@login_required
+def lesson_progress(lid):
+    ls = db.session.get(Lesson, lid) or abort(404)
+    row = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=ls.id).first()
+    if not row:
+        row = LessonProgress(user_id=current_user.id, lesson_id=ls.id)
+        db.session.add(row)
+    secs = request.form.get("seconds", type=int)
+    if secs is not None and secs >= 0:
+        row.seconds = min(secs, 24 * 3600)
+    done = request.form.get("done")
+    if done == "1" and not row.completed_at:
+        row.completed_at = datetime.utcnow()
+    elif done == "0":
+        row.completed_at = None
+    row.updated_at = datetime.utcnow()
+    db.session.commit()
+    if wants_json():
+        return {"ok": True, "done": bool(row.completed_at)}
+    nxt = request.form.get("next", "")
+    return redirect(nxt if nxt.startswith("/formacion/") else url_for("lesson", lid=ls.id))
+
+
+@app.route("/formacion/leccion/<int:lid>/archivo")
+@login_required
+def lesson_file(lid):
+    ls = db.session.get(Lesson, lid)
+    if not ls or not ls.file_name or ((not ls.published or not ls.chapter.course.published) and not current_user.is_admin):
+        abort(404)
+    resp = Response(ls.file_data or b"", mimetype=ls.file_mime or "application/octet-stream")
+    safe = re.sub(r"[^A-Za-z0-9._ -]", "_", ls.file_name)[:120] or "archivo"
+    resp.headers["Content-Disposition"] = f'attachment; filename="{safe}"'
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+# ---- panel
+def _move(model, item, siblings, direction):
+    siblings = list(siblings)
+    for n, x in enumerate(siblings):
+        x.position = n
+    i = siblings.index(item)
+    j = i - 1 if direction == "subir" else i + 1
+    if 0 <= j < len(siblings):
+        siblings[i].position, siblings[j].position = siblings[j].position, siblings[i].position
+
+
+@app.route("/admin/formacion", methods=["GET", "POST"])
+@admin_required
+def admin_courses():
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()[:160]
+        if not title:
+            flash("Escribe el nombre del curso.", "error")
+            return redirect(url_for("admin_courses"))
+        c = Course(title=title, position=Course.query.count())
+        db.session.add(c)
+        db.session.flush()
+        db.session.add(Chapter(course_id=c.id, title="Capítulo 1", position=0))
+        audit("curso_creado", title)
+        db.session.commit()
+        return redirect(url_for("admin_course", cid=c.id))
+    rows = []
+    for c in Course.query.order_by(Course.position, Course.id).all():
+        ids = [ls.id for ls in c.lessons]
+        learners = (db.session.query(db.func.count(db.distinct(LessonProgress.user_id)))
+                    .filter(LessonProgress.lesson_id.in_(ids or [0])).scalar() or 0)
+        completed = (LessonProgress.query.filter(LessonProgress.lesson_id.in_(ids or [0]),
+                                                 LessonProgress.completed_at.isnot(None)).count())
+        rows.append({"c": c, "lessons": len(ids), "learners": learners,
+                     "avg": round(completed / (learners * len(ids)) * 100) if learners and ids else 0})
+    return render_template("admin/courses.html", rows=rows, bunny=bunny_ready())
+
+
+@app.route("/admin/formacion/<int:cid>", methods=["GET", "POST"])
+@admin_required
+def admin_course(cid):
+    c = db.session.get(Course, cid) or abort(404)
+    if request.method == "POST":
+        act = request.form.get("act", "")
+        if act == "guardar":
+            c.title = (request.form.get("title") or c.title).strip()[:160] or c.title
+            c.description = (request.form.get("description") or "").strip()[:4000]
+            c.published = bool(request.form.get("published"))
+            flash("Curso guardado.", "ok")
+        elif act == "capitulo":
+            db.session.add(Chapter(course_id=c.id, title=(request.form.get("title") or "Capítulo nuevo").strip()[:160],
+                                   position=len(c.chapters)))
+        elif act in ("cap_subir", "cap_bajar", "cap_borrar", "cap_nombre"):
+            ch = db.session.get(Chapter, request.form.get("chapter", type=int) or 0)
+            if not ch or ch.course_id != c.id:
+                abort(404)
+            if act == "cap_borrar":
+                db.session.delete(ch)
+            elif act == "cap_nombre":
+                ch.title = (request.form.get("title") or ch.title).strip()[:160] or ch.title
+            else:
+                _move(Chapter, ch, c.chapters, "subir" if act == "cap_subir" else "bajar")
+        elif act == "leccion":
+            ch = db.session.get(Chapter, request.form.get("chapter", type=int) or 0)
+            if not ch or ch.course_id != c.id:
+                abort(404)
+            ls = Lesson(chapter_id=ch.id, title=(request.form.get("title") or "Lección nueva").strip()[:160],
+                        position=len(ch.lessons))
+            db.session.add(ls)
+            db.session.commit()
+            return redirect(url_for("admin_lesson", lid=ls.id))
+        elif act in ("les_subir", "les_bajar"):
+            ls = db.session.get(Lesson, request.form.get("lesson", type=int) or 0)
+            if not ls or ls.chapter.course_id != c.id:
+                abort(404)
+            _move(Lesson, ls, ls.chapter.lessons, "subir" if act == "les_subir" else "bajar")
+        elif act == "borrar":
+            audit("curso_borrado", c.title)
+            db.session.delete(c)
+            db.session.commit()
+            flash("Curso borrado.", "ok")
+            return redirect(url_for("admin_courses"))
+        else:
+            abort(400)
+        db.session.commit()
+        return redirect(url_for("admin_course", cid=c.id))
+    stats = {ls.id: LessonProgress.query.filter(LessonProgress.lesson_id == ls.id,
+                                                LessonProgress.completed_at.isnot(None)).count() for ls in c.lessons}
+    return render_template("admin/course.html", c=c, stats=stats)
+
+
+ALLOWED_FILES = {".pdf", ".zip", ".png", ".jpg", ".jpeg", ".txt", ".docx", ".xlsx", ".pptx", ".mp3", ".srt"}
+
+
+@app.route("/admin/formacion/leccion/<int:lid>", methods=["GET", "POST"])
+@admin_required
+def admin_lesson(lid):
+    ls = db.session.get(Lesson, lid) or abort(404)
+    if request.method == "POST":
+        act = request.form.get("act", "guardar")
+        if act == "borrar":
+            cid = ls.chapter.course_id
+            if ls.video_guid and bunny_ready():
+                try:
+                    bunny_call("DELETE", f"/videos/{ls.video_guid}")
+                except requests.RequestException:
+                    log.warning("No se pudo borrar el vídeo de Bunny %s", ls.video_guid)
+            db.session.delete(ls)
+            db.session.commit()
+            flash("Lección borrada.", "ok")
+            return redirect(url_for("admin_course", cid=cid))
+        if act == "quitar_video":
+            ls.video_guid, ls.video_status, ls.duration = "", "", 0
+        elif act == "quitar_archivo":
+            ls.file_name, ls.file_mime, ls.file_data = "", "", None
+        else:
+            ls.title = (request.form.get("title") or ls.title).strip()[:160] or ls.title
+            ls.body = (request.form.get("body") or "").strip()[:20000]
+            url = (request.form.get("video_url") or "").strip()[:500]
+            ls.video_url = url if url.startswith("https://") else ""
+            ls.published = bool(request.form.get("published"))
+            ch = request.form.get("chapter", type=int)
+            if ch and ch != ls.chapter_id:
+                target = db.session.get(Chapter, ch)
+                if target and target.course_id == ls.chapter.course_id:
+                    ls.chapter_id, ls.position = target.id, len(target.lessons)
+            f = request.files.get("file")
+            if f and f.filename:
+                ext = os.path.splitext(f.filename.lower())[1]
+                if ext not in ALLOWED_FILES:
+                    flash("Ese tipo de archivo no se puede subir. Usa PDF, ZIP, imagen, texto u Office.", "error")
+                    return redirect(url_for("admin_lesson", lid=ls.id))
+                ls.file_data, ls.file_name = f.read(), os.path.basename(f.filename)[:160]
+                ls.file_mime = (f.mimetype or "application/octet-stream")[:80]
+        db.session.commit()
+        flash("Lección guardada.", "ok")
+        return redirect(url_for("admin_lesson", lid=ls.id))
+    return render_template("admin/lesson.html", ls=ls, c=ls.chapter.course, bunny=bunny_ready(), embed=lesson_embed(ls))
+
+
+@app.route("/admin/formacion/leccion/<int:lid>/video", methods=["POST"])
+@admin_required
+def admin_lesson_video(lid):
+    """Prepara la subida directa del navegador a Bunny: crea el vídeo y da una firma que caduca en 2 horas."""
+    ls = db.session.get(Lesson, lid) or abort(404)
+    if not bunny_ready():
+        return {"ok": False, "error": "Faltan BUNNY_LIBRARY_ID y BUNNY_API_KEY en Railway."}, 400
+    try:
+        ok, code, data = bunny_call("POST", "/videos", json={"title": f"{ls.chapter.course.title} · {ls.title}"[:200]})
+    except requests.RequestException:
+        return {"ok": False, "error": "Bunny no responde. Inténtalo en un momento."}, 502
+    if not ok or not data.get("guid"):
+        return {"ok": False, "error": f"Bunny respondió {code}. Revisa la clave y la biblioteca."}, 502
+    old = ls.video_guid
+    ls.video_guid, ls.video_status, ls.duration = data["guid"], "subiendo", 0
+    db.session.commit()
+    if old:
+        try:
+            bunny_call("DELETE", f"/videos/{old}")
+        except requests.RequestException:
+            pass
+    exp = int(time.time()) + 2 * 3600
+    sig = hashlib.sha256(f"{BUNNY_LIBRARY_ID}{BUNNY_API_KEY}{exp}{ls.video_guid}".encode()).hexdigest()
+    return {"ok": True, "guid": ls.video_guid, "library": BUNNY_LIBRARY_ID, "expire": exp, "signature": sig,
+            "endpoint": "https://video.bunnycdn.com/tusupload"}
+
+
+BUNNY_STATUS = {0: "subiendo", 1: "subiendo", 2: "procesando", 3: "procesando", 4: "listo", 5: "error", 6: "error"}
+
+
+@app.route("/admin/formacion/leccion/<int:lid>/video/estado")
+@admin_required
+def admin_lesson_video_status(lid):
+    ls = db.session.get(Lesson, lid) or abort(404)
+    if not ls.video_guid or not bunny_ready():
+        return {"status": ls.video_status or ""}
+    try:
+        ok, _, data = bunny_call("GET", f"/videos/{ls.video_guid}")
+    except requests.RequestException:
+        return {"status": ls.video_status}
+    if ok:
+        ls.video_status = BUNNY_STATUS.get(data.get("status"), ls.video_status)
+        ls.duration = int(data.get("length") or ls.duration or 0)
+        db.session.commit()
+    return {"status": ls.video_status, "duration": ls.duration}
+
+
+@app.route("/sw.js")
+def service_worker():
+    """Programa del navegador que muestra los avisos aunque la web esté cerrada."""
+    resp = app.send_static_file("sw.js")
+    resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Service-Worker-Allowed"] = "/"
+    return resp
+
+
+@app.route("/notificaciones", methods=["GET", "POST"])
+@login_required
+def notification_settings():
+    u = current_user
+    if request.method == "POST":
+        off = [f"{e}.{c}" for e in NOTIFY_EVENTS for c in NOTIFY_CHANNELS if not request.form.get(f"{e}.{c}")]
+        u.notify_off = ",".join(off)[:400]
+        if "whatsapp" in request.form:
+            wa = re.sub(r"[^\d+]", "", request.form.get("whatsapp", ""))[:20]
+            if wa and not re.match(r"^\+?\d{8,15}$", wa):
+                flash("Escribe tu WhatsApp con el prefijo del país, por ejemplo +34 600 000 000.", "error")
+                return redirect(url_for("notification_settings"))
+            u.whatsapp = wa
+        db.session.commit()
+        flash("Avisos guardados.", "ok")
+        return redirect(url_for("notification_settings"))
+    return render_template("notifications.html", events=NOTIFY_EVENTS, channels=NOTIFY_CHANNELS, wants=wants,
+                           devices=PushSub.query.filter_by(user_id=u.id).count(),
+                           push_ready=push_ready(), whatsapp_ready=whatsapp_ready(), vapid=VAPID_PUBLIC_KEY)
+
+
+@app.route("/push/suscribir", methods=["POST"])
+@login_required
+def push_subscribe():
+    endpoint = (request.form.get("endpoint") or "").strip()
+    p256dh, auth = (request.form.get("p256dh") or "").strip(), (request.form.get("auth") or "").strip()
+    if not endpoint.startswith("https://") or len(endpoint) > 800 or not p256dh or not auth or len(p256dh) > 200 or len(auth) > 60:
+        return {"ok": False}, 400
+    row = PushSub.query.filter_by(endpoint=endpoint).first()
+    if row:
+        row.user_id, row.p256dh, row.auth = current_user.id, p256dh, auth
+    else:
+        if PushSub.query.filter_by(user_id=current_user.id).count() >= 10:
+            db.session.delete(PushSub.query.filter_by(user_id=current_user.id).order_by(PushSub.created_at).first())
+        db.session.add(PushSub(user_id=current_user.id, endpoint=endpoint, p256dh=p256dh, auth=auth))
+    db.session.commit()
+    return {"ok": True}
+
+
+@app.route("/push/quitar", methods=["POST"])
+@login_required
+def push_unsubscribe():
+    PushSub.query.filter_by(user_id=current_user.id, endpoint=(request.form.get("endpoint") or "").strip()).delete()
+    db.session.commit()
+    return {"ok": True}
+
+
+def render_for(text_, user):
+    """Personaliza un aviso: {nombre} → el nombre del clipper."""
+    first = (user.name or "").split()[0] if user.name else ""
+    return text_.replace("{nombre}", first).replace("{Nombre}", first)
+
+
+@app.route("/admin/avisos", methods=["GET", "POST"])
+@admin_required
+def admin_notify():
+    """Enviar un aviso personalizado a todos, a los de una campaña o a un clipper."""
+    camps = Campaign.query.order_by(Campaign.created_at.desc()).all()
+    if request.method == "POST":
+        audience = request.form.get("audience", "todos")
+        if (request.form.get("one") or "").strip():
+            audience = "u:" + request.form.get("one", "")
+        body = (request.form.get("body") or "").strip()[:1000]
+        title = (request.form.get("title") or "").strip()[:80] or "Aviso del equipo"
+        if len(body) < 3:
+            flash("Escribe el mensaje.", "error")
+            return redirect(url_for("admin_notify"))
+        q = User.query.filter(User.is_admin.is_(False), User.is_banned.is_(False))
+        if audience.startswith("c:"):
+            cid_ = int(audience[2:] or 0) if audience[2:].isdigit() else 0
+            ids = [m.user_id for m in CampaignMember.query.filter_by(campaign_id=cid_, status="aceptada")]
+            q = q.filter(User.id.in_(ids or [0]))
+        elif audience.startswith("u:"):
+            q = q.filter(User.email == audience[2:].strip().lower())
+        users = q.all()
+        for u in users:
+            text_ = render_for(body, u)
+            if request.form.get("chat"):
+                db.session.add(Message(user_id=u.id, from_admin=True, sender_id=current_user.id, body=text_,
+                                       read_by_admin=True, read_by_user=False))
+            notify_user(u.id, "mensaje", render_for(title, u), text_, request.form.get("path", "")[:200] or "/")
+        audit("aviso_enviado", f"{audience} · {len(users)} clippers · {title}")
+        db.session.commit()
+        flash(f"Aviso enviado a {len(users)} {'clipper' if len(users) == 1 else 'clippers'}.", "ok" if users else "error")
+        return redirect(url_for("admin_notify"))
+    return render_template("admin/notify.html", camps=camps, push_ready=push_ready(), whatsapp_ready=whatsapp_ready(),
+                           devices=PushSub.query.count(), with_wa=User.query.filter(User.whatsapp != "").count())
+
+
+@app.route("/admin/ajustes/claves-avisos", methods=["POST"])
+@admin_required
+def admin_vapid_keys():
+    """Genera un par de claves para los avisos (no se guarda: se enseña una vez para pegarla en Railway)."""
+    priv, pub = webpush.new_vapid_keys()
+    return render_template("admin/vapid.html", priv=priv, pub=pub)
 
 
 @app.route("/avisos")
@@ -3061,6 +4262,8 @@ def post_message(owner_id, from_admin):
     db.session.commit()
     if not from_admin:
         notify_phone(f"💬 {current_user.name}", body or "📷 Ha enviado una foto", url_for("admin_chat", uid=owner_id))
+    else:
+        notify_user(owner_id, "mensaje", "Mensaje del equipo", body[:200] or "Te hemos enviado una foto", "/soporte")
     return m, None
 
 
@@ -3193,6 +4396,12 @@ def admin_campaign_member(mid, accion):
         abort(400)
     mb.status = "aceptada" if accion == "aceptar" else "rechazada"
     mb.decided_at = datetime.utcnow()
+    camp_ = mb.campaign
+    if accion == "aceptar" and camp_.max_members:
+        db.session.flush()
+        if camp_.members_accepted >= camp_.max_members and not camp_.full:
+            camp_.full = True
+            flash(f"Se han llenado las {camp_.max_members} plazas: la campaña pasa a «plazas completas».", "info")
     if accion == "aceptar":
         note = (f"¡Te hemos aceptado en «{mb.campaign.song}»! Entra en la campaña, añade la cuenta con la que vas a publicar "
                 "y verifícala con el código en su bio. En cuanto esté verificada podrás subir tus clips.")

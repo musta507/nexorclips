@@ -16,9 +16,10 @@
       <a class="adm-view" href="{{ url_for('index') }}">{{ icon("out") }} Ver la web como clipper</a>
       {% else %}
       <nav class="tabs" aria-label="Secciones">
-        <a class="tab {% if ep in ['index', 'campaign'] %}on{% endif %}" href="{{ url_for('index') }}" {% if ep in ['index', 'campaign'] %}aria-current="page"{% endif %}>{{ icon("home") }}Home</a>
-        <a class="tab {% if ep == 'submit' %}on{% endif %}" href="{{ url_for('submit') }}" {% if ep == 'submit' %}aria-current="page"{% endif %}>{{ icon("plus") }}Enviar clips</a>
+        <a class="tab {% if ep in ['index', 'campaign', 'ranking_page'] %}on{% endif %}" href="{{ url_for('index') }}" {% if ep in ['index', 'campaign', 'ranking_page'] %}aria-current="page"{% endif %}>{{ icon("home") }}Inicio</a>
+        <a class="tab {% if ep == 'my_clips' %}on{% endif %}" href="{{ url_for('my_clips') }}" {% if ep == 'my_clips' %}aria-current="page"{% endif %}>{{ icon("film") }}Mis clips</a>
         <a class="tab {% if ep in ['earnings', 'account'] %}on{% endif %}" href="{{ url_for('earnings') }}" {% if ep in ['earnings', 'account'] %}aria-current="page"{% endif %}>{{ icon("wallet") }}Ganancias</a>
+        <a class="tab {% if ep in ['courses', 'course', 'lesson'] %}on{% endif %}" href="{{ url_for('courses') }}" {% if ep in ['courses', 'course', 'lesson'] %}aria-current="page"{% endif %}>{{ icon("cap") }}Formación</a>
       </nav>
       {% endif %}
       {% set unread = unread_messages() %}
@@ -29,6 +30,9 @@
         <div class="menu">
           <div class="who"><b>{{ current_user.name }}</b><div class="small muted">{{ current_user.email }}</div></div>
           <a href="{{ url_for('account') }}">Mi cuenta</a>
+          {% if not current_user.is_admin %}<a href="{{ url_for('onboarding') }}">Editar perfil</a>{% endif %}
+          <a href="{{ url_for('ranking_page') }}">Ranking</a>
+          <a href="{{ url_for('notification_settings') }}">Notificaciones</a>
           {% if current_user.is_admin %}
             <a href="{{ url_for('admin_home') }}">Panel de admin</a>
             <a href="{{ url_for('admin_inbox') }}">Mensajes{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
@@ -55,6 +59,8 @@
           ("admin_clippers", ["admin_clippers", "admin_clipper"], "Clippers", "users", 0),
           ("admin_payouts", ["admin_payouts"], "Retiros", "cash", nc.payouts),
           ("admin_inbox", ["admin_inbox", "admin_chat"], "Mensajes", "chat", nc.messages),
+          ("admin_courses", ["admin_courses", "admin_course", "admin_lesson"], "Formación", "cap", 0),
+          ("admin_notify", ["admin_notify"], "Avisos", "bell", 0),
           ("admin_leads", ["admin_leads"], "Creadores interesados", "megaphone", nc.leads),
           ("admin_activity", ["admin_activity"], "Actividad", "pulse", 0),
           ("admin_settings", ["admin_settings", "admin_probe"], "Ajustes", "gear", 0)] %}

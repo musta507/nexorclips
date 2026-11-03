@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ ls.title }} · Formación{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_course', cid=c.id) }}">← {{ c.title }}</a>
+<div class="card form-stack">
+  <h2>Vídeo</h2>
+  {% if embed %}<div class="lesson-video sm"><iframe src="{{ embed }}" title="Vídeo de la lección" loading="lazy" allowfullscreen></iframe></div>{% endif %}
+  {% if ls.video_guid %}<p class="small">Estado: <b data-video-status>{{ {'subiendo': 'Subiendo', 'procesando': 'Procesando (tarda unos minutos)', 'listo': 'Listo', 'error': 'Error al procesar'}.get(ls.video_status, ls.video_status) }}</b></p>{% endif %}
+  {% if bunny %}
+  <div class="upload-box" data-bunny-upload data-prepare="{{ url_for('admin_lesson_video', lid=ls.id) }}" data-status="{{ url_for('admin_lesson_video_status', lid=ls.id) }}" data-csrf="{{ csrf_token() }}" data-title="{{ ls.title }}">
+    <input type="file" accept="video/*" aria-label="Vídeo de la lección" data-file>
+    <button type="button" class="btn accent sm" data-start>Subir vídeo</button>
+    <div class="dbar" hidden data-bar><span style="width:0%"></span></div>
+    <p class="small muted" data-msg>{% if ls.video_guid %}Si subes otro, sustituye al actual.{% else %}Sube el vídeo desde tu ordenador. Puedes cerrar la página cuando llegue al 100 %.{% endif %}</p>
+  </div>
+  {% else %}<p class="small muted">Para subir vídeos aquí faltan las variables de Bunny en Railway. Puedes pegar un enlace de YouTube (oculto) o Vimeo abajo.</p>{% endif %}
+  {% if ls.video_guid %}<form method="post" data-confirm="¿Quitar el vídeo de esta lección?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="quitar_video"><button class="btn sm soft">Quitar vídeo</button></form>{% endif %}
+</div>
+<form method="post" enctype="multipart/form-data" class="card form-stack">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="guardar">
+  <div class="form-grid">
+    <div class="field"><label for="title">Título</label><input id="title" name="title" value="{{ ls.title }}" required maxlength="160"></div>
+    <div class="field"><label for="chapter">Capítulo</label><select id="chapter" name="chapter">{% for ch in c.chapters %}<option value="{{ ch.id }}"{% if ch.id == ls.chapter_id %} selected{% endif %}>{{ ch.title }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="field"><label for="video_url">O enlace del vídeo (YouTube / Vimeo)</label><input id="video_url" name="video_url" value="{{ ls.video_url }}" placeholder="https://youtu.be/…"><span class="hint">Solo se usa si no has subido un vídeo arriba.</span></div>
+  <div class="field"><label for="body">Texto de la lección</label><textarea id="body" name="body" rows="8">{{ ls.body }}</textarea></div>
+  <div class="field"><label for="file">Archivo para descargar (máx. 8 MB)</label>
+    {% if ls.file_name %}<p class="small">Actual: <b>{{ ls.file_name }}</b></p>{% endif %}
+    <input id="file" type="file" name="file"></div>
+  <label class="check"><input type="checkbox" name="published" {% if ls.published %}checked{% endif %}> Visible para los clippers</label>
+  <div class="inline" style="flex-wrap:wrap"><button class="btn accent">Guardar</button><a class="btn soft" href="{{ url_for('lesson', lid=ls.id) }}">Ver como clipper</a></div>
+</form>
+<div class="inline" style="flex-wrap:wrap">
+  {% if ls.file_name %}<form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="quitar_archivo"><button class="btn sm soft">Quitar archivo</button></form>{% endif %}
+  <form method="post" data-confirm="¿Borrar esta lección?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="borrar"><button class="btn sm red">Borrar lección</button></form>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Bienvenida · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="onb card">
+  <ol class="onb-steps" aria-label="Pasos">
+    {% for label in ["Tu perfil", "Dónde estás", "Cobros y avisos"] %}
+    <li class="{% if loop.index == step %}on{% elif loop.index < step %}done{% endif %}"><b>{{ loop.index }}</b><span>{{ label }}</span></li>
+    {% endfor %}
+  </ol>
+  <form method="post" enctype="multipart/form-data" class="form-stack" action="{{ url_for('onboarding', paso=step) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% if step == 1 %}
+      <h1>¡Bienvenido a {{ APP_NAME }}!</h1>
+      <p class="muted">Tres pasos rápidos y empiezas a ganar con tus clips.</p>
+      <div class="onb-photo">
+        <span class="avatar lg">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}</span>
+        <div class="field"><label for="photo">Foto de perfil</label><input id="photo" type="file" name="photo" accept="image/*"></div>
+      </div>
+      <div class="field"><label for="name">Tu nombre</label><input id="name" name="name" value="{{ current_user.name }}" required maxlength="120" autocomplete="name"></div>
+      <div class="field"><label for="tiktok">Tu usuario de TikTok (opcional)</label><input id="tiktok" name="tiktok" placeholder="@tuusuario" value="{{ current_user.handles('tiktok')[0] if current_user.handles('tiktok') else '' }}"><span class="hint">Podrás añadir más cuentas en cada campaña.</span></div>
+    {% elif step == 2 %}
+      <h1>¿Desde dónde clipeas?</h1>
+      <p class="muted">Algunas campañas son solo para ciertos países o idiomas.</p>
+      <div class="field"><label for="country">País</label>
+        <select id="country" name="country" required><option value="">Elige tu país</option>
+          {% for k, label in COUNTRIES.items() %}<option value="{{ k }}"{% if current_user.country == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><span class="label">Idiomas en los que publicas</span>
+        <div class="chips-check">{% set mine = (current_user.languages or 'es').split(',') %}
+          {% for k, label in LANGUAGES.items() %}<label class="chip-check"><input type="checkbox" name="languages" value="{{ k }}"{% if k in mine %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
+        </div></div>
+    {% else %}
+      <h1>Cobros y avisos</h1>
+      <p class="muted">Los dos son opcionales: puedes hacerlo más tarde en «Mi cuenta».</p>
+      <div class="field"><label for="whop_username"><img class="whop-ico" src="{{ static_url('whop.png') }}" alt="" width="16" height="16"> Tu usuario de Whop</label>
+        <input id="whop_username" name="whop_username" placeholder="@tuusuario" value="{{ current_user.whop_username or '' }}"><span class="hint">Ahí te llega el dinero al momento cuando retiras.</span></div>
+      <div class="field"><label for="whatsapp">Tu WhatsApp</label>
+        <input id="whatsapp" name="whatsapp" inputmode="tel" placeholder="+34 600 000 000" value="{{ current_user.whatsapp or '' }}" autocomplete="tel"><span class="hint">Para avisarte cuando aprobemos tus clips o haya campañas nuevas. Lo puedes apagar cuando quieras.</span></div>
+    {% endif %}
+    <div class="onb-foot">
+      <button class="btn soft" name="saltar" value="1" formnovalidate>Saltar por ahora</button>
+      <span>{% if step > 1 %}<a class="btn soft" href="{{ url_for('onboarding', paso=step - 1) }}">← Atrás</a>{% endif %}
+      <button class="btn accent">{{ "Terminar" if step == 3 else "Siguiente" }} {{ icon("arrow") }}</button></span>
+    </div>
+  </form>
+</div>
+{% endblock %}

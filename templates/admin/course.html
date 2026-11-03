@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}{{ c.title }} · Formación{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_courses') }}">← Formación</a>
+<form method="post" class="card form-stack">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="guardar">
+  <div class="field"><label for="title">Nombre del curso</label><input id="title" name="title" value="{{ c.title }}" required maxlength="160"></div>
+  <div class="field"><label for="description">Descripción</label><textarea id="description" name="description" rows="3">{{ c.description }}</textarea></div>
+  <label class="check"><input type="checkbox" name="published" {% if c.published %}checked{% endif %}> Publicado (lo ven los clippers)</label>
+  <div class="inline" style="flex-wrap:wrap"><button class="btn accent">Guardar</button><a class="btn soft" href="{{ url_for('course', cid=c.id) }}">Ver como clipper</a></div>
+</form>
+
+{% for ch in c.chapters %}
+<section class="card form-stack adm-ch">
+  <div class="inline adm-ch-head" style="flex-wrap:wrap">
+    <form method="post" class="inline" style="flex:1">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="cap_nombre"><input type="hidden" name="chapter" value="{{ ch.id }}">
+      <input name="title" value="{{ ch.title }}" aria-label="Nombre del capítulo" style="font-weight:700;flex:1"><button class="btn sm soft">Guardar</button>
+    </form>
+    {% for act, label in [("cap_subir", "↑"), ("cap_bajar", "↓")] %}
+    <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="{{ act }}"><input type="hidden" name="chapter" value="{{ ch.id }}"><button class="btn sm soft" aria-label="{{ 'Subir' if act == 'cap_subir' else 'Bajar' }} capítulo">{{ label }}</button></form>
+    {% endfor %}
+    <form method="post" data-confirm="¿Borrar el capítulo «{{ ch.title }}» con todas sus lecciones?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="cap_borrar"><input type="hidden" name="chapter" value="{{ ch.id }}"><button class="btn sm soft">Borrar</button></form>
+  </div>
+  <ol class="adm-lessons">
+    {% for l in ch.lessons %}
+    <li>
+      <a class="link" href="{{ url_for('admin_lesson', lid=l.id) }}"><b>{{ l.title }}</b></a>
+      <span class="small muted">{% if l.video_guid %}🎬 {{ l.video_status or 'vídeo' }}{% elif l.video_url %}🎬 enlace{% endif %}{% if l.file_name %} · 📎{% endif %}{% if not l.published %} · oculta{% endif %} · {{ stats[l.id] }} la vieron</span>
+      <span class="inline push">
+        {% for act, label in [("les_subir", "↑"), ("les_bajar", "↓")] %}
+        <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="{{ act }}"><input type="hidden" name="lesson" value="{{ l.id }}"><button class="btn sm soft" aria-label="{{ 'Subir' if act == 'les_subir' else 'Bajar' }} lección">{{ label }}</button></form>
+        {% endfor %}
+      </span>
+    </li>
+    {% endfor %}
+  </ol>
+  <form method="post" class="inline">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="leccion"><input type="hidden" name="chapter" value="{{ ch.id }}">
+    <input name="title" placeholder="Nombre de la lección nueva" required maxlength="160" style="flex:1" aria-label="Nombre de la lección"><button class="btn sm">+ Lección</button>
+  </form>
+</section>
+{% endfor %}
+
+<form method="post" class="card tight inline">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="capitulo">
+  <input name="title" placeholder="Nombre del capítulo nuevo" maxlength="160" style="flex:1" aria-label="Nombre del capítulo"><button class="btn soft">+ Capítulo</button>
+</form>
+<form method="post" data-confirm="¿Borrar el curso «{{ c.title }}» entero? No se puede deshacer."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="borrar"><button class="btn sm red">Borrar curso</button></form>
+{% endblock %}

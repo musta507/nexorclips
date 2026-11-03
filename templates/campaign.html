@@ -82,6 +82,54 @@
     {% endif %}
   </section>
 
+  {% set mats = camp.material_list %}
+  {% set tabs = [("resumen", "Resumen", True), ("normas", "Normas", camp.rules_text), ("anuncios", "Anuncios", camp.announcement_list),
+                 ("recursos", "Recursos", mats), ("ganadores", "Clips ganadores", winners), ("ideas", "Ideas", camp.idea_list)] %}
+  <nav class="seg ctabs" aria-label="Secciones de la campaña">
+    {% for k, label, show in tabs %}{% if show %}<a class="{% if ctab == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, tab=k if k != 'resumen' else None) }}">{{ label }}{% if k == 'anuncios' %} <b class="tnum">{{ camp.announcement_list|length }}</b>{% endif %}</a>{% endif %}{% endfor %}
+  </nav>
+
+  {% if ctab == 'normas' %}
+  <section class="card box">
+    <div class="box-head">{{ icon("doc") }} Reglas de la campaña</div>
+    <div class="box-body rules">{{ camp.rules_text }}</div>
+  </section>
+  {% elif ctab == 'anuncios' %}
+  <section class="card box">
+    <div class="box-head">{{ icon("megaphone") }} Anuncios</div>
+    <ul class="box-body ann-list">{% for d, t in camp.announcement_list|reverse %}<li>{% if d %}<span class="small muted">{{ d }}</span>{% endif %}<p>{{ t }}</p></li>{% endfor %}</ul>
+  </section>
+  {% elif ctab == 'recursos' %}
+  <section class="card box mats">
+    <div class="box-head">{{ icon("stack") }} Materiales de la campaña</div>
+    {% for name, url, kind in mats %}
+    <a class="mat-row" href="{{ url }}" target="_blank" rel="noopener">
+      <span class="mat-ico">{{ icon(kind if kind in ("tiktok", "instagram", "youtube") else ("folder" if kind == "drive" else "link")) }}</span>
+      <span class="mat-name">{{ name }}</span>
+      <span class="mat-out">{{ icon("out") }}</span>
+    </a>
+    {% endfor %}
+  </section>
+  {% elif ctab == 'ganadores' %}
+  <section class="card box">
+    <div class="box-head">{{ icon("trophy") }} Los clips con más vistas</div>
+    <p class="box-body small muted">Míralos para ver qué funciona en esta campaña.</p>
+    <div class="box-body clip-list">
+      {% for s in winners %}
+      <a class="clip" href="{{ s.url }}" target="_blank" rel="noopener">
+        <span class="pi">{{ icon(s.platform) }}</span>
+        <div class="meta"><b>{{ s.author and '@' ~ s.author or PLATFORMS[s.platform] }}</b><span class="small muted">{{ s.created_at|ago }}</span></div>
+        <div class="views tnum">{{ s.views|short }} vistas</div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% elif ctab == 'ideas' %}
+  <section class="card box">
+    <div class="box-head">{{ icon("bulb") }} Ideas de clips</div>
+    <ul class="box-body idea-list">{% for i in camp.idea_list %}<li>{{ i }}</li>{% endfor %}</ul>
+  </section>
+  {% else %}
   {# ---------- pago de cada red #}
   <div class="pay-grid">
     {% for p, r, lo, hi in camp.pay_rows %}
@@ -98,7 +146,7 @@
 
   {# ---------- presupuesto y materiales #}
   {% set mats = camp.material_list %}
-  <div class="duo{% if not mats %} solo{% endif %}">
+  <div class="duo solo">
     <section class="card box">
       <div class="box-head">{{ icon("cash") }} Presupuesto</div>
       <div class="box-body bud">
@@ -107,28 +155,7 @@
       </div>
       <p class="box-foot small">{% if st.exhausted or camp.status == 'finalizada' %}Se ha repartido todo el presupuesto.{% elif st.left_pct >= 50 %}<b class="money-txt tnum">{{ st.remaining|money(0) }}</b> todavía disponibles, hay mucho margen para unirte.{% elif st.left_pct >= 20 %}<b class="money-txt tnum">{{ st.remaining|money(0) }}</b> todavía disponibles, aún estás a tiempo.{% else %}Quedan solo <b class="tnum">{{ st.remaining|money(0) }}</b>, date prisa.{% endif %}</p>
     </section>
-    {% if mats %}
-    <section class="card box mats">
-      <div class="box-head">{{ icon("stack") }} Materiales de la campaña</div>
-      {% for name, url, kind in mats %}
-      <a class="mat-row" href="{{ url }}" target="_blank" rel="noopener">
-        <span class="mat-ico">{{ icon(kind if kind in ("tiktok", "instagram", "youtube") else ("folder" if kind == "drive" else "link")) }}</span>
-        <span class="mat-name">{{ name }}</span>
-        <span class="mat-out">{{ icon("out") }}</span>
-      </a>
-      {% endfor %}
-    </section>
-    {% endif %}
   </div>
-
-  {# ---------- reglas #}
-  {% set rules_all = camp.rules_text %}
-  {% if rules_all %}
-  <section class="card box">
-    <div class="box-head">{{ icon("doc") }} Reglas de la campaña</div>
-    <div class="box-body rules">{{ rules_all }}</div>
-  </section>
-  {% endif %}
 
   {% if mine %}
   <section class="card box">
@@ -138,11 +165,12 @@
       <div class="clip">
         <span class="pi">{{ icon(s.platform) }}</span>
         <div class="meta"><a href="{{ s.url }}" target="_blank" rel="noopener">{{ PLATFORMS[s.platform] }}</a><span class="small muted">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</span></div>
-        <div><div class="views tnum">{{ s.views|short }}{% if s.status == "aprobado" %} · {{ s.earned|money }}{% endif %}</div><span class="status {{ s.status }}">{{ s.status|capitalize }}</span></div>
+        <div><div class="views tnum">{{ s.views|short }}{% if s.status == "aprobado" %} · {{ s.earned|money }}{% endif %}</div>{% set stg = clip_stage(s) %}<span class="status {{ 'pendiente' if stg in ('contando', 'revisar') else s.status }}">{{ STAGE_LABELS[stg] }}</span></div>
       </div>
       {% endfor %}
     </div>
   </section>
+  {% endif %}
   {% endif %}
 </div>
 

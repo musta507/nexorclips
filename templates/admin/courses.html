@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Formación · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Formación", "Cursos para los clippers. Los vídeos se suben aquí mismo y se ven dentro de la web.") %}{% endcall %}
+{% if not bunny %}<div class="flash info">Para subir vídeos desde aquí, añade en Railway <code>BUNNY_LIBRARY_ID</code> y <code>BUNNY_API_KEY</code> (Bunny Stream). Mientras tanto puedes pegar enlaces de YouTube (ocultos) o Vimeo.</div>{% endif %}
+<form method="post" class="card tight inline" style="flex-wrap:wrap">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <input name="title" placeholder="Nombre del curso nuevo" required maxlength="160" style="flex:1;min-width:220px" aria-label="Nombre del curso">
+  <button class="btn accent">+ Crear curso</button>
+</form>
+<div class="table-card">
+  {% if rows %}
+  <div class="table-scroll"><table class="rt">
+    <thead><tr><th>Curso</th><th>Estado</th><th class="r">Lecciones</th><th class="r">Alumnos</th><th class="r">Progreso medio</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr><td data-label="Curso"><b>{{ r.c.title }}</b></td>
+      <td data-label="Estado"><span class="status {{ 'aprobado' if r.c.published else 'pendiente' }}">{{ "Publicado" if r.c.published else "Borrador" }}</span></td>
+      <td data-label="Lecciones" class="r tnum">{{ r.lessons }}</td>
+      <td data-label="Alumnos" class="r tnum">{{ r.learners }}</td>
+      <td data-label="Progreso medio" class="r tnum">{{ r.avg }} %</td>
+      <td><a class="btn sm soft" href="{{ url_for('admin_course', cid=r.c.id) }}">Editar</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<div class="empty"><h3>Aún no hay cursos</h3><p class="muted">Crea el primero arriba.</p></div>{% endif %}
+</div>
+{% endblock %}

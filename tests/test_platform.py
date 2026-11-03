@@ -1285,3 +1285,309 @@ def test_creators_page_and_roles(monkeypatch):
     assert rev.get("/admin/clips").status_code == 200
     assert rev.get("/admin/retiros").status_code == 403 and rev.get("/admin/creadores").status_code == 403
     assert "Retiros" not in rev.get("/admin").get_data(as_text=True).split("adm-nav")[1].split("</nav>")[0]
+
+
+# ---------------------------------------------------------------- fase 2: revisión y campañas
+def _refresh_with(monkeypatch, data):
+    monkeypatch.setattr(V, "fetch_views", lambda p, urls: data if p == "tiktok" else {})
+    with A.app.test_request_context():
+        A.refresh_views()
+
+
+def _vid(n):
+    return str(7300000000000000000 + n)
+
+
+def test_clip_counts_views_until_minimum_then_goes_to_review(monkeypatch):
+    cid = make_campaign(min_tiktok=1.0)          # 200 por 1M → mínimo $1 = 5.000 vistas
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    r = post(a, f"/campana/{cid}", url=tt("ana", 1))
+    assert "contando vistas" in r.get_data(as_text=True).lower()
+    _refresh_with(monkeypatch, {_vid(1): {"views": 1000}})
+    page = admin.get("/admin/clips").get_data(as_text=True)
+    assert "Todo revisado" in page
+    assert "@ana" in admin.get("/admin/clips?tab=contando").get_data(as_text=True)
+    _refresh_with(monkeypatch, {_vid(1): {"views": 6000}})
+    page = admin.get("/admin/clips").get_data(as_text=True)
+    assert "1 de 1" in page and "tiktok.com/embed/v2/" + _vid(1) in page
+
+
+def test_clip_expires_when_minimum_not_reached(monkeypatch):
+    cid = make_campaign(min_tiktok=1.0, expire_days=3)
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        s = A.Submission.query.one()
+        s.created_at = datetime.utcnow() - timedelta(days=4)
+        A.db.session.commit()
+    _refresh_with(monkeypatch, {_vid(1): {"views": 100}})
+    with A.app.app_context():
+        s = A.Submission.query.one()
+        assert s.status == "rechazado" and s.reject_code == "caducado"
+
+
+def test_video_posted_before_joining_is_auto_rejected(monkeypatch):
+    cid = make_campaign(auto_reject_old=True)
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    _refresh_with(monkeypatch, {_vid(1): {"views": 100, "posted_at": datetime.utcnow() - timedelta(days=30)}})
+    with A.app.app_context():
+        s = A.Submission.query.one()
+        assert s.status == "rechazado" and s.reject_code == "antiguo" and "publicado_antes" in s.flag_list
+
+
+def test_trusted_clipper_is_auto_approved(monkeypatch):
+    cid = make_campaign(auto_approve_trusted=True)
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        A.User.query.filter_by(email="a@test.com").one().trusted = True
+        A.db.session.commit()
+    _refresh_with(monkeypatch, {_vid(1): {"views": 10000}})
+    with A.app.app_context():
+        s = A.Submission.query.one()
+        assert s.status == "aprobado" and s.earned == 2.0
+
+
+def test_reject_with_fixed_reason_and_appeal_once():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        sid = A.Submission.query.one().id
+    post(admin, f"/admin/envio/{sid}/rechazar", code="menciones", reason="falta @marca")
+    with A.app.app_context():
+        assert get(A.Submission, sid).reject_reason == "Faltan las menciones o hashtags obligatorios: falta @marca"
+    post(a, f"/clip/{sid}/apelar", text="Sí que puse la mención, mira el minuto 0:03")
+    assert "ya no se puede" in post(a, f"/clip/{sid}/apelar", text="otra vez lo mismo, por favor").get_data(as_text=True)
+    assert "minuto 0:03" in admin.get("/admin/clips?tab=apelaciones").get_data(as_text=True)
+    post(admin, f"/admin/envio/{sid}/apelacion_aceptar", approve="1")
+    with A.app.app_context():
+        s = get(A.Submission, sid)
+        assert s.status == "aprobado" and s.appeal_status == "aceptada"
+        assert A.Message.query.filter_by(user_id=s.user_id).count() >= 1
+
+
+def test_bulk_review():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    for n in (1, 2, 3):
+        post(a, f"/campana/{cid}", url=tt("ana", n))
+    with A.app.app_context():
+        ids = [s.id for s in A.Submission.query.all()]
+    admin.post("/admin/clips/lote", data={"_csrf": "t", "ids": ids[:2], "accion": "aprobar"})
+    admin.post("/admin/clips/lote", data={"_csrf": "t", "ids": ids[2:], "accion": "rechazar", "code": "calidad"})
+    with A.app.app_context():
+        st = sorted(s.status for s in A.Submission.query.all())
+        assert st == ["aprobado", "aprobado", "rechazado"]
+
+
+def test_duplicate_pause_and_add_budget():
+    cid = make_campaign(budget=100, spent=90)
+    admin = client_for("admin@test.com")
+    post(admin, f"/admin/campana/{cid}/duplicar")
+    with A.app.app_context():
+        copy = A.Campaign.query.filter(A.Campaign.id != cid).one()
+        assert copy.status == "pausada" and copy.spent == 0 and copy.song.endswith("(copia)")
+    post(admin, f"/admin/campana/{cid}/estado", accion="pausar")
+    post(admin, f"/admin/campana/{cid}/estado", accion="presupuesto", amount="1.000")
+    with A.app.app_context():
+        c = get(A.Campaign, cid)
+        assert c.status == "pausada" and c.budget == 1100
+
+
+def test_campaign_start_date_and_places_and_countries():
+    cid = make_campaign(starts_at=datetime.utcnow() + timedelta(days=2), max_members=1, countries="MX")
+    a = client_for("a@test.com", tiktok="ana", verify=False)
+    b = client_for("b@test.com", verify=False)
+    assert "Indica tu país" in post(a, f"/campana/{cid}/unirme").get_data(as_text=True)
+    with A.app.app_context():
+        A.User.query.filter_by(email="a@test.com").one().country = "MX"
+        A.User.query.filter_by(email="b@test.com").one().country = "ES"
+        A.db.session.commit()
+    assert "solo para clippers de: México" in post(b, f"/campana/{cid}/unirme").get_data(as_text=True)
+    post(a, f"/campana/{cid}/unirme")
+    admin = client_for("admin@test.com")
+    with A.app.app_context():
+        mid = A.CampaignMember.query.one().id
+    post(admin, f"/admin/solicitud/{mid}/aceptar")
+    with A.app.app_context():
+        assert get(A.Campaign, cid).full
+    AUTO_ACCEPT.add("a@test.com")
+    assert "La campaña empieza el" in post(a, f"/campana/{cid}", url=tt("ana", 1)).get_data(as_text=True)
+
+
+def test_bonus_per_clip_and_campaign_closes_on_end_date(monkeypatch):
+    cid = make_campaign(bonus_per_clip=0.5, ends_on=datetime.utcnow() - timedelta(minutes=1))
+    with A.app.app_context():
+        s = A.Submission(user_id=1, campaign_id=cid, url="x", platform="tiktok", video_key="tiktok:1", views=10000)
+        assert A.raw_earning(s, get(A.Campaign, cid)) == 2.5
+    _refresh_with(monkeypatch, {})
+    with A.app.app_context():
+        assert get(A.Campaign, cid).status == "finalizada"
+
+
+def test_wizard_saves_new_options():
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/campana/nueva", wizard="1", song="Nueva", artist="Pablo", pf_tiktok="on", rate_k_tiktok="1,5",
+         min_k_tiktok="", max_k_tiktok="", budget="5.000", kind="ugc", bonus_per_clip="2", max_members="20",
+         countries=["ES", "MX"], earn_days="10", expire_days="7", review_at_min="on", status="activa",
+         starts_at="2030-01-01T10:00", ends_on="2030-02-01T10:00", ideas="Idea uno\nIdea dos")
+    with A.app.app_context():
+        c = A.Campaign.query.one()
+        assert (c.kind, c.bonus_per_clip, c.max_members, c.countries, c.earn_days, c.expire_days) == ("ugc", 2.0, 20, "ES,MX", 10, 7)
+        assert c.rate == 1500 and c.budget == 5000 and c.starts_at.year == 2030 and c.idea_list == ["Idea uno", "Idea dos"]
+
+
+def test_publish_date_parsed_from_apify():
+    assert V.parse_item("tiktok", {"playCount": 5, "createTime": 1700000000})["posted_at"].year == 2023
+    assert V.parse_item("instagram", {"videoPlayCount": 5, "timestamp": "2024-05-01T10:00:00.000Z"})["posted_at"].month == 5
+
+
+# ---------------------------------------------------------------- fase 3-6: clipper, avisos, formación, informe
+def test_my_clips_tabs_and_stats(monkeypatch):
+    cid = make_campaign(min_tiktok=1.0)
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    page = a.get("/mis-clips?tab=contando").get_data(as_text=True)
+    assert "Contando vistas" in page and "mín. 5K" in page
+    assert "Nada por aquí" in a.get("/mis-clips?tab=aprobado").get_data(as_text=True)
+
+
+def test_onboarding_three_steps():
+    a = client_for("a@test.com", verify=False)
+    post(a, "/bienvenida?paso=1", name="Ana García", tiktok="@anag")
+    post(a, "/bienvenida?paso=2", country="MX", languages=["es", "en"])
+    post(a, "/bienvenida?paso=3", whatsapp="+52 55 1234 5678")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="a@test.com").one()
+        assert (u.name, u.country, u.languages, u.whatsapp) == ("Ana García", "MX", "es,en", "+525512345678")
+        assert u.onboarded_at and "anag" in u.handles("tiktok")
+    assert "Primeros pasos" in a.get("/").get_data(as_text=True)
+
+
+def test_ranking_masks_names():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, "/bienvenida?paso=1", name="Ana García López")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        sid = A.Submission.query.one().id
+    post(admin, f"/admin/envio/{sid}/aprobar")
+    page = client_for("b@test.com").get("/ranking").get_data(as_text=True)
+    assert "Ana G." in page and "García López" not in page
+
+
+def test_web_push_encryption_roundtrip():
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    import push as P
+    ua = ec.generate_private_key(ec.SECP256R1())
+    ua_pub = P._raw_public(ua)
+    auth = os.urandom(16)
+    body = P.encrypt(b"hola", P.b64u(ua_pub), P.b64u(auth))
+    salt, idlen = body[:16], body[20]
+    as_pub, cipher = body[21:21 + idlen], body[21 + idlen:]
+    peer = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), as_pub)
+    secret = ua.exchange(ec.ECDH(), peer)
+    ikm = P._hkdf(auth, secret, b"WebPush: info\x00" + ua_pub + as_pub, 32)
+    cek = P._hkdf(salt, ikm, b"Content-Encoding: aes128gcm\x00", 16)
+    nonce = P._hkdf(salt, ikm, b"Content-Encoding: nonce\x00", 12)
+    assert AESGCM(cek).decrypt(nonce, cipher, None) == b"hola\x02"
+    priv, pub = P.new_vapid_keys()
+    assert P.vapid_public(priv) == pub
+    assert P.vapid_header("https://fcm.googleapis.com/x", priv, "mailto:a@b.c").startswith("vapid t=")
+
+
+def test_notifications_respect_preferences(monkeypatch):
+    sent = []
+    monkeypatch.setattr(A, "VAPID_PRIVATE_KEY", "x")
+    monkeypatch.setattr(A, "VAPID_PUBLIC_KEY", "y")
+    monkeypatch.setattr(A, "_spawn", lambda fn, *args: sent.append(args))
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, "/notificaciones", **{"clip_aprobado.push": "on"})
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        sid = A.Submission.query.one().id
+        u = A.User.query.filter_by(email="a@test.com").one()
+        assert A.wants(u, "clip_aprobado", "push") and not A.wants(u, "clip_rechazado", "push")
+    post(admin, f"/admin/envio/{sid}/aprobar")
+    assert sent and sent[0][1] == "clip_aprobado"
+    post(admin, "/admin/avisos", audience="todos", title="Hola {nombre}", body="Hola {nombre}, hay campaña", chat="on")
+    with A.app.app_context():
+        assert "hay campaña" in A.Message.query.order_by(A.Message.id.desc()).first().body
+
+
+def test_push_subscribe_saves_device():
+    a = client_for("a@test.com")
+    r = a.post("/push/suscribir", data={"_csrf": "t", "endpoint": "https://fcm.googleapis.com/abc", "p256dh": "k", "auth": "a"})
+    assert r.status_code == 200
+    with A.app.app_context():
+        assert A.PushSub.query.count() == 1
+
+
+def test_courses_lessons_and_progress():
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/formacion", title="Curso de clips")
+    with A.app.app_context():
+        c = A.Course.query.one()
+        cid, chid = c.id, c.chapters[0].id
+    post(admin, f"/admin/formacion/{cid}", act="leccion", chapter=str(chid), title="Ganchos")
+    with A.app.app_context():
+        lid = A.Lesson.query.one().id
+    post(admin, f"/admin/formacion/leccion/{lid}", title="Ganchos", body="Empieza fuerte", video_url="https://youtu.be/abcdefghijk", published="on")
+    a = client_for("a@test.com")
+    assert "Muy pronto" in a.get("/formacion").get_data(as_text=True)
+    post(admin, f"/admin/formacion/{cid}", act="guardar", title="Curso de clips", published="on")
+    assert "Curso de clips" in a.get("/formacion").get_data(as_text=True)
+    page = a.get(f"/formacion/leccion/{lid}").get_data(as_text=True)
+    assert "youtube-nocookie.com/embed/abcdefghijk" in page and "Empieza fuerte" in page
+    post(a, f"/formacion/leccion/{lid}/progreso", done="1")
+    assert "100 %" in a.get("/formacion").get_data(as_text=True)
+
+
+def test_bunny_upload_signature(monkeypatch):
+    monkeypatch.setattr(A, "BUNNY_LIBRARY_ID", "123")
+    monkeypatch.setattr(A, "BUNNY_API_KEY", "key")
+    monkeypatch.setattr(A, "bunny_call", lambda m, p, **k: (True, 200, {"guid": "g-1"}))
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/formacion", title="C")
+    with A.app.app_context():
+        ch = A.Chapter.query.one()
+        A.db.session.add(A.Lesson(chapter_id=ch.id, title="L"))
+        A.db.session.commit()
+        lid = A.Lesson.query.one().id
+    d = admin.post(f"/admin/formacion/leccion/{lid}/video", data={"_csrf": "t"}).get_json()
+    import hashlib
+    assert d["guid"] == "g-1" and d["signature"] == hashlib.sha256(f"123key{d['expire']}g-1".encode()).hexdigest()
+    assert "key" not in str({k: v for k, v in d.items() if k != "signature"})
+
+
+def test_report_has_best_clips_and_print():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        s = A.Submission.query.one()
+        s.views = 5000
+        A.db.session.commit()
+        sid, tok = s.id, get(A.Campaign, cid).report_token
+    post(admin, f"/admin/envio/{sid}/aprobar")
+    page = A.app.test_client().get(f"/informe/{tok}").get_data(as_text=True)
+    assert "Lo mejor de la campaña" in page and "data-print" in page and "tiktok.com/embed/v2/" in page
+
+
+def test_campaign_tabs():
+    cid = make_campaign(rules="Menciona a @marca", ideas="Reacción", announcements="12/11 | Nuevo material")
+    a = client_for("a@test.com")
+    assert "Anuncios" in a.get(f"/campana/{cid}").get_data(as_text=True)
+    assert "Menciona a @marca" in a.get(f"/campana/{cid}?tab=normas").get_data(as_text=True)
+    assert "Nuevo material" in a.get(f"/campana/{cid}?tab=anuncios").get_data(as_text=True)
+    assert "Reacción" in a.get(f"/campana/{cid}?tab=ideas").get_data(as_text=True)

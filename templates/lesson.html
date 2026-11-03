@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ ls.title }} · {{ c.title }}{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('course', cid=c.id) }}">← {{ c.title }}</a>
+<div class="lesson-grid">
+  <div class="lesson-main">
+    {% if embed %}
+    <div class="lesson-video" data-lesson-player data-url="{{ url_for('lesson_progress', lid=ls.id) }}" data-csrf="{{ csrf_token() }}" data-start="{{ mine.seconds if mine and not mine.completed_at else 0 }}">
+      <iframe src="{{ embed }}" title="{{ ls.title }}" loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+    </div>
+    {% elif ls.video_guid %}<div class="card tight"><p class="muted">El vídeo se está preparando. Vuelve en unos minutos.</p></div>{% endif %}
+    <div class="card lesson-body">
+      <h1>{{ ls.title }}</h1>
+      {% if ls.body %}<div class="pre">{{ ls.body }}</div>{% endif %}
+      {% if ls.file_name %}<a class="mat-row" href="{{ url_for('lesson_file', lid=ls.id) }}" data-turbo="false"><span class="mat-ico">{{ icon("doc") }}</span><span class="mat-name">{{ ls.file_name }}</span><span class="mat-out">↓</span></a>{% endif %}
+      <div class="lesson-foot">
+        {% if prev_ %}<a class="btn soft" href="{{ url_for('lesson', lid=prev_.id) }}">← Anterior</a>{% else %}<span></span>{% endif %}
+        <form method="post" action="{{ url_for('lesson_progress', lid=ls.id) }}" data-lesson-done>
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          {% set done = mine and mine.completed_at %}
+          <input type="hidden" name="done" value="{{ '0' if done else '1' }}">
+          {% if next_ and not done %}<input type="hidden" name="next" value="{{ url_for('lesson', lid=next_.id) }}">{% endif %}
+          <button class="btn {{ 'soft' if done else 'accent' }}">{% if done %}✓ Vista{% elif next_ %}Marcar como vista y seguir →{% else %}Marcar como vista{% endif %}</button>
+        </form>
+        {% if next_ %}<a class="btn soft" href="{{ url_for('lesson', lid=next_.id) }}">Siguiente →</a>{% else %}<span></span>{% endif %}
+      </div>
+    </div>
+  </div>
+  <aside class="lesson-side">
+    <div class="small muted"><b class="tnum">{{ pr.done }} de {{ pr.total }}</b> vistas</div>
+    <div class="dbar"><span style="width:{{ pr.pct }}%"></span></div>
+    {% include "_course_index.html" %}
+  </aside>
+</div>
+{% endblock %}

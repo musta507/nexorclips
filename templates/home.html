@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon, budget %}
 {% block content %}
+{% if fs and fs.done < 4 %}
+<section class="card fsteps" aria-label="Primeros pasos">
+  <div class="fsteps-head"><h2>Primeros pasos</h2><span class="small muted tnum">{{ fs.done }} de 4</span></div>
+  <div class="dbar" role="img" aria-label="{{ fs.done }} de 4 hechos"><span style="width:{{ fs.done * 25 }}%"></span></div>
+  <ol class="fsteps-list">
+    {% for label, done, url in fs.steps %}
+    <li class="{{ 'done' if done }}"><a href="{{ url }}"><span class="fs-dot">{% if done %}✓{% else %}{{ loop.index }}{% endif %}</span>{{ label }}</a></li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
 {% if not new_user and not current_user.payout_ready %}
 <div class="card tight notice">
   <span class="ico">{{ icon("card") }}</span>
@@ -35,7 +46,7 @@
 </a>
 {% endif %}
 
-<section>
+<section id="campanas">
   <div class="section-head">
     <h2>Campañas para ti</h2>
     <p class="muted">Únete a campañas y empieza a ganar</p>
@@ -47,4 +58,32 @@
     <div class="table-card"><div class="empty"><h3>No hay campañas aquí ahora mismo</h3><p class="muted">Vuelve pronto: aquí aparecerán las nuevas campañas.</p></div></div>
   {% endif %}
 </section>
+{% if top5 or week_clips %}
+<div class="duo home-duo">
+  <section class="card box">
+    <div class="box-head">{{ icon("trophy") }} Top 5 de la semana <a class="link small push" href="{{ url_for('ranking_page') }}">Ver ranking</a></div>
+    {% if top5 %}
+    <ol class="rank compact">
+      {% for r in top5 %}
+      <li class="rank-row{% if r.user.id == current_user.id %} me{% endif %}"><span class="rank-pos{% if r.pos <= 3 %} top{{ r.pos }}{% endif %}">{{ r.pos }}</span><span class="rank-name"><b>{{ r.name }}</b></span><span class="rank-val tnum"><b>{{ r.views|short }}</b><span class="small muted">vistas</span></span></li>
+      {% endfor %}
+    </ol>
+    {% else %}<p class="box-body muted small">Esta semana aún no hay clips aprobados. ¡Puedes ser el primero!</p>{% endif %}
+  </section>
+  <section class="card box">
+    <div class="box-head">{{ icon("film") }} Clips de la semana</div>
+    {% if week_clips %}
+    <div class="box-body clip-list">
+      {% for s in week_clips %}
+      <a class="clip" href="{{ s.url }}" target="_blank" rel="noopener">
+        <span class="pi">{{ icon(s.platform) }}</span>
+        <div class="meta"><b>{{ s.campaign.song }}</b><span class="small muted">{{ s.author and '@' ~ s.author or PLATFORMS[s.platform] }}</span></div>
+        <div class="views tnum">{{ s.views|short }}</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}<p class="box-body muted small">Aquí saldrán los clips con más vistas de los últimos 7 días.</p>{% endif %}
+  </section>
+</div>
+{% endif %}
 {% endblock %}

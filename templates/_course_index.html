@@ -1,0 +1,22 @@
+{% from "_icons.html" import icon %}
+<div class="course-index">
+  {% for ch in c.chapters %}
+  {% set vis = ch.lessons if current_user.is_admin else ch.lessons|selectattr('published')|list %}
+  {% if vis %}
+  <section class="card tight ci-ch">
+    <h3>{{ ch.title }}</h3>
+    <ol>
+      {% for l in vis %}
+      <li class="{% if l.id in pr.done_ids %}done{% endif %}{% if ls is defined and ls.id == l.id %} on{% endif %}">
+        <a href="{{ url_for('lesson', lid=l.id) }}"{% if ls is defined and ls.id == l.id %} aria-current="page"{% endif %}>
+          <span class="ci-dot">{% if l.id in pr.done_ids %}✓{% else %}{{ loop.index }}{% endif %}</span>
+          <span class="ci-t">{{ l.title }}</span>
+          {% if l.duration %}<span class="small muted tnum">{{ (l.duration // 60) }}:{{ '%02d'|format(l.duration % 60) }}</span>{% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+  {% endfor %}
+</div>

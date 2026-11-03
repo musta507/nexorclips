@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Ranking · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('index') }}">← Inicio</a>
+<div class="section-head" style="margin:0">
+  <h1>Ranking de clippers</h1>
+  <p class="muted">Por vistas de clips aprobados. Solo se ve el nombre y la inicial del apellido.</p>
+</div>
+<nav class="seg" aria-label="Periodo">
+  {% for k, v in periods.items() %}<a class="{% if period == k %}on{% endif %}" href="{{ url_for('ranking_page', p=k) }}">{{ v[0] }}</a>{% endfor %}
+</nav>
+{% if me %}<div class="card tight rank-me">Vas <b>#{{ me.pos }}</b> con <b class="tnum">{{ me.views|short }}</b> vistas y <b class="tnum money-txt">{{ me.earned|money }}</b> ganados.</div>{% endif %}
+<div class="table-card">
+  {% if rows %}
+  <ol class="rank">
+    {% for r in rows %}
+    <li class="rank-row{% if r.user.id == current_user.id %} me{% endif %}">
+      <span class="rank-pos{% if r.pos <= 3 %} top{{ r.pos }}{% endif %}">{{ r.pos }}</span>
+      <span class="avatar sm">{% if r.user.avatar_url %}<img src="{{ r.user.avatar_url }}" alt="" referrerpolicy="no-referrer" loading="lazy">{% else %}{{ r.name[:1] }}{% endif %}</span>
+      <span class="rank-name"><b>{{ r.name }}</b>{% if r.user.id == current_user.id %} <span class="small muted">(tú)</span>{% endif %}<span class="small muted">{{ r.clips }} clip{{ 's' if r.clips != 1 }}</span></span>
+      <span class="rank-val tnum"><b>{{ r.views|short }}</b><span class="small muted">vistas</span></span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <div class="empty"><h3>Aún no hay nadie</h3><p class="muted">Cuando se aprueben clips en este periodo, saldrán aquí.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

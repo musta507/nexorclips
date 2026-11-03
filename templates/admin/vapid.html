@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Claves de avisos · Admin{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_settings') }}">← Ajustes</a>
+{% call ui.head("Claves para los avisos", "Cópiala ahora: no se guarda en la web y no se volverá a mostrar.") %}{% endcall %}
+<div class="card form-stack" style="max-width:720px">
+  <ol class="small">
+    <li>En Railway → servicio <b>web</b> → <b>Variables</b> → <b>New Variable</b>.</li>
+    <li>Nombre: <code>VAPID_PRIVATE_KEY</code> · Valor: la clave de abajo. Pulsa el candado para sellarla.</li>
+    <li>Railway reinicia la web y los avisos quedan activados.</li>
+  </ol>
+  <div class="inline"><input id="vapid-priv" value="{{ priv }}" readonly aria-label="Clave privada"><button type="button" class="btn sm soft" data-copy="vapid-priv">Copiar</button></div>
+  <p class="small muted">Si alguna vez la cambias, los clippers tendrán que volver a activar los avisos en su móvil.</p>
+</div>
+{% endblock %}

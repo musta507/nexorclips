@@ -7,13 +7,14 @@
   <div class="inline" style="gap:14px">
     <span class="avatar lg">{% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ user.initial }}{% endif %}</span>
     <div>
-      <h1>{{ user.name }}{% if user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}</h1>
+      <h1>{{ user.name }}{% if user.trusted %} <span class="pill-ok">De confianza</span>{% endif %}{% if user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}</h1>
       <p class="small muted"><span class="selectable">{{ user.email }}</span> · entra con {{ "Google" if user.google_sub else "correo" }} · desde {{ user.created_at|date }}{% if user.last_seen_at %} · visto {{ user.last_seen_at|ago }}{% endif %}</p>
     </div>
   </div>
   {% if not user.is_admin %}
   <div class="inline" style="flex-wrap:wrap">
     <a class="btn accent" href="{{ url_for('admin_chat', uid=user.id) }}">{{ icon("chat") }} Chat{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
+    <form method="post" action="{{ url_for('admin_ban', uid=user.id, accion='confianza') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft" title="En las campañas que lo permitan, sus clips sin avisos se aprueban solos">{{ "✓ De confianza" if user.trusted else "Marcar de confianza" }}</button></form>
     {% if user.is_banned %}
     <form method="post" action="{{ url_for('admin_ban', uid=user.id, accion='desbloquear') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">Desbloquear</button></form>
     {% else %}

@@ -141,6 +141,10 @@ function pagina() {
   iniciarChat();
   pastillaOrden();
   graficas();
+  asistente();
+  avisosPush();
+  subidaVideo();
+  progresoLeccion();
 }
 
 // =============================================================== gráfica de estadísticas (informe y panel)
@@ -438,4 +442,243 @@ document.addEventListener("turbo:before-prefetch", function (e) {
 document.addEventListener("change", function (e) {
   var f = e.target.closest("form[data-autosubmit]");
   if (f) f.requestSubmit ? f.requestSubmit() : f.submit();
+});
+
+// =============================================================== revisión de clips: atajos de teclado
+// ← / → (o ↑ / ↓) cambian de clip · A aprueba · R va al motivo del rechazo. No hacen nada mientras escribes.
+document.addEventListener("keydown", function (e) {
+  if (!document.querySelector("[data-review]") || e.metaKey || e.ctrlKey || e.altKey) return;
+  var t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+  var k = e.key, el = null;
+  if (k === "ArrowRight" || k === "ArrowDown") el = document.querySelector("[data-key-next]");
+  else if (k === "ArrowLeft" || k === "ArrowUp") el = document.querySelector("[data-key-prev]");
+  if (el) { e.preventDefault(); el.click(); return; }
+  if (k === "a" || k === "A") {
+    var b = document.querySelector(".rv-panel [data-key-approve]:not([disabled])");
+    if (b) { e.preventDefault(); b.form.requestSubmit ? b.form.requestSubmit(b) : b.click(); }
+  } else if (k === "r" || k === "R") {
+    var s = document.querySelector(".rv-panel [data-key-reject]");
+    if (s) { e.preventDefault(); s.focus(); s.scrollIntoView({ block: "center" }); }
+  }
+});
+
+// Casilla «Todos»: marca o desmarca todas las de la lista
+document.addEventListener("change", function (e) {
+  var all = e.target.closest("[data-check-all]");
+  if (!all) return;
+  var name = all.getAttribute("data-check-all");
+  document.querySelectorAll("input[type=checkbox][name='" + name + "']").forEach(function (c) { c.checked = all.checked; });
+});
+
+// =============================================================== asistente de campaña (5 pasos) con vista previa
+function asistente() {
+  var wz = document.querySelector("[data-wizard]");
+  if (!wz) return;
+  var steps = Array.prototype.slice.call(wz.querySelectorAll(".wz-step"));
+  var pills = Array.prototype.slice.call(wz.querySelectorAll("[data-wz-go]"));
+  var back = wz.querySelector("[data-wz-back]"), next = wz.querySelector("[data-wz-next]"), save = wz.querySelector("[data-wz-save]");
+  var editing = wz.hasAttribute("data-editing");
+  var cur = 0;
+  wz.classList.add("wz-on");
+  function valid(i) {
+    var bad = Array.prototype.slice.call(steps[i].querySelectorAll("input,select,textarea")).filter(function (f) { return !f.checkValidity(); });
+    if (bad.length) { bad[0].reportValidity(); return false; }
+    return true;
+  }
+  function show(i) {
+    cur = Math.max(0, Math.min(steps.length - 1, i));
+    steps.forEach(function (s, j) { s.hidden = j !== cur; });
+    pills.forEach(function (p, j) { p.classList.toggle("on", j === cur); p.classList.toggle("done", j < cur); p.setAttribute("aria-current", j === cur ? "step" : "false"); });
+    back.hidden = cur === 0;
+    next.hidden = cur === steps.length - 1;
+    save.hidden = !editing && cur !== steps.length - 1;
+    var top = wz.getBoundingClientRect().top + window.scrollY - 80;
+    if (window.scrollY > top) window.scrollTo(0, top);
+    preview();
+  }
+  next.addEventListener("click", function () { if (valid(cur)) show(cur + 1); });
+  back.addEventListener("click", function () { show(cur - 1); });
+  pills.forEach(function (p, j) {
+    p.addEventListener("click", function () {
+      if (j <= cur || editing) return show(j);
+      for (var k = cur; k < j; k++) { if (!valid(k)) return show(k); }
+      show(j);
+    });
+  });
+  // Si al guardar falta algo en un paso escondido, se abre ese paso
+  wz.closest("form").addEventListener("invalid", function (e) {
+    var st = e.target.closest(".wz-step");
+    if (st && st.hidden) show(steps.indexOf(st));
+  }, true);
+  // Vista previa en directo de la tarjeta de la campaña
+  var pv = document.querySelector("[data-wz-preview]");
+  function val(n) { var f = wz.querySelector("[name='" + n + "']"); return f ? f.value.trim() : ""; }
+  function num(v) { v = (v || "").replace(/\s/g, ""); if (/^\d{1,3}(\.\d{3})+$/.test(v)) v = v.replace(/\./g, ""); return parseFloat(v.replace(",", ".")) || 0; }
+  function money(v) { return "$" + (Math.round(v * 100) / 100).toLocaleString("es-ES", { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 }); }
+  function preview() {
+    if (!pv) return;
+    var on = Array.prototype.slice.call(wz.querySelectorAll("input[name^='pf_']:checked")).map(function (c) { return c.name.slice(3); });
+    var top = 0;
+    on.forEach(function (p) { top = Math.max(top, num(val("rate_k_" + p))); });
+    pv.querySelector("[data-pv=name]").textContent = val("song") || "Nombre de la campaña";
+    pv.querySelector("[data-pv=artist]").textContent = val("artist") || "Creador";
+    pv.querySelector("[data-pv=cpm]").textContent = top ? money(top) + " / 1K vistas" : "— / 1K vistas";
+    pv.querySelector("[data-pv=budget]").textContent = num(val("budget")) ? money(num(val("budget"))) : "—";
+    var k = wz.querySelector("[name=kind]:checked");
+    pv.querySelector("[data-pv=kind]").textContent = k ? k.getAttribute("data-label") : "Clipping";
+    pv.querySelectorAll("[data-pv-pf]").forEach(function (i) { i.hidden = on.indexOf(i.getAttribute("data-pv-pf")) < 0; });
+    var bonus = num(val("bonus_per_clip"));
+    var b = pv.querySelector("[data-pv=bonus]"); b.hidden = !bonus; b.textContent = "+" + money(bonus) + " por clip";
+    var url = val("cover_url"), img = pv.querySelector("[data-pv=cover]");
+    if (url.indexOf("https://") === 0) img.style.backgroundImage = "url('" + url.replace(/'/g, "") + "')";
+  }
+  var file = wz.querySelector("input[name=cover_file]");
+  if (file && pv) file.addEventListener("change", function () {
+    var f = file.files && file.files[0];
+    if (f && /^image\//.test(f.type)) {
+      var u = URL.createObjectURL(f);
+      pv.querySelector("[data-pv=cover]").style.backgroundImage = "url('" + u + "')";
+    }
+  });
+  wz.addEventListener("input", preview);
+  wz.addEventListener("change", preview);
+  show(0);
+}
+
+// =============================================================== avisos en este dispositivo (Web Push)
+function avisosPush() {
+  var box = document.querySelector("[data-push]");
+  if (!box) return;
+  var on = box.querySelector("[data-push-on]"), off = box.querySelector("[data-push-off]"), state = box.querySelector("[data-push-state]");
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    on.hidden = true; state.textContent = "Este navegador no permite avisos. En iPhone: añade la web a la pantalla de inicio y ábrela desde ahí.";
+    return;
+  }
+  function key(b64) {
+    var pad = "=".repeat((4 - b64.length % 4) % 4), raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    var out = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out;
+  }
+  function b64(buf) { return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+  function send(url, sub) {
+    var f = new FormData(); f.append("_csrf", box.getAttribute("data-csrf")); f.append("endpoint", sub.endpoint);
+    if (sub.getKey) { f.append("p256dh", b64(sub.getKey("p256dh"))); f.append("auth", b64(sub.getKey("auth"))); }
+    return fetch(url, { method: "POST", body: f, credentials: "same-origin" });
+  }
+  function show(sub) { on.hidden = !!sub; off.hidden = !sub; if (sub) state.textContent = "Avisos activados en este dispositivo."; }
+  navigator.serviceWorker.register("/sw.js", { scope: "/" }).then(function (reg) {
+    reg.pushManager.getSubscription().then(show);
+    on.addEventListener("click", function () {
+      Notification.requestPermission().then(function (perm) {
+        if (perm !== "granted") { state.textContent = "Has bloqueado los avisos. Actívalos en los ajustes del navegador."; return; }
+        reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key(box.getAttribute("data-key")) })
+          .then(function (sub) { return send(box.getAttribute("data-sub"), sub).then(function () { show(sub); }); })
+          .catch(function () { state.textContent = "No se pudieron activar. Inténtalo otra vez."; });
+      });
+    });
+    off.addEventListener("click", function () {
+      reg.pushManager.getSubscription().then(function (sub) {
+        if (!sub) return show(null);
+        send(box.getAttribute("data-unsub"), sub).then(function () { return sub.unsubscribe(); }).then(function () { show(null); state.textContent = "Avisos desactivados en este dispositivo."; });
+      });
+    });
+  });
+}
+
+// =============================================================== formación: subir vídeo a Bunny (directo desde el navegador)
+function subidaVideo() {
+  var box = document.querySelector("[data-bunny-upload]");
+  if (!box) return;
+  var file = box.querySelector("[data-file]"), start = box.querySelector("[data-start]"), bar = box.querySelector("[data-bar]"),
+      fill = bar.querySelector("span"), msg = box.querySelector("[data-msg]");
+  var CHUNK = 16 * 1024 * 1024;
+  function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
+  function fail(t) { msg.textContent = t; start.disabled = false; }
+  start.addEventListener("click", function () {
+    var f = file.files && file.files[0];
+    if (!f) { msg.textContent = "Elige primero el vídeo."; return; }
+    start.disabled = true; msg.textContent = "Preparando la subida…";
+    var fd = new FormData(); fd.append("_csrf", box.getAttribute("data-csrf"));
+    fetch(box.getAttribute("data-prepare"), { method: "POST", body: fd, credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) return fail(d.error || "No se pudo preparar la subida.");
+        var h = { "Tus-Resumable": "1.0.0", "AuthorizationSignature": d.signature, "AuthorizationExpire": String(d.expire),
+                  "VideoId": d.guid, "LibraryId": String(d.library) };
+        var x = new XMLHttpRequest();
+        x.open("POST", d.endpoint);
+        Object.keys(h).forEach(function (k) { x.setRequestHeader(k, h[k]); });
+        x.setRequestHeader("Upload-Length", String(f.size));
+        x.setRequestHeader("Upload-Metadata", "filetype " + b64(f.type || "video/mp4") + ",title " + b64(box.getAttribute("data-title") || f.name));
+        x.onload = function () {
+          var loc = x.getResponseHeader("Location");
+          if (x.status !== 201 || !loc) return fail("Bunny no aceptó la subida (" + x.status + ").");
+          loc = new URL(loc, d.endpoint).href;
+          bar.hidden = false;
+          (function send(offset) {
+            if (offset >= f.size) { fill.style.width = "100%"; msg.textContent = "¡Subido! Bunny lo está procesando (unos minutos)."; return estado(); }
+            var p = new XMLHttpRequest();
+            p.open("PATCH", loc);
+            Object.keys(h).forEach(function (k) { p.setRequestHeader(k, h[k]); });
+            p.setRequestHeader("Upload-Offset", String(offset));
+            p.setRequestHeader("Content-Type", "application/offset+octet-stream");
+            p.upload.onprogress = function (e) { var pc = Math.round((offset + e.loaded) / f.size * 100); fill.style.width = pc + "%"; msg.textContent = "Subiendo… " + pc + " %"; };
+            p.onload = function () {
+              if (p.status !== 204) return fail("Se cortó la subida (" + p.status + "). Vuelve a intentarlo.");
+              send(parseInt(p.getResponseHeader("Upload-Offset") || String(offset + CHUNK), 10));
+            };
+            p.onerror = function () { fail("Sin conexión durante la subida. Vuelve a intentarlo."); };
+            p.send(f.slice(offset, offset + CHUNK));
+          })(0);
+        };
+        x.onerror = function () { fail("No se pudo conectar con Bunny."); };
+        x.send(null);
+      })
+      .catch(function () { fail("No se pudo preparar la subida."); });
+  });
+  function estado() {
+    var t = setInterval(function () {
+      fetch(box.getAttribute("data-status"), { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d.status === "listo") { clearInterval(t); msg.textContent = "Vídeo listo."; location.reload(); }
+        else if (d.status === "error") { clearInterval(t); msg.textContent = "Bunny no pudo procesar el vídeo. Prueba con otro archivo."; }
+      }).catch(function () {});
+    }, 8000);
+    limpiar.push(function () { clearInterval(t); });
+  }
+}
+
+// =============================================================== formación: progreso de la lección (sigue donde lo dejaste)
+function progresoLeccion() {
+  var box = document.querySelector("[data-lesson-player]");
+  if (!box) return;
+  var frame = box.querySelector("iframe"), url = box.getAttribute("data-url"), csrf = box.getAttribute("data-csrf");
+  var start = parseInt(box.getAttribute("data-start") || "0", 10), last = 0, ended = false;
+  function save(extra) {
+    var f = new FormData(); f.append("_csrf", csrf);
+    Object.keys(extra).forEach(function (k) { f.append(k, extra[k]); });
+    return fetch(url, { method: "POST", body: f, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } });
+  }
+  function cmd(method, value) {
+    frame.contentWindow.postMessage(JSON.stringify({ context: "player.js", version: "0.0.11", method: method, value: value, listener: "cp" }), "*");
+  }
+  function onMsg(e) {
+    if (!frame || e.source !== frame.contentWindow) return;
+    var d; try { d = typeof e.data === "string" ? JSON.parse(e.data) : e.data; } catch (err) { return; }
+    if (!d || d.context !== "player.js") return;
+    if (d.event === "ready") {
+      cmd("addEventListener", "timeupdate"); cmd("addEventListener", "ended");
+      if (start > 5) cmd("setCurrentTime", start);
+    } else if (d.event === "timeupdate" && d.value) {
+      var s = Math.floor(d.value.seconds || 0);
+      if (Math.abs(s - last) >= 15) { last = s; save({ seconds: s }); }
+      if (!ended && d.value.duration && s >= d.value.duration * 0.92) { ended = true; save({ done: "1", seconds: s }); }
+    } else if (d.event === "ended" && !ended) { ended = true; save({ done: "1" }); }
+  }
+  window.addEventListener("message", onMsg);
+  limpiar.push(function () { window.removeEventListener("message", onMsg); });
+}
+
+// Botón «Descargar PDF / imprimir» del informe (el navegador deja guardarlo como PDF)
+document.addEventListener("click", function (e) {
+  if (e.target.closest("[data-print]")) window.print();
 });

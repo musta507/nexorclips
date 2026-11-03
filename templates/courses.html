@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Formación · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="section-head" style="margin:0"><h1>Formación</h1><p class="muted">Aprende a hacer clips que consiguen vistas.</p></div>
+{% if rows %}
+<div class="course-grid">
+  {% for c, pr in rows %}
+  <a class="card course-card" href="{{ url_for('lesson', lid=pr.next.id) if pr.done and not pr.finished else url_for('course', cid=c.id) }}">
+    <span class="course-ico">{{ icon("cap") }}</span>
+    <b>{{ c.title }}</b>
+    {% if c.description %}<span class="small muted course-desc">{{ c.description }}</span>{% endif %}
+    <span class="small muted">{{ pr.total }} lecciones · {{ c.chapters|length }} capítulo{{ 's' if c.chapters|length != 1 }}</span>
+    <div class="dbar"><span style="width:{{ pr.pct }}%"></span></div>
+    <span class="small"><b class="tnum">{{ pr.pct }} %</b> <span class="muted">{% if pr.finished %}· ¡Completado!{% elif pr.done %}· Continuar{% else %}· Empezar{% endif %}</span></span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="table-card"><div class="empty"><h3>Muy pronto</h3><p class="muted">Estamos preparando los cursos. Te avisaremos cuando estén.</p></div></div>
+{% endif %}
+{% endblock %}

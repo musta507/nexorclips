@@ -2,10 +2,16 @@
 {% import "admin/_ui.html" as ui %}
 {% block title %}Clips por revisar · Admin{% endblock %}
 {% block content %}
-{% call ui.head("Clips por revisar", "Aprueba los clips que cumplen las reglas. Para rechazar hay que escribir el motivo: el clipper lo verá.") %}
+{% call ui.head("Clips por revisar", "Los clips llegan aquí cuando alcanzan el pago mínimo. Atajos: ← → para moverte, A aprueba, R rechaza.") %}
   <form method="post" action="{{ url_for('admin_refresh') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">↻ Actualizar vistas</button></form>
 {% endcall %}
+<nav class="seg" aria-label="Bandeja">
+  {% for t, label in [("revisar", "Por revisar"), ("contando", "Contando vistas"), ("apelaciones", "Apelaciones")] %}
+  <a class="{% if tab == t %}on{% endif %}" href="{{ url_for('admin_clips', tab=t, c=cid or None) }}">{{ label }} <b class="tnum">{{ n[t] }}</b></a>
+  {% endfor %}
+</nav>
 <form method="get" class="adm-filters" data-autosubmit>
+  <input type="hidden" name="tab" value="{{ tab }}">
   <select name="c" aria-label="Campaña">
     <option value="">Todas las campañas</option>
     {% for c in camps %}<option value="{{ c.id }}"{% if cid == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}
@@ -13,24 +19,88 @@
   <label class="check"><input type="checkbox" name="avisos" value="1"{% if avisos %} checked{% endif %}> Solo con avisos</label>
   <noscript><button class="btn sm soft">Filtrar</button></noscript>
 </form>
-<div class="table-card">
-{% if pending %}
-  <div class="table-scroll"><table class="rt">
-    <thead><tr><th>Clipper</th><th>Campaña</th><th>Clip</th><th class="r">Vistas</th><th>Acción</th></tr></thead>
-    <tbody>
-    {% for s in pending %}
-    <tr{% if s.flag_list %} class="row-flag"{% endif %}>
-      <td data-label="Clipper"><a class="link" href="{{ url_for('admin_clipper', uid=s.user_id) }}"><b>{{ s.user.name }}</b></a><div class="small muted">{{ s.user.email }}</div></td>
-      <td data-label="Campaña">{{ s.campaign.song }}</td>
-      <td data-label="Clip"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver en {{ PLATFORMS[s.platform] }}</a><div class="small muted">{{ s.created_at|ago }}</div>{% include "admin/_flags.html" %}</td>
-      <td data-label="Vistas" class="r tnum">{{ s.views|num }}<div class="small {% if s.views_error %}" style="color:var(--red){% else %} muted{% endif %}">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</div></td>
-      <td data-label="Acción">{% include "admin/_review_buttons.html" %}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
-{% else %}
-  <div class="empty"><h3>Todo revisado</h3><p class="muted">No hay clips pendientes{% if cid or avisos %} con este filtro{% endif %}.</p></div>
-{% endif %}
+
+{% if rows %}
+<div class="rv" data-review>
+  <div class="rv-list card tight">
+    {% if tab == 'revisar' %}
+    <form id="bulk" method="post" action="{{ url_for('admin_review_bulk') }}" class="rv-bulk">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="check"><input type="checkbox" data-check-all="ids"> Todos</label>
+      <select name="accion" aria-label="Acción"><option value="aprobar">Aprobar</option><option value="rechazar">Rechazar</option></select>
+      <select name="code" aria-label="Motivo">{% for k, label in REJECT_REASONS.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select>
+      <button class="btn sm" data-confirm="¿Aplicar a los clips marcados?">Aplicar</button>
+    </form>
+    {% endif %}
+    <ul class="rv-items">
+      {% for s in rows %}
+      <li class="rv-item{% if sel and s.id == sel.id %} on{% endif %}{% if s.flag_list %} flagged{% endif %}">
+        {% if tab == 'revisar' %}<input type="checkbox" name="ids" value="{{ s.id }}" form="bulk" aria-label="Marcar clip de {{ s.user.name }}">{% endif %}
+        <a href="{{ url_for('admin_clips', tab=tab, c=cid or None, avisos=1 if avisos else None, sel=s.id) }}"{% if sel and s.id == sel.id %} aria-current="true"{% endif %}>
+          <span class="rv-top"><b>{{ s.user.name }}</b><span class="tnum">{{ s.views|short }}</span></span>
+          <span class="rv-sub small muted">{{ PLATFORMS[s.platform] }}{% if s.author %} · @{{ s.author }}{% endif %} · {{ s.campaign.song }}</span>
+          <span class="rv-sub small muted">{{ (s.appeal_at if tab == 'apelaciones' else s.created_at)|ago }}{% if s.flag_list %} · <span class="warn-txt">⚠ {{ s.flag_list|length }} aviso{{ 's' if s.flag_list|length > 1 }}</span>{% endif %}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% set s = sel %}
+  {% set next_url = url_for('admin_clips', tab=tab, c=cid or None, avisos=1 if avisos else None, sel=next_.id if next_ else (prev_.id if prev_ else None)) %}
+  <section class="rv-panel card" aria-label="Clip seleccionado">
+    <div class="rv-nav">
+      {% if prev_ %}<a class="btn sm soft" data-key-prev href="{{ url_for('admin_clips', tab=tab, c=cid or None, avisos=1 if avisos else None, sel=prev_.id) }}">← Anterior</a>{% else %}<span></span>{% endif %}
+      <span class="small muted">{{ rows.index(s) + 1 }} de {{ rows|length }}</span>
+      {% if next_ %}<a class="btn sm soft" data-key-next href="{{ url_for('admin_clips', tab=tab, c=cid or None, avisos=1 if avisos else None, sel=next_.id) }}">Siguiente →</a>{% else %}<span></span>{% endif %}
+    </div>
+    <div class="rv-body">
+      <div class="rv-video">
+        {% if embed %}<iframe src="{{ embed }}" title="Vídeo del clip" loading="lazy" allow="encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+        {% else %}<div class="empty"><p class="muted">No se puede ver aquí.</p></div>{% endif %}
+        <a class="link small" href="{{ s.url }}" target="_blank" rel="noopener">Abrir en {{ PLATFORMS[s.platform] }} ↗</a>
+      </div>
+      <div class="rv-info">
+        <h2><a class="link" href="{{ url_for('admin_clipper', uid=s.user_id) }}">{{ s.user.name }}</a>{% if s.user.trusted %} <span class="pill-ok">De confianza</span>{% endif %}</h2>
+        <p class="small muted">{{ s.user.email }}</p>
+        <dl class="rv-dl">
+          <dt>Campaña</dt><dd><a class="link" href="{{ url_for('admin_campaign', cid=s.campaign_id) }}">{{ s.campaign.song }}</a></dd>
+          <dt>Vistas</dt><dd class="tnum">{{ s.views|num }} <span class="small muted">· {{ s|checked }}</span></dd>
+          {% if s.likes is not none %}<dt>Interacción</dt><dd class="tnum">{{ s.likes|short }} me gusta{% if s.comments is not none %} · {{ s.comments|short }} coment.{% endif %}{% if s.shares is not none %} · {{ s.shares|short }} compart.{% endif %}</dd>{% endif %}
+          <dt>Ganaría</dt><dd class="tnum">{{ [s.campaign.remaining, raw_earning_of(s)]|min|money }}</dd>
+          <dt>Enviado</dt><dd>{{ s.created_at|datetime }}</dd>
+          <dt>Publicado</dt><dd>{% if s.posted_at %}{{ s.posted_at|datetime }}{% else %}<span class="muted">Aún no lo sabemos</span>{% endif %}</dd>
+        </dl>
+        {% include "admin/_flags.html" %}
+        {% if s.views_error %}<p class="small warn-txt">{{ s.views_error }}</p>{% endif %}
+        {% if s.campaign.rules_text %}<details class="rv-rules"><summary>Reglas de la campaña</summary><div class="small pre">{{ s.campaign.rules_text }}</div></details>{% endif %}
+
+        {% if tab == 'apelaciones' %}
+        <div class="rv-appeal">
+          <p class="small"><b>Motivo del rechazo:</b> {{ s.reject_reason or "—" }}</p>
+          <p class="small"><b>Lo que dice el clipper:</b></p>
+          <blockquote class="small pre">{{ s.appeal_text }}</blockquote>
+          <form method="post" action="{{ url_for('admin_review', sid=s.id, accion='apelacion_aceptar') }}" class="form-stack">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ next_url }}">
+            <input name="reply" placeholder="Mensaje para el clipper (opcional)" aria-label="Mensaje para el clipper">
+            <div class="inline" style="flex-wrap:wrap">
+              <button class="btn sm green" name="approve" value="1" data-key-approve>Darle la razón y aprobar</button>
+              <button class="btn sm soft">Darle la razón (volver a revisión)</button>
+              <button class="btn sm red" formaction="{{ url_for('admin_review', sid=s.id, accion='apelacion_rechazar') }}">Mantener el rechazo</button>
+            </div>
+          </form>
+        </div>
+        {% elif tab == 'revisar' %}
+        <div class="rv-actions">{% include "admin/_review_buttons.html" %}</div>
+        {% else %}
+        <p class="small muted">Aún no llega al pago mínimo ({{ s.campaign.min_for(s.platform)|money }}). Pasará a «Por revisar» solo cuando lo alcance{% if s.campaign.expire_days %}; si no lo hace en {{ s.campaign.expire_days }} días se rechaza solo{% endif %}.</p>
+        <div class="rv-actions">{% include "admin/_review_buttons.html" %}</div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
 </div>
+{% else %}
+<div class="table-card"><div class="empty"><h3>{{ "Todo revisado" if tab == 'revisar' else "Nada por aquí" }}</h3><p class="muted">{% if tab == 'revisar' %}No hay clips que hayan llegado al mínimo pendientes de revisar{% elif tab == 'contando' %}No hay clips contando vistas{% else %}No hay apelaciones pendientes{% endif %}{% if cid or avisos %} con este filtro{% endif %}.</p></div></div>
+{% endif %}
 {% endblock %}

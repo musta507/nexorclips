@@ -21,6 +21,20 @@ SHORT_TIKTOK = re.compile(r"^https?://(?:vm|vt)\.tiktok\.com/|^https?://(?:www\.
 
 
 # ---------------------------------------------------------------- enlaces
+def embed_url(platform, url):
+    """Enlace para ver el vídeo dentro de la web (reproductor oficial de cada red)."""
+    vid = video_id(url)
+    if not vid:
+        return ""
+    if platform == "tiktok":
+        return f"https://www.tiktok.com/embed/v2/{vid}"
+    if platform == "instagram":
+        return f"https://www.instagram.com/reel/{vid}/embed/"
+    if platform == "youtube":
+        return f"https://www.youtube-nocookie.com/embed/{vid}"
+    return ""
+
+
 def detect_platform(url):
     u = (url or "").lower()
     if "tiktok.com" in u:
@@ -141,6 +155,29 @@ AUTHOR_KEYS = {
 }
 
 
+DATE_KEYS = {
+    "tiktok": ["createTimeISO", "createTime", "create_time"],
+    "instagram": ["timestamp", "takenAtTimestamp", "taken_at_timestamp"],
+    "youtube": ["date", "uploadDate", "publishedAt"],
+}
+
+
+def _to_date(v):
+    """Fecha de publicación (UTC, sin zona) a partir de un número de segundos o un texto ISO."""
+    from datetime import datetime, timezone
+    if v is None or isinstance(v, bool):
+        return None
+    try:
+        if isinstance(v, (int, float)) or (isinstance(v, str) and v.strip().isdigit()):
+            n = float(v)
+            n = n / 1000 if n > 1e12 else n
+            return datetime.fromtimestamp(n, tz=timezone.utc).replace(tzinfo=None) if n > 1e9 else None
+        d = datetime.fromisoformat(str(v).strip().replace("Z", "+00:00"))
+        return d.astimezone(timezone.utc).replace(tzinfo=None) if d.tzinfo else d
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
 def _ids_from_item(item):
     ids = set()
     for k in ("id", "shortCode", "shortcode", "videoId"):
@@ -161,7 +198,9 @@ def parse_item(platform, item):
     shares = _to_int(_first(item, SHARE_KEYS[platform]))
     author = _first(item, AUTHOR_KEYS[platform])
     author = clean_handle(author) if isinstance(author, str) else ""
-    return {"views": views, "likes": likes, "comments": comments, "shares": shares, "author": author}
+    posted = _to_date(_first(item, DATE_KEYS[platform]))
+    return {"views": views, "likes": likes, "comments": comments, "shares": shares, "author": author,
+            "posted_at": posted}
 
 
 def fetch_items(platform, urls):

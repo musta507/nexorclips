@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ c.title }} · Formación{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('courses') }}">← Formación</a>
+<div class="card course-head">
+  <div><h1>{{ c.title }}</h1>{% if c.description %}<p class="muted pre">{{ c.description }}</p>{% endif %}
+    <div class="dbar" style="max-width:360px"><span style="width:{{ pr.pct }}%"></span></div>
+    <p class="small muted"><b class="tnum">{{ pr.done }} de {{ pr.total }}</b> lecciones vistas</p></div>
+  {% if pr.next %}<a class="btn accent" href="{{ url_for('lesson', lid=pr.next.id) }}">{{ icon("play") }} {% if pr.finished %}Volver a ver{% elif pr.done %}Continuar{% else %}Empezar{% endif %}</a>{% endif %}
+</div>
+{% include "_course_index.html" %}
+{% endblock %}

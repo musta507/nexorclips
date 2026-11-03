@@ -56,6 +56,13 @@
 </div>
 
 {% if allow_wipe %}
+<div class="card tight form-stack">
+  <h3>Avisos a los clippers</h3>
+  <p class="small">{% if VAPID_ON %}✓ Avisos al móvil y al ordenador activados.{% else %}Avisos al móvil: falta la variable <code>VAPID_PRIVATE_KEY</code> en Railway.{% endif %}
+    · {% if WHATSAPP_ON %}✓ WhatsApp activado.{% else %}WhatsApp: faltan <code>WHATSAPP_TOKEN</code> y <code>WHATSAPP_PHONE_ID</code> (API oficial de Meta, con una plantilla aprobada llamada <code>{{ WHATSAPP_TEMPLATE }}</code> con un hueco {{ '{{1}}' }}).{% endif %}</p>
+  {% if not VAPID_ON %}<form method="post" action="{{ url_for('admin_vapid_keys') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Generar la clave de avisos</button></form>{% endif %}
+</div>
+
 <details class="card wipe">
   <summary><b>Empezar de cero</b> <span class="small muted">· borrar todos los datos de prueba</span></summary>
   <p class="small muted" style="margin:10px 0 14px">Borra todas las campañas, clips, retiros, mensajes, solicitudes, el registro de actividad y las cuentas de los clippers. Los administradores se quedan. Con «Borrar todo menos las campañas» las campañas se quedan, pero vacías (sin clips ni dinero repartido). <b>No se puede deshacer.</b></p>
