@@ -1223,3 +1223,65 @@ def test_parse_spanish_numbers():
     assert A.parse_float("5.000") == 5000 and A.parse_float("5.000,50") == 5000.5
     assert A.parse_float("1,5") == 1.5 and A.parse_float("1.5") == 1.5 and A.parse_float("0.150") == 0.15
     assert A.parse_float("1.500.000") == 1_500_000 and A.parse_float("") is None and A.parse_float("abc", 0) == 0
+
+
+def _two_creator_setup(monkeypatch):
+    """Un clipper con dinero en dos campañas cerradas: una del creador Pablo (su Whop) y otra de la cuenta principal."""
+    c, admin = _clipper_with_balance(monkeypatch)
+    monkeypatch.setenv("WHOP_KEY_PABLO", "apik_pablo")
+    with A.app.app_context():
+        cr = A.Creator(name="Pablo", key_var="WHOP_KEY_PABLO", company_id="biz_pablo")
+        A.db.session.add(cr); A.db.session.commit()
+        u = A.User.query.filter(A.User.is_admin.is_(False)).first()
+        camp1 = A.Campaign.query.first()
+        camp2 = A.Campaign(song="Otra", artist="P", rate=1_000_000, budget=1000, spent=40, status="finalizada", creator_id=cr.id)
+        A.db.session.add(camp2); A.db.session.flush()
+        A.db.session.add(A.Submission(user_id=u.id, campaign_id=camp2.id, url="https://www.tiktok.com/@x/video/99", platform="tiktok",
+                                      video_key="tiktok:99", views=40, earned=40, status="aprobado"))
+        A.db.session.commit()
+        before = A.user_money(u)
+        return c, admin, cr.id, before
+
+
+def test_withdraw_splits_by_creator_wallet(monkeypatch):
+    c, admin, crid, before = _two_creator_setup(monkeypatch)
+    assert before["by_creator"].get(crid) == 40
+    calls = _whop_fake(monkeypatch)
+    post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    r = post(c, "/ganancias/retirar")
+    assert "Te hemos enviado" in r.get_data(as_text=True)
+    with A.app.app_context():
+        ps = A.Payout.query.order_by(A.Payout.id).all()
+        assert {p.creator_id for p in ps} == {crid, None}
+        assert abs(sum(p.amount for p in ps) - before["available"]) < 0.01
+    transfers = [x for x in calls if x[0] == "POST" and x[1].endswith("/transfers")]
+    assert {t[2].get("origin_id") for t in transfers} == {"biz_pablo", "biz_1"}
+    keys = {t[2].get("origin_id"): t[3].get("Authorization") for t in transfers}
+    assert keys["biz_pablo"] == "Bearer apik_pablo" and keys["biz_1"] == "Bearer k"     # cada pago con la clave de su Whop
+
+
+def test_creator_without_key_keeps_money_reserved(monkeypatch):
+    c, admin, crid, before = _two_creator_setup(monkeypatch)
+    monkeypatch.delenv("WHOP_KEY_PABLO")
+    _whop_fake(monkeypatch)
+    post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    r = post(c, "/ganancias/retirar").get_data(as_text=True)
+    assert "quedan reservados" in r
+    with A.app.app_context():
+        p = A.Payout.query.filter_by(creator_id=crid).first()
+        assert p.status == "solicitado" and "Esperando" in p.note
+
+
+def test_creators_page_and_roles(monkeypatch):
+    c, admin, crid, before = _two_creator_setup(monkeypatch)
+    html = admin.get("/admin/creadores").get_data(as_text=True)
+    assert "Pablo" in html and "Conectado" in html
+    r = post(admin, "/admin/creadores/nuevo", name="Mala", key_var="otra cosa")
+    assert "WHOP_KEY_" in r.get_data(as_text=True)
+    monkeypatch.setattr(A, "REVIEWER_EMAILS", {"rev@test.com"})
+    rev = client_for("rev@test.com")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="rev@test.com").first(); u.is_admin, u.admin_role = True, "reviewer"; A.db.session.commit()
+    assert rev.get("/admin/clips").status_code == 200
+    assert rev.get("/admin/retiros").status_code == 403 and rev.get("/admin/creadores").status_code == 403
+    assert "Retiros" not in rev.get("/admin").get_data(as_text=True).split("adm-nav")[1].split("</nav>")[0]

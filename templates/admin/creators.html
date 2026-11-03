@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Creadores · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Creadores", "Cada creador paga los retiros de sus campañas desde su propio Whop. El dinero nunca pasa por la agencia.") %}
+  <a class="btn" href="{{ url_for('admin_creator_form') }}">+ Añadir creador</a>
+{% endcall %}
+
+<div class="table-card">
+  <div class="table-scroll"><table class="rt">
+    <thead><tr><th>Creador</th><th>Whop</th><th class="r">Saldo en su Whop</th><th class="r">Debe a clippers</th><th>Campañas</th><th></th></tr></thead>
+    <tbody>
+    <tr>
+      <td data-label="Creador"><b>Cuenta principal</b><div class="small muted">campañas sin creador asignado</div></td>
+      <td data-label="Whop">{% if main_ready %}<span class="status aprobado">Conectado</span>{% else %}<span class="status rechazado">Sin conectar</span>{% endif %}</td>
+      <td data-label="Saldo" class="r tnum muted">—</td>
+      <td data-label="Debe" class="r tnum">{{ main_owed|money }}</td>
+      <td data-label="Campañas"></td><td></td>
+    </tr>
+    {% for r in rows %}
+    <tr>
+      <td data-label="Creador"><b>{{ r.c.name }}</b>{% if r.c.contact %}<div class="small muted selectable">{{ r.c.contact }}</div>{% endif %}</td>
+      <td data-label="Whop">
+        {% if not r.c.key_var %}<span class="status pendiente">Sin clave</span>
+        {% elif not r.has_key %}<span class="status rechazado">Falta {{ r.c.key_var }} en Railway</span>
+        {% elif not r.company %}<span class="status rechazado">Clave no válida</span>{% if r.error %}<div class="small muted">{{ r.error }}</div>{% endif %}
+        {% else %}<span class="status aprobado">Conectado</span><div class="small muted selectable">{{ r.company }}</div>{% endif %}
+      </td>
+      <td data-label="Saldo" class="r tnum">{% if r.balance is not none %}<b>{{ r.balance|money }}</b>{% elif r.error %}<span class="small muted" title="{{ r.error }}">No se puede leer</span>{% else %}—{% endif %}</td>
+      <td data-label="Debe" class="r tnum">{{ r.owed|money }}{% if r.missing %}<div class="small" style="color:var(--red-ink);font-weight:600">Le faltan {{ r.missing|money }}</div>{% endif %}</td>
+      <td data-label="Campañas" class="small">{{ r.campaigns }} ({{ r.live }} activas)</td>
+      <td class="r"><a class="btn sm soft" href="{{ url_for('admin_creator_form', crid=r.c.id) }}">Editar</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% if not rows %}<div class="empty"><h3>Aún no hay creadores</h3><p class="muted">Añade uno para que sus campañas se paguen desde su propio Whop.</p></div>{% endif %}
+</div>
+
+<div class="card tight form-stack">
+  <h3>Cómo conectar el Whop de un creador</h3>
+  <ol class="small" style="margin:0;padding-left:18px;line-height:1.8">
+    <li>El creador crea una clave en su Whop (Desarrollador → Claves de API) con los permisos <b>payout:transfer_funds</b>, <b>payout:transfer:read</b>, <b>company:balance:read</b> y <b>payout:account:read</b>, y te la manda por privado.</li>
+    <li>En Railway, en el servicio de la web → Variables, añade una variable nueva con un nombre como <b>WHOP_KEY_PABLO</b> y pega su clave. Pulsa los 3 puntos → <b>Seal</b> para que nadie pueda volver a verla.</li>
+    <li>Aquí, pulsa «Añadir creador» y escribe ese mismo nombre de variable. La clave nunca se guarda en la web.</li>
+    <li>Al crear o editar una campaña, elige en «Paga desde el Whop de» a ese creador.</li>
+  </ol>
+  {% if env_keys %}<p class="small muted">Variables de creadores que ya hay en Railway: {% for k in env_keys %}<span class="chip">{{ k }}</span> {% endfor %}</p>{% endif %}
+</div>
+{% endblock %}

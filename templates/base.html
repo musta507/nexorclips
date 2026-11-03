@@ -11,7 +11,7 @@
   <a class="skip" href="#contenido">Saltar al contenido</a>
   <header class="topbar">
     <div class="wrap">
-      <a class="home-link" href="{{ url_for('admin_home') if admin_page else url_for('index') }}" aria-label="Inicio">{{ logo() }}{% if admin_page %}<span class="admin-tag adm-badge">Admin</span>{% endif %}</a>
+      <a class="home-link" href="{{ url_for('admin_home') if admin_page else url_for('index') }}" aria-label="Inicio">{{ logo() }}{% if admin_page %}<span class="admin-tag adm-badge">{{ "Admin" if (current_user.admin_role or "owner") == "owner" else ADMIN_ROLES[current_user.admin_role] }}</span>{% endif %}</a>
       {% if admin_page %}
       <a class="adm-view" href="{{ url_for('index') }}">{{ icon("out") }} Ver la web como clipper</a>
       {% else %}
@@ -49,6 +49,7 @@
         {% for e, eps, label, ico, n in [
           ("admin_home", ["admin_home"], "Resumen", "grid", 0),
           ("admin_campaigns", ["admin_campaigns", "admin_campaign", "admin_campaign_form"], "Campañas", "flag", 0),
+          ("admin_creators", ["admin_creators", "admin_creator_form"], "Creadores", "card", nc.creators_alert),
           ("admin_requests", ["admin_requests"], "Solicitudes", "inbox", nc.requests),
           ("admin_clips", ["admin_clips"], "Clips por revisar", "film", nc.clips),
           ("admin_clippers", ["admin_clippers", "admin_clipper"], "Clippers", "users", 0),
@@ -57,7 +58,7 @@
           ("admin_leads", ["admin_leads"], "Creadores interesados", "megaphone", nc.leads),
           ("admin_activity", ["admin_activity"], "Actividad", "pulse", 0),
           ("admin_settings", ["admin_settings", "admin_probe"], "Ajustes", "gear", 0)] %}
-        <a class="adm-link{% if ep in eps %} on{% endif %}" href="{{ url_for(e) }}"{% if ep in eps %} aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span>{% if n %}<b class="adm-n">{{ n }}</b>{% endif %}</a>
+        {% if admin_can(e) %}<a class="adm-link{% if ep in eps %} on{% endif %}" href="{{ url_for(e) }}"{% if ep in eps %} aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span>{% if n %}<b class="adm-n">{{ n }}</b>{% endif %}</a>{% endif %}
         {% endfor %}
       </nav>
     </aside>

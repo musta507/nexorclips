@@ -14,6 +14,13 @@
     </div>
     <input type="hidden" name="category" value="{{ camp.category or 'streamer' }}">
 
+    <div class="field"><label for="creator_id">Paga desde el Whop de</label>
+      <select id="creator_id" name="creator_id">
+        <option value="">Cuenta principal de la agencia</option>
+        {% for cr in creators %}<option value="{{ cr.id }}" {% if camp.creator_id == cr.id %}selected{% endif %}>{{ cr.name }}</option>{% endfor %}
+      </select>
+      <span class="hint">Los retiros de los clippers de esta campaña salen del Whop de este creador. Se añaden en <a class="link" href="{{ url_for('admin_creators') }}">Creadores</a>.</span></div>
+
     <div class="field">
       <label for="cover_file">Portada</label>
       {% if cover_src(camp) %}<img src="{{ cover_src(camp, 720) }}" alt="Portada actual" style="width:160px;aspect-ratio:1;object-fit:cover;border-radius:14px">{% endif %}

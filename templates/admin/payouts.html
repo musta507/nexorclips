@@ -18,7 +18,7 @@
       {% for p in open_requests %}
       <tr{% if p.user.is_banned %} class="row-flag"{% endif %}>
         <td data-label="Clipper"><a class="link" href="{{ url_for('admin_clipper', uid=p.user_id) }}"><b>{{ p.user.name }}</b></a>{% if p.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">{{ p.user.email }} · {{ p.created_at|ago }}</div></td>
-        <td data-label="Enviar a"><b>{{ p.method }}</b><div class="small selectable" style="word-break:break-all">{{ p.details }}</div></td>
+        <td data-label="Enviar a"><b>{{ p.method }}</b><div class="small selectable" style="word-break:break-all">{{ p.details }}</div><div class="small muted">Sale del Whop de: {{ p.creator.name if p.creator else "cuenta principal" }}</div></td>
         <td data-label="Monto" class="r tnum"><b>{{ p.amount|money }}</b></td>
         <td data-label="Acción">
           {% if p.status == "procesando" %}
@@ -30,7 +30,7 @@
             <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <input type="hidden" name="payout_id" value="{{ p.id }}">
             <input id="note-{{ p.id }}" name="note" placeholder="ID de transacción o motivo" style="width:200px" aria-label="Nota">
-            {% if p.method == WHOP_METHOD and whop_enabled() %}<button class="btn sm" name="action" value="whop"><span class="whop-ico" aria-hidden="true"></span>Pagar con Whop</button>{% endif %}
+            {% if p.method == WHOP_METHOD and wallet_ready(p.creator_id) %}<button class="btn sm" name="action" value="whop"><span class="whop-ico" aria-hidden="true"></span>Pagar con Whop</button>{% endif %}
             <button class="btn sm green" name="action" value="pagar">Marcar pagado</button>
             <button class="btn sm red" name="action" value="rechazar">Rechazar</button>
           </form>

@@ -84,7 +84,10 @@ REFRESH_DAYS = int(os.environ.get("REFRESH_DAYS", "0"))        # 0 = se cuentan 
 MIN_WITHDRAW = float(os.environ.get("MIN_WITHDRAW", "1"))           # Whop no envía pagos de menos de 1 $
 MAX_CLIPS_DAY = int(os.environ.get("MAX_CLIPS_DAY", "0"))      # 0 = sin límite de clips al día
 PAYOUT_DAYS = int(os.environ.get("PAYOUT_DAYS", "7"))          # plazo de pago que se promete al clipper
-ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").split(",") if e.strip()}
+ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").split(",") if e.strip()}          # dueños: todo
+REVIEWER_EMAILS = {e.strip().lower() for e in os.environ.get("REVIEWER_EMAILS", "").split(",") if e.strip()}   # revisan clips y solicitudes
+SUPPORT_EMAILS = {e.strip().lower() for e in os.environ.get("SUPPORT_EMAILS", "").split(",") if e.strip()}     # atienden mensajes
+ADMIN_ROLES = {"owner": "Dueño", "reviewer": "Revisor", "support": "Soporte"}
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
@@ -147,6 +150,7 @@ class User(UserMixin, db.Model):
     google_sub = db.Column(db.String(64), unique=True, nullable=True)
     password_hash = db.Column(db.String(255), default="")      # solo si se registró con correo y contraseña
     is_admin = db.Column(db.Boolean, default=False)
+    admin_role = db.Column(db.String(20), default="")          # owner · reviewer · support (sale de las variables de Railway)
     is_banned = db.Column(db.Boolean, default=False)
     ban_reason = db.Column(db.String(255), default="")
     payout_method = db.Column(db.String(60), default="")
@@ -199,8 +203,22 @@ class User(UserMixin, db.Model):
 
 
 
+class Creator(db.Model):
+    """Creador o marca que paga sus campañas desde SU Whop. La clave nunca se guarda aquí:
+    va en una variable de Railway (p. ej. WHOP_KEY_PABLO) y aquí solo se guarda el NOMBRE de esa variable."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    contact = db.Column(db.String(255), default="")          # correo, WhatsApp… para avisarle
+    key_var = db.Column(db.String(60), default="")           # nombre de la variable de Railway con su clave de Whop
+    company_id = db.Column(db.String(40), default="")        # biz_ de su empresa (si se deja vacío, se detecta con la clave)
+    notes = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    campaigns = db.relationship("Campaign", backref="creator", lazy=True)
+
+
 class Campaign(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    creator_id = db.Column(db.Integer, db.ForeignKey("creator.id"), nullable=True, index=True)   # quién paga (vacío = cuenta principal)
     song = db.Column(db.String(200), nullable=False)
     artist = db.Column(db.String(200), nullable=False)
     cover_url = db.Column(db.String(500), default="")
@@ -389,6 +407,7 @@ class Payout(db.Model):
     """Retiros: el clipper los solicita y el admin los marca como pagados."""
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    creator_id = db.Column(db.Integer, db.ForeignKey("creator.id"), nullable=True, index=True)  # de qué Whop sale (vacío = principal)
     amount = db.Column(Money, nullable=False)
     method = db.Column(db.String(60), default="")
     details = db.Column(db.String(255), default="")
@@ -399,6 +418,7 @@ class Payout(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     paid_at = db.Column(db.DateTime, nullable=True)
     user = db.relationship("User", backref="payouts")
+    creator = db.relationship("Creator")
 
 
 class AuditLog(db.Model):
@@ -537,10 +557,27 @@ def load_user(uid):
         user = db.session.get(User, int(uid))
     except (TypeError, ValueError):
         return None
-    if user and user.is_admin and (user.email or "").lower() not in ADMIN_EMAILS:
-        user.is_admin = False      # su correo ya no está en ADMIN_EMAIL: deja de ser admin al momento
-        db.session.commit()
+    if user and user.is_admin:
+        role = role_for(user.email)
+        if not role:
+            user.is_admin, user.admin_role = False, ""     # su correo ya no está en ninguna lista: deja de ser admin al momento
+            db.session.commit()
+        elif role != user.admin_role:
+            user.admin_role = role                          # le han cambiado de lista en Railway
+            db.session.commit()
     return user
+
+
+def role_for(email):
+    """Rol de admin según las variables de Railway: ADMIN_EMAIL (dueño), REVIEWER_EMAILS (revisor), SUPPORT_EMAILS (soporte)."""
+    email = (email or "").lower()
+    if email in ADMIN_EMAILS:
+        return "owner"
+    if email in REVIEWER_EMAILS:
+        return "reviewer"
+    if email in SUPPORT_EMAILS:
+        return "support"
+    return ""
 
 
 def ensure_schema():
@@ -858,7 +895,16 @@ def user_money(user):
     withdrawn = cents(sum(p.amount for p in user.payouts if p.status in PAYOUT_OPEN + ("pagado",)))
     paid = cents(sum(p.amount for p in user.payouts if p.status == "pagado"))
     balance = cents(closed - withdrawn)
+    # Saldo por creador: cada creador paga desde su Whop lo que se ganó en SUS campañas
+    by_creator = {}
+    for s_, a in earned_rows:
+        by_creator[s_.campaign.creator_id] = by_creator.get(s_.campaign.creator_id, 0) + a
+    for p in user.payouts:
+        if p.status in PAYOUT_OPEN + ("pagado",):
+            by_creator[p.creator_id] = by_creator.get(p.creator_id, 0) - p.amount
+    by_creator = {k: cents(v) for k, v in by_creator.items() if cents(v) >= CENT}
     return {
+        "by_creator": by_creator,
         "earned": earned,
         "live": live,
         "pending": cents(sum(a for _, a in pending_rows)),
@@ -1038,6 +1084,18 @@ def _refresh_due(now=None):
     return now - last >= timedelta(hours=REFRESH_HOURS)
 
 
+def check_creator_balances():
+    """Una vez al día: si a algún creador no le llega el saldo de su Whop para lo que deben sus campañas, aviso al móvil."""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    if get_setting("creators_checked", "") == today:
+        return
+    set_setting("creators_checked", today)
+    for r in creators_overview():
+        if r["missing"]:
+            notify_phone(f"⚠️ A {r['c'].name} le falta saldo en Whop",
+                         f"Debe {money(r['owed'])} a clippers y tiene {money(r['balance'])}. Faltan {money(r['missing'])}.", tags="warning")
+
+
 def _auto_refresh_loop():
     """Reloj interno: cada 10 minutos mira si toca contar vistas (cada REFRESH_HOURS horas)."""
     time.sleep(90)                          # deja arrancar la web primero
@@ -1047,6 +1105,7 @@ def _auto_refresh_loop():
                 if _refresh_due():
                     set_setting("last_refresh_at", datetime.utcnow().isoformat())
                     refresh_views()
+                    check_creator_balances()
         except Exception:  # noqa: BLE001
             log.exception("Fallo en la actualización automática de vistas")
         time.sleep(600)
@@ -1127,11 +1186,27 @@ def unhandled_error(e):
     return render_template("error.html", code=500, title=title, body=body), 500
 
 
+# Qué puede abrir cada rol. El dueño, todo. Lo que no está en la lista es solo para el dueño (dinero, campañas, ajustes…).
+ROLE_ENDPOINTS = {
+    "reviewer": {"admin_home", "admin_clips", "admin_requests", "admin_review", "admin_campaign_member",
+                 "admin_campaign_account", "admin_campaign", "admin_campaigns", "admin_clipper"},
+    "support": {"admin_home", "admin_inbox", "admin_chat", "admin_chat_poll", "admin_clipper"},
+}
+
+
+def admin_can(endpoint, user=None):
+    user = user or current_user
+    if not getattr(user, "is_admin", False):
+        return False
+    role = user.admin_role or "owner"
+    return role == "owner" or endpoint in ROLE_ENDPOINTS.get(role, set())
+
+
 def admin_required(f):
     @wraps(f)
     @login_required
     def wrapper(*a, **kw):
-        if not current_user.is_admin:
+        if not current_user.is_admin or not admin_can(request.endpoint):
             abort(403)
         return f(*a, **kw)
     return wrapper
@@ -1208,7 +1283,7 @@ def static_url(filename):
 
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": csrf_token, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
+    return {"csrf_token": csrf_token, "admin_can": admin_can, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
@@ -1317,8 +1392,8 @@ def sign_in(email, name, avatar="", sub=None, password_user=None):
     user.avatar_url = (avatar or user.avatar_url or "")[:500]
     if not user.accepted_terms_at:
         user.accepted_terms_at = datetime.utcnow()
-    if email in ADMIN_EMAILS and password_user is None:   # el admin solo se activa entrando con Google, nunca con contraseña
-        user.is_admin = True
+    if role_for(email) and password_user is None:   # el admin solo se activa entrando con Google, nunca con contraseña
+        user.is_admin, user.admin_role = True, role_for(email)
     db.session.commit()
     session.pop("_csrf", None)            # código de seguridad nuevo en cada inicio de sesión
     session.permanent = True
@@ -1390,7 +1465,7 @@ def register():
     if len(password) < 8:
         flash("La contraseña tiene que tener al menos 8 caracteres.", "error")
         return back
-    if email in ADMIN_EMAILS:
+    if role_for(email):
         flash("Con este correo se entra con Google.", "error")
         return back
     if User.query.filter_by(email=email).first():
@@ -1825,35 +1900,61 @@ def withdraw():
         if amount < MIN_WITHDRAW:
             flash(f"El retiro mínimo es {money(MIN_WITHDRAW)}.", "error")
             return redirect(url_for("earnings"))
-        is_whop = current_user.payout_method == WHOP_METHOD
-        auto = is_whop and whop_enabled() and (WHOP_AUTO_MAX <= 0 or amount <= WHOP_AUTO_MAX)
-        payout = Payout(user_id=current_user.id, amount=amount, method=current_user.payout_method,
-                        status="procesando" if auto else "solicitado",
-                        details=(f"@{current_user.whop_username} ({current_user.whop_user_id})" if is_whop
-                                 else current_user.payout_details))
-        db.session.add(payout)
+        parts, left = [], amount               # se reparte entre los Whop de los creadores, empezando por el que más debe
+        for cid, avail in sorted(m["by_creator"].items(), key=lambda kv: -kv[1]):
+            take = cents(min(avail, left))
+            if take >= max(MIN_WITHDRAW, CENT):
+                parts.append((cid, take))
+                left = cents(left - take)
+            if left < CENT:
+                break
+        if not parts:
+            flash(f"Cada pago por Whop tiene que ser de al menos {money(MIN_WITHDRAW)}. Prueba con una cantidad mayor.", "error")
+            return redirect(url_for("earnings"))
+        amount = cents(sum(t for _, t in parts))
+        created = []
+        for cid, take in parts:
+            auto = wallet_ready(cid) and (WHOP_AUTO_MAX <= 0 or take <= WHOP_AUTO_MAX)
+            p = Payout(user_id=current_user.id, creator_id=cid, amount=take, method=current_user.payout_method,
+                       status="procesando" if auto else "solicitado",
+                       note="" if auto or wallet_ready(cid) else "Esperando a que se conecte el Whop del creador",
+                       details=f"@{current_user.whop_username} ({current_user.whop_user_id})")
+            db.session.add(p)
+            created.append((p, auto))
         db.session.commit()
-    log.info("Retiro: user=%s amount=%s method=%s auto=%s", current_user.id, amount, payout.method, auto)
-    if auto:
-        result = whop_pay(payout)
-        db.session.commit()
-        if result == "pagado":
-            notify_phone(f"✅ Pagado por Whop: {money(amount)}", f"{current_user.name} · @{current_user.whop_username}",
-                         url_for("admin_clippers"), tags="white_check_mark")
-            flash(f"¡Listo! Te hemos enviado {money(amount)} a tu cuenta de Whop (@{current_user.whop_username}). "
-                  "Ya lo tienes en tu saldo de Whop.", "ok")
-        elif result == "procesando":
-            flash(f"Estamos enviando {money(amount)} a tu cuenta de Whop. Llegará en unos minutos.", "ok")
+    log.info("Retiro: user=%s amount=%s partes=%s", current_user.id, amount, len(created))
+    results = []
+    for p, auto in created:
+        if auto:
+            results.append(whop_pay(p))
+            db.session.commit()
         else:
-            flash("Whop no ha podido enviar el pago ahora mismo. No se te ha descontado nada: el dinero sigue "
-                  "en tu saldo. Vuelve a intentarlo en un rato.", "error")
-        return redirect(url_for("earnings", tab="retiros"))
-    notify_phone(f"💸 Retiro de {money(amount)}", f"{current_user.name} quiere cobrar en {payout.method}.",
-                 url_for("admin_clippers"), tags="money_with_wings")
-    if is_whop:
-        flash(f"Retiro de {money(amount)} solicitado. Por ser una cantidad alta lo revisamos antes de enviarlo a tu Whop.", "ok")
-    else:
-        flash(f"Retiro de {money(amount)} solicitado. Lo pagaremos en un plazo de {PAYOUT_DAYS} días hábiles.", "ok")
+            results.append("espera")
+    paid = cents(sum(p.amount for (p, _), r in zip(created, results) if r == "pagado"))
+    waiting = cents(sum(p.amount for (p, _), r in zip(created, results) if r in ("procesando", "espera")))
+    failed = cents(sum(p.amount for (p, _), r in zip(created, results) if r == "fallido"))
+    if paid:
+        notify_phone(f"✅ Pagado por Whop: {money(paid)}", f"{current_user.name} · @{current_user.whop_username}",
+                     url_for("admin_payouts"), tags="white_check_mark")
+    if any(r == "espera" for r in results):
+        notify_phone(f"💸 Retiro de {money(waiting)} esperando", f"{current_user.name}: revisa Retiros en el panel.",
+                     url_for("admin_payouts"), tags="money_with_wings")
+    msgs = []
+    if paid:
+        msgs.append(f"¡Listo! Te hemos enviado {money(paid)} a tu cuenta de Whop (@{current_user.whop_username}).")
+    processing = cents(sum(p.amount for (p, _), r in zip(created, results) if r == "procesando"))
+    held = [p for (p, _), r in zip(created, results) if r == "espera"]
+    if processing:
+        msgs.append(f"Estamos enviando {money(processing)} a tu cuenta de Whop. Llegará en unos minutos.")
+    if any(wallet_ready(p.creator_id) for p in held):
+        msgs.append(f"Retiro de {money(sum(p.amount for p in held if wallet_ready(p.creator_id)))} solicitado. "
+                    "Por ser una cantidad alta lo revisamos antes de enviarlo a tu Whop.")
+    if any(not wallet_ready(p.creator_id) for p in held):
+        msgs.append(f"{money(sum(p.amount for p in held if not wallet_ready(p.creator_id)))} quedan reservados para ti: "
+                    "te los enviaremos en cuanto el creador de esa campaña conecte su Whop.")
+    if failed:
+        msgs.append(f"Whop no ha podido enviar {money(failed)}. No se te ha descontado: sigue en tu saldo.")
+    flash(" ".join(msgs), "error" if failed and not paid and not waiting else "ok")
     return redirect(url_for("earnings", tab="retiros"))
 
 
@@ -1927,6 +2028,7 @@ def admin_counts():
         "payouts": Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).count(),
         "messages": Message.query.filter_by(from_admin=False, read_by_admin=False).count(),
         "leads": CampaignLead.query.filter_by(status="nueva").count(),
+        "creators_alert": sum(1 for c in Creator.query.all() if not creator_key(c)) + int(get_setting("creators_short", "0") or 0),
     }
 
 
@@ -2161,6 +2263,8 @@ def _campaign_from_form(camp):
     if status == "finalizada" and camp.id and camp.status != "finalizada":
         close_campaign(camp, current_user.id)          # al cerrarla, los clippers ya pueden retirar
     camp.status = status
+    crid = request.form.get("creator_id", type=int)
+    camp.creator_id = crid if crid and db.session.get(Creator, crid) else None
     camp.featured = bool(request.form.get("featured"))
     was_full, camp.full = bool(camp.full), bool(request.form.get("full"))
     if was_full and not camp.full and camp.id:
@@ -2236,7 +2340,88 @@ def admin_campaign_form(cid=None):
         flash(error, "error")
         if cid:
             camp = db.session.get(Campaign, cid)
-    return render_template("admin/campaign_form.html", camp=camp, editing=bool(cid))
+    return render_template("admin/campaign_form.html", camp=camp, editing=bool(cid), creators=Creator.query.order_by(Creator.name).all())
+
+
+# ---------------------------------------------------------------- creadores (pagan desde su propio Whop)
+def creator_owed(creator_id):
+    """Lo que el Whop de un creador todavía tiene que pagar: lo ganado en sus campañas menos lo ya enviado."""
+    earned = (db.session.query(db.func.coalesce(db.func.sum(Submission.earned), 0))
+              .join(Campaign, Submission.campaign_id == Campaign.id)
+              .filter(Submission.status == "aprobado", Campaign.creator_id == creator_id).scalar() or 0)
+    sent = (db.session.query(db.func.coalesce(db.func.sum(Payout.amount), 0))
+            .filter(Payout.creator_id == creator_id, Payout.status.in_(("pagado", "procesando"))).scalar() or 0)
+    return cents(float(earned) - float(sent))
+
+
+def creators_overview():
+    """Estado de cada creador: si su Whop está conectado, su saldo y si le alcanza para lo que debe."""
+    rows, short = [], 0
+    for c in Creator.query.order_by(Creator.name).all():
+        key = creator_key(c)
+        company = creator_company_id(c) if key else ""
+        balance, err = whop_balance(c.id) if key and company else (None, "")
+        owed = creator_owed(c.id)
+        missing = cents(owed - balance) if balance is not None and balance + CENT < owed else 0
+        short += 1 if missing else 0
+        rows.append({"c": c, "has_key": bool(key), "company": company, "balance": balance, "error": err or
+                     (_creator_company.get(c.key_var, {}).get("error", "") if key and not company else ""),
+                     "owed": owed, "missing": missing, "campaigns": len(c.campaigns),
+                     "live": sum(1 for x in c.campaigns if x.status == "activa")})
+    set_setting("creators_short", str(short))
+    return rows
+
+
+@app.route("/admin/creadores")
+@admin_required
+def admin_creators():
+    env_keys = sorted(k for k in os.environ if CREATOR_KEY_RE.match(k))
+    return render_template("admin/creators.html", rows=creators_overview(), env_keys=env_keys,
+                           main_ready=bool(WHOP_API_KEY and whop_company_id()), main_owed=creator_owed(None))
+
+
+@app.route("/admin/creadores/nuevo", methods=["GET", "POST"])
+@app.route("/admin/creadores/<int:crid>", methods=["GET", "POST"])
+@admin_required
+def admin_creator_form(crid=None):
+    c = db.session.get(Creator, crid) if crid else Creator(name="")
+    if crid and not c:
+        abort(404)
+    if request.method == "POST":
+        if request.form.get("action") == "borrar" and c.id:
+            if c.campaigns:
+                flash("No se puede borrar: tiene campañas. Cambia antes el creador de esas campañas.", "error")
+                return redirect(url_for("admin_creator_form", crid=c.id))
+            audit("creador_borrado", c.name)
+            db.session.delete(c)
+            db.session.commit()
+            flash("Creador borrado.", "ok")
+            return redirect(url_for("admin_creators"))
+        name = (request.form.get("name") or "").strip()[:120]
+        key_var = (request.form.get("key_var") or "").strip().upper()
+        company = (request.form.get("company_id") or "").strip()
+        if not name:
+            flash("Escribe el nombre del creador.", "error")
+        elif key_var and not CREATOR_KEY_RE.match(key_var):
+            flash("El nombre de la variable tiene que empezar por WHOP_KEY_ y llevar solo letras, números y _ (p. ej. WHOP_KEY_PABLO).", "error")
+        elif company and not re.fullmatch(r"biz_[A-Za-z0-9]{6,30}", company):
+            flash("El código de empresa tiene que empezar por biz_.", "error")
+        else:
+            changed_key = c.key_var != key_var
+            c.name, c.key_var, c.company_id = name, key_var, company
+            c.contact = (request.form.get("contact") or "").strip()[:255]
+            c.notes = (request.form.get("notes") or "").strip()[:2000]
+            if not c.id:
+                db.session.add(c)
+            if changed_key:
+                _creator_company.pop(key_var, None)
+            audit("creador_guardado", f"{c.name} · {key_var or 'sin clave'}")
+            db.session.commit()
+            flash("Creador guardado." + ("" if not key_var or os.environ.get(key_var) else
+                  f" Falta añadir la variable {key_var} en Railway con su clave de Whop."), "ok")
+            return redirect(url_for("admin_creators"))
+    env_keys = sorted(k for k in os.environ if CREATOR_KEY_RE.match(k))
+    return render_template("admin/creator_form.html", c=c, env_keys=env_keys)
 
 
 @app.route("/admin/campana/<int:cid>")
@@ -2379,9 +2564,9 @@ def admin_clipper(uid):
                            unread=Message.query.filter_by(user_id=uid, from_admin=False, read_by_admin=False).count())
 
 
-def whop_call(method, path, **kw):
-    """Llama a la API de Whop y devuelve (ok, código, datos)."""
-    headers = {"Authorization": f"Bearer {WHOP_API_KEY}", "Content-Type": "application/json"}
+def whop_call(method, path, api_key=None, **kw):
+    """Llama a la API de Whop y devuelve (ok, código, datos). Sin `api_key`, usa la clave principal (WHOP_API_KEY)."""
+    headers = {"Authorization": f"Bearer {api_key or WHOP_API_KEY}", "Content-Type": "application/json"}
     headers.update(kw.pop("headers", {}))
     try:
         r = requests.request(method, f"{WHOP_API}{path}", headers=headers, timeout=30, **kw)
@@ -2414,13 +2599,95 @@ def whop_company_id():
     return _whop_company["id"]
 
 
+CREATOR_KEY_RE = re.compile(r"^WHOP_KEY_[A-Z0-9_]{1,40}$")
+_creator_company = {}          # nombre de variable → {"id", "tried", "error"}
+_balance_cache = {}            # (clave de cartera) → (momento, saldo o None, error)
+
+
+def creator_key(creator):
+    """La clave de Whop de un creador, leída de su variable de Railway (nunca de la base de datos)."""
+    if not creator or not CREATOR_KEY_RE.match(creator.key_var or ""):
+        return ""
+    return os.environ.get(creator.key_var, "").strip()
+
+
+def creator_company_id(creator):
+    """El biz_ de la empresa del creador: el que se escribió en su ficha o el que Whop dice con su clave."""
+    if creator.company_id:
+        return creator.company_id
+    key = creator_key(creator)
+    if not key:
+        return ""
+    st = _creator_company.setdefault(creator.key_var, {"id": "", "tried": 0.0, "error": ""})
+    if not st["id"] and time.time() - st["tried"] > 60:
+        st["tried"] = time.time()
+        ok, code, data = whop_call("GET", "/accounts/me", api_key=key)
+        cid = str((data or {}).get("id", "")) if isinstance(data, dict) else ""
+        if ok and cid.startswith("biz_"):
+            st["id"], st["error"] = cid, ""
+        else:
+            st["error"] = ("No se pudo conectar con Whop. Se vuelve a intentar en un minuto." if code == 0 else
+                           "Whop no acepta la clave: revisa que esté bien copiada en Railway y que tenga los permisos."
+                           if code in (401, 403) else f"Whop respondió {code}.")
+            log.warning("Whop: no se pudo saber la empresa del creador %s (%s) %s", creator.id, code, str(data)[:200])
+    return st["id"]
+
+
+def wallet(creator_id):
+    """(clave, empresa, nombre) del Whop del que sale el dinero de un creador; sin creador = la cuenta principal."""
+    if creator_id:
+        c = db.session.get(Creator, creator_id)
+        if c:
+            return creator_key(c), creator_company_id(c), c.name
+        return "", "", "Creador borrado"
+    return WHOP_API_KEY, (whop_company_id() if WHOP_API_KEY else ""), "Cuenta principal"
+
+
+def wallet_ready(creator_id):
+    key, company, _ = wallet(creator_id)
+    return bool(key and company)
+
+
+def whop_balance(creator_id):
+    """Saldo en dólares del Whop de un creador (o de la cuenta principal). None si no se puede leer. Guarda 2 minutos."""
+    key, company, _ = wallet(creator_id)
+    if not key or not company:
+        return None, "Whop no conectado"
+    hit = _balance_cache.get((creator_id, company))
+    if hit and time.time() - hit[0] < 120:
+        return hit[1], hit[2]
+    ok, code, data = whop_call("GET", f"/ledger_accounts/{company}", api_key=key)
+    value, err = None, ""
+    if ok and isinstance(data, dict):
+        for b in data.get("balances") or []:
+            if str(b.get("currency", "")).lower() == "usd":
+                value = parse_float(b.get("balance"), None)
+        if value is None and isinstance(data.get("treasury_balance"), dict):
+            value = parse_float(data["treasury_balance"].get("balance_usd"), None)
+    else:
+        err = (f"Whop respondió {code}. Para ver el saldo, la clave necesita los permisos "
+               "«company:balance:read» y «payout:account:read».") if code in (401, 403) else f"Whop respondió {code}"
+    _balance_cache[(creator_id, company)] = (time.time(), value, err)
+    return value, err
+
+
 def whop_enabled():
-    return bool(WHOP_API_KEY and whop_company_id())
+    """¿Se puede pagar por Whop? Con la cuenta principal o con el Whop de algún creador."""
+    if WHOP_API_KEY and whop_company_id():
+        return True
+    return any(creator_key(c) for c in Creator.query.all())
+
+
+def whop_lookup_key():
+    """Clave con la que buscar usuarios de Whop: la principal o, si no hay, la de cualquier creador conectado."""
+    if WHOP_API_KEY:
+        return WHOP_API_KEY
+    return next((k for k in (creator_key(c) for c in Creator.query.all()) if k), "")
 
 
 def whop_find_user(username):
     """Busca un usuario de Whop por su nombre de usuario. Devuelve (id, username) o (None, None)."""
-    ok, code, data = whop_call("GET", f"/users/{username}")
+    ok, code, data = whop_call("GET", f"/users/{username}", api_key=whop_lookup_key())
     if ok and isinstance(data, dict) and str(data.get("id", "")).startswith("user_"):
         return data["id"], (data.get("username") or username)
     log.warning("Whop: usuario %s no encontrado (%s) %s", username, code, str(data)[:300])
@@ -2466,12 +2733,16 @@ def _whop_apply(payout, ok, code, data):
 
 
 def whop_pay(payout):
-    """Manda el retiro al saldo de Whop del clipper. Es seguro repetirlo: la clave evita pagar dos veces."""
+    """Manda el retiro al saldo de Whop del clipper, desde el Whop del creador que paga esas campañas.
+    Es seguro repetirlo: la clave de idempotencia evita pagar dos veces."""
+    api_key, company, _ = wallet(payout.creator_id)
+    if not api_key or not company:
+        return _whop_apply(payout, False, 0, {"error": "El Whop de este creador no está conectado"})
     key = f"{APP_NAME.lower().replace(' ', '')}-payout-{payout.id}"
-    body = {"type": "balance", "amount": round(payout.amount, 2), "currency": "usd", "origin_id": whop_company_id(),
+    body = {"type": "balance", "amount": round(payout.amount, 2), "currency": "usd", "origin_id": company,
             "destination_id": payout.user.whop_user_id, "notes": f"Retiro #{payout.id} · {APP_NAME}"[:50],
             "idempotence_key": key, "metadata": {"payout_id": str(payout.id)}}
-    ok, code, data = whop_call("POST", "/transfers", json=body, headers={"Idempotency-Key": key})
+    ok, code, data = whop_call("POST", "/transfers", api_key=api_key, json=body, headers={"Idempotency-Key": key})
     result = _whop_apply(payout, ok, code, data)
     log.info("Whop: retiro #%s → %s (%s)", payout.id, result, code)
     return result
@@ -2481,9 +2752,12 @@ def whop_sync(payouts):
     """Consulta en Whop los retiros que seguían «procesando»."""
     changed = False
     for p in payouts:
-        if p.status != "procesando" or not p.ext_id or not whop_enabled():
+        if p.status != "procesando" or not p.ext_id:
             continue
-        ok, code, data = whop_call("GET", f"/transfers/{p.ext_id}")
+        api_key, _, _ = wallet(p.creator_id)
+        if not api_key:
+            continue
+        ok, code, data = whop_call("GET", f"/transfers/{p.ext_id}", api_key=api_key)
         if ok:
             _whop_apply(p, ok, code, data)
             changed = True
@@ -2537,9 +2811,10 @@ def admin_wipe():
     if current_user.id not in admin_ids:
         admin_ids.append(current_user.id)
     keep_campaigns = request.form.get("mode") == "keep_campaigns"
-    models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, CampaignLead, Campaign, AuditLog, Setting)
+    models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, CampaignLead, Campaign,
+              Creator, AuditLog, Setting)
     for model in models:
-        if keep_campaigns and model is Campaign:
+        if keep_campaigns and model in (Campaign, Creator):
             continue
         model.query.delete(synchronize_session=False)
     if keep_campaigns:      # las campañas se quedan como nuevas: sin nada repartido
@@ -2567,8 +2842,8 @@ def admin_clippers():
             return redirect(url_for("admin_payouts"))
         note = request.form.get("note", "").strip()[:255]
         if request.form.get("action") == "whop":
-            if payout.method != WHOP_METHOD or not payout.user.whop_user_id or not whop_enabled():
-                flash("Este retiro no se puede pagar por Whop.", "error")
+            if payout.method != WHOP_METHOD or not payout.user.whop_user_id or not wallet_ready(payout.creator_id):
+                flash("Este retiro no se puede pagar por Whop: el Whop de su creador no está conectado.", "error")
                 return redirect(url_for("admin_payouts"))
             payout.status = "procesando"
             db.session.commit()

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ c.name or "Nuevo creador" }} · Admin{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_creators') }}">← Creadores</a>
+<div class="card" style="max-width:640px;width:100%">
+  <form method="post" class="form-stack">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <h2>{{ "Editar creador" if c.id else "Nuevo creador" }}</h2>
+    <div class="field"><label for="name">Nombre del creador o marca</label><input id="name" name="name" value="{{ c.name or '' }}" required placeholder="Ej.: Pablo Pérez"></div>
+    <div class="field"><label for="contact">Contacto</label><input id="contact" name="contact" value="{{ c.contact or '' }}" placeholder="Correo o WhatsApp, para avisarle si le falta saldo"></div>
+    <div class="field"><label for="key_var">Variable de Railway con su clave de Whop</label>
+      <input id="key_var" name="key_var" value="{{ c.key_var or '' }}" placeholder="WHOP_KEY_PABLO" list="env-keys" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <datalist id="env-keys">{% for k in env_keys %}<option value="{{ k }}">{% endfor %}</datalist>
+      <span class="hint">Solo el NOMBRE de la variable, no la clave. Tiene que empezar por WHOP_KEY_. La clave se pega en Railway, nunca aquí.</span></div>
+    <div class="field"><label for="company_id">Código de su empresa en Whop (opcional)</label><input id="company_id" name="company_id" value="{{ c.company_id or '' }}" placeholder="biz_…"><span class="hint">Si lo dejas vacío, la web lo averigua con su clave.</span></div>
+    <div class="field"><label for="notes">Notas</label><textarea id="notes" name="notes" rows="3">{{ c.notes or '' }}</textarea></div>
+    <button class="btn">Guardar creador</button>
+  </form>
+  {% if c.id %}
+  <form method="post" style="margin-top:16px" data-confirm="¿Borrar a {{ c.name }}? Solo se puede si no tiene campañas.">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="btn soft" name="action" value="borrar">Borrar creador</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
