@@ -315,7 +315,7 @@ def test_withdrawals(monkeypatch):
     set_views(monkeypatch, {str(7300000000000000001): 450_000})     # 45 $
     with A.app.app_context():
         A.refresh_views()
-    assert "Whop" in flashes(post(a, "/ganancias/retirar"))[0][1]                  # sin Whop: se pide al retirar
+    assert "conecta tu usuario de Whop" in flashes(post(a, "/ganancias/retirar"))[0][1]
     calls = _whop_fake(monkeypatch)
     post(a, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
     assert "cuando la campaña termina" in flashes(post(a, "/ganancias/retirar"))[0][1]   # campaña abierta: aún no
@@ -1433,6 +1433,7 @@ def test_onboarding_three_steps():
     a = client_for("a@test.com", verify=False)
     post(a, "/bienvenida?paso=1", name="Ana García", tiktok="@anag")
     post(a, "/bienvenida?paso=2", country="MX", languages=["es", "en"])
+    post(a, "/bienvenida?paso=3")
     with A.app.app_context():
         u = A.User.query.filter_by(email="a@test.com").one()
         assert (u.name, u.country, u.languages) == ("Ana García", "MX", "es,en")
@@ -1713,21 +1714,3 @@ def test_review_cards_filters_and_video_copy(monkeypatch):
     assert "iframe.mediadelivery.net/embed/1/g-9" in admin.get("/admin/clips").get_data(as_text=True)
 
 
-def test_withdraw_connects_whop_in_the_same_step(monkeypatch):
-    monkeypatch.setattr(A, "whop_enabled", lambda: True)
-    monkeypatch.setattr(A, "whop_find_user", lambda u: ("user_1", u))
-    cid = make_campaign()
-    a = client_for("a@test.com", tiktok="ana")
-    post(a, f"/campana/{cid}", url=tt("ana", 1))
-    with A.app.app_context():
-        s = A.Submission.query.one()
-        s.status, s.earned = "aprobado", 10.0
-        c = get(A.Campaign, cid)
-        c.status, c.spent = "finalizada", 10.0
-        A.db.session.commit()
-    page = a.get("/ganancias").get_data(as_text=True)
-    assert 'name="whop_username"' in page and ">Retirar<" in page
-    a.post("/ganancias/retirar", data={"_csrf": "t", "whop_username": "@ana", "amount": "5"})
-    with A.app.app_context():
-        u = A.User.query.filter_by(email="a@test.com").one()
-        assert u.whop_user_id == "user_1" and u.whop_username == "ana"

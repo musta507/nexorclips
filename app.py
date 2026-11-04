@@ -2044,7 +2044,7 @@ def register():
     session.pop("form_name", None)
     log.info("Nuevo usuario con correo: %s", email)
     sign_in(email, name, password_user=user)
-    flash(f"¡Bienvenido, {name}! Completa tu perfil en 2 pasos.", "ok")
+    flash(f"¡Bienvenido, {name}! Completa tu perfil en 3 pasos.", "ok")
     return redirect(url_for("onboarding"))
 
 
@@ -2607,7 +2607,7 @@ def clips_of_week(limit=3):
 @login_required
 def onboarding():
     step = request.args.get("paso", 1, type=int)
-    step = step if step in (1, 2) else 1
+    step = step if step in (1, 2, 3) else 1
     u = current_user
     if request.method == "POST":
         if request.form.get("saltar"):
@@ -2642,10 +2642,6 @@ def onboarding():
                 return redirect(url_for("onboarding", paso=2))
             u.country = c
             u.languages = ",".join(x for x in request.form.getlist("languages") if x in LANGUAGES)[:60]
-            u.onboarded_at = u.onboarded_at or datetime.utcnow()
-            db.session.commit()
-            flash("¡Perfil listo! Elige una campaña y pide unirte.", "ok")
-            return redirect(url_for("index"))
         else:
             username = (request.form.get("whop_username") or "").strip().lstrip("@")
             if username and whop_enabled() and WHOP_USERNAME_RE.match(username):
@@ -2709,23 +2705,9 @@ _withdraw_lock = threading.Lock()
 @app.route("/ganancias/retirar", methods=["POST"])
 @login_required
 def withdraw():
-    if not current_user.payout_ready:                  # aún sin Whop: se conecta en el mismo paso del retiro
-        username = (request.form.get("whop_username") or "").strip().lstrip("@")
-        if "whop.com/" in username:
-            username = username.rstrip("/").rsplit("/", 1)[-1].lstrip("@")
-        if not whop_enabled():
-            flash("Los retiros por Whop aún no están activados. Escríbenos por el chat de soporte.", "error")
-            return redirect(url_for("earnings"))
-        if not WHOP_USERNAME_RE.match(username):
-            flash("Escribe tu usuario de Whop para recibir el dinero, por ejemplo @tunombre.", "error")
-            return redirect(url_for("earnings"))
-        uid, uname = whop_find_user(username)
-        if not uid:
-            flash(f"No encontramos el usuario @{username} en Whop. Revisa que esté bien escrito: lo ves en tu perfil de whop.com.", "error")
-            return redirect(url_for("earnings"))
-        current_user.whop_user_id, current_user.whop_username = uid, uname[:80]
-        current_user.payout_method = WHOP_METHOD
-        db.session.commit()
+    if not current_user.payout_ready:
+        flash("Primero conecta tu usuario de Whop en «Mi cuenta».", "error")
+        return redirect(url_for("account", _anchor="cobro"))
     with _withdraw_lock:
         lock_row(User, current_user.id)          # dos retiros a la vez del mismo clipper: el segundo espera y ve el primero
         m = user_money(current_user)

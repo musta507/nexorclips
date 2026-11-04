@@ -7,7 +7,9 @@
     <span class="l">Balance disponible</span>
     <div class="row">
       <span class="v">{{ m.available|amount }}</span>
-      {% if m.open_payout %}
+      {% if not current_user.payout_ready %}
+        <a class="btn sm" href="{{ url_for('account') }}#cobro"><span class="whop-ico" aria-hidden="true"></span>Conectar Whop</a>
+      {% elif m.open_payout %}
         <span class="status solicitado">Retiro en curso</span>
       {% else %}
         <button type="button" class="btn sm" data-open="wd-dialog" {% if m.available < 0.01 %}disabled{% endif %}>Retirar</button>
@@ -21,7 +23,7 @@
       <div class="budget-bar"><span style="width:{{ (m.available / MIN_WITHDRAW * 100)|round|int }}%"></span></div>
     </div>
     {% endif %}
-    <span class="small muted">{% if current_user.payout_ready %}Cobras por {{ current_user.payout_label }}{% if current_user.payout_method == WHOP_METHOD %} (al instante){% endif %} · <a href="{{ url_for('account') }}#cobro" style="text-decoration:underline">cambiar</a>{% if MIN_WITHDRAW %} · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}{% else %}Al retirar te pediremos tu usuario de Whop{% if MIN_WITHDRAW %} · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}{% endif %}</span>
+    <span class="small muted">{% if current_user.payout_ready %}Cobras por {{ current_user.payout_label }}{% if current_user.payout_method == WHOP_METHOD %} (al instante){% endif %} · <a href="{{ url_for('account') }}#cobro" style="text-decoration:underline">cambiar</a>{% if MIN_WITHDRAW %} · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}{% else %}Conecta tu Whop para retirar{% endif %}</span>
   </div>
   <div class="card stat">
     <span class="l">En campañas abiertas</span>
@@ -95,7 +97,7 @@
   {% endif %}
   </div>
 </div>
-{% if not m.open_payout and m.available >= 0.01 %}
+{% if current_user.payout_ready and not m.open_payout and m.available >= 0.01 %}
 <dialog class="wd-dialog" id="wd-dialog" aria-labelledby="wd-title">
   <form method="post" action="{{ url_for('withdraw') }}" class="form-stack">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -107,13 +109,7 @@
       <div class="wd-input"><input id="wd-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" value="{{ m.available|amount }}" required aria-label="Cantidad"><span>{{ CUR }}</span></div>
       <button type="button" class="btn soft wd-all" data-all="{{ m.available|amount }}">Todo</button>
     </div>
-    {% if current_user.payout_ready %}
     <p class="small muted">Llega al instante a tu <span class="whop-ico" aria-hidden="true"></span> Whop <b>@{{ current_user.whop_username }}</b>.</p>
-    {% else %}
-    <div class="field"><label for="wd-whop"><span class="whop-ico" aria-hidden="true"></span> Tu usuario de Whop</label>
-      <input id="wd-whop" name="whop_username" placeholder="@tunombre" required autocomplete="off" autocapitalize="none">
-      <span class="hint">El dinero te llega al momento a tu saldo de Whop. Lo ves en tu perfil de whop.com.</span></div>
-    {% endif %}
     <div class="wd-actions">
       <button type="button" class="btn soft" data-close>Cancelar</button>
       <button class="btn accent">Confirmar retiro</button>
