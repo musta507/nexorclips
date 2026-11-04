@@ -315,7 +315,7 @@ def test_withdrawals(monkeypatch):
     set_views(monkeypatch, {str(7300000000000000001): 450_000})     # 45 $
     with A.app.app_context():
         A.refresh_views()
-    assert "conecta tu usuario de Whop" in flashes(post(a, "/ganancias/retirar"))[0][1]
+    assert "Whop" in flashes(post(a, "/ganancias/retirar"))[0][1]                  # sin Whop: se pide al retirar
     calls = _whop_fake(monkeypatch)
     post(a, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
     assert "cuando la campaña termina" in flashes(post(a, "/ganancias/retirar"))[0][1]   # campaña abierta: aún no
@@ -564,7 +564,7 @@ def test_join_campaign_and_admin_accepts(monkeypatch):
     assert "no se puede añadir" not in post(a, f"/campana/{cid}/cuentas", platform="tiktok", handle="ana").get_data(as_text=True)
     with A.app.app_context():
         assert not A.CampaignAccount.query.first()                       # aún no aceptado: no puede añadir cuenta
-    assert "solicitud para entrar" in admin.get("/admin").get_data(as_text=True)          # aviso en el resumen
+    assert "1 solicitud" in admin.get("/admin").get_data(as_text=True)                    # aviso en el resumen (por campaña)
     assert "Aceptar" in admin.get("/admin/solicitudes-clippers").get_data(as_text=True)
     # 2) el admin acepta
     post(admin, f"/admin/solicitud/{mid}/aceptar")
@@ -1433,12 +1433,12 @@ def test_onboarding_three_steps():
     a = client_for("a@test.com", verify=False)
     post(a, "/bienvenida?paso=1", name="Ana García", tiktok="@anag")
     post(a, "/bienvenida?paso=2", country="MX", languages=["es", "en"])
-    post(a, "/bienvenida?paso=3")
     with A.app.app_context():
         u = A.User.query.filter_by(email="a@test.com").one()
         assert (u.name, u.country, u.languages) == ("Ana García", "MX", "es,en")
         assert u.onboarded_at and "anag" in u.handles("tiktok")
-    assert "Primeros pasos" in a.get("/").get_data(as_text=True)
+    home = a.get("/").get_data(as_text=True)
+    assert "Primeros pasos" not in home and "Agrega tu cuenta" not in home
 
 
 def test_ranking_masks_names():
@@ -1556,14 +1556,59 @@ def test_report_has_best_clips_and_print():
     assert "Lo mejor de la campaña" in page and "data-print" in page and "tiktok.com/embed/v2/" in page
 
 
-def test_campaign_tabs():
+def test_campaign_hub_channels_for_members():
     cid = make_campaign(rules="Menciona a @marca", ideas="Reacción", announcements="12/11 | Nuevo material")
-    a = client_for("a@test.com")
-    assert "Anuncios" in a.get(f"/campana/{cid}").get_data(as_text=True)
-    assert "Menciona a @marca" in a.get(f"/campana/{cid}?tab=normas").get_data(as_text=True)
-    assert "Nuevo material" in a.get(f"/campana/{cid}?tab=anuncios").get_data(as_text=True)
-    assert "Reacción" in a.get(f"/campana/{cid}?tab=ideas").get_data(as_text=True)
+    outsider = client_for("b@test.com", verify=False)
+    page = outsider.get(f"/campana/{cid}").get_data(as_text=True)
+    assert 'class="hub"' not in page and "Solicitar entrar" in page
+    a = client_for("a@test.com", tiktok="ana")
+    _auto_accept()
+    page = a.get(f"/campana/{cid}").get_data(as_text=True)
+    assert 'class="hub"' in page and "Anuncios" in page and "Cuentas TOP" in page
+    with A.app.app_context():
+        chans = {c.name: c.id for c in A.Channel.query.filter_by(campaign_id=cid)}
+    assert "Nuevo material" in a.get(f"/campana/{cid}?canal={chans['Anuncios']}").get_data(as_text=True)
+    assert "Reacción" in a.get(f"/campana/{cid}?canal={chans['Ideas virales']}").get_data(as_text=True)
+    assert "Menciona a @marca" in a.get(f"/campana/{cid}?canal={chans['Normas']}").get_data(as_text=True)
 
+
+def test_admin_channels_posts_likes_comments_and_discord():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    _auto_accept()
+    admin.get(f"/admin/campana/{cid}/canales")
+    with A.app.app_context():
+        sec = A.ChannelSection.query.filter_by(campaign_id=cid).order_by(A.ChannelSection.position).first().id
+    post(admin, f"/admin/campana/{cid}/canales", act="canal_nuevo", section=str(sec), name="Cuentas que molan", emoji="🔥")
+    with A.app.app_context():
+        ch = A.Channel.query.filter_by(name="Cuentas que molan").one().id
+    post(admin, f"/admin/campana/{cid}/canales?canal={ch}", act="publicar", canal=str(ch), body="Mirad https://www.tiktok.com/@pablo", notify="on")
+    post(admin, f"/admin/campana/{cid}/canales", act="discord", discord_url="https://discord.gg/abc123")
+    page = a.get(f"/campana/{cid}?canal={ch}").get_data(as_text=True)
+    assert 'href="https://www.tiktok.com/@pablo"' in page and "discord.gg/abc123" in page
+    with A.app.app_context():
+        pid = A.Post.query.one().id
+        ana = A.User.query.filter_by(email="a@test.com").one()
+        assert A.Notice.query.filter_by(user_id=ana.id, kind="anuncio").count() == 1
+    post(a, f"/campana/{cid}/publicacion/{pid}/megusta")
+    post(a, f"/campana/{cid}/publicacion/{pid}/comentar", body="¡Gracias!")
+    with A.app.app_context():
+        assert A.PostLike.query.count() == 1 and A.PostComment.query.one().body == "¡Gracias!"
+    outsider = client_for("b@test.com", verify=False)
+    assert outsider.post(f"/campana/{cid}/publicacion/{pid}/megusta", data={"_csrf": "t"}).status_code == 404
+
+
+def test_campaign_admin_tabs_and_menu():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana", verify=False)
+    post(a, f"/campana/{cid}/unirme")
+    for path in ["", "/revisar", "/solicitudes", "/clippers", "/canales", "/editar"]:
+        r = admin.get(f"/admin/campana/{cid}{path}")
+        assert r.status_code == 200 and "cn-tabs" in r.get_data(as_text=True), path
+    menu = admin.get("/admin").get_data(as_text=True)
+    assert ">Clips por revisar<" not in menu and "/admin/campana/%d/solicitudes" % cid in menu
 
 def test_demo_data_loads_and_removes_cleanly():
     cid = make_campaign(budget=5000, min_tiktok=0.5, join_questions="¿Cuánto llevas?")
@@ -1666,3 +1711,23 @@ def test_review_cards_filters_and_video_copy(monkeypatch):
         s2 = get(A.Submission, sid2)
         assert s2.video_guid == "g-9" and s2.video_status == "listo"
     assert "iframe.mediadelivery.net/embed/1/g-9" in admin.get("/admin/clips").get_data(as_text=True)
+
+
+def test_withdraw_connects_whop_in_the_same_step(monkeypatch):
+    monkeypatch.setattr(A, "whop_enabled", lambda: True)
+    monkeypatch.setattr(A, "whop_find_user", lambda u: ("user_1", u))
+    cid = make_campaign()
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        s = A.Submission.query.one()
+        s.status, s.earned = "aprobado", 10.0
+        c = get(A.Campaign, cid)
+        c.status, c.spent = "finalizada", 10.0
+        A.db.session.commit()
+    page = a.get("/ganancias").get_data(as_text=True)
+    assert 'name="whop_username"' in page and ">Retirar<" in page
+    a.post("/ganancias/retirar", data={"_csrf": "t", "whop_username": "@ana", "amount": "5"})
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="a@test.com").one()
+        assert u.whop_user_id == "user_1" and u.whop_username == "ana"

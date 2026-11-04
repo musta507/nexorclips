@@ -4,7 +4,7 @@
 {% block content %}
 <div class="onb card">
   <ol class="onb-steps" aria-label="Pasos">
-    {% for label in ["Tu perfil", "Dónde estás", "Cobros"] %}
+    {% for label in ["Tu perfil", "Dónde estás"] %}
     <li class="{% if loop.index == step %}on{% elif loop.index < step %}done{% endif %}"><b>{{ loop.index }}</b><span>{{ label }}</span></li>
     {% endfor %}
   </ol>
@@ -30,16 +30,12 @@
         <div class="chips-check">{% set mine = (current_user.languages or 'es').split(',') %}
           {% for k, label in LANGUAGES.items() %}<label class="chip-check"><input type="checkbox" name="languages" value="{{ k }}"{% if k in mine %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
         </div></div>
-    {% else %}
-      <h1>¿Dónde te pagamos?</h1>
-      <p class="muted">Es opcional: puedes conectarlo más tarde en «Mi cuenta».</p>
-      <div class="field"><label for="whop_username"><img class="whop-ico" src="{{ static_url('whop.png') }}" alt="" width="16" height="16"> Tu usuario de Whop</label>
-        <input id="whop_username" name="whop_username" placeholder="@tuusuario" value="{{ current_user.whop_username or '' }}"><span class="hint">Ahí te llega el dinero al momento cuando retiras.</span></div>
+
     {% endif %}
     <div class="onb-foot">
       <button class="btn soft" name="saltar" value="1" formnovalidate>Saltar por ahora</button>
       <span>{% if step > 1 %}<a class="btn soft" href="{{ url_for('onboarding', paso=step - 1) }}">← Atrás</a>{% endif %}
-      <button class="btn accent">{{ "Terminar" if step == 3 else "Siguiente" }} {{ icon("arrow") }}</button></span>
+      <button class="btn accent">{{ "Terminar" if step == 2 else "Siguiente" }} {{ icon("arrow") }}</button></span>
     </div>
   </form>
 </div>

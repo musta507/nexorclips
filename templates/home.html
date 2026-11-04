@@ -1,27 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon, budget %}
 {% block content %}
-{% if fs and fs.done < 4 %}
-<section class="card fsteps" aria-label="Primeros pasos">
-  <div class="fsteps-head"><h2>Primeros pasos</h2><span class="small muted tnum">{{ fs.done }} de 4</span></div>
-  <div class="dbar" role="img" aria-label="{{ fs.done }} de 4 hechos"><span style="width:{{ fs.done * 25 }}%"></span></div>
-  <ol class="fsteps-list">
-    {% for label, done, url in fs.steps %}
-    <li class="{{ 'done' if done }}"><a href="{{ url }}"><span class="fs-dot">{% if done %}✓{% else %}{{ loop.index }}{% endif %}</span>{{ label }}</a></li>
-    {% endfor %}
-  </ol>
-</section>
-{% endif %}
-{% if not new_user and not current_user.payout_ready %}
-<div class="card tight notice">
-  <span class="ico">{{ icon("card") }}</span>
-  <div class="txt">
-    <h3>Agrega tu cuenta para poder pagarte</h3>
-    <p class="small muted">Conecta tu usuario de Whop: ahí te llega el dinero al instante cuando retiras.</p>
-  </div>
-  <a class="btn sm" href="{{ url_for('account') }}#cobro">Agregar</a>
-</div>
-{% endif %}
 
 
 {% if announce %}

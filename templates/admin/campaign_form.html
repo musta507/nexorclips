@@ -2,8 +2,22 @@
 {% from "_icons.html" import icon %}
 {% block title %}{{ "Editar" if editing else "Nueva" }} campaña · Admin{% endblock %}
 {% block content %}
-<a class="back" href="{{ url_for('admin_campaign', cid=camp.id) if editing else url_for('admin_campaigns') }}">← Volver</a>
-<h1 style="margin:4px 0 14px">{{ "Editar campaña" if editing else "Nueva campaña" }}</h1>
+{% if editing %}
+{% include "admin/_camp_nav.html" %}
+<div class="card tight cn-actions">
+  <div><h3>Acciones rápidas</h3><p class="small muted">Sin tocar el resto de la campaña.</p></div>
+  <div class="inline" style="flex-wrap:wrap;gap:8px">
+    {% if camp.status in ('activa', 'pausada') %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="{{ 'pausar' if camp.status == 'activa' else 'reanudar' }}"><button class="btn soft sm">{{ "Pausar" if camp.status == 'activa' else "Reanudar" }}</button></form>{% endif %}
+    {% if camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="plazas"><button class="btn soft sm">{{ "Abrir plazas" if camp.full else "Marcar plazas completas" }}</button></form>{% endif %}
+    <form method="post" action="{{ url_for('admin_campaign_duplicate', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft sm">Duplicar</button></form>
+    <a class="btn soft sm" href="{{ url_for('admin_campaign_csv', cid=camp.id) }}" data-turbo="false">Descargar CSV</a>
+    {% if camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_close', cid=camp.id) }}" data-confirm="¿Cerrar «{{ camp.song }}»? Dejará de aceptar clips y los clippers podrán retirar lo que ganaron."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn red sm">Cerrar campaña</button></form>{% endif %}
+  </div>
+</div>
+{% else %}
+<a class="back" href="{{ url_for('admin_campaigns') }}">← Volver</a>
+<h1 style="margin:4px 0 14px">Nueva campaña</h1>
+{% endif %}
 {% if request.args.get('solicitud') and not editing %}<div class="flash ok">Creando la campaña a partir de una solicitud. Al guardarla, la solicitud quedará como «Campaña creada».</div>{% endif %}
 <form method="post" enctype="multipart/form-data">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

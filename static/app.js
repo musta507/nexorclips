@@ -157,6 +157,7 @@ function pagina() {
   progresoLeccion();
   desplegables();
   destacado();
+  canalVisible();
 }
 
 // =============================================================== gráfica de estadísticas (informe y panel)
@@ -861,4 +862,12 @@ function destacado() {
   }
   radios.forEach(function (r) { r.addEventListener("change", show); });
   show();
+}
+
+// Canales de la campaña en el móvil: la barra de canales se desliza hasta el canal abierto
+function canalVisible() {
+  var on = document.querySelector(".hub-side .hub-ch.on");
+  var bar = on && on.closest(".hub-side");
+  if (!bar || bar.scrollWidth <= bar.clientWidth) return;
+  bar.scrollLeft = on.offsetLeft - bar.clientWidth / 2 + on.offsetWidth / 2;
 }

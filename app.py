@@ -320,6 +320,8 @@ class Campaign(db.Model):
     low_alert_sent = db.Column(db.Boolean, default=False)    # ya se avisó de que queda poco presupuesto
     announcements = db.Column(db.Text, default="")           # anuncios para los clippers («fecha | texto» por línea)
     ideas = db.Column(db.Text, default="")                   # ideas de clips, una por línea
+    discord_url = db.Column(db.String(300), default="")      # enlace de invitación al Discord de la campaña
+    channels_ready = db.Column(db.Boolean, default=False)    # ya tiene sus canales (se crean la primera vez)
     report_token = db.Column(db.String(40), unique=True, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -668,6 +670,135 @@ class Notice(db.Model):
     url = db.Column(db.String(300), default="")
     read = db.Column(db.Boolean, default=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class ChannelSection(db.Model):
+    """Grupo de canales dentro de una campaña (p. ej. «Empieza aquí»)."""
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
+    title = db.Column(db.String(80), nullable=False)
+    position = db.Column(db.Integer, default=0)
+    channels = db.relationship("Channel", backref="section", lazy=True, order_by="Channel.position",
+                               cascade="all, delete-orphan")
+
+
+class Channel(db.Model):
+    """Canal de una campaña. kind: posts (publicaciones) · rules (normas de la campaña) · resources (materiales)
+    · winners (los clips con más vistas, automático)."""
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
+    section_id = db.Column(db.Integer, db.ForeignKey("channel_section.id"), nullable=False, index=True)
+    name = db.Column(db.String(60), nullable=False)
+    emoji = db.Column(db.String(8), default="")
+    kind = db.Column(db.String(12), default="posts")
+    position = db.Column(db.Integer, default=0)
+    posts = db.relationship("Post", backref="channel", lazy=True, order_by="Post.created_at.desc()",
+                            cascade="all, delete-orphan")
+
+
+class Post(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    channel_id = db.Column(db.Integer, db.ForeignKey("channel.id"), nullable=False, index=True)
+    author_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    body = db.Column(db.Text, default="")
+    image_data = db.deferred(db.Column(db.LargeBinary, nullable=True))
+    image_mime = db.Column(db.String(30), default="")
+    pinned = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    edited_at = db.Column(db.DateTime, nullable=True)
+    author = db.relationship("User")
+    likes = db.relationship("PostLike", backref="post", lazy=True, cascade="all, delete-orphan")
+    comments = db.relationship("PostComment", backref="post", lazy=True, order_by="PostComment.created_at",
+                               cascade="all, delete-orphan")
+
+
+class PostLike(db.Model):
+    __table_args__ = (db.UniqueConstraint("post_id", "user_id", name="uq_post_like"),)
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey("post.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+
+
+class PostComment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey("post.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    body = db.Column(db.String(1000), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship("User")
+
+
+DEFAULT_CHANNELS = [
+    ("Empieza aquí", [("📜", "Normas", "rules")]),
+    ("Comunidad", [("📣", "Anuncios", "posts")]),
+    ("Contenido y herramientas", [("🏆", "Cuentas TOP", "posts"), ("💡", "Ideas virales", "posts"),
+                                  ("📁", "Recursos", "resources"), ("🎬", "Clips ganadores", "winners")]),
+]
+
+
+def ensure_channels(camp):
+    """La primera vez crea los canales de la campaña y pasa a ellos los anuncios y las ideas que ya hubiera."""
+    if camp.channels_ready:
+        return
+    if ChannelSection.query.filter_by(campaign_id=camp.id).first():
+        camp.channels_ready = True
+        db.session.commit()
+        return
+    made = {}
+    for i, (title, chans) in enumerate(DEFAULT_CHANNELS):
+        sec = ChannelSection(campaign_id=camp.id, title=title, position=i)
+        db.session.add(sec)
+        db.session.flush()
+        for j, (emo, name, kind) in enumerate(chans):
+            ch = Channel(campaign_id=camp.id, section_id=sec.id, name=name, emoji=emo, kind=kind, position=j)
+            db.session.add(ch)
+            db.session.flush()
+            made[name] = ch
+    for d, t in camp.announcement_list:                  # anuncios antiguos → publicaciones en «Anuncios»
+        when = None
+        for fmt in ("%d/%m/%Y", "%d/%m"):
+            try:
+                when = datetime.strptime(d, fmt)
+                if fmt == "%d/%m":
+                    when = when.replace(year=datetime.utcnow().year)
+                break
+            except ValueError:
+                pass
+        db.session.add(Post(channel_id=made["Anuncios"].id, body=t, created_at=when or camp.created_at))
+    if camp.idea_list:                                   # ideas antiguas → una publicación en «Ideas virales»
+        db.session.add(Post(channel_id=made["Ideas virales"].id, body="\n".join("• " + x for x in camp.idea_list),
+                            created_at=camp.created_at))
+    camp.channels_ready = True
+    db.session.commit()
+
+
+def campaign_channels(camp):
+    ensure_channels(camp)
+    return (ChannelSection.query.filter_by(campaign_id=camp.id).order_by(ChannelSection.position, ChannelSection.id)
+            .options(selectinload(ChannelSection.channels)).all())
+
+
+def is_campaign_member(user, camp):
+    if getattr(user, "is_admin", False):
+        return True
+    m = campaign_member(user.id, camp.id)
+    return bool(m and m.status == "aceptada") or bool(campaign_accounts(user.id, camp.id, "aceptada"))
+
+
+_URL_RE = re.compile(r"(https?://[^\s<]+)")
+
+
+def linkify(text_):
+    """Texto de una publicación con los enlaces clicables (todo lo demás se escapa)."""
+    from markupsafe import Markup, escape
+    out, last = [], 0
+    for m in _URL_RE.finditer(text_ or ""):
+        url = m.group(1).rstrip(".,);:!?»\"'")
+        out.append(escape((text_ or "")[last:m.start()]))
+        out.append(Markup('<a class="link" href="{0}" target="_blank" rel="noopener nofollow">{0}</a>').format(url))
+        last = m.start() + len(url)
+    out.append(escape((text_ or "")[last:]))
+    return Markup("").join(out)
 
 
 class PushSub(db.Model):
@@ -1598,6 +1729,7 @@ def unhandled_error(e):
 # Qué puede abrir cada rol. El dueño, todo. Lo que no está en la lista es solo para el dueño (dinero, campañas, ajustes…).
 ROLE_ENDPOINTS = {
     "reviewer": {"admin_home", "admin_clips", "admin_requests", "admin_review", "admin_review_bulk", "admin_campaign_member",
+                 "admin_campaign_review", "admin_campaign_requests", "admin_campaign_clippers",
                  "admin_campaign_account", "admin_campaign", "admin_campaigns", "admin_clipper"},
     "support": {"admin_home", "admin_inbox", "admin_chat", "admin_chat_poll", "admin_clipper"},
 }
@@ -1718,6 +1850,9 @@ def inject_globals():
             "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
             "VAPID_ON": bool(VAPID_PUBLIC_KEY), "WHATSAPP_ON": whatsapp_ready(),
             "WHATSAPP_TEMPLATE": WHATSAPP_TEMPLATE}
+
+
+app.add_template_filter(lambda t: linkify(t), "linkify")
 
 
 @app.template_filter("rate_k")
@@ -1909,7 +2044,7 @@ def register():
     session.pop("form_name", None)
     log.info("Nuevo usuario con correo: %s", email)
     sign_in(email, name, password_user=user)
-    flash(f"¡Bienvenido, {name}! Completa tu perfil en 3 pasos.", "ok")
+    flash(f"¡Bienvenido, {name}! Completa tu perfil en 2 pasos.", "ok")
     return redirect(url_for("onboarding"))
 
 
@@ -2061,7 +2196,7 @@ def index():
     my_join = {m.campaign_id: m.status for m in CampaignMember.query.filter_by(user_id=current_user.id).all()}
     cards.sort(key=lambda x: bool(x[0].full and x[0].id not in my_join))   # plazas completas (si no estás dentro) al final
     apply_schedule()
-    fs = first_steps(current_user) if not current_user.is_admin else None
+    fs = None
     return render_template("home.html", cards=cards, featured=featured, cat=cat, counts=counts,
                            total=len(all_cards), new_user=not current_user.submissions, my_join=my_join,
                            fs=fs, top5=ranking("semana", 5), week_clips=clips_of_week(),
@@ -2128,9 +2263,86 @@ def campaign(cid):
     winners = sorted((s for s in camp.submissions if s.status == "aprobado" and (s.views or 0) > 0),
                      key=lambda s: -(s.views or 0))[:10]
     ctab = request.args.get("tab", "resumen")
+    hub = is_campaign_member(current_user, camp)
+    sections, chan, posts, liked = [], None, [], set()
+    if hub:
+        sections = campaign_channels(camp)
+        chid = request.args.get("canal", type=int)
+        if chid:
+            chan = next((c for sec in sections for c in sec.channels if c.id == chid), None)
+            if not chan:
+                return redirect(url_for("campaign", cid=cid))
+            if chan.kind in ("posts", "rules", "resources"):
+                posts = (Post.query.filter_by(channel_id=chan.id).options(selectinload(Post.likes), selectinload(Post.comments))
+                         .order_by(Post.pinned.desc(), Post.created_at.desc()).limit(50).all())
+                liked = {lk.post_id for lk in PostLike.query.filter(PostLike.user_id == current_user.id,
+                                                                    PostLike.post_id.in_([p_.id for p_ in posts] or [0]))}
     return render_template("campaign.html", camp=camp, st=st, mine=mine, accounts=accounts, accepted=accepted,
                            member=campaign_member(current_user.id, camp.id), join_statuses=JOIN_STATUSES, waiting=waiting,
-                           winners=winners, ctab=ctab)
+                           winners=winners, ctab=ctab, hub=hub, sections=sections, chan=chan, posts=posts, liked=liked)
+
+
+def _member_post(cid, pid):
+    camp = db.session.get(Campaign, cid) or abort(404)
+    post_ = db.session.get(Post, pid)
+    if not post_ or post_.channel.campaign_id != cid or not is_campaign_member(current_user, camp):
+        abort(404)
+    return camp, post_
+
+
+@app.route("/campana/<int:cid>/publicacion/<int:pid>/megusta", methods=["POST"])
+@login_required
+def post_like(cid, pid):
+    camp, post_ = _member_post(cid, pid)
+    row = PostLike.query.filter_by(post_id=pid, user_id=current_user.id).first()
+    if row:
+        db.session.delete(row)
+    else:
+        db.session.add(PostLike(post_id=pid, user_id=current_user.id))
+    db.session.commit()
+    if wants_json():
+        return {"liked": not row, "count": PostLike.query.filter_by(post_id=pid).count()}
+    return redirect(url_for("campaign", cid=cid, canal=post_.channel_id, _anchor=f"p{pid}"))
+
+
+@app.route("/campana/<int:cid>/publicacion/<int:pid>/comentar", methods=["POST"])
+@login_required
+def post_comment(cid, pid):
+    camp, post_ = _member_post(cid, pid)
+    body = " ".join((request.form.get("body") or "").split())[:1000]
+    if body:
+        recent = PostComment.query.filter(PostComment.user_id == current_user.id,
+                                          PostComment.created_at >= datetime.utcnow() - timedelta(minutes=10)).count()
+        if recent >= 20 and not current_user.is_admin:
+            flash("Has escrito muchos comentarios seguidos. Espera un poco.", "error")
+        else:
+            db.session.add(PostComment(post_id=pid, user_id=current_user.id, body=body))
+            db.session.commit()
+    return redirect(url_for("campaign", cid=cid, canal=post_.channel_id, _anchor=f"p{pid}"))
+
+
+@app.route("/comentario/<int:coid>/borrar", methods=["POST"])
+@login_required
+def delete_comment(coid):
+    co = db.session.get(PostComment, coid) or abort(404)
+    if co.user_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    ch = co.post.channel
+    db.session.delete(co)
+    db.session.commit()
+    nxt = request.form.get("next", "")
+    return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("campaign", cid=ch.campaign_id, canal=ch.id))
+
+
+@app.route("/publicacion/<int:pid>/imagen")
+@login_required
+def post_image(pid):
+    p_ = db.session.get(Post, pid)
+    if not p_ or not p_.image_mime or not is_campaign_member(current_user, db.session.get(Campaign, p_.channel.campaign_id)):
+        abort(404)
+    resp = Response(p_.image_data, mimetype=p_.image_mime)
+    resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+    return resp
 
 
 @app.route("/campana/<int:cid>/avisame", methods=["POST"])
@@ -2395,7 +2607,7 @@ def clips_of_week(limit=3):
 @login_required
 def onboarding():
     step = request.args.get("paso", 1, type=int)
-    step = step if step in (1, 2, 3) else 1
+    step = step if step in (1, 2) else 1
     u = current_user
     if request.method == "POST":
         if request.form.get("saltar"):
@@ -2430,6 +2642,10 @@ def onboarding():
                 return redirect(url_for("onboarding", paso=2))
             u.country = c
             u.languages = ",".join(x for x in request.form.getlist("languages") if x in LANGUAGES)[:60]
+            u.onboarded_at = u.onboarded_at or datetime.utcnow()
+            db.session.commit()
+            flash("¡Perfil listo! Elige una campaña y pide unirte.", "ok")
+            return redirect(url_for("index"))
         else:
             username = (request.form.get("whop_username") or "").strip().lstrip("@")
             if username and whop_enabled() and WHOP_USERNAME_RE.match(username):
@@ -2493,9 +2709,23 @@ _withdraw_lock = threading.Lock()
 @app.route("/ganancias/retirar", methods=["POST"])
 @login_required
 def withdraw():
-    if not current_user.payout_ready:
-        flash("Primero conecta tu usuario de Whop en «Mi cuenta».", "error")
-        return redirect(url_for("account", _anchor="cobro"))
+    if not current_user.payout_ready:                  # aún sin Whop: se conecta en el mismo paso del retiro
+        username = (request.form.get("whop_username") or "").strip().lstrip("@")
+        if "whop.com/" in username:
+            username = username.rstrip("/").rsplit("/", 1)[-1].lstrip("@")
+        if not whop_enabled():
+            flash("Los retiros por Whop aún no están activados. Escríbenos por el chat de soporte.", "error")
+            return redirect(url_for("earnings"))
+        if not WHOP_USERNAME_RE.match(username):
+            flash("Escribe tu usuario de Whop para recibir el dinero, por ejemplo @tunombre.", "error")
+            return redirect(url_for("earnings"))
+        uid, uname = whop_find_user(username)
+        if not uid:
+            flash(f"No encontramos el usuario @{username} en Whop. Revisa que esté bien escrito: lo ves en tu perfil de whop.com.", "error")
+            return redirect(url_for("earnings"))
+        current_user.whop_user_id, current_user.whop_username = uid, uname[:80]
+        current_user.payout_method = WHOP_METHOD
+        db.session.commit()
     with _withdraw_lock:
         lock_row(User, current_user.id)          # dos retiros a la vez del mismo clipper: el segundo espera y ve el primero
         m = user_money(current_user)
@@ -2652,19 +2882,41 @@ def review_queue(cid=None):
     return rev, cnt
 
 
+def pending_by_campaign():
+    """{campaña: {"clips": por revisar + apelaciones, "requests": solicitudes, "accounts": cuentas sin verificar}}."""
+    out = {}
+    rev, _ = review_queue()
+    for s_ in rev:
+        out.setdefault(s_.campaign_id, {"clips": 0, "requests": 0, "accounts": 0})["clips"] += 1
+    for cid, n in (db.session.query(Submission.campaign_id, db.func.count(Submission.id))
+                   .filter(Submission.appeal_status == "pendiente").group_by(Submission.campaign_id)):
+        out.setdefault(cid, {"clips": 0, "requests": 0, "accounts": 0})["clips"] += n
+    for cid, n in (db.session.query(CampaignMember.campaign_id, db.func.count(CampaignMember.id))
+                   .filter(CampaignMember.status == "pendiente").group_by(CampaignMember.campaign_id)):
+        out.setdefault(cid, {"clips": 0, "requests": 0, "accounts": 0})["requests"] = n
+    for cid, n in (db.session.query(CampaignAccount.campaign_id, db.func.count(CampaignAccount.id))
+                   .filter(CampaignAccount.status == "pendiente").group_by(CampaignAccount.campaign_id)):
+        out.setdefault(cid, {"clips": 0, "requests": 0, "accounts": 0})["accounts"] = n
+    return out
+
+
 def review_queue_count():
     return len(review_queue()[0]) + Submission.query.filter_by(appeal_status="pendiente").count()
 
 
 def admin_counts():
     """Números del menú lateral del panel: lo que está esperando a que hagas algo."""
+    req, clips = CampaignMember.query.filter_by(status="pendiente").count(), review_queue_count()
+    accs = CampaignAccount.query.filter_by(status="pendiente").count()
     return {
-        "requests": CampaignMember.query.filter_by(status="pendiente").count(),
-        "clips": review_queue_count(),
+        "requests": req,
+        "clips": clips,
+        "accounts": accs,
         "payouts": Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).count(),
         "messages": Message.query.filter_by(from_admin=False, read_by_admin=False).count(),
         "leads": CampaignLead.query.filter_by(status="nueva").count(),
         "creators_alert": 0,
+        "camps": req + clips + accs,
         "tech": tech_alert_count(),
     }
 
@@ -2739,10 +2991,15 @@ def admin_home():
     users_day = daily_series([(u.created_at, 1) for u in User.query.filter(User.created_at >= since).with_entities(User.created_at)])
     nc = admin_counts()
     alerts = []
-    if nc["requests"]:
-        alerts.append(("inbox", f"{nc['requests']} {'solicitud' if nc['requests'] == 1 else 'solicitudes'} para entrar en campañas", url_for("admin_requests")))
-    if nc["clips"]:
-        alerts.append(("film", f"{nc['clips']} {'clip' if nc['clips'] == 1 else 'clips'} por revisar", url_for("admin_clips")))
+    names = {c.id: c.song for c in camps}
+    for cid_, pd in sorted(pending_by_campaign().items(), key=lambda kv: -(kv[1]["clips"] + kv[1]["requests"])):
+        if pd["clips"]:
+            alerts.append(("film", f"«{names.get(cid_, '')}»: {pd['clips']} {'clip' if pd['clips'] == 1 else 'clips'} por revisar",
+                           url_for("admin_campaign_review", cid=cid_)))
+        n = pd["requests"] + pd["accounts"]
+        if n:
+            alerts.append(("inbox", f"«{names.get(cid_, '')}»: {n} {'solicitud' if n == 1 else 'solicitudes'}",
+                           url_for("admin_campaign_requests", cid=cid_)))
     if nc["payouts"]:
         alerts.append(("cash", f"{nc['payouts']} {'retiro' if nc['payouts'] == 1 else 'retiros'} en curso", url_for("admin_payouts")))
     failed = Payout.query.filter(Payout.status == "rechazado", Payout.error != "",
@@ -2768,18 +3025,61 @@ def admin_campaigns():
     filt = request.args.get("estado", "")
     if filt in ("activa", "pausada", "finalizada"):
         camps = [c for c in camps if c.status == filt]
-    return render_template("admin/campaigns.html", cards=[(c, campaign_stats(c)) for c in camps], filt=filt)
+    return render_template("admin/campaigns.html", cards=[(c, campaign_stats(c)) for c in camps], filt=filt,
+                           pend=pending_by_campaign())
 
 
 @app.route("/admin/solicitudes-clippers")
 @admin_required
-def admin_requests():
+def admin_requests(cid=None):
     estado = request.args.get("estado", "pendiente")
     estado = estado if estado in ("pendiente", "aceptada", "rechazada") else "pendiente"
-    joins = (CampaignMember.query.filter_by(status=estado)
-             .options(joinedload(CampaignMember.user), joinedload(CampaignMember.campaign))
-             .order_by(CampaignMember.created_at.desc() if estado != "pendiente" else CampaignMember.created_at).limit(300).all())
-    return render_template("admin/requests.html", joins=joins, estado=estado)
+    q = (CampaignMember.query.filter_by(status=estado)
+         .options(joinedload(CampaignMember.user), joinedload(CampaignMember.campaign)))
+    camp, accounts = None, []
+    if cid:
+        camp = db.session.get(Campaign, cid) or abort(404)
+        q = q.filter(CampaignMember.campaign_id == cid)
+        accounts = (CampaignAccount.query.filter_by(campaign_id=cid, status="pendiente")
+                    .options(joinedload(CampaignAccount.user)).order_by(CampaignAccount.created_at).all())
+    joins = q.order_by(CampaignMember.created_at.desc() if estado != "pendiente" else CampaignMember.created_at).limit(300).all()
+    return render_template("admin/requests.html", joins=joins, estado=estado, camp=camp, accounts=accounts,
+                           pend=pending_by_campaign().get(cid, {}) if cid else {}, sec="solicitudes")
+
+
+@app.route("/admin/campana/<int:cid>/solicitudes")
+@admin_required
+def admin_campaign_requests(cid):
+    return admin_requests(cid)
+
+
+@app.route("/admin/campana/<int:cid>/revisar")
+@admin_required
+def admin_campaign_review(cid):
+    db.session.get(Campaign, cid) or abort(404)
+    return admin_clips(cid)
+
+
+@app.route("/admin/campana/<int:cid>/clippers")
+@admin_required
+def admin_campaign_clippers(cid):
+    """Los clippers aceptados en la campaña con lo que llevan en ella."""
+    camp = db.session.get(Campaign, cid) or abort(404)
+    members = (CampaignMember.query.filter_by(campaign_id=cid, status="aceptada")
+               .options(joinedload(CampaignMember.user)).all())
+    stats = {}
+    for s_ in Submission.query.filter_by(campaign_id=cid).all():
+        d = stats.setdefault(s_.user_id, {"clips": 0, "approved": 0, "views": 0, "earned": 0.0, "last": None})
+        d["clips"] += 1
+        if s_.status == "aprobado":
+            d["approved"] += 1
+            d["views"] += s_.views or 0
+            d["earned"] = cents(d["earned"] + (s_.earned or 0))
+        d["last"] = max(d["last"] or s_.created_at, s_.created_at)
+    rows = sorted(((m, stats.get(m.user_id, {"clips": 0, "approved": 0, "views": 0, "earned": 0.0, "last": None}),
+                    campaign_accounts(m.user_id, cid)) for m in members), key=lambda r: -r[1]["views"])
+    return render_template("admin/camp_clippers.html", camp=camp, rows=rows, pend=pending_by_campaign().get(cid, {}),
+                           sec="clippers")
 
 
 REVIEW_SLA_HOURS = int(os.environ.get("REVIEW_SLA_HOURS", "48"))   # a partir de aquí un clip sale como «atrasado»
@@ -2863,8 +3163,8 @@ def bot_check(sub):
 
 @app.route("/admin/clips")
 @admin_required
-def admin_clips():
-    cid = request.args.get("c", type=int)
+def admin_clips(camp_id=None):
+    cid = camp_id or request.args.get("c", type=int)
     tab = request.args.get("tab", "revisar")
     tab = tab if tab in ("revisar", "contando", "apelaciones") else "revisar"
     f = request.args.get("f", "todos")
@@ -2906,7 +3206,8 @@ def admin_clips():
                            n={"revisar": len(rev), "contando": len(cnt), "apelaciones": len(appeals)},
                            growth=clip_growth(shown), players={s_.id: clip_player(s_) for s_ in shown},
                            bots={s_.id: bot_check(s_) for s_ in shown}, hours={s_.id: waiting_hours(s_) for s_ in shown},
-                           sla=REVIEW_SLA_HOURS, filters=REVIEW_FILTERS)
+                           sla=REVIEW_SLA_HOURS, filters=REVIEW_FILTERS, in_camp=bool(camp_id),
+                           pend=pending_by_campaign().get(cid, {}) if camp_id else {}, sec="revisar")
 
 
 @app.route("/admin/retiros")
@@ -3372,7 +3673,8 @@ def admin_campaign_form(cid=None):
         flash(error, "error")
         if cid:
             camp = db.session.get(Campaign, cid)
-    return render_template("admin/campaign_form.html", camp=camp, editing=bool(cid), creators=Creator.query.order_by(Creator.name).all())
+    return render_template("admin/campaign_form.html", camp=camp, editing=bool(cid), creators=Creator.query.order_by(Creator.name).all(),
+                           pend=pending_by_campaign().get(cid, {}) if cid else {}, sec="ajustes")
 
 
 def home_feature():
@@ -3528,6 +3830,99 @@ def announce_campaign(camp):
     return n
 
 
+@app.route("/admin/campana/<int:cid>/canales", methods=["GET", "POST"])
+@admin_required
+def admin_campaign_channels(cid):
+    """Canales de la campaña: secciones, canales, publicaciones y el enlace de Discord."""
+    camp = db.session.get(Campaign, cid) or abort(404)
+    sections = campaign_channels(camp)
+    chans = {c.id: c for sec in sections for c in sec.channels}
+    secs = {sec.id: sec for sec in sections}
+    chid = request.args.get("canal", type=int) or request.form.get("canal", type=int)
+    if request.method == "POST":
+        act = request.form.get("act", "")
+        name = " ".join((request.form.get("name") or "").split())[:60]
+        emoji = (request.form.get("emoji") or "").strip()[:8]
+        back = lambda c=None: redirect(url_for("admin_campaign_channels", cid=cid, canal=c or chid or None))  # noqa: E731
+        if act == "discord":
+            url = (request.form.get("discord_url") or "").strip()[:300]
+            if url and not re.match(r"^https://(www\.)?(discord\.gg|discord\.com)/", url):
+                flash("Pega un enlace de invitación de Discord (empieza por https://discord.gg/…).", "error")
+                return back()
+            camp.discord_url = url
+            flash("Discord guardado." if url else "Discord quitado.", "ok")
+        elif act == "seccion_nueva" and name:
+            db.session.add(ChannelSection(campaign_id=cid, title=name[:80], position=len(sections)))
+        elif act.startswith("seccion_"):
+            sec = secs.get(request.form.get("section", type=int)) or abort(404)
+            if act == "seccion_nombre" and name:
+                sec.title = name[:80]
+            elif act == "seccion_borrar":
+                db.session.delete(sec)
+            elif act in ("seccion_subir", "seccion_bajar"):
+                _move(ChannelSection, sec, sections, "subir" if act == "seccion_subir" else "bajar")
+        elif act == "canal_nuevo" and name:
+            sec = secs.get(request.form.get("section", type=int)) or abort(404)
+            ch = Channel(campaign_id=cid, section_id=sec.id, name=name, emoji=emoji or "#", position=len(sec.channels))
+            db.session.add(ch)
+            db.session.commit()
+            return back(ch.id)
+        elif act.startswith("canal_"):
+            ch = chans.get(request.form.get("channel", type=int)) or abort(404)
+            if act == "canal_editar" and name:
+                ch.name, ch.emoji = name, emoji or ch.emoji
+            elif act == "canal_borrar":
+                db.session.delete(ch)
+                db.session.commit()
+                return redirect(url_for("admin_campaign_channels", cid=cid))
+            elif act in ("canal_subir", "canal_bajar"):
+                _move(Channel, ch, ch.section.channels, "subir" if act == "canal_subir" else "bajar")
+        elif act == "publicar":
+            ch = chans.get(chid) or abort(404)
+            body = (request.form.get("body") or "").strip()[:8000]
+            img, mime = None, ""
+            f = request.files.get("image")
+            if f and f.filename:
+                img = process_photo(f)
+                if not img:
+                    flash("La imagen tiene que ser JPG, PNG o WEBP.", "error")
+                    return back()
+                mime = "image/jpeg"
+            if not body and not img:
+                flash("Escribe algo o añade una imagen.", "error")
+                return back()
+            post_ = Post(channel_id=ch.id, author_id=current_user.id, body=body, image_data=img, image_mime=mime)
+            db.session.add(post_)
+            db.session.flush()
+            n = 0
+            if request.form.get("notify"):
+                for m in CampaignMember.query.filter_by(campaign_id=cid, status="aceptada").all():
+                    notify_user(m.user_id, "anuncio", f"{ch.emoji} {ch.name} · {camp.song}".strip(), body[:200] or "Nueva imagen",
+                                url_for("campaign", cid=cid, canal=ch.id))
+                    n += 1
+            audit("publicacion_canal", f"«{camp.song}» · {ch.name}")
+            flash("Publicado." + (f" Avisados {n} clippers." if n else ""), "ok")
+        elif act in ("post_editar", "post_borrar", "post_fijar"):
+            post_ = db.session.get(Post, request.form.get("post", type=int) or 0)
+            if not post_ or post_.channel_id not in chans:
+                abort(404)
+            if act == "post_borrar":
+                db.session.delete(post_)
+            elif act == "post_fijar":
+                post_.pinned = not post_.pinned
+            else:
+                post_.body, post_.edited_at = (request.form.get("body") or "").strip()[:8000], datetime.utcnow()
+        else:
+            abort(400)
+        db.session.commit()
+        return back()
+    chan = chans.get(chid) or (next(iter(chans.values()), None))
+    posts = (Post.query.filter_by(channel_id=chan.id).options(selectinload(Post.likes), selectinload(Post.comments))
+             .order_by(Post.pinned.desc(), Post.created_at.desc()).limit(100).all()) if chan else []
+    return render_template("admin/channels.html", camp=camp, sections=sections, chan=chan, posts=posts,
+                           pend=pending_by_campaign().get(cid, {}), sec="canales")
+
+
 @app.route("/admin/campana/<int:cid>/contenido", methods=["POST"])
 @admin_required
 def admin_campaign_content(cid):
@@ -3661,7 +4056,7 @@ def admin_campaign(cid):
         if bal is not None and bal + CENT < owed:
             shortfall = {"balance": bal, "owed": owed, "missing": cents(owed - bal)}
     return render_template("admin/campaign.html", camp=camp, st=st, subs=subs, filt=filt, report_url=report_url,
-                           an=campaign_analytics(camp), shortfall=shortfall)
+                           an=campaign_analytics(camp), shortfall=shortfall, pend=pending_by_campaign().get(cid, {}), sec="resumen")
 
 
 @app.route("/admin/campana/<int:cid>/clips.csv")
@@ -4121,9 +4516,10 @@ def admin_wipe():
         admin_ids.append(current_user.id)
     keep_campaigns = request.form.get("mode") == "keep_campaigns"
     models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, CampaignLead,
-              Notice, PushSub, LessonProgress, Campaign, Creator, AuditLog, Setting)
+              Notice, PushSub, LessonProgress, PostComment, PostLike, Post, Channel, ChannelSection, Campaign, Creator,
+              AuditLog, Setting)
     for model in models:
-        if keep_campaigns and model in (Campaign, Creator):
+        if keep_campaigns and model in (Campaign, Creator, Post, Channel, ChannelSection):
             continue
         model.query.delete(synchronize_session=False)
     if keep_campaigns:      # las campañas se quedan como nuevas: sin nada repartido
@@ -4196,8 +4592,10 @@ def delete_user_account(user):
     sub_ids = [s.id for s in subs]
     if sub_ids:
         ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(sub_ids)).delete(synchronize_session=False)
-    for model in (Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, Notice, PushSub, LessonProgress):
+    for model in (Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, Notice, PushSub, LessonProgress,
+                  PostComment, PostLike):
         model.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+    Post.query.filter_by(author_id=user.id).update({"author_id": None}, synchronize_session=False)
     Message.query.filter_by(sender_id=user.id).update({"sender_id": None}, synchronize_session=False)
     AuditLog.query.filter_by(admin_id=user.id).update({"admin_id": None}, synchronize_session=False)
     db.session.delete(user)
@@ -4815,17 +5213,21 @@ def bell_data():
     items = []
     if current_user.is_admin:
         nc = admin_counts()
-        appeals = Submission.query.filter_by(appeal_status="pendiente").count()
+        names = {c.id: c.song for c in Campaign.query.with_entities(Campaign.id, Campaign.song)}
+        for cid_, pd in pending_by_campaign().items():
+            if pd["clips"] and admin_can("admin_campaign_review"):
+                items.append({"id": None, "icon": "film", "title": f"{pd['clips']} {'clip' if pd['clips'] == 1 else 'clips'} por revisar",
+                              "body": names.get(cid_, ""), "url": url_for("admin_campaign_review", cid=cid_), "ago": "", "unread": True})
+            n = pd["requests"] + pd["accounts"]
+            if n and admin_can("admin_campaign_requests"):
+                items.append({"id": None, "icon": "inbox", "title": f"{n} {'solicitud' if n == 1 else 'solicitudes'}",
+                              "body": names.get(cid_, ""), "url": url_for("admin_campaign_requests", cid=cid_), "ago": "", "unread": True})
         for n, ico, one, many, ep in [
-                (nc["clips"] - appeals, "film", "clip por revisar", "clips por revisar", "admin_clips"),
-                (appeals, "flag", "apelación pendiente", "apelaciones pendientes", "admin_clips"),
-                (nc["requests"], "inbox", "solicitud para unirse", "solicitudes para unirse", "admin_requests"),
                 (nc["payouts"], "cash", "retiro en curso", "retiros en curso", "admin_payouts"),
                 (nc["messages"], "chat", "mensaje sin leer", "mensajes sin leer", "admin_inbox"),
                 (nc["leads"], "megaphone", "creador interesado", "creadores interesados", "admin_leads")]:
             if n > 0 and admin_can(ep):
-                url = url_for(ep, tab="apelaciones") if one.startswith("apel") else url_for(ep)
-                items.append({"id": None, "icon": ico, "title": f"{n} {one if n == 1 else many}", "body": "", "url": url,
+                items.append({"id": None, "icon": ico, "title": f"{n} {one if n == 1 else many}", "body": "", "url": url_for(ep),
                               "ago": "", "unread": True})
         return {"rows": items, "unread": len(items)}
     msgs = unread_messages()

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon, av %}
+{% block title %}Clippers · {{ camp.song }}{% endblock %}
+{% block content %}
+{% include "admin/_camp_nav.html" %}
+<div class="table-card">
+  {% if rows %}
+  <div class="table-scroll"><table class="rt">
+    <thead><tr><th>Clipper</th><th>Cuentas en la campaña</th><th class="r">Clips</th><th class="r">Vistas aprobadas</th><th class="r">Ganado aquí</th><th>Último clip</th><th></th></tr></thead>
+    <tbody>
+    {% for m, st, accs in rows %}
+    <tr>
+      <td data-label="Clipper">{{ av(m.user) }} <a class="link" href="{{ url_for('admin_clipper', uid=m.user_id) }}"><b>{{ m.user.name }}</b></a>{% if m.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">Entró {{ m.created_at|ago }}</div></td>
+      <td data-label="Cuentas" class="small">{% for a in accs %}<div class="hl">{{ icon(a.platform) }} @{{ a.handle }} {% if a.status != 'aceptada' %}<span class="muted">· {{ "sin verificar" if a.status == 'pendiente' else "rechazada" }}</span>{% endif %}</div>{% else %}<span class="muted">Aún sin cuenta</span>{% endfor %}</td>
+      <td data-label="Clips" class="r tnum">{{ st.clips }}{% if st.approved %} <span class="small muted">· {{ st.approved }} ✓</span>{% endif %}</td>
+      <td data-label="Vistas" class="r tnum">{{ st.views|short }}</td>
+      <td data-label="Ganado" class="r tnum money-txt"><b>{{ st.earned|money }}</b></td>
+      <td data-label="Último clip" class="small muted">{{ st.last|ago if st.last else "—" }}</td>
+      <td data-label="" class="r"><a class="btn sm soft" href="{{ url_for('admin_chat', uid=m.user_id) }}">Escribir</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<div class="empty"><h3>Aún no hay clippers aquí</h3><p class="muted">Cuando aceptes solicitudes, saldrán en esta lista.</p></div>{% endif %}
+</div>
+{% endblock %}

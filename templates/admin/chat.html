@@ -7,7 +7,7 @@
   <div class="chat-wrap card">
     <div class="chat-head">
       <span class="avatar">{% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ user.initial }}{% endif %}</span>
-      {{ av(user) }}<div><b>{{ user.name }}</b><div class="small muted">{{ user.email }}</div></div>
+      <div><b>{{ user.name }}</b><div class="small muted">{{ user.email }}</div></div>
     </div>
     {% with viewer_admin=true, post_url=url_for('admin_chat', uid=user.id), poll_url=url_for('admin_chat_poll', uid=user.id),
             empty_text="Aún no habéis hablado. Escríbele el primer mensaje." %}

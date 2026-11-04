@@ -18,11 +18,15 @@
     {% for c, st in cards %}
     <tr>
       <td data-label="Campaña"><a class="adm-camp-cell" href="{{ url_for('admin_campaign', cid=c.id) }}">{% set _t, lqip = cover_meta(c) %}<span class="dthumb sm"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="44" height="44" loading="lazy">{% endif %}</span><span><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<span class="small muted" style="display:block">{{ c.artist }}</span></span></a></td>
-      <td data-label="Estado"><span class="status {{ c.status }}">{{ c.status|capitalize }}</span>{% if c.full %} <span class="small muted">· Plazas completas</span>{% endif %}</td>
+      <td data-label="Estado"><span class="status {{ c.status }}">{{ c.status|capitalize }}</span>{% if c.full %} <span class="small muted">· Plazas completas</span>{% endif %}
+        {% set pd = pend.get(c.id, {}) %}{% if pd.get("clips") or pd.get("requests") or pd.get("accounts") %}<div class="cn-pend">
+          {% if pd.get("clips") %}<a href="{{ url_for('admin_campaign_review', cid=c.id) }}"><b>{{ pd.clips }}</b> por revisar</a>{% endif %}
+          {% if pd.get("requests") or pd.get("accounts") %}<a href="{{ url_for('admin_campaign_requests', cid=c.id) }}"><b>{{ pd.get("requests", 0) + pd.get("accounts", 0) }}</b> {{ "solicitud" if pd.get("requests", 0) + pd.get("accounts", 0) == 1 else "solicitudes" }}</a>{% endif %}
+        </div>{% endif %}</td>
       <td data-label="Pago / 1.000" class="r tnum">{% if c.rates_vary %}<span class="small muted">hasta </span>{% endif %}{{ c.rate|rate_k }}</td>
       <td data-label="Repartido" class="tnum"><span class="small">{{ st.spent|money(0) }} / {{ c.budget|money(0) }}</span><div class="bar mini-bar" style="margin-top:6px"><span style="width:{{ st.pct }}%"></span></div></td>
       <td data-label="Vistas" class="r tnum">{{ st.views|short }}</td>
-      <td data-label="Clips" class="r tnum">{{ st.clips }}{% if st.pending %} <a class="small" href="{{ url_for('admin_clips', c=c.id) }}">+{{ st.pending }}</a>{% endif %}</td>
+      <td data-label="Clips" class="r tnum">{{ st.clips }}</td>
       <td data-label="" class="r"><a class="btn sm soft" href="{{ url_for('admin_campaign', cid=c.id) }}">Abrir</a></td>
     </tr>
     {% else %}

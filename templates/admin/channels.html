@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon, av %}
+{% block title %}Canales · {{ camp.song }}{% endblock %}
+{% block content %}
+{% include "admin/_camp_nav.html" %}
+<div class="hub hub-admin">
+  <aside class="hub-side card tight">
+    {% for sec in sections %}
+    <div class="hub-sec">
+      <details class="hub-sec-edit">
+        <summary class="hub-sec-title">{{ sec.title }} <span class="muted">✎</span></summary>
+        <div class="hub-mini form-stack">
+          <form method="post" class="inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seccion_nombre"><input type="hidden" name="section" value="{{ sec.id }}"><input name="name" value="{{ sec.title }}" maxlength="80" aria-label="Nombre de la sección"><button class="btn sm soft">Guardar</button></form>
+          <div class="inline" style="gap:6px">
+            {% for act, label in [("seccion_subir", "↑"), ("seccion_bajar", "↓")] %}<form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="{{ act }}"><input type="hidden" name="section" value="{{ sec.id }}"><button class="btn sm soft">{{ label }}</button></form>{% endfor %}
+            <form method="post" data-confirm="¿Borrar la sección «{{ sec.title }}» con todos sus canales y publicaciones?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seccion_borrar"><input type="hidden" name="section" value="{{ sec.id }}"><button class="btn sm red">Borrar</button></form>
+          </div>
+          <form method="post" class="inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="canal_nuevo"><input type="hidden" name="section" value="{{ sec.id }}"><input name="emoji" placeholder="😀" maxlength="8" style="width:52px" aria-label="Emoji"><input name="name" placeholder="Canal nuevo" maxlength="60" required aria-label="Nombre del canal"><button class="btn sm">+</button></form>
+        </div>
+      </details>
+      {% for c in sec.channels %}
+      <a class="hub-ch{% if chan and c.id == chan.id %} on{% endif %}" href="{{ url_for('admin_campaign_channels', cid=camp.id, canal=c.id) }}"><span class="hub-emo">{{ c.emoji or "#" }}</span>{{ c.name }}{% if c.kind == 'posts' %}<span class="hub-count">{{ c.posts|length }}</span>{% endif %}</a>
+      {% endfor %}
+    </div>
+    {% endfor %}
+    <form method="post" class="inline hub-newsec"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seccion_nueva"><input name="name" placeholder="Sección nueva" maxlength="80" required aria-label="Nombre de la sección"><button class="btn sm soft">+</button></form>
+    <div class="hub-discord form-stack">
+      <b class="small">Discord de la campaña</b>
+      <form method="post" class="inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="discord"><input name="discord_url" value="{{ camp.discord_url or '' }}" placeholder="https://discord.gg/…" aria-label="Enlace de Discord"><button class="btn sm soft">Guardar</button></form>
+      <span class="hint">Vacío = no sale el botón de Discord.</span>
+    </div>
+  </aside>
+
+  <section class="hub-main">
+    {% if chan %}
+    <div class="hub-top card tight">
+      <form method="post" class="inline" style="flex:1;flex-wrap:wrap"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="canal_editar"><input type="hidden" name="channel" value="{{ chan.id }}">
+        <input name="emoji" value="{{ chan.emoji }}" maxlength="8" style="width:56px" aria-label="Emoji"><input name="name" value="{{ chan.name }}" maxlength="60" style="flex:1;min-width:160px" aria-label="Nombre del canal"><button class="btn sm soft">Guardar</button></form>
+      {% for act, label in [("canal_subir", "↑"), ("canal_bajar", "↓")] %}<form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="{{ act }}"><input type="hidden" name="channel" value="{{ chan.id }}"><button class="btn sm soft">{{ label }}</button></form>{% endfor %}
+      <form method="post" data-confirm="¿Borrar el canal «{{ chan.name }}» y sus publicaciones?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="canal_borrar"><input type="hidden" name="channel" value="{{ chan.id }}"><button class="btn sm red">Borrar canal</button></form>
+    </div>
+    {% if chan.kind == 'rules' %}<p class="small muted hub-note">Este canal enseña arriba las <b>reglas de la campaña</b> (se cambian en Ajustes). Puedes añadir publicaciones debajo.</p>
+    {% elif chan.kind == 'resources' %}<p class="small muted hub-note">Este canal enseña arriba los <b>materiales de la campaña</b> (se cambian en Ajustes). Puedes añadir publicaciones debajo.</p>
+    {% elif chan.kind == 'winners' %}<p class="small muted hub-note">Este canal es automático: enseña los clips aprobados con más vistas de la campaña.</p>{% endif %}
+    {% if chan.kind != 'winners' %}
+    <form method="post" enctype="multipart/form-data" class="card hub-compose form-stack">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="publicar"><input type="hidden" name="canal" value="{{ chan.id }}">
+      <textarea name="body" rows="3" maxlength="8000" placeholder="¿Qué quieres contar en {{ chan.emoji }} {{ chan.name }}? Los enlaces se pueden pulsar." aria-label="Publicación"></textarea>
+      <div class="hub-compose-foot">
+        <label class="btn soft sm file-btn">{{ icon("plus") }} Imagen<input type="file" name="image" accept="image/*"></label>
+        <label class="check small"><input type="checkbox" name="notify" checked> Avisar a los clippers por la campanita</label>
+        <button class="btn accent sm push">Publicar</button>
+      </div>
+    </form>
+    {% endif %}
+    {% for p in posts %}
+    <article class="card post" id="p{{ p.id }}">
+      <header class="post-head">{% if p.author %}{{ av(p.author) }}{% else %}<span class="avatar sm team"><span class="logo-mark"></span></span>{% endif %}
+        <div><b>Equipo {{ APP_NAME }}</b><span class="small muted">{{ p.created_at|ago }}{% if p.edited_at %} · editado{% endif %}{% if p.pinned %} · 📌 Fijado{% endif %}</span></div>
+        <details class="cr-more push"><summary class="btn sm soft" aria-label="Opciones">···</summary>
+          <div class="cr-pop cr-menu">
+            <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="post_fijar"><input type="hidden" name="post" value="{{ p.id }}"><input type="hidden" name="canal" value="{{ chan.id }}"><button>{{ "Quitar fijado" if p.pinned else "Fijar arriba" }}</button></form>
+            <form method="post" data-confirm="¿Borrar esta publicación?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="post_borrar"><input type="hidden" name="post" value="{{ p.id }}"><input type="hidden" name="canal" value="{{ chan.id }}"><button>Borrar</button></form>
+          </div></details>
+      </header>
+      <details class="post-edit"><summary class="small link">Editar texto</summary>
+        <form method="post" class="form-stack" style="margin-top:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="post_editar"><input type="hidden" name="post" value="{{ p.id }}"><input type="hidden" name="canal" value="{{ chan.id }}"><textarea name="body" rows="4">{{ p.body }}</textarea><button class="btn sm" style="align-self:flex-start">Guardar</button></form>
+      </details>
+      {% if p.body %}<div class="post-body">{{ p.body|linkify }}</div>{% endif %}
+      {% if p.image_mime %}<img class="post-img" src="{{ url_for('post_image', pid=p.id) }}" alt="" loading="lazy">{% endif %}
+      <footer class="post-foot small muted"><span>♥ {{ p.likes|length }}</span><span>{{ icon("chat") }} {{ p.comments|length }}</span></footer>
+      {% if p.comments %}<ul class="post-comments">{% for co in p.comments %}<li>{{ av(co.user) }}<div><b>{{ co.user.name }}</b> <span class="small muted">{{ co.created_at|ago }}</span><p>{{ co.body }}</p></div>
+        <form method="post" action="{{ url_for('delete_comment', coid=co.id) }}" data-confirm="¿Borrar este comentario?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('admin_campaign_channels', cid=camp.id, canal=chan.id) }}"><button class="icon-btn" aria-label="Borrar comentario">✕</button></form></li>{% endfor %}</ul>{% endif %}
+    </article>
+    {% else %}
+    {% if chan.kind == 'posts' %}<div class="table-card"><div class="empty"><h3>Aún no hay publicaciones</h3><p class="muted">Escribe la primera arriba.</p></div></div>{% endif %}
+    {% endfor %}
+    {% else %}
+    <div class="table-card"><div class="empty"><h3>Sin canales</h3><p class="muted">Crea una sección y un canal a la izquierda.</p></div></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -3,8 +3,11 @@
 {% block title %}{{ camp.song }} - {{ camp.artist }} · {{ APP_NAME }}{% endblock %}
 {% block content %}
 {% if not member and accepted %}{% set member = {"status": "aceptada"} %}{% endif %}
+{% if hub %}{% set ctab = 'resumen' %}{% endif %}
 <a class="back" href="{{ url_for('index') }}">← Campañas</a>
 {% set open_camp = camp.status == 'activa' and not st.exhausted %}
+{% if hub %}<div class="hub">{% include "_hub_side.html" %}<section class="hub-main">{% if chan %}{% include "_hub_channel.html" %}{% endif %}{% endif %}
+{% if not chan %}
 <div class="cdetail">
   <header class="album">
     {% set _t, lqip = cover_meta(camp) %}
@@ -83,11 +86,10 @@
   </section>
 
   {% set mats = camp.material_list %}
-  {% set tabs = [("resumen", "Resumen", True), ("normas", "Normas", camp.rules_text), ("anuncios", "Anuncios", camp.announcement_list),
-                 ("recursos", "Recursos", mats), ("ganadores", "Clips ganadores", winners), ("ideas", "Ideas", camp.idea_list)] %}
-  <nav class="seg ctabs" aria-label="Secciones de la campaña">
-    {% for k, label, show in tabs %}{% if show %}<a class="{% if ctab == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, tab=k if k != 'resumen' else None) }}">{{ label }}{% if k == 'anuncios' %} <b class="tnum">{{ camp.announcement_list|length }}</b>{% endif %}</a>{% endif %}{% endfor %}
-  </nav>
+  {% set tabs = [("resumen", "Resumen", True), ("normas", "Normas", camp.rules_text), ("recursos", "Recursos", mats)] %}
+  {% if not hub %}<nav class="seg ctabs" aria-label="Secciones de la campaña">
+    {% for k, label, show in tabs %}{% if show %}<a class="{% if ctab == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, tab=k if k != 'resumen' else None) }}">{{ label }}</a>{% endif %}{% endfor %}
+  </nav>{% endif %}
 
   {% if ctab == 'normas' %}
   <section class="card box">
@@ -173,6 +175,9 @@
   {% endif %}
   {% endif %}
 </div>
+{% endif %}
+{% if hub %}</section></div>{% endif %}
+
 
 {% if open_camp and member and member.status == 'aceptada' and accounts|length < 5 %}
 <dialog class="wd-dialog" id="acc-dialog" aria-labelledby="acc-title">

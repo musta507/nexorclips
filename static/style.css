@@ -1239,3 +1239,88 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .cr-stats{justify-content:center;gap:12px}
 @media (max-width:1100px){.cr-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:600px){.cr-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.cr-facts>div:nth-child(3n){border-right:1px solid var(--line)}.cr-facts>div:nth-child(2n){border-right:0}.cr-facts>div:nth-last-child(3){border-bottom:1px solid var(--line)}}
+.bell-btn{background:transparent!important;width:34px;height:34px}.bell-btn:hover,.bell-menu[open] .bell-btn{background:transparent!important;color:var(--ink-2)}.bell-btn svg{width:21px;height:21px}
+/* panel de cada campaña */
+.cn-head{display:flex;align-items:center;gap:14px;margin:4px 0 12px}
+.cn-head .dthumb{width:56px;height:56px;border-radius:14px;flex:none;overflow:hidden;background:var(--soft) center/cover}
+.cn-head .dthumb img{width:100%;height:100%;object-fit:cover}
+.cn-title{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cn-title h1{font-size:clamp(22px,3vw,30px)}
+.cn-tabs{margin-bottom:14px}
+.cn-n{display:inline-block;min-width:18px;padding:0 5px;border-radius:99px;background:#ef4444;color:#fff!important;opacity:1!important;font-size:11px;line-height:18px;text-align:center}
+.cn-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.cn-pend{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.cn-pend a{font-size:12px;background:var(--red-soft);color:#b42318;border-radius:99px;padding:2px 9px;font-weight:500}
+.cn-pend a b{font-weight:700}
+
+/* =============================================================== campaña tipo Discord/Whop (canales) */
+.hub{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;align-items:start}
+.hub-side{position:sticky;top:84px;display:flex;flex-direction:column;gap:2px;padding:10px;max-height:calc(100vh - 100px);overflow-y:auto;scrollbar-width:none}
+.hub-side::-webkit-scrollbar{display:none}
+.hub-camp{display:flex;gap:10px;align-items:center;padding:6px 6px 12px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.hub-camp .dthumb{width:40px;height:40px;border-radius:10px;overflow:hidden;flex:none;background:var(--soft) center/cover}
+.hub-camp .dthumb img{width:100%;height:100%;object-fit:cover}
+.hub-camp span:last-child{display:flex;flex-direction:column;min-width:0}
+.hub-camp b{font:600 14.5px/1.25 var(--display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hub-sec{display:flex;flex-direction:column;gap:2px;margin-top:10px}
+.hub-sec-title{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:2px 8px 4px;cursor:pointer;list-style:none}
+.hub-sec-title::-webkit-details-marker{display:none}
+.hub-ch{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;font-size:14.5px;color:var(--ink-2)}
+.hub-ch:hover{background:var(--soft);color:var(--ink)}
+.hub-ch.on{background:var(--ink);color:#fff}
+.hub-emo{width:22px;height:22px;display:grid;place-items:center;font-size:15px;flex:none}
+.hub-emo svg{width:16px;height:16px}
+.hub-emo.big{width:34px;height:34px;font-size:22px;background:var(--soft);border-radius:10px}
+.hub-count{margin-left:auto;font-size:11px;color:var(--muted)}
+.hub-ch.on .hub-count{color:#bbb}
+.hub-discord-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;background:#5865f2;color:#fff;border-radius:12px;padding:11px;font:600 14px var(--display)}
+.hub-discord-btn svg{width:18px;height:18px}
+.hub-discord-btn:hover{background:#4752c4}
+.hub-main{display:flex;flex-direction:column;gap:12px;min-width:0}
+.hub-main .cdetail{margin:0}
+.hub-title{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+.post{padding:0;overflow:hidden}
+.post-head{display:flex;align-items:center;gap:10px;padding:14px 18px}
+.post-head>div{display:flex;flex-direction:column}
+.post-body{padding:0 18px 14px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.6}
+.post-img{display:block;max-width:100%;max-height:520px;margin:0 18px 14px;border-radius:14px;object-fit:contain}
+.post-foot{display:flex;gap:8px;padding:8px 14px;border-top:1px solid var(--line)}
+.post-btn{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;border-radius:99px;padding:6px 10px;font:500 13.5px var(--font);color:var(--muted);cursor:pointer}
+.post-btn svg{width:15px;height:15px}
+.post-btn:hover{background:var(--soft);color:var(--ink)}
+.post-btn.on{color:#e11d48}
+.post-comments{list-style:none;margin:0;padding:6px 18px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);background:#fcfcfd}
+.post-comments li{display:flex;gap:10px;align-items:flex-start}
+.post-comments li>div{flex:1;min-width:0}
+.post-comments p{margin:2px 0 0;font-size:14px;overflow-wrap:anywhere}
+.post-reply{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
+.post-reply input{padding:9px 12px;font-size:14px}
+.pinned-sys{border-color:#dbe6ff;background:#fbfcff}
+.pinned-sys .mats{padding:0 12px 12px}
+.pinned-sys .clip-list,.post .clip-list{padding:0 12px 12px}
+.avatar.team{background:transparent}
+.avatar.team .logo-mark{width:30px;height:30px;border-radius:50%}
+/* panel: editar canales */
+.hub-admin .hub-side{gap:4px}
+.hub-sec-edit summary{display:flex;justify-content:space-between}
+.hub-mini{padding:8px;background:var(--soft);border-radius:12px;margin:4px 0;gap:8px}
+.hub-mini input{padding:7px 9px;font-size:13px}
+.hub-newsec,.hub-discord{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.hub-newsec input,.hub-discord input{padding:8px 10px;font-size:13px}
+.hub-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hub-top input{padding:8px 10px}
+.hub-note{margin:0 4px}
+.hub-compose textarea{min-height:90px}
+.hub-compose-foot{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.post-edit{padding:0 18px 10px}
+@media (max-width:900px){
+  .hub{grid-template-columns:1fr}
+  .hub-side{position:static;max-height:none;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;gap:6px;padding:8px}
+  .hub-camp,.hub-sec-title,.hub-newsec,.hub-discord,.hub-mini,.hub-sec-edit{display:none}
+  .hub-sec{flex-direction:row;margin:0;gap:6px}
+  .hub-ch{white-space:nowrap;flex:none;background:var(--soft)}
+  .hub-discord-btn{margin:0;flex:none;padding:8px 12px;white-space:nowrap}
+  .hub-admin .hub-side{flex-direction:column;overflow:visible}
+  .hub-admin .hub-sec{flex-direction:column}
+  .hub-admin .hub-sec-title,.hub-admin .hub-newsec,.hub-admin .hub-discord,.hub-admin .hub-sec-edit{display:flex}
+}

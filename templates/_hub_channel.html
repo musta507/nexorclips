@@ -1,0 +1,31 @@
+{# Contenido de un canal de la campaña #}
+{% from "_icons.html" import icon, av %}
+<div class="hub-title"><span class="hub-emo big">{{ chan.emoji or "#" }}</span><h2>{{ chan.name }}</h2></div>
+{% if chan.kind == 'rules' and camp.rules_text %}
+<article class="card post pinned-sys"><header class="post-head"><span class="avatar sm team"><span class="logo-mark"></span></span><div><b>Reglas de la campaña</b><span class="small muted">Léelas antes de publicar</span></div></header>
+  <div class="post-body">{{ camp.rules_text|linkify }}</div></article>
+{% elif chan.kind == 'resources' and camp.material_list %}
+<article class="card post pinned-sys"><header class="post-head"><span class="avatar sm team"><span class="logo-mark"></span></span><div><b>Materiales de la campaña</b><span class="small muted">Úsalos para tus clips</span></div></header>
+  <div class="mats">{% for name, url, kind in camp.material_list %}<a class="mat-row" href="{{ url }}" target="_blank" rel="noopener"><span class="mat-ico">{{ icon(kind if kind in ("tiktok", "instagram", "youtube", "facebook") else ("folder" if kind == "drive" else "link")) }}</span><span class="mat-name">{{ name }}</span><span class="mat-out">{{ icon("out") }}</span></a>{% endfor %}</div></article>
+{% elif chan.kind == 'winners' %}
+<article class="card post"><header class="post-head"><span class="avatar sm team"><span class="logo-mark"></span></span><div><b>Los clips con más vistas</b><span class="small muted">Se actualiza solo · míralos para ver qué funciona</span></div></header>
+  {% if winners %}<div class="clip-list">{% for s in winners %}<a class="clip" href="{{ s.url }}" target="_blank" rel="noopener"><span class="pi">{{ icon(s.platform) }}</span><div class="meta"><b>{{ s.author and '@' ~ s.author or PLATFORMS[s.platform] }}</b><span class="small muted">{{ s.created_at|ago }}</span></div><div class="views tnum">{{ s.views|short }} vistas</div></a>{% endfor %}</div>
+  {% else %}<p class="muted small" style="padding:0 18px 16px">Aún no hay clips aprobados en esta campaña.</p>{% endif %}</article>
+{% endif %}
+{% for p in posts %}
+<article class="card post" id="p{{ p.id }}">
+  <header class="post-head"><span class="avatar sm team"><span class="logo-mark"></span></span><div><b>Equipo {{ APP_NAME }}</b><span class="small muted">{{ p.created_at|ago }}{% if p.pinned %} · 📌 Fijado{% endif %}</span></div></header>
+  {% if p.body %}<div class="post-body">{{ p.body|linkify }}</div>{% endif %}
+  {% if p.image_mime %}<img class="post-img" src="{{ url_for('post_image', pid=p.id) }}" alt="" loading="lazy">{% endif %}
+  <footer class="post-foot">
+    <form method="post" action="{{ url_for('post_like', cid=camp.id, pid=p.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="post-btn{% if p.id in liked %} on{% endif %}" aria-pressed="{{ 'true' if p.id in liked else 'false' }}">♥ <span>{{ p.likes|length }}</span></button></form>
+    <span class="post-btn">{{ icon("chat") }} <span>{{ p.comments|length }}</span></span>
+  </footer>
+  {% if p.comments %}<ul class="post-comments">{% for co in p.comments %}<li>{{ av(co.user) }}<div><b>{{ co.user.name }}</b> <span class="small muted">{{ co.created_at|ago }}</span><p>{{ co.body }}</p></div>
+    {% if co.user_id == current_user.id %}<form method="post" action="{{ url_for('delete_comment', coid=co.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="icon-btn" aria-label="Borrar mi comentario">✕</button></form>{% endif %}</li>{% endfor %}</ul>{% endif %}
+  <form method="post" action="{{ url_for('post_comment', cid=camp.id, pid=p.id) }}" class="post-reply"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input name="body" maxlength="1000" placeholder="Escribe un comentario…" aria-label="Comentario" required><button class="btn sm soft">Enviar</button></form>
+</article>
+{% else %}
+{% if chan.kind == 'posts' %}<div class="table-card"><div class="empty"><h3>Aún no hay nada aquí</h3><p class="muted">Cuando el equipo publique en este canal, lo verás aquí.</p></div></div>{% endif %}
+{% endfor %}

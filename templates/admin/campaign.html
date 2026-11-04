@@ -2,22 +2,7 @@
 {% from "_icons.html" import av %}
 {% block title %}{{ camp.song }} · Admin{% endblock %}
 {% block content %}
-<a class="back" href="{{ url_for('admin_campaigns') }}">← Campañas</a>
-<div class="toolbar">
-  <div>
-    <span class="status {{ camp.status }}">{{ camp.status|capitalize }}</span>
-    <h1 style="margin-top:8px">{{ camp.song }} - {{ camp.artist }}</h1>
-  </div>
-  <div class="inline" style="flex-wrap:wrap">
-    <a class="btn soft" href="{{ url_for('admin_campaign_csv', cid=camp.id) }}" data-turbo="false">Descargar CSV</a>
-    <a class="btn soft" href="{{ url_for('campaign', cid=camp.id) }}">Ver como clipper</a>
-    <a class="btn" href="{{ url_for('admin_campaign_form', cid=camp.id) }}">Editar</a>
-    <form method="post" action="{{ url_for('admin_campaign_duplicate', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">Duplicar</button></form>
-    {% if camp.status in ('activa', 'pausada') %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="{{ 'pausar' if camp.status == 'activa' else 'reanudar' }}"><button class="btn soft">{{ "Pausar" if camp.status == 'activa' else "Reanudar" }}</button></form>{% endif %}
-    {% if camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="plazas"><button class="btn soft">{{ "Abrir plazas" if camp.full else "Marcar plazas completas" }}</button></form>{% endif %}
-    {% if camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_close', cid=camp.id) }}" data-confirm="¿Cerrar «{{ camp.song }}»? Dejará de aceptar clips y los clippers podrán retirar lo que ganaron."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn red">Cerrar campaña</button></form>{% endif %}
-  </div>
-</div>
+{% include "admin/_camp_nav.html" %}
 
 {% if camp.status == 'finalizada' %}<div class="flash ok">Campaña completada{% if camp.ended_at %} el {{ camp.ended_at|date }}{% endif %}. Ya no acepta clips ni se actualizan sus vistas, y los clippers ya pueden retirar lo que ganaron. Para reabrirla, sube el presupuesto y ponla en «Activa».</div>{% endif %}
 
@@ -34,35 +19,6 @@
   <div class="small muted camp-meta">
     Clipping{% if camp.max_members %} · Plazas: {{ camp.members_accepted }} de {{ camp.max_members }}{% endif %}
   </div>
-</div>
-
-<div class="duo camp-extras">
-  <section class="card tight form-stack">
-    <h3>Anuncios para los clippers</h3>
-    <form method="post" action="{{ url_for('admin_campaign_content', cid=camp.id) }}" class="form-stack">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="anuncio">
-      <textarea name="text" rows="2" maxlength="600" required placeholder="Ej.: Nuevo material subido al Drive" aria-label="Texto del anuncio"></textarea>
-      <button class="btn sm" style="align-self:flex-start">Publicar anuncio</button>
-    </form>
-    {% set anns = camp.announcement_list %}
-    {% if anns %}<ul class="item-list">{% for d, t in anns|reverse %}{% set i = anns|length - loop.index %}
-      <li><div><span class="small muted">{{ d }}</span><p>{{ t }}</p></div>
-        <form method="post" action="{{ url_for('admin_campaign_content', cid=camp.id) }}" data-confirm="¿Borrar este anuncio?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="borrar_anuncio"><input type="hidden" name="i" value="{{ i }}"><button class="icon-btn" aria-label="Borrar anuncio">✕</button></form></li>
-    {% endfor %}</ul>{% else %}<p class="small muted">Aún no hay anuncios. Los clippers aceptados reciben un aviso en la campanita.</p>{% endif %}
-  </section>
-  <section class="card tight form-stack">
-    <h3>Ideas de clips</h3>
-    <form method="post" action="{{ url_for('admin_campaign_content', cid=camp.id) }}" class="inline">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="idea">
-      <input name="text" maxlength="300" required placeholder="Ej.: Reacción al mejor momento del directo" aria-label="Idea de clip" style="flex:1">
-      <button class="btn sm">+ Añadir idea</button>
-    </form>
-    {% set ideas = camp.idea_list %}
-    {% if ideas %}<ul class="item-list">{% for t in ideas %}
-      <li><p>{{ t }}</p>
-        <form method="post" action="{{ url_for('admin_campaign_content', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="borrar_idea"><input type="hidden" name="i" value="{{ loop.index0 }}"><button class="icon-btn" aria-label="Borrar idea">✕</button></form></li>
-    {% endfor %}</ul>{% else %}<p class="small muted">Aún no hay ideas. Salen en la pestaña «Ideas» de la campaña.</p>{% endif %}
-  </section>
 </div>
 
 {% include "_analytics.html" %}

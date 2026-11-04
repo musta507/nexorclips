@@ -2,12 +2,15 @@
 {% from "_icons.html" import icon, av %}
 {% block title %}Clips por revisar · Admin{% endblock %}
 {% block content %}
-{% set base = {"tab": tab, "c": cid or None, "f": f if f != "todos" else None, "q": q or None} %}
+{% set rev_ep = 'admin_campaign_review' if in_camp else 'admin_clips' %}
+{% set base = {"tab": tab, "f": f if f != "todos" else None, "q": q or None} %}
+{% if in_camp %}{% set base = dict(base, cid=cid) %}{% else %}{% set base = dict(base, c=cid or None) %}{% endif %}
+{% if in_camp %}{% include "admin/_camp_nav.html" %}{% endif %}
 <div class="cr" data-review>
   <nav class="cr-rail" aria-label="Filtros">
     {% for k, (label, ico) in filters.items() %}
     {% if k in ("todos", "atrasados", "avisos") or counts.get(k) %}
-    <a class="cr-rail-btn{% if f == k %} on{% endif %}{% if k == 'atrasados' and counts.atrasados %} hot{% endif %}" href="{{ url_for('admin_clips', **dict(base, f=k if k != 'todos' else None)) }}" title="{{ label }} ({{ counts.get(k, 0) }})" aria-label="{{ label }}: {{ counts.get(k, 0) }}">{{ icon(ico) }}{% if counts.get(k) and k != 'todos' %}<b>{{ counts[k] }}</b>{% endif %}</a>
+    <a class="cr-rail-btn{% if f == k %} on{% endif %}{% if k == 'atrasados' and counts.atrasados %} hot{% endif %}" href="{{ url_for(rev_ep, **dict(base, f=k if k != 'todos' else None)) }}" title="{{ label }} ({{ counts.get(k, 0) }})" aria-label="{{ label }}: {{ counts.get(k, 0) }}">{{ icon(ico) }}{% if counts.get(k) and k != 'todos' %}<b>{{ counts[k] }}</b>{% endif %}</a>
     {% endif %}
     {% if k == "avisos" %}<span class="cr-rail-sep"></span>{% endif %}
     {% endfor %}
@@ -17,12 +20,12 @@
     <div class="cr-top">
       <nav class="seg" aria-label="Bandeja">
         {% for t, label in [("revisar", "Por revisar"), ("contando", "Contando vistas"), ("apelaciones", "Apelaciones")] %}
-        <a class="{% if tab == t %}on{% endif %}" href="{{ url_for('admin_clips', tab=t, c=cid or None) }}">{{ label }} <b class="tnum">{{ n[t] }}</b></a>
+        <a class="{% if tab == t %}on{% endif %}" href="{{ url_for(rev_ep, **(dict(tab=t, cid=cid) if in_camp else dict(tab=t, c=cid or None))) }}">{{ label }} <b class="tnum">{{ n[t] }}</b></a>
         {% endfor %}
       </nav>
-      <form method="get" class="cr-search" data-autosubmit>
+      <form method="get" class="cr-search" data-autosubmit{% if in_camp %} action="{{ url_for('admin_campaign_review', cid=cid) }}"{% endif %}>
         <input type="hidden" name="tab" value="{{ tab }}">{% if f != "todos" %}<input type="hidden" name="f" value="{{ f }}">{% endif %}
-        <select name="c" aria-label="Campaña"><option value="">Todas las campañas</option>{% for c in camps %}<option value="{{ c.id }}"{% if cid == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}</select>
+        {% if not in_camp %}<select name="c" aria-label="Campaña"><option value="">Todas las campañas</option>{% for c in camps %}<option value="{{ c.id }}"{% if cid == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}</select>{% endif %}
         <label class="cr-q">{{ icon("eye") }}<input type="search" name="q" value="{{ q }}" placeholder="Buscar" aria-label="Buscar"></label>
       </form>
     </div>
@@ -118,7 +121,7 @@
       </article>
       {% endfor %}
     </div>
-    {% if more %}<div class="cr-more-wrap"><a class="btn soft" href="{{ url_for('admin_clips', **dict(base, p=page + 1)) }}#clip-{{ rows[-1].id }}">Ver más clips</a></div>{% endif %}
+    {% if more %}<div class="cr-more-wrap"><a class="btn soft" href="{{ url_for(rev_ep, **dict(base, p=page + 1)) }}#clip-{{ rows[-1].id }}">Ver más clips</a></div>{% endif %}
     {% else %}
     <div class="table-card"><div class="empty"><h3>{{ "Todo revisado" if tab == 'revisar' else "Nada por aquí" }}</h3><p class="muted">{% if tab == 'revisar' %}No hay clips que hayan llegado al mínimo pendientes de revisar{% elif tab == 'contando' %}No hay clips contando vistas{% else %}No hay apelaciones pendientes{% endif %}{% if cid or q or f != 'todos' %} con este filtro{% endif %}.</p></div></div>
     {% endif %}
