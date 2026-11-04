@@ -1573,7 +1573,7 @@ def test_campaign_hub_channels_for_members():
     assert "Menciona a @marca" in a.get(f"/campana/{cid}?canal={chans['Normas']}").get_data(as_text=True)
 
 
-def test_admin_channels_posts_likes_comments_and_discord():
+def test_admin_channels_posts_likes_comments_and_whatsapp():
     cid = make_campaign()
     admin = client_for("admin@test.com")
     a = client_for("a@test.com", tiktok="ana")
@@ -1585,9 +1585,9 @@ def test_admin_channels_posts_likes_comments_and_discord():
     with A.app.app_context():
         ch = A.Channel.query.filter_by(name="Cuentas que molan").one().id
     post(admin, f"/admin/campana/{cid}/canales?canal={ch}", act="publicar", canal=str(ch), body="Mirad https://www.tiktok.com/@pablo", notify="on")
-    post(admin, f"/admin/campana/{cid}/canales", act="discord", discord_url="https://discord.gg/abc123")
+    post(admin, f"/admin/campana/{cid}/canales", act="whatsapp", whatsapp_url="https://chat.whatsapp.com/AbC123xyz")
     page = a.get(f"/campana/{cid}?canal={ch}").get_data(as_text=True)
-    assert 'href="https://www.tiktok.com/@pablo"' in page and "discord.gg/abc123" in page
+    assert 'href="https://www.tiktok.com/@pablo"' in page and "chat.whatsapp.com/AbC123xyz" in page
     with A.app.app_context():
         pid = A.Post.query.one().id
         ana = A.User.query.filter_by(email="a@test.com").one()
@@ -1714,3 +1714,16 @@ def test_review_cards_filters_and_video_copy(monkeypatch):
     assert "iframe.mediadelivery.net/embed/1/g-9" in admin.get("/admin/clips").get_data(as_text=True)
 
 
+
+
+def test_whatsapp_general_group_on_home():
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    post(admin, "/admin/destacado", act="whatsapp", whatsapp_url="https://evil.com/x")
+    home = a.get("/").get_data(as_text=True)
+    assert "evil.com" not in home and "chat.whatsapp.com" not in home
+    post(admin, "/admin/destacado", act="whatsapp", whatsapp_url="https://chat.whatsapp.com/Grupo123?mode=ems_copy_t")
+    page = a.get("/").get_data(as_text=True)
+    assert "https://chat.whatsapp.com/Grupo123" in page and "Únete al grupo de WhatsApp" in page
+    post(admin, "/admin/destacado", act="whatsapp", whatsapp_url="")
+    assert "chat.whatsapp.com" not in a.get("/").get_data(as_text=True)

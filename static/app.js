@@ -217,21 +217,36 @@ function graficas() {
         el("path", { d: d + " L" + x(n - 1).toFixed(1) + " " + (T + ih) + " L" + x(0).toFixed(1) + " " + (T + ih) + " Z", fill: "url(#an-fill-g)" }, svg);
         el("path", { d: d, class: "an-line" }, svg);
       }
-      var guide = el("line", { y1: T, y2: T + ih, class: "an-guide", visibility: "hidden" }, svg);
-      var dot = el("circle", { r: 5, class: "an-dot", visibility: "hidden" }, svg);
-      var tip = document.createElement("div"); tip.className = "an-tip"; tip.hidden = true; plot.appendChild(tip);
-      function move(ev) {
-        var r = svg.getBoundingClientRect(), px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
-        var i = Math.round((px * W / r.width - L) / iw * (n - 1)); i = Math.max(0, Math.min(n - 1, i));
-        var cx = x(i), cy = y(vals[i]);
-        guide.setAttribute("x1", cx); guide.setAttribute("x2", cx); guide.setAttribute("visibility", "visible");
-        dot.setAttribute("cx", cx); dot.setAttribute("cy", cy); dot.setAttribute("visibility", "visible");
+      var guide = el("line", { x1: 0, x2: 0, y1: T, y2: T + ih, class: "an-guide" }, svg);
+      var dot = el("circle", { cx: 0, cy: 0, r: 5, class: "an-dot" }, svg);
+      var tip = document.createElement("div"); tip.className = "an-tip"; plot.appendChild(tip);
+      var cur = -1, frame = 0, lastX = 0, shown = false;
+      function place(i) {                                  // mueve guía, punto y etiqueta (con transición CSS)
+        var r = svg.getBoundingClientRect(), cx = x(i), cy = y(vals[i]), jump = !shown;
+        if (jump) [guide, dot, tip].forEach(function (e) { e.style.transition = "none"; });   // al entrar aparece en su sitio, sin deslizar desde la izquierda
+        guide.style.transform = "translate(" + cx + "px,0)";
+        dot.style.transform = "translate(" + cx + "px," + cy + "px)";
         tip.innerHTML = "<b>" + numES(vals[i]) + "</b><span>" + fechaCorta(labels[i]) + "</span>";
-        tip.hidden = false;
-        var tx = cx * r.width / W, left = Math.min(Math.max(tx - tip.offsetWidth / 2, 0), r.width - tip.offsetWidth);
-        tip.style.left = left + "px"; tip.style.top = Math.max(0, cy * r.height / H - tip.offsetHeight - 12) + "px";
+        var tw = tip.offsetWidth, th = tip.offsetHeight, sx = r.width / W;
+        var left = Math.min(Math.max(cx * sx - tw / 2, 0), r.width - tw), top = Math.max(0, cy * r.height / H - th - 12);
+        tip.style.transform = "translate(" + left + "px," + top + "px)";
+        if (jump) {
+          void tip.offsetWidth;
+          [guide, dot, tip].forEach(function (e) { e.style.transition = ""; });
+          box.classList.add("an-hover"); shown = true;
+        }
       }
-      function leave() { guide.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); tip.hidden = true; }
+      function tick() {
+        frame = 0;
+        var r = svg.getBoundingClientRect(), px = lastX - r.left;
+        var i = Math.round((px * W / r.width - L) / iw * (n - 1)); i = Math.max(0, Math.min(n - 1, i));
+        if (i !== cur) { cur = i; place(i); }
+      }
+      function move(ev) {
+        lastX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+        if (!frame) frame = requestAnimationFrame(tick);
+      }
+      function leave() { box.classList.remove("an-hover"); shown = false; cur = -1; }
       svg.addEventListener("mousemove", move); svg.addEventListener("touchmove", move, { passive: true });
       svg.addEventListener("mouseleave", leave); svg.addEventListener("touchend", leave);
       box.querySelector("[data-chart-total]").textContent = numES(data.totals[state.metric] || 0);

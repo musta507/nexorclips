@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon, budget %}
 {% block content %}
-
+{% if wa_general %}
+<a class="wa-general" href="{{ wa_general }}" target="_blank" rel="noopener">
+  <span class="wa-general-ico">{% include "_wa_icon.html" %}</span>
+  <span class="wa-general-txt"><b>Únete al grupo de WhatsApp de {{ APP_NAME }}</b><span>Avisos, novedades y comunidad de clippers.</span></span>
+  <span class="btn wa-general-btn">Unirme</span>
+</a>
+{% endif %}
 
 {% if announce %}
 <section class="featured home-ann">

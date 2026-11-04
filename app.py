@@ -320,7 +320,8 @@ class Campaign(db.Model):
     low_alert_sent = db.Column(db.Boolean, default=False)    # ya se avisó de que queda poco presupuesto
     announcements = db.Column(db.Text, default="")           # anuncios para los clippers («fecha | texto» por línea)
     ideas = db.Column(db.Text, default="")                   # ideas de clips, una por línea
-    discord_url = db.Column(db.String(300), default="")      # enlace de invitación al Discord de la campaña
+    discord_url = db.Column(db.String(300), default="")      # antiguo (ya no se usa)
+    whatsapp_url = db.Column(db.String(300), default="")     # enlace al grupo de WhatsApp de la campaña
     channels_ready = db.Column(db.Boolean, default=False)    # ya tiene sus canales (se crean la primera vez)
     report_token = db.Column(db.String(40), unique=True, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
@@ -2197,7 +2198,8 @@ def index():
     cards.sort(key=lambda x: bool(x[0].full and x[0].id not in my_join))   # plazas completas (si no estás dentro) al final
     apply_schedule()
     fs = None
-    return render_template("home.html", cards=cards, featured=featured, cat=cat, counts=counts,
+    wa_general = get_setting("whatsapp_general", "")
+    return render_template("home.html", cards=cards, featured=featured, cat=cat, counts=counts, wa_general=wa_general,
                            total=len(all_cards), new_user=not current_user.submissions, my_join=my_join,
                            fs=fs, top5=ranking("semana", 5), week_clips=clips_of_week(),
                            announce=hf if hf["mode"] == "announce" else None)
@@ -3670,10 +3672,23 @@ def home_feature():
             "image_v": d.get("image_v", 0)}
 
 
+WA_GROUP_RE = re.compile(r"^https://chat\.whatsapp\.com/[A-Za-z0-9]+/?(\?[\w=&.-]*)?$")
+
+
 @app.route("/admin/destacado", methods=["GET", "POST"])
 @admin_required
 def admin_featured():
     hf = home_feature()
+    if request.method == "POST" and request.form.get("act") == "whatsapp":
+        url = (request.form.get("whatsapp_url") or "").strip()[:300]
+        if url and not WA_GROUP_RE.match(url):
+            flash("Pega un enlace de grupo de WhatsApp (empieza por https://chat.whatsapp.com/…).", "error")
+            return redirect(url_for("admin_featured"))
+        set_setting("whatsapp_general", url)
+        audit("whatsapp_general", url or "quitado")
+        db.session.commit()
+        flash("Grupo general de WhatsApp guardado." if url else "Grupo general de WhatsApp quitado.", "ok")
+        return redirect(url_for("admin_featured"))
     if request.method == "POST":
         mode = request.form.get("mode", "")
         if mode not in ("campaign", "announce", "none", ""):
@@ -3722,7 +3737,7 @@ def admin_featured():
         flash("Inicio actualizado.", "ok")
         return redirect(url_for("admin_featured"))
     camps = Campaign.query.filter(Campaign.status != "finalizada").order_by(Campaign.created_at.desc()).all()
-    return render_template("admin/featured.html", hf=hf, camps=camps)
+    return render_template("admin/featured.html", hf=hf, camps=camps, wa_general=get_setting("whatsapp_general", ""))
 
 
 @app.route("/destacado/imagen")
@@ -3826,12 +3841,12 @@ def admin_campaign_channels(cid):
         name = " ".join((request.form.get("name") or "").split())[:60]
         emoji = (request.form.get("emoji") or "").strip()[:8]
         back = lambda c=None: redirect(url_for("admin_campaign_channels", cid=cid, canal=c or chid or None))  # noqa: E731
-        if act == "discord":
-            url = (request.form.get("discord_url") or "").strip()[:300]
-            if url and not re.match(r"^https://(www\.)?(discord\.gg|discord\.com)/", url):
-                flash("Pega un enlace de invitación de Discord (empieza por https://discord.gg/…).", "error")
+        if act == "whatsapp":
+            url = (request.form.get("whatsapp_url") or "").strip()[:300]
+            if url and not WA_GROUP_RE.match(url):
+                flash("Pega un enlace de grupo de WhatsApp (empieza por https://chat.whatsapp.com/…).", "error")
                 return back()
-            camp.discord_url = url
+            camp.whatsapp_url = url
             flash("Discord guardado." if url else "Discord quitado.", "ok")
         elif act == "seccion_nueva" and name:
             db.session.add(ChannelSection(campaign_id=cid, title=name[:80], position=len(sections)))

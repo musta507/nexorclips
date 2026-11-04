@@ -38,4 +38,11 @@
   </div>
   <button class="btn accent" style="align-self:flex-start">Guardar</button>
 </form>
+<form method="post" class="card form-stack" style="max-width:760px;margin-top:18px">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="whatsapp">
+  <h3 class="wa-h">{% include "_wa_icon.html" %} Grupo general de WhatsApp de {{ APP_NAME }}</h3>
+  <p class="small muted" style="margin:0">Sale en el Inicio de todos los clippers. Los grupos de cada campaña se ponen dentro de la campaña, en «Canales».</p>
+  <div class="inline"><input name="whatsapp_url" value="{{ wa_general }}" placeholder="https://chat.whatsapp.com/…" aria-label="Enlace del grupo general" style="flex:1"><button class="btn accent">Guardar</button></div>
+  <span class="hint">Vacío = no sale en el Inicio.</span>
+</form>
 {% endblock %}

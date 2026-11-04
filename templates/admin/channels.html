@@ -25,9 +25,9 @@
     {% endfor %}
     <form method="post" class="inline hub-newsec"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seccion_nueva"><input name="name" placeholder="Sección nueva" maxlength="80" required aria-label="Nombre de la sección"><button class="btn sm soft">+</button></form>
     <div class="hub-discord form-stack">
-      <b class="small">Discord de la campaña</b>
-      <form method="post" class="inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="discord"><input name="discord_url" value="{{ camp.discord_url or '' }}" placeholder="https://discord.gg/…" aria-label="Enlace de Discord"><button class="btn sm soft">Guardar</button></form>
-      <span class="hint">Vacío = no sale el botón de Discord.</span>
+      <b class="small">Grupo de WhatsApp de la campaña</b>
+      <form method="post" class="inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="whatsapp"><input name="whatsapp_url" value="{{ camp.whatsapp_url or '' }}" placeholder="https://chat.whatsapp.com/…" aria-label="Enlace del grupo de WhatsApp"><button class="btn sm soft">Guardar</button></form>
+      <span class="hint">Solo lo ven los clippers aceptados. Vacío = no sale el botón.</span>
     </div>
   </aside>
 
