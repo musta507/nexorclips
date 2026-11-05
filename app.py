@@ -2433,17 +2433,20 @@ def home_data(u):
                      "btn": "Ver formación", "url": url_for("courses")}
     # paso a paso
     wa = get_setting("whatsapp_general", "")
-    steps = []
-    if wa:
-        steps.append({"title": "Únete al grupo de WhatsApp", "text": "Avisos, plazas nuevas y comunidad de clippers.",
-                      "done": bool(u.wa_joined_at), "btn": "Unirme", "url": url_for("join_whatsapp"), "ext": True})
+    steps = [{"title": "Únete al grupo de WhatsApp", "text": "Avisos, plazas nuevas y comunidad de clippers.",
+              "done": bool(wa and u.wa_joined_at), "btn": "Unirme", "url": url_for("join_whatsapp"), "ext": True,
+              "soon": not wa}]                               # sin enlace aún: sale como «Próximamente» y no cuenta
     if guide and gp["total"]:
         steps.append({"title": "Mira la guía para principiantes", "text": "Lo básico para que te aprueben los clips.",
                       "done": gp["finished"], "btn": "Empezar", "url": url_for("course", cid=guide.id)})
+    else:                                                    # aún no hay guía publicada: lleva a Formación
+        any_done = any(course_progress(c, u.id)["finished"] for c in Course.query.filter_by(published=True).all())
+        steps.append({"title": "Mira la guía para principiantes", "text": "Lo básico para que te aprueben los clips.",
+                      "done": any_done, "btn": "Ver formación", "url": url_for("courses")})
     steps.append({"title": "Aplica a una campaña", "text": "Elige una y pide entrar.",
                   "done": bool(CampaignMember.query.filter_by(user_id=u.id).first()), "btn": "Ver campañas",
                   "url": url_for("campaigns_page")})
-    show_steps = not all(st["done"] for st in steps)
+    show_steps = not all(st["done"] or st.get("soon") for st in steps)
     # ranking de la semana: mi puesto y cuánto falta para el de arriba
     full = ranking("semana", 1000)
     me = next((r for r in full if r["user"].id == u.id), None)

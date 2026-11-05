@@ -29,12 +29,13 @@
   </div>
   <ol class="hm-step-list{{ ' solo' if steps|length == 1 }}" style="grid-template-columns:repeat({{ steps|length }},minmax(0,1fr))">
     {% set ns = namespace(cur=None) %}
-    {% for st in steps %}{% if not st.done and ns.cur is none %}{% set ns.cur = loop.index %}{% endif %}{% endfor %}
+    {% for st in steps %}{% if not st.done and not st.soon and ns.cur is none %}{% set ns.cur = loop.index %}{% endif %}{% endfor %}
     {% for st in steps %}
     <li class="{{ 'done' if st.done }}{{ ' now' if loop.index == ns.cur }}">
       <span class="hm-chk">{% if st.done %}✓{% else %}{{ loop.index }}{% endif %}</span>
       <div><b>{{ st.title }}</b><small>{{ st.text }}</small></div>
       {% if st.done %}<span class="hm-ok">Hecho</span>
+      {% elif st.soon %}<span class="hm-soon">Próximamente</span>
       {% else %}<a class="btn sm {{ 'dark' if loop.index == ns.cur else 'soft' }}" href="{{ st.url }}"{% if st.ext %} target="_blank" rel="noopener" data-reload-soon{% endif %}>{{ st.btn }} {{ icon("arrow") }}</a>{% endif %}
     </li>
     {% endfor %}
