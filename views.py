@@ -350,3 +350,47 @@ def fetch_bio(platform, handle):
         if isinstance(bio, str):
             return bio
     return None
+
+
+# ---------------------------------------------------------------- perfiles: vídeos nuevos de una cuenta
+def _profile_input(platform, handles, per):
+    if platform == "tiktok":
+        return {"profiles": handles, "resultsPerPage": per, "shouldDownloadVideos": False,
+                "shouldDownloadCovers": False, "shouldDownloadSubtitles": False}
+    if platform == "instagram":
+        return {"directUrls": [f"https://www.instagram.com/{h}/" for h in handles], "resultsType": "posts",
+                "resultsLimit": per, "addParentData": False}
+    return {"startUrls": [{"url": f"https://www.youtube.com/@{h}/shorts"} for h in handles], "maxResults": 0,
+            "maxResultsShorts": per}
+
+
+PROFILE_URL_KEYS = {"tiktok": ["webVideoUrl", "url"], "instagram": ["url", "inputUrl"], "youtube": ["url"]}
+
+
+def fetch_profile_videos(platform, handles, per=12):
+    """Los últimos vídeos publicados por esas cuentas, con sus cifras: [{url, vid, author, views, ..., posted_at}]."""
+    if platform not in ("tiktok", "instagram", "youtube"):
+        return []
+    if not APIFY_TOKEN:
+        raise RuntimeError("Falta APIFY_TOKEN en las variables de entorno.")
+    if not handles:
+        return []
+    resp = requests.post(f"https://api.apify.com/v2/acts/{ACTORS[platform]}/run-sync-get-dataset-items",
+                         params={"token": APIFY_TOKEN, "timeout": 280}, json=_profile_input(platform, handles, per), timeout=300)
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Apify respondió {resp.status_code}: {resp.text[:200]}")
+    data = resp.json() or []
+    out = []
+    for item in data if isinstance(data, list) else []:
+        if not isinstance(item, dict):
+            continue
+        url = _first(item, PROFILE_URL_KEYS[platform])
+        if not isinstance(url, str) or not url.startswith("http"):
+            continue
+        vid = video_id(url)
+        if not vid:
+            continue
+        info = parse_item(platform, item)
+        info.update({"url": url, "vid": vid})
+        out.append(info)
+    return out

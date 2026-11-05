@@ -14,19 +14,29 @@
   {% if not user.is_admin %}
   <div class="inline" style="flex-wrap:wrap">
     <a class="btn accent" href="{{ url_for('admin_chat', uid=user.id) }}">{{ icon("chat") }} Chat{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
-    {% if user.is_banned %}
-    <form method="post" action="{{ url_for('admin_ban', uid=user.id, accion='desbloquear') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">Desbloquear</button></form>
-    {% else %}
-    <form method="post" action="{{ url_for('admin_ban', uid=user.id, accion='bloquear') }}" data-confirm="¿Bloquear a {{ user.name }}? No podrá enviar clips ni retirar dinero."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">Bloquear</button></form>
-    {% endif %}
-    <details class="del-acc">
-      <summary class="btn soft">Eliminar cuenta</summary>
-      <form method="post" action="{{ url_for('admin_ban', uid=user.id, accion='eliminar') }}" class="inline" style="flex-wrap:wrap;gap:8px;margin-top:10px" data-confirm="¿Eliminar la cuenta de {{ user.name }} con todos sus clips, retiros y mensajes? No se puede deshacer.">
-        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-        <input name="confirm" placeholder="Escribe ELIMINAR" autocomplete="off" style="max-width:180px" aria-label="Confirmación">
-        <button class="btn red">Eliminar</button>
-      </form>
+    {% if admin_can('admin_ban') %}
+    <details class="cr-more danger-menu">
+      <summary class="btn soft" aria-label="Más opciones">···</summary>
+      <div class="cr-pop cr-menu">
+        {% if user.is_banned %}
+        <form method="post" action="{{ url_for('admin_ban', uid=user.id, accion='desbloquear') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button>Desbloquear</button></form>
+        {% else %}
+        <form method="post" action="{{ url_for('admin_ban', uid=user.id, accion='bloquear') }}" data-confirm="¿Bloquear a {{ user.name }}? No podrá enviar clips ni retirar dinero." class="form-stack" style="padding:6px 10px">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input name="reason" placeholder="Motivo (lo verá)" aria-label="Motivo del bloqueo">
+          <button class="btn sm soft">Bloquear</button>
+        </form>
+        {% endif %}
+        <hr>
+        <form method="post" action="{{ url_for('admin_ban', uid=user.id, accion='eliminar') }}" class="form-stack" style="padding:6px 10px" data-confirm="¿Eliminar la cuenta de {{ user.name }} con todos sus clips, retiros y mensajes? No se puede deshacer.">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <span class="small muted">Borra todo y no se puede deshacer.</span>
+          <input name="confirm" placeholder="Escribe ELIMINAR" autocomplete="off" aria-label="Confirmación">
+          <button class="btn sm red">Eliminar cuenta</button>
+        </form>
+      </div>
     </details>
+    {% endif %}
   </div>
   {% endif %}
 </div>

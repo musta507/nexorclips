@@ -52,7 +52,7 @@
           <div class="who"><b>{{ current_user.name }}</b><div class="small muted">{{ current_user.email }}</div></div>
           <a href="{{ url_for('account') }}">Mi cuenta</a>
           {% if not current_user.is_admin %}<a href="{{ url_for('onboarding') }}">Editar perfil</a>{% endif %}
-          {% for mc in mod_campaigns(current_user) %}<a href="{{ url_for('admin_campaign_review', cid=mc.id) }}"><span class="mod-tag">MOD</span> {{ mc.song }}</a>{% endfor %}
+          {% for mc in mod_campaigns(current_user) %}<a href="{{ mod_home(mc.id) }}"><span class="mod-tag">MOD</span> {{ mc.song }}</a>{% endfor %}
           <a href="{{ url_for('ranking_page') }}">Ranking</a>
           <a href="{{ url_for('notification_settings') }}">Notificaciones</a>
           {% if current_user.is_admin %}
@@ -79,6 +79,7 @@
           ("admin_featured", ["admin_featured"], "Destacado de inicio", "megaphone", 0),
           ("admin_creators", ["admin_creators", "admin_creator_form"], "Creadores", "card", nc.creators_alert),
           ("admin_clippers", ["admin_clippers", "admin_clipper"], "Clippers", "users", 0),
+          ("admin_mods", ["admin_mods"], "Mods", "users", 0),
           ("admin_payouts", ["admin_payouts"], "Retiros", "cash", nc.payouts),
           ("admin_inbox", ["admin_inbox", "admin_chat"], "Mensajes", "chat", nc.messages),
           ("admin_courses", ["admin_courses", "admin_course", "admin_lesson"], "Formación", "cap", 0),

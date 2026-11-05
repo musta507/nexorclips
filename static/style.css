@@ -1539,3 +1539,25 @@ body.has-tabs>.site-footer{flex:none}
 .vv-url svg{width:12px;height:12px;flex:none}.vv-url:hover{background:var(--soft-2)}
 .vv-head{align-items:flex-start}
 .vv-url span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.add-clip{padding:0}.add-clip-sum{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 20px}
+.add-clip-sum::-webkit-details-marker{display:none}.add-clip-sum svg{width:15px;height:15px;vertical-align:-2px}
+.add-clip[open] .add-clip-sum{border-bottom:1px solid var(--line)}.add-clip-body{padding:18px 20px}
+.danger-menu .cr-menu{min-width:240px}.danger-menu hr{border:0;border-top:1px solid var(--line);margin:6px 0}
+.mods-add-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px}.mods-add-sum::-webkit-details-marker{display:none}.mods-add-sum svg{width:16px;height:16px}
+.mods-checks{display:flex;flex-wrap:wrap;gap:8px 18px}
+.mods-search{margin:16px 0 12px}.live-q{max-width:420px}
+.mods-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.mod-card{padding:16px;display:flex;flex-direction:column;gap:10px}
+.mod-card-head{display:flex;align-items:center;gap:10px}
+.mod-act{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mod-act div{background:var(--soft);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column}
+.mod-act b{font:700 18px var(--display)}.mod-act span{font-size:11.5px;color:var(--muted);line-height:1.25}
+.mod-camps{display:flex;flex-direction:column;gap:6px}
+.mod-camp{border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.mod-camp summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px}.mod-camp summary::-webkit-details-marker{display:none}
+.mod-camp-name{font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+[data-search][hidden]{display:none!important}
+.live-empty{padding:12px 4px}
+.live-bar{margin:0 0 12px}.live-q{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:0 12px;max-width:420px}.live-q svg{width:15px;height:15px;color:var(--muted);flex:none}.live-q input{border:0;background:transparent;padding:10px 0;width:100%;outline:none}
+.mod-act{grid-template-columns:repeat(2,minmax(0,1fr))}
+.mod-card-head .mods-who{min-width:0;flex:1}.mod-card-head .mods-who span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

@@ -9,16 +9,15 @@
   <div class="toolbar" style="margin-bottom:18px">
     <h2>Todos los clippers ({{ rows|length }})</h2>
     <form method="get" class="inline">
-      <input name="q" value="{{ q }}" placeholder="Buscar por nombre, correo o @cuenta" aria-label="Buscar clipper" style="width:280px">
-      <button class="btn sm soft">Buscar</button>
+      <label class="cr-q live-q">{{ icon("eye") }}<input type="search" name="q" value="{{ q }}" placeholder="Buscar por nombre, correo o @cuenta" aria-label="Buscar clipper" data-live-search="#clippers-table tbody"></label>
     </form>
   </div>
   <div class="table-card">
-    <div class="table-scroll"><table class="rt">
+    <div class="table-scroll"><table class="rt" id="clippers-table">
       <thead><tr><th>Clipper</th><th>Cuentas</th><th>Cobra por</th><th class="r">Clips</th><th class="r">Ganado</th><th class="r">Pagado</th><th class="r">Disponible</th><th></th></tr></thead>
       <tbody>
       {% for u, m, n in rows %}
-      <tr{% if u.is_banned %} class="row-flag"{% endif %}>
+      <tr{% if u.is_banned %} class="row-flag"{% endif %} data-search="{{ u.name }} {{ u.email }} {{ u.tiktok_handles }} {{ u.instagram_handles }} {{ u.youtube_handles }} {{ u.facebook_handles or '' }}">
         <td data-label="Clipper"><div class="who-cell">{{ av(u) }}<div><a class="link" href="{{ url_for('admin_clipper', uid=u.id) }}"><b>{{ u.name }}</b></a>{% if u.is_admin %} <span class="admin-tag" style="font-size:10px">Admin</span>{% endif %}{% if u.is_banned %} <span class="flag">Bloqueado</span>{% endif %}
           <div class="small muted">{{ u.email }} · desde {{ u.created_at|date }}</div>
           {% if u.is_banned and u.ban_reason %}<div class="small" style="color:var(--red)">{{ u.ban_reason }}</div>{% endif %}</div></div></td>
@@ -32,17 +31,7 @@
           {% if not u.is_admin %}
             <a class="btn sm" href="{{ url_for('admin_clipper', uid=u.id) }}" style="margin-bottom:6px">Ficha</a>
             <a class="btn sm soft" href="{{ url_for('admin_chat', uid=u.id) }}" style="margin-bottom:6px">Escribir</a>
-            {% if u.is_banned %}
-            <form method="post" action="{{ url_for('admin_ban', uid=u.id, accion='desbloquear') }}">
-              <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Desbloquear</button>
-            </form>
-            {% else %}
-            <form class="inline" method="post" action="{{ url_for('admin_ban', uid=u.id, accion='bloquear') }}" data-confirm="¿Bloquear a {{ u.name }}? No podrá enviar clips ni retirar dinero.">
-              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-              <input name="reason" placeholder="Motivo" style="width:120px" aria-label="Motivo del bloqueo">
-              <button class="btn sm red">Bloquear</button>
-            </form>
-            {% endif %}
+            {% if u.is_banned %}<span class="flag">Bloqueado</span>{% endif %}
           {% endif %}
         </td>
       </tr>

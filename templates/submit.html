@@ -4,10 +4,12 @@
 {% block content %}
 <div class="section-head" style="margin:0">
   <h1>Mis clips</h1>
-  <p class="muted">Pega el enlace de tu vídeo y sigue cómo va cada uno.</p>
+  <p class="muted">Publica en tus cuentas de campaña y tus clips aparecen aquí solos. Sigue cómo va cada uno.</p>
 </div>
 
-<div class="card">
+<details class="card add-clip"{% if not camps %} open{% endif %}>
+  <summary class="add-clip-sum"><span>{{ icon("plus") }} <b>¿Un clip no aparece?</b> <span class="muted small">Añádelo a mano pegando su enlace</span></span><span class="small muted">Los vídeos nuevos de tus cuentas se añaden solos cada pocas horas</span></summary>
+  <div class="add-clip-body">
   {% if camps %}
   <form method="post" class="form-grid send-form" style="align-items:end;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) auto">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -30,7 +32,8 @@
     <a class="btn accent" href="{{ url_for('index') }}">Ver campañas</a>
   </div>
   {% endif %}
-</div>
+  </div>
+</details>
 
 <div class="kpis k4">
   <div class="kpi card tight"><span class="small muted">Vistas</span><b class="tnum">{{ stats.views|short }}</b></div>
@@ -66,7 +69,7 @@
       {% set stg = clip_stage(s) %}
       <tr>
         <td data-label="Fecha" class="small muted">{{ s.created_at|date }}</td>
-        <td data-label="Clip"><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a></td>
+        <td data-label="Clip"><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a>{% if s.source == 'auto' %}<div class="small muted">Detectado solo{% if s.author %} · @{{ s.author }}{% endif %}</div>{% endif %}</td>
         <td data-label="Campaña"><a class="link" href="{{ url_for('campaign', cid=s.campaign_id) }}">{{ s.campaign.song }}</a><div class="small muted">{{ s.campaign.artist }}</div></td>
         <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b>{% set mv = s.campaign.min_views_for(s.platform) %}{% if stg == 'contando' and mv %}<div class="mini-bar" title="{{ s.views|num }} de {{ mv|num }}"><span style="width:{{ [100, ((s.views or 0) / mv * 100)|round]|min }}%"></span></div><div class="small muted">mín. {{ mv|short }}</div>{% endif %}{% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}</td>
         <td data-label="Estado"><span class="status {{ 'pendiente' if stg in ('contando', 'revisar', 'estadisticas') else s.status }}{% if stg == 'contando' %} counting{% endif %}">{{ STAGE_LABELS[stg] }}</span>

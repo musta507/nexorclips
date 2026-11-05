@@ -6,12 +6,15 @@
 <div class="sup-admin">
   <aside class="card tight sup-list">
     <b class="small muted">Conversaciones</b>
+    <label class="cr-q live-q">{{ icon("eye") }}<input type="search" placeholder="Buscar" data-live-search="#sup-items" aria-label="Buscar"></label>
+    <div id="sup-items">
     {% for t in threads %}
-    <a class="sup-item{% if who and t.user.id == who.id %} on{% endif %}" href="{{ url_for('admin_campaign_support', cid=camp.id, u=t.user.id) }}">
+    <a data-search="{{ t.user.name }} {{ t.user.email }}" class="sup-item{% if who and t.user.id == who.id %} on{% endif %}" href="{{ url_for('admin_campaign_support', cid=camp.id, u=t.user.id) }}">
       {{ av(t.user) }}<span><b>{{ t.user.name }}</b><small>{{ t.last.body|truncate(48) }}</small></span>
       {% if t.unread %}<span class="hub-count hot">{{ t.unread }}</span>{% else %}<small class="muted">{{ t.last.created_at|ago }}</small>{% endif %}
     </a>
     {% else %}<p class="small muted" style="margin:8px 0 0">Aún no ha escrito nadie al soporte de esta campaña.</p>{% endfor %}
+    </div>
   </aside>
   <section class="sup-main">
     {% if who %}

@@ -898,7 +898,11 @@ def test_bio_code_verification(monkeypatch):
     cid2 = make_campaign(song="Otra")
     with A.app.app_context():
         A.db.session.add(A.CampaignMember(user_id=uid, campaign_id=cid2, status="aceptada")); A.db.session.commit()
-    post(a, f"/campana/{cid2}/cuentas", platform="tiktok", handle="biouser")   # la misma cuenta en otra campaña ya sale verificada
+    r = post(a, f"/campana/{cid2}/cuentas", platform="tiktok", handle="biouser")   # cada cuenta, en una sola campaña
+    assert "solo puede estar en una campaña" in r.get_data(as_text=True)
+    with A.app.app_context():
+        get(A.Campaign, cid).status = "finalizada"; A.db.session.commit()
+    post(a, f"/campana/{cid2}/cuentas", platform="tiktok", handle="biouser")   # terminada la otra, ya sale verificada
     with A.app.app_context():
         assert A.CampaignAccount.query.filter_by(campaign_id=cid2).one().status == "aceptada"
 
@@ -1948,3 +1952,82 @@ def test_admin_sees_campaign_as_outsider_unless_hub():
     page = admin.get(f"/campana/{cid}").get_data(as_text=True)
     assert "hub-ch" not in page and "Ver el hub" in page
     assert "hub-ch" in admin.get(f"/campana/{cid}?hub=1").get_data(as_text=True)
+
+
+def test_discover_clips_from_profiles_and_daily_reminder(monkeypatch):
+    cid = make_campaign(song="Bali")
+    a = client_for("a@test.com", tiktok="clipsdepablo")
+    _auto_accept()
+    with A.app.app_context():
+        acc = A.CampaignAccount.query.one()
+        acc.decided_at = datetime.utcnow() - timedelta(days=2)
+        A.db.session.commit()
+    now = datetime.utcnow()
+    items = [
+        {"url": "https://www.tiktok.com/@clipsdepablo/video/7500000000000000001", "vid": "7500000000000000001",
+         "author": "clipsdepablo", "views": 1200, "likes": 30, "comments": 2, "shares": 1, "posted_at": now - timedelta(hours=3), "video_url": ""},
+        {"url": "https://www.tiktok.com/@clipsdepablo/video/7500000000000000002", "vid": "7500000000000000002",
+         "author": "clipsdepablo", "views": 999, "likes": 1, "comments": 0, "shares": 0, "posted_at": now - timedelta(days=10), "video_url": ""},
+    ]
+    monkeypatch.setattr(A.viewcounter, "APIFY_TOKEN", "x")
+    monkeypatch.setattr(A.viewcounter, "fetch_profile_videos", lambda p, handles, per=12: items if p == "tiktok" else [])
+    with A.app.app_context():
+        added, errors = A.discover_clips()
+        assert added == 1 and not errors                       # el antiguo (de antes de entrar) no cuenta
+        s_ = A.Submission.query.one()
+        assert s_.source == "auto" and s_.views == 1200 and s_.campaign_id == cid
+        assert A.discover_clips()[0] == 0                       # no se duplica
+        assert A.inactivity_reminders() == 0                    # publicó hace 3 h: sin aviso
+        acc = A.CampaignAccount.query.one()
+        acc.last_post_at = datetime.utcnow() - timedelta(hours=30)
+        A.db.session.commit()
+        assert A.inactivity_reminders() == 1
+        acc.last_scan_at = None                                 # sin poder mirar el perfil, no se avisa
+        A.db.session.commit()
+        assert A.inactivity_reminders() == 0
+        uid = A.User.query.filter_by(email="a@test.com").one().id
+        assert A.Notice.query.filter_by(user_id=uid, kind="inactividad").count() == 1
+        # 1:00 en Madrid
+        due, _ = A.reminders_due(datetime(2026, 11, 6, 0, 30))   # 00:30 UTC = 01:30 Madrid (invierno)
+        assert due
+        assert not A.reminders_due(datetime(2026, 11, 6, 9, 0))[0]
+    assert "Detectado solo" in a.get("/mis-clips").get_data(as_text=True)
+
+
+def test_account_only_in_one_campaign():
+    c1 = make_campaign(song="Uno")
+    c2 = make_campaign(song="Dos")
+    a = client_for("a@test.com", verify=False)
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="a@test.com").one()
+        for c in (c1, c2):
+            A.db.session.add(A.CampaignMember(user_id=u.id, campaign_id=c, status="aceptada"))
+        A.db.session.add(A.CampaignAccount(user_id=u.id, campaign_id=c1, platform="tiktok", handle="micuenta", status="aceptada"))
+        A.db.session.commit()
+    r = post(a, f"/campana/{c2}/cuentas", platform="tiktok", handle="micuenta")
+    assert "solo puede estar en una campaña" in r.get_data(as_text=True)
+
+
+def test_mods_page_and_permissions():
+    cid = make_campaign(song="Neón")
+    admin = client_for("admin@test.com")
+    reviewer = client_for("rev@test.com")
+    mod = client_for("mod@test.com", tiktok="modo")
+    with A.app.app_context():
+        r = A.User.query.filter_by(email="rev@test.com").one(); r.is_admin, r.admin_role = True, "reviewer"; A.db.session.commit()
+    assert reviewer.get("/admin/mods").status_code == 403          # solo el admin principal
+    post(admin, "/admin/mods", act="anadir", email="mod@test.com", campaigns=[str(cid)], perms=["soporte", "canales"])
+    with A.app.app_context():
+        row = A.CampaignMod.query.one()
+        assert row.perm_set == {"soporte", "canales"}
+        mid = row.id
+    assert mod.get(f"/admin/campana/{cid}/revisar").status_code == 403
+    assert mod.get(f"/admin/campana/{cid}/soporte").status_code == 200
+    page = admin.get("/admin/mods").get_data(as_text=True)
+    assert "mod@test.com" in page and "2 de 6 permisos" in page
+    post(admin, "/admin/mods", act="permisos", mid=str(mid), perms=list(A.MOD_PERMS))
+    assert mod.get(f"/admin/campana/{cid}/revisar").status_code == 200
+    post(admin, "/admin/mods", act="quitar", mid=str(mid))
+    assert mod.get(f"/admin/campana/{cid}/soporte").status_code == 403
+    clip_page = admin.get("/admin/clipper/%d" % 1)
+    assert clip_page.status_code in (200, 404)

@@ -989,3 +989,37 @@ function canalVisible() {
   if (!bar || bar.scrollWidth <= bar.clientWidth) return;
   bar.scrollLeft = on.offsetLeft - bar.clientWidth / 2 + on.offsetWidth / 2;
 }
+
+
+// =============================================================== buscador instantáneo en las listas (filtra mientras escribes)
+function quitarAcentos(t) { return (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+function buscadoresVivos() {
+  document.querySelectorAll("[data-live-search]").forEach(function (inp) {
+    if (inp.dataset.ready) return;
+    inp.dataset.ready = "1";
+    var box = document.querySelector(inp.getAttribute("data-live-search"));
+    if (!box) return;
+    var empty = box.parentNode.querySelector(".live-empty") || box.querySelector(".live-empty");
+    if (!empty) {
+      empty = document.createElement(box.tagName === "TBODY" ? "tr" : "p");
+      empty.className = "live-empty small muted"; empty.hidden = true;
+      if (box.tagName === "TBODY") { var td = document.createElement("td"); td.colSpan = 12; empty.appendChild(td); }
+      box.appendChild(empty);
+    }
+    function filtra() {
+      var q = quitarAcentos(inp.value.trim()), shown = 0;
+      box.querySelectorAll("[data-search]").forEach(function (el) {
+        var ok = !q || quitarAcentos(el.getAttribute("data-search")).indexOf(q) !== -1;
+        el.hidden = !ok; if (ok) shown++;
+      });
+      var msg = q && !shown ? "Nadie coincide con «" + inp.value.trim() + "»." : "";
+      (empty.tagName === "TR" ? empty.firstChild : empty).textContent = msg;
+      empty.hidden = !msg;
+    }
+    inp.addEventListener("input", filtra);
+    inp.addEventListener("keydown", function (e) { if (e.key === "Enter" && !inp.name) { e.preventDefault(); } });
+    if (inp.value) filtra();
+  });
+}
+document.addEventListener("turbo:load", buscadoresVivos);
+document.addEventListener("DOMContentLoaded", buscadoresVivos);

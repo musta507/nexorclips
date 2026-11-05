@@ -22,7 +22,7 @@
     <span class="post-btn">{{ icon("chat") }} <span>{{ p.comments|length }}</span></span>
   </footer>
   {% if p.comments %}<ul class="post-comments">{% for co in p.comments %}<li>{{ av(co.user) }}<div><b>{{ co.user.name }}</b>{% if co.user_id in mod_ids %} <span class="mod-tag">MOD</span>{% elif co.user.is_admin %} <span class="mod-tag">EQUIPO</span>{% endif %} <span class="small muted">{{ co.created_at|ago }}</span><p>{{ co.body }}</p></div>
-    {% if co.user_id == current_user.id or i_mod %}<form method="post" action="{{ url_for('delete_comment', coid=co.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="icon-btn" aria-label="Borrar mi comentario">✕</button></form>{% endif %}</li>{% endfor %}</ul>{% endif %}
+    {% if co.user_id == current_user.id or mod_del %}<form method="post" action="{{ url_for('delete_comment', coid=co.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="icon-btn" aria-label="Borrar mi comentario">✕</button></form>{% endif %}</li>{% endfor %}</ul>{% endif %}
   <form method="post" action="{{ url_for('post_comment', cid=camp.id, pid=p.id) }}" class="post-reply"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <input name="body" maxlength="1000" placeholder="Escribe un comentario…" aria-label="Comentario" required><button class="btn sm soft">Enviar</button></form>
 </article>

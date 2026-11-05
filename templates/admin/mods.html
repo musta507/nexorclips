@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% import "admin/_ui.html" as ui %}
+{% from "_icons.html" import icon, av %}
+{% block title %}Mods · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Mods", "Quién modera cada campaña, qué puede hacer y cuánto ha trabajado esta semana.") %}{% endcall %}
+
+<details class="card tight mods-add"{% if not mods %} open{% endif %}>
+  <summary class="mods-add-sum">{{ icon("plus") }} <b>Añadir mod</b></summary>
+  <form method="post" class="form-stack" style="margin-top:14px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="anadir">
+    <div class="field"><label for="mod-email">Correo del usuario</label>
+      <input id="mod-email" type="email" name="email" required placeholder="correo@ejemplo.com">
+      <span class="hint">Tiene que haberse registrado antes en la web con ese correo.</span></div>
+    <div class="field"><span class="label">Campañas</span>
+      <div class="mods-checks">{% for c in camps %}<label class="check"><input type="checkbox" name="campaigns" value="{{ c.id }}"> {{ c.song }}</label>{% else %}<span class="small muted">No hay campañas activas.</span>{% endfor %}</div></div>
+    <div class="field"><span class="label">Permisos</span>
+      <div class="mods-checks">{% for k, label in perms.items() %}<label class="check"><input type="checkbox" name="perms" value="{{ k }}" checked> {{ label }}</label>{% endfor %}</div>
+      <span class="hint">Ningún mod puede tocar dinero, editar la campaña ni bloquear clippers.</span></div>
+    <button class="btn accent" style="align-self:flex-start">Añadir mod</button>
+  </form>
+</details>
+
+{% if mods %}
+<div class="mods-search">
+  <label class="cr-q live-q">{{ icon("eye") }}<input type="search" placeholder="Buscar mod por nombre o correo" data-live-search="#mods-list" aria-label="Buscar mod"></label>
+</div>
+<div id="mods-list" class="mods-grid">
+  {% for m in mods %}
+  <article class="card mod-card" data-search="{{ m.user.name }} {{ m.user.email }}">
+    <header class="mod-card-head">
+      {{ av(m.user) }}
+      <div class="mods-who"><b>{{ m.user.name }} <span class="mod-tag">MOD</span></b><span class="small muted">{{ m.user.email }}</span></div>
+      <form method="post" data-confirm="¿Quitar a {{ m.user.name }} como mod de todas sus campañas?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="quitar_todo"><input type="hidden" name="uid" value="{{ m.user.id }}"><button class="btn sm soft">Quitar de todo</button></form>
+    </header>
+    <div class="mod-act">
+      <div><b class="tnum">{{ m.activity.clips }}</b><span>clips revisados</span></div>
+      <div><b class="tnum">{{ m.activity.requests }}</b><span>solicitudes</span></div>
+      <div><b class="tnum">{{ m.activity.support }}</b><span>respuestas de soporte</span></div>
+      <div><b class="tnum">{{ m.activity.posts }}</b><span>publicaciones</span></div>
+    </div>
+    <span class="small muted">Últimos 7 días</span>
+    <div class="mod-camps">
+      {% for r in m.rows %}{% set ps = r.perm_set %}
+      <details class="mod-camp">
+        <summary><span class="mod-camp-name">{{ r.campaign.song }}</span><span class="small muted">{{ ps|length }} de {{ perms|length }} permisos</span><span class="link small">Gestionar</span></summary>
+        <form method="post" class="form-stack" style="margin-top:10px">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="permisos"><input type="hidden" name="mid" value="{{ r.id }}">
+          <div class="mods-checks">{% for k, label in perms.items() %}<label class="check"><input type="checkbox" name="perms" value="{{ k }}"{% if k in ps %} checked{% endif %}> {{ label }}</label>{% endfor %}</div>
+          <div class="inline" style="gap:8px"><button class="btn sm">Guardar permisos</button></div>
+        </form>
+        <form method="post" data-confirm="¿Quitar a {{ m.user.name }} como mod de «{{ r.campaign.song }}»?" style="margin-top:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="quitar"><input type="hidden" name="mid" value="{{ r.id }}"><button class="btn sm soft">Quitar de esta campaña</button></form>
+      </details>
+      {% endfor %}
+    </div>
+  </article>
+  {% endfor %}
+  <p class="live-empty small muted" hidden>Nadie coincide con esa búsqueda.</p>
+</div>
+{% else %}
+<div class="table-card"><div class="empty"><h3>Aún no hay mods</h3><p class="muted">Añade el primero con el formulario de arriba.</p></div></div>
+{% endif %}
+{% endblock %}

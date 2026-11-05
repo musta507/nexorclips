@@ -496,6 +496,7 @@ class Submission(db.Model):
     stats_at = db.Column(db.DateTime, nullable=True)        # cuándo lo envió
     stats_asked_at = db.Column(db.DateTime, nullable=True)  # cuándo se le pidió (desde aquí cuenta el plazo)
     stats_reason = db.Column(db.String(300), default="")    # si se le pide otra: qué corregir
+    source = db.Column(db.String(10), default="")          # "auto" = la web lo encontró sola en el perfil
     video_guid = db.Column(db.String(64), default="")        # copia del vídeo en Bunny para revisarlo
     video_status = db.Column(db.String(20), default="")      # "" · subiendo · listo · error · borrado
     video_tries = db.Column(db.Integer, default=0)
@@ -601,6 +602,8 @@ class CampaignAccount(db.Model):
     bio_checked_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime, nullable=True)
+    last_post_at = db.Column(db.DateTime, nullable=True)       # último vídeo que vimos en su perfil
+    last_scan_at = db.Column(db.DateTime, nullable=True)       # última vez que miramos su perfil
     user = db.relationship("User")
     campaign = db.relationship("Campaign")
 
@@ -764,9 +767,14 @@ class CampaignMod(db.Model):
     campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    perms = db.Column(db.String(200), default="")             # permisos separados por comas ("" = todos)
     user = db.relationship("User")
     campaign = db.relationship("Campaign")
     __table_args__ = (db.UniqueConstraint("campaign_id", "user_id"),)
+
+    @property
+    def perm_set(self):
+        return set(MOD_PERMS) if not self.perms else {p_ for p_ in self.perms.split(",") if p_ in MOD_PERMS}
 
 
 def is_mod(user, cid):
@@ -783,6 +791,35 @@ def mod_campaigns(user):
     if not getattr(user, "is_authenticated", False) or getattr(user, "is_admin", False):
         return []
     return [m.campaign for m in CampaignMod.query.filter_by(user_id=user.id).all() if m.campaign]
+
+
+MOD_PERMS = {"revisar": "Revisar clips", "verificar": "Pedir otra verificación de vistas", "solicitudes": "Solicitudes y cuentas",
+             "canales": "Publicar en canales", "comentarios": "Moderar comentarios", "soporte": "Soporte de la campaña"}
+ENDPOINT_PERM = {"admin_campaign_review": "revisar", "admin_review": "revisar", "admin_review_bulk": "revisar",
+                 "admin_campaign_requests": "solicitudes", "admin_campaign_member": "solicitudes",
+                 "admin_campaign_account": "solicitudes", "admin_campaign_channels": "canales",
+                 "admin_campaign_support": "soporte"}
+
+
+def mod_perms(user, cid):
+    if not getattr(user, "is_authenticated", False) or not cid:
+        return set()
+    m = CampaignMod.query.filter_by(campaign_id=cid, user_id=user.id).first()
+    return m.perm_set if m else set()
+
+
+def mod_can(user, cid, perm):
+    return perm in mod_perms(user, cid)
+
+
+def mod_home(cid, user=None):
+    """Primera pantalla del panel de la campaña a la que el mod tiene acceso."""
+    ps = mod_perms(user or current_user, cid)
+    for perm, ep in (("revisar", "admin_campaign_review"), ("solicitudes", "admin_campaign_requests"),
+                     ("soporte", "admin_campaign_support"), ("canales", "admin_campaign_channels")):
+        if perm in ps:
+            return url_for(ep, cid=cid)
+    return url_for("campaign", cid=cid)
 
 
 MOD_ENDPOINTS = {"admin_campaign_support", "admin_campaign_review", "admin_campaign_requests", "admin_campaign_channels", "admin_review",
@@ -1534,6 +1571,11 @@ def refresh_views():
     if not _refresh_lock.acquire():
         return "Ya hay una actualización en marcha."
     try:
+        try:                                      # primero, los clips nuevos que haya en los perfiles de los clippers
+            discover_clips()
+        except Exception:  # noqa: BLE001
+            db.session.rollback()
+            log.exception("Fallo buscando clips nuevos en los perfiles")
         q = (Submission.query.join(Campaign)
              .filter(Campaign.status == "activa", Submission.status != "rechazado"))
         if REFRESH_DAYS > 0:
@@ -1722,6 +1764,100 @@ def refresh_in_background():
     threading.Thread(target=run, daemon=True).start()
 
 
+AUTO_PLATFORMS = ("tiktok", "instagram", "youtube")
+SCAN_CHUNK = 20                         # cuentas por llamada a Apify
+APP_TZ = os.environ.get("APP_TZ", "Europe/Madrid")
+REMIND_HOUR = int(os.environ.get("REMIND_HOUR", "1"))       # hora (de España) del aviso «hoy no has publicado»
+
+
+def discover_clips(now=None):
+    """Mira el perfil de cada cuenta aceptada en una campaña activa y añade solos los vídeos nuevos.
+    Cada cuenta es de una sola campaña, así que todo lo que publica después de entrar es un clip de esa campaña."""
+    now = now or datetime.utcnow()
+    accs = (CampaignAccount.query.join(Campaign)
+            .filter(CampaignAccount.status == "aceptada", Campaign.status == "activa",
+                    CampaignAccount.platform.in_(AUTO_PLATFORMS)).all())
+    accs = [a for a in accs if not a.campaign.exhausted and a.platform in a.campaign.platform_list and not is_demo(a.user)]
+    added, errors = 0, []
+    by_platform = {}
+    for a in accs:
+        by_platform.setdefault(a.platform, []).append(a)
+    for platform, group in by_platform.items():
+        for i in range(0, len(group), SCAN_CHUNK):
+            chunk = group[i:i + SCAN_CHUNK]
+            try:
+                items = viewcounter.fetch_profile_videos(platform, [a.handle for a in chunk])
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{PLATFORMS[platform]}: {e}")
+                log.warning("No se pudieron leer perfiles de %s: %s", platform, e)
+                continue
+            by_handle = {viewcounter.clean_handle(a.handle): a for a in chunk}
+            for a in chunk:
+                a.last_scan_at = now
+            for it in items:
+                acc = by_handle.get(viewcounter.clean_handle(it.get("author") or ""))
+                if not acc and len(chunk) == 1:
+                    acc = chunk[0]
+                if not acc:
+                    continue
+                posted = it.get("posted_at")
+                if posted and (not acc.last_post_at or posted > acc.last_post_at):
+                    acc.last_post_at = posted
+                since = (acc.decided_at or acc.created_at or now) - timedelta(hours=1)
+                if not posted or posted < since:
+                    continue                                  # solo cuentan los vídeos publicados después de entrar
+                key = f"{platform}:{it['vid']}"
+                if Submission.query.filter_by(video_key=key).first():
+                    continue
+                camp = acc.campaign
+                sub = Submission(user_id=acc.user_id, campaign_id=camp.id, url=viewcounter.normalize_url(it["url"], resolve=False),
+                                 platform=platform, video_key=key, author=acc.handle, source="auto", posted_at=posted,
+                                 review_since=None if camp.min_for(platform) else now)
+                db.session.add(sub)
+                db.session.flush()
+                if it.get("views") is not None:
+                    apply_reading(sub, it, now)
+                notify_user(acc.user_id, "clip_nuevo", f"Clip detectado en {camp.song}",
+                            f"Hemos añadido solo tu nuevo vídeo de @{acc.handle}. Ya está contando vistas.",
+                            "/mis-clips", camp_id=camp.id)
+                added += 1
+            db.session.commit()
+    if added:
+        log.info("Clips detectados solos: %s", added)
+    return added, errors
+
+
+def inactivity_reminders(now=None):
+    """Aviso diario: cuentas de campañas activas que no han publicado nada en las últimas 24 h."""
+    now = now or datetime.utcnow()
+    accs = (CampaignAccount.query.join(Campaign)
+            .filter(CampaignAccount.status == "aceptada", Campaign.status == "activa").all())
+    n = 0
+    for a in accs:
+        camp = a.campaign
+        if camp.exhausted or is_demo(a.user) or (a.user and a.user.is_banned):
+            continue
+        if (a.decided_at or a.created_at or now) > now - timedelta(hours=12):
+            continue                                          # recién aceptada: aún no toca
+        if a.platform not in AUTO_PLATFORMS or not a.last_scan_at or a.last_scan_at < now - timedelta(hours=26):
+            continue                                          # si no hemos podido mirar su perfil, no avisamos a ciegas
+        if a.last_post_at and a.last_post_at > now - timedelta(hours=24):
+            continue
+        st = campaign_stats(camp)
+        notify_user(a.user_id, "inactividad", f"@{a.handle} no ha subido ningún clip hoy",
+                    f"Quedan {money(st['remaining'], 0)} por repartir en {camp.song}. Sube un clip para no quedarte fuera.",
+                    f"/campana/{camp.id}", camp_id=camp.id)
+        n += 1
+    db.session.commit()
+    return n
+
+
+def reminders_due(now=None):
+    """¿Es la hora del aviso diario (1:00 en España) y aún no se ha mandado hoy?"""
+    local = (now or datetime.utcnow()).replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ))
+    return local.hour == REMIND_HOUR and get_setting("reminders_sent", "") != local.strftime("%Y-%m-%d"), local.strftime("%Y-%m-%d")
+
+
 REFRESH_HOURS = parse_float(os.environ.get("REFRESH_HOURS"), 6) or 0   # cada cuántas horas se cuentan las vistas solas (0 = nunca)
 
 
@@ -1759,6 +1895,12 @@ def _auto_refresh_loop():
                     set_setting("last_refresh_at", datetime.utcnow().isoformat())
                     refresh_views()
                     check_creator_balances()
+                due, day = reminders_due()
+                if due:                                   # 1:00 en España: última mirada a los perfiles y aviso a quien no publicó
+                    set_setting("reminders_sent", day)
+                    db.session.commit()
+                    discover_clips()
+                    inactivity_reminders()
         except Exception:  # noqa: BLE001
             log.exception("Fallo en la actualización automática de vistas")
         time.sleep(600)
@@ -1898,7 +2040,7 @@ def staff_required(campaign_of):
                     abort(403)
                 return f(*a, **kw)
             cid = campaign_of(kw)
-            if request.endpoint in MOD_ENDPOINTS and cid and is_mod(current_user, cid):
+            if request.endpoint in MOD_ENDPOINTS and cid and mod_can(current_user, cid, ENDPOINT_PERM.get(request.endpoint, "")):
                 g.mod_cid = cid
                 return f(*a, **kw)
             abort(403)
@@ -1910,7 +2052,7 @@ def staff_can(endpoint, cid):
     """Para las plantillas: ¿puede el usuario entrar en esta pantalla de la campaña?"""
     if getattr(current_user, "is_admin", False):
         return admin_can(endpoint)
-    return endpoint in MOD_ENDPOINTS and is_mod(current_user, cid)
+    return endpoint in MOD_ENDPOINTS and mod_can(current_user, cid, ENDPOINT_PERM.get(endpoint, ""))
 
 
 def acting_as_mod():
@@ -2017,7 +2159,7 @@ def inject_globals():
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year,
             "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
             "REJECT_REASONS": REJECT_REASONS, "COUNTRIES": COUNTRIES, "LANGUAGES": LANGUAGES, "CAMPAIGN_KINDS": CAMPAIGN_KINDS,
-            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "is_mod": is_mod,
+            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
             "mod_campaigns": mod_campaigns, "acting_as_mod": acting_as_mod,
             "STATS_HOURS": STATS_HOURS, "bunny_ready": bunny_ready, "reached_min": reached_min,
             "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
@@ -2591,6 +2733,7 @@ def campaign(cid):
                            member=campaign_member(current_user.id, camp.id), join_statuses=JOIN_STATUSES, waiting=waiting,
                            winners=winners, ctab=ctab, hub=hub, sections=sections, chan=chan, posts=posts, liked=liked,
                            mod_ids=campaign_mod_ids(cid) if hub else set(), i_mod=hub and is_mod(current_user, cid),
+                           mod_del=hub and mod_can(current_user, cid, "comentarios"),
                            hubq=1 if staff_view else None, staff_view=staff_view, support=support,
                            mod_ids_all=campaign_mod_ids(cid) if support and support["open"] else set())
 
@@ -2639,7 +2782,7 @@ def post_comment(cid, pid):
 def delete_comment(coid):
     co = db.session.get(PostComment, coid) or abort(404)
     ch = co.post.channel
-    if co.user_id != current_user.id and not current_user.is_admin and not is_mod(current_user, ch.campaign_id):
+    if co.user_id != current_user.id and not current_user.is_admin and not mod_can(current_user, ch.campaign_id, "comentarios"):
         abort(403)
     db.session.delete(co)
     db.session.commit()
@@ -2734,6 +2877,12 @@ def add_campaign_account(cid):
         if used:
             flash(f"Esta campaña pide una cuenta nueva, solo para ella. @{handle} ya se usó en otra campaña.", "error")
             return back
+    other = (CampaignAccount.query.filter(CampaignAccount.platform == platform, CampaignAccount.handle == handle,
+                                          CampaignAccount.campaign_id != cid, CampaignAccount.status != "rechazada")
+             .join(Campaign).filter(Campaign.status != "finalizada").first())
+    if other:                                          # cada cuenta es de una sola campaña: todo lo que publica es de ella
+        flash(f"La cuenta @{handle} ya está en la campaña «{other.campaign.song}». Cada cuenta solo puede estar en una campaña.", "error")
+        return back
     existing = CampaignAccount.query.filter_by(campaign_id=cid, platform=platform, handle=handle).first()
     if existing:
         flash("Ya has añadido esa cuenta a esta campaña." if existing.user_id == current_user.id
@@ -3407,6 +3556,89 @@ def admin_campaign_clippers(cid):
                            sec="clippers", mods=mods, mod_ids={m_.user_id for m_ in mods})
 
 
+@app.route("/admin/mods", methods=["GET", "POST"])
+@admin_required
+def admin_mods():
+    """Todos los mods en un sitio: en qué campañas están, qué pueden hacer y cuánto trabajan."""
+    if request.method == "POST":
+        act = request.form.get("act", "")
+        perms = [p_ for p_ in request.form.getlist("perms") if p_ in MOD_PERMS]
+        perm_str = "" if set(perms) == set(MOD_PERMS) else ",".join(perms)
+        if act == "anadir":
+            email = (request.form.get("email") or "").strip().lower()
+            u = User.query.filter(db.func.lower(User.email) == email).first() if email else None
+            cids = [int(x) for x in request.form.getlist("campaigns") if x.isdigit()]
+            if not u:
+                flash("No hay ningún usuario con ese correo. Tiene que haberse registrado antes.", "error")
+            elif u.is_admin:
+                flash(f"{u.name} ya es del equipo: puede hacerlo todo.", "info")
+            elif u.is_banned:
+                flash("No puedes hacer mod a un usuario bloqueado.", "error")
+            elif not cids:
+                flash("Elige al menos una campaña.", "error")
+            elif not perms:
+                flash("Marca al menos un permiso.", "error")
+            else:
+                n = 0
+                for camp in Campaign.query.filter(Campaign.id.in_(cids)).all():
+                    row = CampaignMod.query.filter_by(campaign_id=camp.id, user_id=u.id).first()
+                    if row:
+                        row.perms = perm_str
+                        continue
+                    db.session.add(CampaignMod(campaign_id=camp.id, user_id=u.id, perms=perm_str))
+                    notify_user(u.id, "mod", f"Ahora eres mod de {camp.song}",
+                                "Te han dado permisos de moderador en esta campaña. Entra desde la campaña o desde tu menú.",
+                                f"/campana/{camp.id}", camp_id=camp.id)
+                    n += 1
+                audit("mod_añadido", f"{u.email} · {len(cids)} campañas · {perm_str or 'todos'}")
+                flash(f"{u.name} es mod en {n} {'campaña nueva' if n == 1 else 'campañas nuevas'}.", "ok")
+        elif act == "permisos":
+            row = db.session.get(CampaignMod, request.form.get("mid", type=int) or 0) or abort(404)
+            if not perms:
+                flash("Marca al menos un permiso (o quita al mod de esa campaña).", "error")
+            else:
+                row.perms = perm_str
+                audit("mod_permisos", f"{row.user.email} · «{row.campaign.song}» · {perm_str or 'todos'}")
+                flash(f"Permisos de {row.user.name} en «{row.campaign.song}» guardados.", "ok")
+        elif act == "quitar":
+            row = db.session.get(CampaignMod, request.form.get("mid", type=int) or 0) or abort(404)
+            audit("mod_quitado", f"{row.user.email} · «{row.campaign.song}»")
+            flash(f"{row.user.name} ya no es mod de «{row.campaign.song}».", "ok")
+            db.session.delete(row)
+        elif act == "quitar_todo":
+            uid = request.form.get("uid", type=int) or 0
+            rows = CampaignMod.query.filter_by(user_id=uid).all()
+            for row in rows:
+                db.session.delete(row)
+            u = db.session.get(User, uid)
+            audit("mod_quitado", f"{u.email if u else uid} · todas las campañas")
+            flash("Ya no es mod de ninguna campaña.", "ok")
+        else:
+            abort(400)
+        db.session.commit()
+        return redirect(url_for("admin_mods"))
+    rows = CampaignMod.query.options(joinedload(CampaignMod.user), joinedload(CampaignMod.campaign)).all()
+    week = datetime.utcnow() - timedelta(days=7)
+    mods = {}
+    for r in rows:
+        if not r.user or not r.campaign:
+            continue
+        mods.setdefault(r.user_id, {"user": r.user, "rows": []})["rows"].append(r)
+    for uid, m in mods.items():
+        acts = dict(db.session.query(AuditLog.action, db.func.count(AuditLog.id))
+                    .filter(AuditLog.admin_id == uid, AuditLog.created_at >= week).group_by(AuditLog.action).all())
+        m["activity"] = {
+            "clips": acts.get("clip_aprobado", 0) + acts.get("clip_rechazado", 0),
+            "requests": acts.get("clipper_aceptado", 0) + acts.get("clipper_rechazado", 0),
+            "support": CampMessage.query.filter(CampMessage.sender_id == uid, CampMessage.from_staff.is_(True),
+                                                CampMessage.created_at >= week).count(),
+            "posts": Post.query.filter(Post.author_id == uid, Post.created_at >= week).count(),
+        }
+    camps = Campaign.query.filter(Campaign.status != "finalizada").order_by(Campaign.created_at.desc()).all()
+    return render_template("admin/mods.html", mods=sorted(mods.values(), key=lambda m: m["user"].name.lower()),
+                           camps=camps, perms=MOD_PERMS)
+
+
 @app.route("/campana/<int:cid>/soporte", methods=["POST"])
 @login_required
 def campaign_support_send(cid):
@@ -3424,7 +3656,7 @@ def campaign_support_send(cid):
             db.session.add(CampMessage(campaign_id=cid, user_id=current_user.id, sender_id=current_user.id, body=body,
                                        read_by_user=True))
             for m_ in CampaignMod.query.filter_by(campaign_id=cid).all():
-                if m_.user_id != current_user.id:
+                if m_.user_id != current_user.id and "soporte" in m_.perm_set:
                     notify_user(m_.user_id, "mensaje", f"Soporte de {camp.song}: {current_user.name}", body[:200],
                                 url_for("admin_campaign_support", cid=cid, u=current_user.id), camp_id=cid)
             notify_phone(f"Soporte {camp.song}", f"{current_user.name}: {body[:200]}",
@@ -3482,7 +3714,7 @@ def admin_campaign_mods(cid):
     u = db.session.get(User, uid) if uid else (User.query.filter(db.func.lower(User.email) == email).first() if email else None)
     if not u:
         flash("No hay ningún usuario con ese correo. Tiene que haberse registrado antes.", "error")
-        return redirect(url_for("admin_campaign_clippers", cid=cid))
+        return redirect(url_for("admin_mods"))
     row = CampaignMod.query.filter_by(campaign_id=cid, user_id=u.id).first()
     if act == "quitar":
         if row:
@@ -3502,7 +3734,7 @@ def admin_campaign_mods(cid):
             audit("mod_añadido", f"{u.email} · «{camp.song}»")
             flash(f"{u.name} es ahora mod de «{camp.song}».", "ok")
     db.session.commit()
-    return redirect(url_for("admin_campaign_clippers", cid=cid))
+    return redirect(url_for("admin_mods"))
 
 
 REVIEW_SLA_HOURS = int(os.environ.get("REVIEW_SLA_HOURS", "48"))   # a partir de aquí un clip sale como «atrasado»
@@ -4560,6 +4792,8 @@ def admin_review(sid, accion):
             flash("No puedes revisar tus propios clips: los revisa otra persona del equipo.", "error")
             return _back()
         if accion in ("visitas",):                    # tocar vistas es tocar dinero: solo el equipo
+            abort(403)
+        if accion == "pedir_estadisticas" and not mod_can(current_user, sub.campaign_id, "verificar"):
             abort(403)
     nxt = request.form.get("next", "")
     if accion == "aprobar":
@@ -5750,7 +5984,7 @@ def admin_vapid_keys():
     return render_template("admin/vapid.html", priv=priv, pub=pub)
 
 
-BELL_ICONS = {"mod": "users", "estadisticas": "film", "clip_aprobado": "ok", "clip_rechazado": "x", "campana_nueva": "flag", "plazas": "users", "retiro": "cash",
+BELL_ICONS = {"clip_nuevo": "film", "inactividad": "clock", "mod": "users", "estadisticas": "film", "clip_aprobado": "ok", "clip_rechazado": "x", "campana_nueva": "flag", "plazas": "users", "retiro": "cash",
               "mensaje": "chat", "anuncio": "megaphone", "destacado": "megaphone"}
 
 
