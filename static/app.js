@@ -196,10 +196,10 @@ function graficas() {
       if (parent) parent.appendChild(e);
       return e;
     }
-    var uid = "an" + Math.random().toString(36).slice(2, 8), transicion = null;
+    var uid = "an" + Math.random().toString(36).slice(2, 8), transicion = null, geo = null;
     var calma = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    function draw(anim, ov) {                              // anim: devuelve la animación de entrada · ov: valores intermedios (transición)
-      var labels = data.series.labels, vals = ov || data.series[state.mode][state.metric];
+    function draw(anim, morph) {                           // anim: devuelve la animación de entrada · morph: viene de otra métrica
+      var labels = data.series.labels, vals = data.series[state.mode][state.metric];
       var W = plot.clientWidth || 600, H = W < 560 ? 220 : 300, L = 44, R = 12, T = 12, B = 30;
       var iw = W - L - R, ih = H - T - B, n = vals.length, eje = ejeY(Math.max.apply(null, vals.concat([0]))), max = eje.top;
       var x = function (i) { return L + (n > 1 ? i / (n - 1) : 0.5) * iw; };
@@ -209,22 +209,45 @@ function graficas() {
         "aria-label": METRICA[state.metric] + " " + (state.mode === "daily" ? "por día" : "acumuladas") }, plot);
       for (var gv = 0; gv <= max + eje.step / 2; gv += eje.step) {   // rejilla y eje Y
         var gy = y(gv);
-        el("line", { x1: L, x2: W - R, y1: gy, y2: gy, class: "an-grid" }, svg);
-        el("text", { x: L - 8, y: gy + 4, class: "an-axis", "text-anchor": "end" }, svg).textContent = corto(gv);
+        el("line", { x1: L, x2: W - R, y1: gy, y2: gy, class: "an-grid" + (morph ? " an-fade" : "") }, svg);
+        el("text", { x: L - 8, y: gy + 4, class: "an-axis" + (morph ? " an-fade" : "") , "text-anchor": "end" }, svg).textContent = corto(gv);
       }
+      var base = T + ih, ys = vals.map(function (v) { return y(v); }), linePath = null, fillPath = null, bars = [];
       var step = Math.max(1, Math.ceil(n / (W < 560 ? 4 : 7)));   // fechas del eje X
       for (var i = 0; i < n; i += step) el("text", { x: x(i), y: H - 8, class: "an-axis", "text-anchor": "middle" }, svg).textContent = fechaCorta(labels[i]);
       if (state.mode === "daily") {                        // barras por día
-        var bw = Math.max(2, Math.min(18, iw / n * 0.7)), bars = [];
-        vals.forEach(function (v, i) { if (v > 0) bars.push(el("rect", { x: x(i) - bw / 2, y: y(v), width: bw, height: Math.max(1, T + ih - y(v)), rx: Math.min(4, bw / 2), class: "an-barv" }, svg)); });
+        var bw = Math.max(2, Math.min(18, iw / n * 0.7));
+        vals.forEach(function (v, i) { bars.push(el("rect", { x: x(i) - bw / 2, y: v > 0 ? ys[i] : base, width: bw, height: v > 0 ? Math.max(1, base - ys[i]) : 0, rx: Math.min(4, bw / 2), class: "an-barv" }, svg)); });
       } else {                                             // línea con relleno
-        var d = vals.map(function (v, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); }).join(" ");
+        var d = ys.map(function (yy, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + yy.toFixed(1); }).join(" ");
         var defs = el("defs", {}, svg), grad = el("linearGradient", { id: "an-fill-g", x1: 0, x2: 0, y1: 0, y2: 1 }, defs);
         el("stop", { offset: "0%", class: "an-g0" }, grad); el("stop", { offset: "100%", class: "an-g1" }, grad);
         var clip = el("clipPath", { id: uid + "-c" }, defs), rect = el("rect", { x: 0, y: 0, width: W, height: H }, clip);
-        el("path", { d: d + " L" + x(n - 1).toFixed(1) + " " + (T + ih) + " L" + x(0).toFixed(1) + " " + (T + ih) + " Z", fill: "url(#an-fill-g)", "clip-path": "url(#" + uid + "-c)" }, svg);
-        el("path", { d: d, class: "an-line", "clip-path": "url(#" + uid + "-c)" }, svg);
+        fillPath = el("path", { d: d + " L" + x(n - 1).toFixed(1) + " " + base + " L" + x(0).toFixed(1) + " " + base + " Z", fill: "url(#an-fill-g)", "clip-path": "url(#" + uid + "-c)" }, svg);
+        linePath = el("path", { d: d, class: "an-line", "clip-path": "url(#" + uid + "-c)" }, svg);
       }
+      function ponY(arr) {                                 // mueve la línea / las barras a estas alturas (en píxeles)
+        if (linePath) {
+          var dd = arr.map(function (yy, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + yy.toFixed(1); }).join(" ");
+          linePath.setAttribute("d", dd);
+          fillPath.setAttribute("d", dd + " L" + x(n - 1).toFixed(1) + " " + base + " L" + x(0).toFixed(1) + " " + base + " Z");
+        } else {
+          bars.forEach(function (b, i) { var h = Math.max(0, base - arr[i]); b.setAttribute("y", base - h); b.setAttribute("height", h); });
+        }
+      }
+      if (morph && geo && geo.mode === state.mode && geo.ys.length === n && geo.W === W && !calma) {
+        var desde = geo.ys, t0 = null, dur = 380, token = {};
+        transicion = token;
+        ponY(desde);
+        (function paso(t) {
+          if (transicion !== token || !svg.isConnected) return;
+          t0 = t0 || t;
+          var k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+          ponY(desde.map(function (a, i) { return a + (ys[i] - a) * e; }));
+          if (k < 1) requestAnimationFrame(paso);
+        })(performance.now());
+      }
+      geo = { mode: state.mode, ys: ys, W: W };
       var play = function () {};
       if (anim && !calma) {
         if (state.mode === "daily") {                      // barras: crecen desde abajo una detrás de otra
@@ -287,24 +310,13 @@ function graficas() {
       var key = b.hasAttribute("data-chart-mode") ? "mode" : "metric";
       var nuevo = b.getAttribute(key === "mode" ? "data-chart-mode" : "data-chart-metric");
       if (state[key] === nuevo) return;
-      var antes = data.series[state.mode][state.metric];
       state[key] = nuevo;
       b.parentNode.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
       if (key === "mode") {                               // otro tipo de gráfica: animación de entrada
         var go = draw(true); requestAnimationFrame(function () { requestAnimationFrame(go); });
         return;
       }
-      var despues = data.series[state.mode][state.metric];  // misma gráfica, otra métrica: se transforma suave
-      if (calma || antes.length !== despues.length) { draw(false); return; }
-      var t0 = null, dur = 320, token = {};
-      transicion = token;
-      (function paso(t) {
-        if (transicion !== token || !plot.isConnected) return;
-        t0 = t0 || t;
-        var k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
-        draw(false, k < 1 ? antes.map(function (v, i) { return v + (despues[i] - v) * e; }) : null);
-        if (k < 1) requestAnimationFrame(paso);
-      })(performance.now());
+      draw(false, true);                                  // misma gráfica, otra métrica: se transforma suave
     });
     var entrada = draw(true);                              // la animación de entrada sale cuando la gráfica aparece en pantalla
     if ("IntersectionObserver" in window) {
