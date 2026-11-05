@@ -191,7 +191,9 @@ function graficas() {
       if (parent) parent.appendChild(e);
       return e;
     }
-    function draw() {
+    var uid = "an" + Math.random().toString(36).slice(2, 8);
+    var calma = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function draw(anim) {                                  // anim: devuelve una función que lanza la animación de entrada
       var labels = data.series.labels, vals = data.series[state.mode][state.metric];
       var W = plot.clientWidth || 600, H = W < 560 ? 220 : 300, L = 44, R = 12, T = 12, B = 30;
       var iw = W - L - R, ih = H - T - B, n = vals.length, eje = ejeY(Math.max.apply(null, vals.concat([0]))), max = eje.top;
@@ -208,14 +210,35 @@ function graficas() {
       var step = Math.max(1, Math.ceil(n / (W < 560 ? 4 : 7)));   // fechas del eje X
       for (var i = 0; i < n; i += step) el("text", { x: x(i), y: H - 8, class: "an-axis", "text-anchor": "middle" }, svg).textContent = fechaCorta(labels[i]);
       if (state.mode === "daily") {                        // barras por día
-        var bw = Math.max(2, Math.min(18, iw / n * 0.7));
-        vals.forEach(function (v, i) { if (v > 0) el("rect", { x: x(i) - bw / 2, y: y(v), width: bw, height: Math.max(1, T + ih - y(v)), rx: Math.min(4, bw / 2), class: "an-barv" }, svg); });
+        var bw = Math.max(2, Math.min(18, iw / n * 0.7)), bars = [];
+        vals.forEach(function (v, i) { if (v > 0) bars.push(el("rect", { x: x(i) - bw / 2, y: y(v), width: bw, height: Math.max(1, T + ih - y(v)), rx: Math.min(4, bw / 2), class: "an-barv" }, svg)); });
       } else {                                             // línea con relleno
         var d = vals.map(function (v, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); }).join(" ");
         var defs = el("defs", {}, svg), grad = el("linearGradient", { id: "an-fill-g", x1: 0, x2: 0, y1: 0, y2: 1 }, defs);
         el("stop", { offset: "0%", class: "an-g0" }, grad); el("stop", { offset: "100%", class: "an-g1" }, grad);
-        el("path", { d: d + " L" + x(n - 1).toFixed(1) + " " + (T + ih) + " L" + x(0).toFixed(1) + " " + (T + ih) + " Z", fill: "url(#an-fill-g)" }, svg);
-        el("path", { d: d, class: "an-line" }, svg);
+        var clip = el("clipPath", { id: uid + "-c" }, defs), rect = el("rect", { x: 0, y: 0, width: W, height: H }, clip);
+        el("path", { d: d + " L" + x(n - 1).toFixed(1) + " " + (T + ih) + " L" + x(0).toFixed(1) + " " + (T + ih) + " Z", fill: "url(#an-fill-g)", "clip-path": "url(#" + uid + "-c)" }, svg);
+        el("path", { d: d, class: "an-line", "clip-path": "url(#" + uid + "-c)" }, svg);
+      }
+      var play = function () {};
+      if (anim && !calma) {
+        if (state.mode === "daily") {                      // barras: crecen desde abajo una detrás de otra
+          var stagger = Math.min(18, 500 / Math.max(1, bars.length));
+          bars.forEach(function (b, i) { b.classList.add("an-grow"); b.style.transitionDelay = (i * stagger) + "ms"; });
+          play = function () { bars.forEach(function (b) { b.classList.add("in"); }); };
+        } else {                                           // línea y relleno: se dibujan de izquierda a derecha
+          rect.setAttribute("width", L);
+          play = function () {
+            var t0 = null, dur = 900;
+            (function paso(t) {
+              if (!rect.isConnected) return;
+              t0 = t0 || t;
+              var k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+              rect.setAttribute("width", L + (W - L) * e);
+              if (k < 1) requestAnimationFrame(paso);
+            })(performance.now());
+          };
+        }
       }
       var guide = el("line", { x1: 0, x2: 0, y1: T, y2: T + ih, class: "an-guide" }, svg);
       var dot = el("circle", { cx: 0, cy: 0, r: 5, class: "an-dot" }, svg);
@@ -251,6 +274,7 @@ function graficas() {
       svg.addEventListener("mouseleave", leave); svg.addEventListener("touchend", leave);
       box.querySelector("[data-chart-total]").textContent = numES(data.totals[state.metric] || 0);
       box.querySelector("[data-chart-label]").textContent = METRICA[state.metric];
+      return play;
     }
     box.addEventListener("click", function (e) {
       var b = e.target.closest("[data-chart-mode],[data-chart-metric]");
@@ -258,10 +282,17 @@ function graficas() {
       var key = b.hasAttribute("data-chart-mode") ? "mode" : "metric";
       state[key] = b.getAttribute(key === "mode" ? "data-chart-mode" : "data-chart-metric");
       b.parentNode.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
-      draw();
+      var go = draw(true); requestAnimationFrame(function () { requestAnimationFrame(go); });
     });
-    draw();
-    var redraw = function () { draw(); };
+    var entrada = draw(true);                              // la animación de entrada sale cuando la gráfica aparece en pantalla
+    if ("IntersectionObserver" in window) {
+      var io = new IntersectionObserver(function (es) {
+        if (es.some(function (e) { return e.isIntersecting; })) { io.disconnect(); requestAnimationFrame(function () { requestAnimationFrame(entrada); }); }
+      }, { threshold: 0.25 });
+      io.observe(plot);
+      limpiar.push(function () { io.disconnect(); });
+    } else { entrada(); }
+    var redraw = function () { draw(false); };
     window.addEventListener("resize", redraw);
     limpiar.push(function () { window.removeEventListener("resize", redraw); });
   });
