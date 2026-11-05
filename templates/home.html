@@ -81,12 +81,6 @@
       <div class="empty"><h3>Aún no hay clips esta semana</h3><p class="muted">Los clips aprobados con más vistas de los últimos 7 días saldrán aquí.</p></div>
       {% endif %}
     </div>
-    <h2 class="hm-h" style="margin-top:20px">Actividad reciente</h2>
-    <div class="card hm-act">
-      {% if activity %}
-      <ul>{% for a in activity %}<li><a href="{{ a.url }}"><span class="hm-aico">{{ icon(a.icon) }}</span><span><b>{{ a.title }}</b><small>{% if a.body %}{{ a.body|truncate(70) }} · {% endif %}{{ a.ago }}</small></span></a></li>{% endfor %}</ul>
-      {% else %}<p class="small muted" style="margin:0">Aquí verás lo que te pase: clips aprobados, solicitudes aceptadas, retiros…</p>{% endif %}
-    </div>
   </section>
   <section>
     <h2 class="hm-h">🏆 Ranking de la semana <a class="link small push" href="{{ url_for('ranking_page') }}">Ver completo →</a></h2>

@@ -2464,11 +2464,7 @@ def home_data(u):
     my_join = {m.campaign_id: m.status for m in CampaignMember.query.filter_by(user_id=u.id)}
     camps = [c for c in active_campaigns() if not c.exhausted]
     camps.sort(key=lambda c: (my_join.get(c.id) == "aceptada", bool(c.full)))
-    # actividad reciente (lo último de su campanita)
-    acts = Notice.query.filter_by(user_id=u.id).order_by(Notice.created_at.desc()).limit(6).all()
-    activity = [{"icon": BELL_ICONS.get(n_.kind, "bell"), "title": n_.title, "body": n_.body, "ago": ago(n_.created_at),
-                 "url": url_for("open_notice", nid=n_.id)} for n_ in acts]
-    return {"quick": quick, "home_camps": camps[:3], "my_join": my_join, "activity": activity,
+    return {"quick": quick, "home_camps": camps[:3], "my_join": my_join,
             "summary": summary, "learn": learn, "steps": steps, "show_steps": show_steps,
             "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
             "rank": rank, "masked": mask_name}
