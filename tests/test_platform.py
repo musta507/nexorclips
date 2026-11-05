@@ -1783,7 +1783,7 @@ def test_stats_video_required_blocks_approval_and_expires(monkeypatch):
         assert A.clip_stage(A.db.session.get(A.Submission, sid)) == "estadisticas"
     page = a.get("/mis-clips?tab=estadisticas").get_data(as_text=True)
     assert "60 % España" in page and "Subir vídeo" in page
-    assert "falta que el clipper suba" in flashes(post(admin, f"/admin/envio/{sid}/aprobar"))[0][1]
+    assert "falta que el clipper verifique" in flashes(post(admin, f"/admin/envio/{sid}/aprobar"))[0][1]
     d = a.post(f"/mis-clips/{sid}/estadisticas", data={"_csrf": "t"}).get_json()
     assert d["ok"] and d["guid"] == "st-1"
     a.post(f"/mis-clips/{sid}/estadisticas/listo", data={"_csrf": "t"})

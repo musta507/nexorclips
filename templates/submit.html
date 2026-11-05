@@ -42,7 +42,7 @@
 
 <section>
   <nav class="seg" aria-label="Estado de los clips">
-    {% for t, label in [("todos", "Todos"), ("contando", "Contando vistas"), ("estadisticas", "Estadísticas"), ("revisar", "En revisión"), ("aprobado", "Aprobados"), ("rechazado", "Rechazados")] %}
+    {% for t, label in [("todos", "Todos"), ("contando", "Contando vistas"), ("estadisticas", "Verificar vistas"), ("revisar", "En revisión"), ("aprobado", "Aprobados"), ("rechazado", "Rechazados")] %}
     {% if t != 'estadisticas' or show_stats %}<a class="{% if tab == t %}on{% endif %}{% if t == 'estadisticas' and counts[t] %} seg-alert{% endif %}" href="{{ url_for('my_clips', tab=t, campana=fc or None, red=fp or None) }}">{{ label }} <b class="tnum">{{ counts[t] }}</b></a>{% endif %}
     {% endfor %}
   </nav>

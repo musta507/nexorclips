@@ -87,7 +87,7 @@
         {% if tab == 'apelaciones' %}
         <div class="cr-appeal"><span class="small"><b>Se rechazó por:</b> {{ s.reject_reason or "—" }}</span><span class="small"><b>El clipper dice:</b> {{ s.appeal_text }}</span></div>
         {% endif %}
-        {% if clip_stage(s) == 'estadisticas' %}<div class="cr-appeal warn"><span class="small">Esperando la prueba de estadísticas del clipper{% if s.stats_reason %} (le pediste otra: {{ s.stats_reason }}){% endif %}. Hasta que la suba no se puede aprobar.</span></div>{% endif %}
+        {% if clip_stage(s) == 'estadisticas' %}<div class="cr-appeal warn"><span class="small">Esperando la verificación de vistas del clipper{% if s.stats_reason %} (le pediste otra: {{ s.stats_reason }}){% endif %}. Hasta que la suba no se puede aprobar.</span></div>{% endif %}
         {% if not account_verified(s) %}<div class="cr-appeal warn"><span class="small">La cuenta {% if s.author %}@{{ s.author }} {% endif %}no está verificada en esta campaña: no se puede aprobar hasta que lo esté.</span></div>{% endif %}
 
         <div class="cr-body">
@@ -95,7 +95,7 @@
             {% if player %}<iframe src="{{ player }}" title="Vídeo del clip" loading="lazy" allow="accelerometer; gyroscope; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
             {% else %}<a class="cr-novideo" href="{{ s.url }}" target="_blank" rel="noopener">{{ icon(s.platform) }}<span>Ver en {{ PLATFORMS[s.platform] }}</span></a>{% endif %}
             {% if s.stats_status == 'enviado' and stats_embed(s) %}
-            <div class="cr-stats-video"><b>📊 Estadísticas que subió el clipper</b><iframe src="{{ stats_embed(s) }}" title="Vídeo de estadísticas" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+            <div class="cr-stats-video"><b>📊 Verificación de vistas que subió el clipper</b><iframe src="{{ stats_embed(s) }}" title="Vídeo de estadísticas" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
               {% if s.status == 'pendiente' %}<details class="cr-redo"><summary class="small link">Pedir otra grabación</summary>
                 <form method="post" action="{{ url_for('admin_review', sid=s.id, accion='pedir_estadisticas') }}" class="form-stack"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
                   <input name="reason" maxlength="300" required placeholder="Qué corregir (p. ej. no se ven los países)" aria-label="Qué corregir"><button class="btn sm soft">Pedir otra</button></form></details>{% endif %}</div>

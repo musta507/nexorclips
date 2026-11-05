@@ -1,7 +1,7 @@
 {# Mis clips → Estadísticas: los clips que llegaron al mínimo y piden la grabación de sus estadísticas #}
 <div class="stats-help card tight">
   <div class="stats-help-top">
-    <div><b>Prueba de estadísticas</b><p class="small muted" style="margin:2px 0 0">Cuando un clip llega al mínimo, graba sus estadísticas y súbela aquí. Tienes {{ STATS_HOURS }} h o el clip no cobra.</p></div>
+    <div><b>Verificar vistas</b><p class="small muted" style="margin:2px 0 0">Cuando un clip llega al mínimo, graba sus estadísticas y súbela aquí. Tienes {{ STATS_HOURS }} h o el clip no cobra.</p></div>
     <button type="button" class="btn sm soft" data-open="stats-guide">📖 Cómo hacer la prueba</button>
   </div>
 </div>
@@ -56,7 +56,7 @@
   {% endfor %}
 </div>
 {% else %}
-<div class="table-card"><div class="empty"><h3>No tienes estadísticas pendientes</h3><p class="muted">Cuando un clip llegue al mínimo, aparecerá aquí. Tendrás {{ STATS_HOURS }} h para subir el vídeo.</p></div></div>
+<div class="table-card"><div class="empty"><h3>No tienes vistas por verificar</h3><p class="muted">Cuando un clip llegue al mínimo, aparecerá aquí. Tendrás {{ STATS_HOURS }} h para subir el vídeo.</p></div></div>
 {% endif %}
 
 {% if stats_sent %}

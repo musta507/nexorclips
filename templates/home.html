@@ -53,7 +53,7 @@
   <a class="card hm-q" href="{{ url_for('earnings') }}"><span class="hm-ql">{{ icon("wallet") }} Saldo disponible</span><b class="tnum">{{ quick.available|money }}</b><small>{% if quick.live %}+ {{ quick.live|money }} en campañas abiertas{% else %}Ver ganancias →{% endif %}</small></a>
   <a class="card hm-q" href="{{ url_for('my_clips') }}"><span class="hm-ql">{{ icon("eye") }} Vistas esta semana</span><b class="tnum">{{ quick.views_week|short }}</b><small>De los clips que enviaste en 7 días</small></a>
   <a class="card hm-q" href="{{ url_for('my_clips', tab='contando') }}"><span class="hm-ql">{{ icon("clock") }} Clips en marcha</span><b class="tnum">{{ quick.counting }}</b><small>Contando vistas o en revisión</small></a>
-  <a class="card hm-q{% if quick.stats %} alert{% endif %}" href="{{ url_for('my_clips', tab='estadisticas') }}"><span class="hm-ql">{{ icon("film") }} Estadísticas pendientes</span><b class="tnum">{{ quick.stats }}</b><small>{% if quick.stats %}Súbelas antes de que caduquen{% else %}Todo al día{% endif %}</small></a>
+  <a class="card hm-q{% if quick.stats %} alert{% endif %}" href="{{ url_for('my_clips', tab='estadisticas') }}"><span class="hm-ql">{{ icon("film") }} Vistas por verificar</span><b class="tnum">{{ quick.stats }}</b><small>{% if quick.stats %}Sube la prueba antes de que caduque{% else %}Todo al día{% endif %}</small></a>
 </section>
 
 

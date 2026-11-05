@@ -153,7 +153,7 @@ REJECT_REASONS = {
     "otro": "Otro motivo",
 }
 SYSTEM_REASONS = {"caducado": "No llegó al pago mínimo a tiempo",
-                  "sin_estadisticas": "No subiste el vídeo de estadísticas a tiempo"}
+                  "sin_estadisticas": "No verificaste las vistas a tiempo"}
 STATS_HOURS = 72                    # plazo para subir el vídeo de estadísticas desde que el clip llega al mínimo
 STATS_MAX_MB = 100
 CAMPAIGN_KINDS = {"clipping": "Clipping"}
@@ -1203,7 +1203,7 @@ def clip_stage(sub):
     return "estadisticas" if needs_stats(sub) else "revisar"
 
 
-STAGE_LABELS = {"contando": "Contando vistas", "estadisticas": "Falta tu vídeo de estadísticas", "revisar": "En revisión",
+STAGE_LABELS = {"contando": "Contando vistas", "estadisticas": "Falta verificar vistas", "revisar": "En revisión",
                 "aprobado": "Aprobado", "rechazado": "Rechazado"}
 
 
@@ -1254,8 +1254,8 @@ def auto_review(sub, now=None):
     if needs_stats(sub):
         if not sub.stats_status or not sub.stats_asked_at:
             sub.stats_status, sub.stats_asked_at = "pedido", now
-            notify_user(sub.user_id, "estadisticas", f"Sube tu vídeo de estadísticas · {sub.campaign.song}",
-                        f"Tu clip llegó al mínimo. Tienes {STATS_HOURS} h para subir la grabación de sus estadísticas.",
+            notify_user(sub.user_id, "estadisticas", f"Verifica las vistas de tu clip · {sub.campaign.song}",
+                        f"Tu clip llegó al mínimo. Tienes {STATS_HOURS} h para subir la grabación de sus estadísticas en «Verificar vistas».",
                         "/mis-clips?tab=estadisticas", camp_id=sub.campaign_id)
         elif now > stats_due(sub) + timedelta(hours=1 if sub.stats_status == "subiendo" else 0):
             reject_sub(sub, "sin_estadisticas", by="auto")
@@ -2412,7 +2412,7 @@ def home_data(u):
     bits = []
     if stage.get("estadisticas"):
         n = stage["estadisticas"]
-        bits.append(f"{n} {'vídeo' if n == 1 else 'vídeos'} de estadísticas por subir")
+        bits.append(f"{n} {'clip' if n == 1 else 'clips'} por verificar")
     if stage.get("contando"):
         n = stage["contando"]
         bits.append(f"{n} {'clip' if n == 1 else 'clips'} contando vistas")
@@ -2821,7 +2821,7 @@ def verify_bio(cid, aid):
     return redirect(url_for("campaign", cid=cid))
 
 
-CLIP_TABS = {"todos": "Todos", "contando": "Contando vistas", "estadisticas": "Estadísticas", "revisar": "En revisión", "aprobado": "Aprobados", "rechazado": "Rechazados"}
+CLIP_TABS = {"todos": "Todos", "contando": "Contando vistas", "estadisticas": "Verificar vistas", "revisar": "En revisión", "aprobado": "Aprobados", "rechazado": "Rechazados"}
 
 
 def clipper_stats(subs):
@@ -4569,7 +4569,7 @@ def admin_review(sid, accion):
                   "Verifícala desde su chat.", "error")
             return _back()
         if needs_stats(sub):
-            flash("Aún no puedes aprobarlo: falta que el clipper suba su vídeo de estadísticas.", "error")
+            flash("Aún no puedes aprobarlo: falta que el clipper verifique las vistas.", "error")
             return _back()
         approve_sub(sub)
         if camp.exhausted and not sub.earned:
@@ -4601,7 +4601,7 @@ def admin_review(sid, accion):
         reason = (request.form.get("reason") or "").strip()[:300]
         sub.stats_status, sub.stats_asked_at, sub.stats_reason = "pedido", datetime.utcnow(), reason
         notify_user(sub.user_id, "estadisticas", f"Te pedimos otra grabación · {camp.song}",
-                    (reason or "La prueba de estadísticas no es válida.") + f" Tienes {STATS_HOURS} h para subir otra.",
+                    (reason or "La verificación de vistas no es válida.") + f" Tienes {STATS_HOURS} h para subir otra.",
                     "/mis-clips?tab=estadisticas", camp_id=camp.id)
         audit("estadisticas_pedidas", f"#{sub.id} · {reason}")
         flash("Le hemos pedido otra grabación al clipper.", "ok")
@@ -5612,7 +5612,7 @@ def stats_video_done(sid):
         db.session.commit()
     if wants_json():
         return {"ok": True}
-    flash("Vídeo de estadísticas enviado. Ya está en revisión.", "ok")
+    flash("Verificación enviada. Ya está en revisión.", "ok")
     return redirect(url_for("my_clips", tab="estadisticas"))
 
 
