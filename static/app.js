@@ -177,6 +177,11 @@ function ejeY(max) {                // escalones «redondos» (1, 2 o 5 × poten
   var step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
   return { step: step, top: Math.ceil(max / step) * step };
 }
+document.addEventListener("click", function (e) {      // paso «Únete al WhatsApp»: al volver a la pestaña se marca como hecho
+  var a = e.target.closest && e.target.closest("[data-reload-soon]");
+  if (a) setTimeout(function () { location.reload(); }, 1200);
+});
+
 function graficas() {
   document.querySelectorAll("[data-chart]").forEach(function (box) {
     if (box.dataset.ready) return;
@@ -191,10 +196,10 @@ function graficas() {
       if (parent) parent.appendChild(e);
       return e;
     }
-    var uid = "an" + Math.random().toString(36).slice(2, 8);
+    var uid = "an" + Math.random().toString(36).slice(2, 8), transicion = null;
     var calma = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    function draw(anim) {                                  // anim: devuelve una función que lanza la animación de entrada
-      var labels = data.series.labels, vals = data.series[state.mode][state.metric];
+    function draw(anim, ov) {                              // anim: devuelve la animación de entrada · ov: valores intermedios (transición)
+      var labels = data.series.labels, vals = ov || data.series[state.mode][state.metric];
       var W = plot.clientWidth || 600, H = W < 560 ? 220 : 300, L = 44, R = 12, T = 12, B = 30;
       var iw = W - L - R, ih = H - T - B, n = vals.length, eje = ejeY(Math.max.apply(null, vals.concat([0]))), max = eje.top;
       var x = function (i) { return L + (n > 1 ? i / (n - 1) : 0.5) * iw; };
@@ -280,9 +285,26 @@ function graficas() {
       var b = e.target.closest("[data-chart-mode],[data-chart-metric]");
       if (!b) return;
       var key = b.hasAttribute("data-chart-mode") ? "mode" : "metric";
-      state[key] = b.getAttribute(key === "mode" ? "data-chart-mode" : "data-chart-metric");
+      var nuevo = b.getAttribute(key === "mode" ? "data-chart-mode" : "data-chart-metric");
+      if (state[key] === nuevo) return;
+      var antes = data.series[state.mode][state.metric];
+      state[key] = nuevo;
       b.parentNode.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
-      var go = draw(true); requestAnimationFrame(function () { requestAnimationFrame(go); });
+      if (key === "mode") {                               // otro tipo de gráfica: animación de entrada
+        var go = draw(true); requestAnimationFrame(function () { requestAnimationFrame(go); });
+        return;
+      }
+      var despues = data.series[state.mode][state.metric];  // misma gráfica, otra métrica: se transforma suave
+      if (calma || antes.length !== despues.length) { draw(false); return; }
+      var t0 = null, dur = 320, token = {};
+      transicion = token;
+      (function paso(t) {
+        if (transicion !== token || !plot.isConnected) return;
+        t0 = t0 || t;
+        var k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+        draw(false, k < 1 ? antes.map(function (v, i) { return v + (despues[i] - v) * e; }) : null);
+        if (k < 1) requestAnimationFrame(paso);
+      })(performance.now());
     });
     var entrada = draw(true);                              // la animación de entrada sale cuando la gráfica aparece en pantalla
     if ("IntersectionObserver" in window) {

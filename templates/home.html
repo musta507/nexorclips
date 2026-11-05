@@ -1,85 +1,102 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon, budget %}
+{% from "_icons.html" import icon, av %}
 {% block content %}
-{% if wa_general %}
-<a class="wa-general" href="{{ wa_general }}" target="_blank" rel="noopener">
+<div class="hm-heroes">
+  <section class="hm-hero dark">
+    <div>
+      <span class="hm-eb">Hola, {{ current_user.name.split()[0] if current_user.name else "clipper" }}</span>
+      <h1>Bienvenido a {{ APP_NAME }}</h1>
+      <p>{{ summary }}</p>
+    </div>
+    <a class="btn hm-money" href="{{ url_for('campaigns_page') }}">Ver campañas {{ icon("arrow") }}</a>
+  </section>
+  <section class="hm-hero light">
+    <span class="hm-play" aria-hidden="true">▶</span>
+    <div>
+      <span class="hm-eb">{{ learn.eyebrow }}</span>
+      <h2>{{ learn.title }}</h2>
+      <p>{{ learn.text }}</p>
+    </div>
+    <a class="btn dark" href="{{ learn.url }}">{{ learn.btn }} {{ icon("arrow") }}</a>
+  </section>
+</div>
+
+{% if show_steps %}
+<section class="card hm-steps">
+  <div class="hm-steps-head">
+    <div><h2>Empieza a ganar en {{ steps|length }} pasos</h2><span class="small muted">{{ steps_done }} de {{ steps|length }} hecho{{ "s" if steps_done != 1 }} · desaparece cuando completes todos</span></div>
+    <div class="hm-steps-bar" role="progressbar" aria-valuemin="0" aria-valuemax="{{ steps|length }}" aria-valuenow="{{ steps_done }}"><span style="width:{{ (steps_done / steps|length * 100)|round|int }}%"></span></div>
+  </div>
+  <ol class="hm-step-list" style="grid-template-columns:repeat({{ steps|length }},minmax(0,1fr))">
+    {% set ns = namespace(cur=None) %}
+    {% for st in steps %}{% if not st.done and ns.cur is none %}{% set ns.cur = loop.index %}{% endif %}{% endfor %}
+    {% for st in steps %}
+    <li class="{{ 'done' if st.done }}{{ ' now' if loop.index == ns.cur }}">
+      <span class="hm-chk">{% if st.done %}✓{% else %}{{ loop.index }}{% endif %}</span>
+      <div><b>{{ st.title }}</b><small>{{ st.text }}</small></div>
+      {% if st.done %}<span class="hm-ok">Hecho</span>
+      {% else %}<a class="btn sm {{ 'dark' if loop.index == ns.cur else 'soft' }}" href="{{ st.url }}"{% if st.ext %} target="_blank" rel="noopener" data-reload-soon{% endif %}>{{ st.btn }} {{ icon("arrow") }}</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% elif wa_general %}
+<a class="wa-general" href="{{ url_for('join_whatsapp') }}" target="_blank" rel="noopener">
   <span class="wa-general-ico">{% include "_wa_icon.html" %}</span>
-  <span class="wa-general-txt"><b>Únete al grupo de WhatsApp de {{ APP_NAME }}</b><span>Avisos, novedades y comunidad de clippers.</span></span>
+  <span class="wa-general-txt"><b>Únete al grupo de WhatsApp de {{ APP_NAME }}</b><span>Avisos, plazas nuevas y comunidad de clippers.</span></span>
   <span class="btn wa-general-btn">Unirme</span>
 </a>
 {% endif %}
 
-{% if announce %}
-<section class="featured home-ann">
-  {% if announce.image_v %}<div class="art"><img src="{{ url_for('home_feature_image', v=announce.image_v) }}" alt="" width="330" height="330" decoding="async"></div>{% endif %}
-  <div class="info">
-    <span class="eyebrow">Anuncio</span>
-    <h2>{{ announce.title }}</h2>
-    {% if announce.body %}<p class="ann-body">{{ announce.body }}</p>{% endif %}
-    {% if announce.btn_text and announce.btn_url %}<a class="btn accent" href="{{ announce.btn_url }}"{% if announce.btn_url.startswith('https://') %} target="_blank" rel="noopener"{% endif %}>{{ announce.btn_text }} {{ icon("arrow") }}</a>{% endif %}
-  </div>
-</section>
-{% endif %}
-{% if featured %}
-{% set c, st = featured %}
-{% set tint, lqip = cover_meta(c) %}
-<a class="featured" href="{{ url_for('campaign', cid=c.id) }}"{% if tint %} style="background:{{ tint }}"{% endif %}>
-  <div class="art"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 720) }}" alt="Portada de {{ c.song }}" width="330" height="330" fetchpriority="high" decoding="async">{% else %}<span class="cover-fallback">{{ c.song[:1] }}</span>{% endif %}</div>
-  <div class="info">
-    <span class="eyebrow">Campaña destacada</span>
-    <div>
-      <h2>{{ c.song }} {{ icon("check") }}</h2>
-      <p class="artist">{{ c.artist }}</p>
+<div class="hm-two">
+  <section>
+    <h2 class="hm-h">🔥 Clips de la semana</h2>
+    <div class="table-card">
+      {% if week_clips %}
+      <div class="table-scroll"><table class="rt hm-week">
+        <thead><tr><th>#</th><th>Clipper</th><th>Campaña</th><th class="r">Vistas</th><th class="r">Ganado</th></tr></thead>
+        <tbody>
+        {% for s in week_clips %}
+        <tr{% if s.user_id == current_user.id %} class="me"{% endif %}>
+          <td data-label="#"><span class="hm-pos p{{ loop.index }}">{{ loop.index }}</span></td>
+          <td data-label="Clipper"><div class="hm-who">{{ av(s.user) }}<b>{{ "Tú" if s.user_id == current_user.id else masked(s.user.name) }}</b></div></td>
+          <td data-label="Campaña" class="muted"><span class="hm-camp">{{ icon(s.platform) }} {{ s.campaign.song }}</span></td>
+          <td data-label="Vistas" class="r tnum">{{ s.views|short }}</td>
+          <td data-label="Ganado" class="r tnum money-txt"><b>{{ s.earned|money }}</b></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% else %}
+      <div class="empty"><h3>Aún no hay clips esta semana</h3><p class="muted">Los clips aprobados con más vistas de los últimos 7 días saldrán aquí.</p></div>
+      {% endif %}
     </div>
-    <div class="f-stats tnum">
-      <div><b class="hot">{{ c.rate|rate_k }}</b><span>{% if c.rates_vary %}hasta, {% endif %}por 1.000 vistas</span></div>
-      <div><b>{% if st.views %}{{ st.views|short }}{% else %}Nueva{% endif %}</b><span>{% if st.views %}vistas generadas{% else %}aún sin vistas{% endif %}</span></div>
-      <div><b>{{ st.remaining|money(0) }}</b><span>por repartir</span></div>
-    </div>
-    {{ budget(c, st) }}
-    <span class="btn accent">Ver campaña {{ icon("arrow") }}</span>
-  </div>
-</a>
-{% endif %}
-
-<section id="campanas">
-  <div class="section-head">
-    <h2>Campañas para ti</h2>
-    <p class="muted">Únete a campañas y empieza a ganar</p>
-  </div>
-  <div class="sortbar" role="group" aria-label="Ordenar"><button type="button" class="on" data-sort="new">Más nuevas</button><button type="button" data-sort="budget">Más presupuesto</button><button type="button" data-sort="rate">Mejor pago</button></div>
-  {% if cards %}
-    <div class="grid">{% for c, st in cards %}{% include "_camp_card.html" %}{% endfor %}</div>
-  {% else %}
-    <div class="table-card"><div class="empty"><h3>No hay campañas aquí ahora mismo</h3><p class="muted">Vuelve pronto: aquí aparecerán las nuevas campañas.</p></div></div>
-  {% endif %}
-</section>
-{% if top5 or week_clips %}
-<div class="duo home-duo">
-  <section class="card box">
-    <div class="box-head">{{ icon("trophy") }} Top 5 de la semana <a class="link small push" href="{{ url_for('ranking_page') }}">Ver ranking</a></div>
-    {% if top5 %}
-    <ol class="rank compact">
-      {% for r in top5 %}
-      <li class="rank-row{% if r.user.id == current_user.id %} me{% endif %}"><span class="rank-pos{% if r.pos <= 3 %} top{{ r.pos }}{% endif %}">{{ r.pos }}</span><span class="rank-name"><b>{{ r.name }}</b></span><span class="rank-val tnum"><b>{{ r.views|short }}</b><span class="small muted">vistas</span></span></li>
-      {% endfor %}
-    </ol>
-    {% else %}<p class="box-body muted small">Esta semana aún no hay clips aprobados. ¡Puedes ser el primero!</p>{% endif %}
   </section>
-  <section class="card box">
-    <div class="box-head">{{ icon("film") }} Clips de la semana</div>
-    {% if week_clips %}
-    <div class="box-body clip-list">
-      {% for s in week_clips %}
-      <a class="clip" href="{{ s.url }}" target="_blank" rel="noopener">
-        <span class="pi">{{ icon(s.platform) }}</span>
-        <div class="meta"><b>{{ s.campaign.song }}</b><span class="small muted">{{ s.author and '@' ~ s.author or PLATFORMS[s.platform] }}</span></div>
-        <div class="views tnum">{{ s.views|short }}</div>
-      </a>
-      {% endfor %}
+  <section>
+    <h2 class="hm-h">🏆 Ranking de la semana <a class="link small push" href="{{ url_for('ranking_page') }}">Ver completo →</a></h2>
+    <div class="card hm-rank">
+      <div class="hm-me">
+        <span class="small muted">Tu puesto</span>
+        {% if rank.me %}
+        <div class="hm-me-pos"><b>#{{ rank.me.pos }}</b>{% if rank.pct is not none and rank.total > 1 %}<span class="hm-top">top {{ [rank.pct, 1]|max }} %</span>{% endif %}</div>
+        <div class="hm-bar"><span style="width:{{ rank.bar }}%"></span></div>
+        <span class="small muted">{% if rank.above %}Te faltan <b>{{ (rank.above.views - rank.me.views + 1)|num }} vistas</b> para el #{{ rank.above.pos }}{% else %}¡Vas primero esta semana!{% endif %}</span>
+        {% else %}
+        <div class="hm-me-pos"><b>—</b></div>
+        <span class="small muted">Consigue un clip aprobado esta semana para entrar en el ranking.</span>
+        {% endif %}
+      </div>
+      {% if rank.top %}
+      <ol class="hm-rl">
+        {% for r in rank.top %}
+        <li{% if r.user.id == current_user.id %} class="me"{% endif %}>{{ av(r.user) }}<div><b>{{ "Tú" if r.user.id == current_user.id else r.name }}</b><small>{{ r.views|num }} vistas</small></div><span class="hm-rp p{{ r.pos }}">#{{ r.pos }}</span></li>
+        {% endfor %}
+        {% if rank.me and rank.me.pos > rank.top|length %}
+        <li class="me">{{ av(current_user) }}<div><b>Tú</b><small>{{ rank.me.views|num }} vistas</small></div><span class="hm-rp">#{{ rank.me.pos }}</span></li>
+        {% endif %}
+      </ol>
+      {% else %}<p class="small muted" style="margin:14px 0 0">Esta semana aún no hay clips aprobados. ¡Puedes ser el primero!</p>{% endif %}
     </div>
-    {% else %}<p class="box-body muted small">Aquí saldrán los clips con más vistas de los últimos 7 días.</p>{% endif %}
   </section>
 </div>
-{% endif %}
 {% endblock %}

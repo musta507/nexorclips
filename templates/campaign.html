@@ -4,7 +4,7 @@
 {% block content %}
 {% if not member and accepted %}{% set member = {"status": "aceptada"} %}{% endif %}
 {% set ctab = 'resumen' %}{# las secciones (normas, recursos, comunidad…) solo existen dentro del hub de los aceptados #}
-<a class="back" href="{{ url_for('index') }}">← Campañas</a>
+<a class="back" href="{{ url_for('campaigns_page') }}">← Campañas</a>
 {% set open_camp = camp.status == 'activa' and not st.exhausted %}
 {% if hub %}<div class="hub">{% include "_hub_side.html" %}<section class="hub-main">{% if chan %}{% include "_hub_channel.html" %}{% endif %}{% endif %}
 {% if not chan %}

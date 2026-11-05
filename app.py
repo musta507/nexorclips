@@ -212,6 +212,7 @@ class User(UserMixin, db.Model):
     languages = db.Column(db.String(60), default="")
     whatsapp = db.Column(db.String(30), default="")
     onboarded_at = db.Column(db.DateTime, nullable=True)
+    wa_joined_at = db.Column(db.DateTime, nullable=True)        # pulsó «Unirme» al grupo general de WhatsApp
     notify_off = db.Column(db.String(400), default="")             # avisos apagados: «evento.canal» separados por comas
     avatar_data = db.deferred(db.Column(db.LargeBinary, nullable=True))
     avatar_ver = db.Column(db.Integer, default=0)
@@ -1020,6 +1021,23 @@ with app.app_context():
     ensure_schema()
     migrate_money_columns()
     migrate_members()
+
+
+def rename_beginner_course():
+    """Una sola vez: el curso de cómo clipear pasa a llamarse «Guía para principiantes»."""
+    try:
+        if get_setting("beginner_renamed") or beginner_course():
+            return
+        c = (Course.query.filter(db.func.lower(Course.title).like("%clip%"))
+             .order_by(Course.published.desc(), Course.position, Course.id).first())
+        if c:
+            log.info("Curso «%s» renombrado a «Guía para principiantes»", c.title)
+            c.title = "Guía para principiantes"
+        set_setting("beginner_renamed", "1")
+        db.session.commit()
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
+        log.exception("No se pudo renombrar el curso para principiantes")
 
 
 # ---------------------------------------------------------------- utilidades generales
@@ -2333,6 +2351,12 @@ def resize_cover(data, size):
 def index():
     if not current_user.is_authenticated:
         return landing()
+    return render_template("home.html", **home_data(current_user))
+
+
+@app.route("/campanas")
+@login_required
+def campaigns_page():
     all_cards = [(c, campaign_stats(c)) for c in active_campaigns()]
     hf = home_feature()
     if hf["mode"] == "campaign":
@@ -2347,12 +2371,98 @@ def index():
     my_join = {m.campaign_id: m.status for m in CampaignMember.query.filter_by(user_id=current_user.id).all()}
     cards.sort(key=lambda x: bool(x[0].full and x[0].id not in my_join))   # plazas completas (si no estás dentro) al final
     apply_schedule()
-    fs = None
-    wa_general = get_setting("whatsapp_general", "")
-    return render_template("home.html", cards=cards, featured=featured, cat=cat, counts=counts, wa_general=wa_general,
+    return render_template("campaigns.html", cards=cards, featured=featured, cat=cat, counts=counts,
                            total=len(all_cards), new_user=not current_user.submissions, my_join=my_join,
-                           fs=fs, top5=ranking("semana", 5), week_clips=clips_of_week(),
                            announce=hf if hf["mode"] == "announce" else None)
+
+
+BEGINNER_DAYS = 14                 # pasado este tiempo, el banner deja de enseñar la guía para principiantes
+
+
+def beginner_course():
+    """El curso marcado como «Guía para principiantes» (el primero publicado con ese nombre)."""
+    return (Course.query.filter(Course.published.is_(True), db.func.lower(Course.title).like("%principiante%"))
+            .order_by(Course.position, Course.id).first())
+
+
+def home_data(u):
+    """Todo lo del Inicio: resumen, banner de formación, paso a paso, clips y ranking de la semana."""
+    subs = list(u.submissions)
+    stage = {}
+    for s_ in subs:
+        k = clip_stage(s_)
+        stage[k] = stage.get(k, 0) + 1
+    bits = []
+    if stage.get("estadisticas"):
+        n = stage["estadisticas"]
+        bits.append(f"{n} {'vídeo' if n == 1 else 'vídeos'} de estadísticas por subir")
+    if stage.get("contando"):
+        n = stage["contando"]
+        bits.append(f"{n} {'clip' if n == 1 else 'clips'} contando vistas")
+    if stage.get("revisar"):
+        n = stage["revisar"]
+        bits.append(f"{n} en revisión")
+    summary = ("Tienes " + ", ".join(bits[:-1]) + (" y " if len(bits) > 1 else "") + bits[-1] + ".") if bits else (
+        "Elige una campaña, publica tus clips y cobra por cada vista." if not subs else "Todo al día. Sigue publicando para sumar vistas.")
+    # formación: guía para principiantes → siguiente curso → lo que funciona
+    guide = beginner_course()
+    gp = course_progress(guide, u.id) if guide else None
+    is_new = (datetime.utcnow() - (u.created_at or datetime.utcnow())).days < BEGINNER_DAYS
+    learn = None
+    if guide and gp["total"] and not gp["finished"] and is_new:
+        learn = {"eyebrow": "Formación", "title": guide.title, "text": "Lo básico para que tus clips se aprueben y sumen vistas.",
+                 "btn": "Empezar" if not gp["done"] else "Continuar", "url": url_for("course", cid=guide.id)}
+    else:
+        for c in Course.query.filter_by(published=True).order_by(Course.position, Course.id).all():
+            pr = course_progress(c, u.id)
+            if pr["total"] and not pr["finished"]:
+                learn = {"eyebrow": "Sigue aprendiendo", "title": c.title, "text": f"Llevas {pr['done']} de {pr['total']} lecciones.",
+                         "btn": "Continuar", "url": url_for("course", cid=c.id)}
+                break
+    if not learn:
+        mine = next((m.campaign for m in CampaignMember.query.filter_by(user_id=u.id, status="aceptada")
+                     if m.campaign and m.campaign.status == "activa"), None)
+        win = None
+        if mine:
+            win = next((c for sec in campaign_channels(mine) for c in sec.channels if c.kind == "winners"), None)
+        learn = {"eyebrow": "Ideas", "title": "Mira lo que funciona", "text": "Los clips con más vistas de tus campañas, para coger ideas.",
+                 "btn": "Ver clips ganadores", "url": url_for("campaign", cid=mine.id, canal=win.id) if win else url_for("campaigns_page")}
+    # paso a paso
+    wa = get_setting("whatsapp_general", "")
+    steps = []
+    if wa:
+        steps.append({"title": "Únete al grupo de WhatsApp", "text": "Avisos, plazas nuevas y comunidad de clippers.",
+                      "done": bool(u.wa_joined_at), "btn": "Unirme", "url": url_for("join_whatsapp"), "ext": True})
+    if guide and gp["total"]:
+        steps.append({"title": "Mira la guía para principiantes", "text": "Lo básico para que te aprueben los clips.",
+                      "done": gp["finished"], "btn": "Empezar", "url": url_for("course", cid=guide.id)})
+    steps.append({"title": "Aplica a una campaña", "text": "Elige una y pide entrar.",
+                  "done": bool(CampaignMember.query.filter_by(user_id=u.id).first()), "btn": "Ver campañas",
+                  "url": url_for("campaigns_page")})
+    show_steps = not all(st["done"] for st in steps)
+    # ranking de la semana: mi puesto y cuánto falta para el de arriba
+    full = ranking("semana", 1000)
+    me = next((r for r in full if r["user"].id == u.id), None)
+    above = full[me["pos"] - 2] if me and me["pos"] > 1 else None
+    rank = {"top": full[:5], "me": me, "total": len(full), "above": above,
+            "pct": (round(me["pos"] / len(full) * 100) if me else None),
+            "bar": (min(100, round(me["views"] / above["views"] * 100)) if me and above and above["views"] else 100)}
+    return {"summary": summary, "learn": learn, "steps": steps, "show_steps": show_steps,
+            "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
+            "rank": rank, "masked": mask_name}
+
+
+@app.route("/grupo-whatsapp")
+@login_required
+def join_whatsapp():
+    """Abre el grupo general y lo apunta como paso hecho."""
+    url = get_setting("whatsapp_general", "")
+    if not url:
+        return redirect(url_for("index"))
+    if not current_user.wa_joined_at:
+        current_user.wa_joined_at = datetime.utcnow()
+        db.session.commit()
+    return redirect(url)
 
 
 def submit_clip(camp, raw_url):
@@ -2747,7 +2857,7 @@ def first_steps(user):
     members = CampaignMember.query.filter_by(user_id=user.id).all()
     steps = [
         ("Completa tu perfil", bool(user.onboarded_at), url_for("onboarding")),
-        ("Únete a una campaña", any(m.status == "aceptada" for m in members), url_for("index", _anchor="campanas")),
+        ("Únete a una campaña", any(m.status == "aceptada" for m in members), url_for("campaigns_page")),
         ("Sube tu primer clip", bool(user.submissions), url_for("my_clips")),
         ("Conecta Whop para cobrar", bool(user.whop_user_id), url_for("account", _anchor="cobro")),
     ]
@@ -5902,3 +6012,7 @@ def cron_refresh():
 
 if __name__ == "__main__":
     app.run(debug=not PRODUCTION, port=int(os.environ.get("PORT", 5000)))
+
+
+with app.app_context():                 # al arrancar, cuando ya está todo definido
+    rename_beginner_course()

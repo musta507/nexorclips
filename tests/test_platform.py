@@ -559,7 +559,7 @@ def test_join_campaign_and_admin_accepts(monkeypatch):
         mb = A.CampaignMember.query.one()
         assert mb.status == "pendiente" and not A.CampaignAccount.query.first()
         mid = mb.id
-    assert "Pendiente" in a.get("/").get_data(as_text=True)
+    assert "Pendiente" in a.get("/campanas").get_data(as_text=True)
     assert "en revisión" in post(a, f"/campana/{cid}", url=tt("ana", 1)).get_data(as_text=True)
     assert "no se puede añadir" not in post(a, f"/campana/{cid}/cuentas", platform="tiktok", handle="ana").get_data(as_text=True)
     with A.app.app_context():
@@ -781,7 +781,7 @@ def test_campaign_form_per_thousand_and_min_pay():
     with A.app.app_context():
         camp = A.Campaign.query.filter_by(song="Directo").one()
         assert camp.rate == 1200 and camp.min_views == 5000 and A.min_pay(camp) == 6.0
-    html = client_for("c@test.com").get("/").get_data(as_text=True)
+    html = client_for("c@test.com").get("/campanas").get_data(as_text=True)
     assert "1,20 $" in html and "POR 1.000 VISTAS" in html and "Mín. 6,00 $ por clip" in html
 
 
@@ -964,7 +964,7 @@ def test_cover_small_sizes():
         c = A.Campaign.query.filter_by(song="S").one(); cid, v = c.id, c.cover_version
     r = admin.get(f"/portada/{cid}?v={v}&t=160")
     assert r.mimetype == "image/webp" and len(r.data) < 3000
-    assert 'width="62"' in client_for("c@test.com").get("/").get_data(as_text=True)
+    assert 'width="62"' in client_for("c@test.com").get("/campanas").get_data(as_text=True)
 
 
 def test_rate_per_platform(monkeypatch):
@@ -976,7 +976,7 @@ def test_rate_per_platform(monkeypatch):
         cid = c.id
         assert c.rate == 1500 and c.rate_for("tiktok") == 1000 and c.rate_for("instagram") == 1500 and c.rates_vary
     assert "¿Cuánto tiempo llevas haciendo clips?" in admin.get("/admin/campana/nueva").get_data(as_text=True)   # preguntas predeterminadas
-    html = client_for("v@test.com").get("/").get_data(as_text=True)
+    html = client_for("v@test.com").get("/campanas").get_data(as_text=True)
     assert "HASTA" not in html and "1,50 $" in html   # por fuera, el pago más alto sin «hasta»
     # el mismo número de vistas paga distinto según la red; el mínimo (2 $) es en dinero
     with A.app.app_context():
@@ -1013,7 +1013,7 @@ def test_min_max_per_platform():
         assert c.min_views_for("tiktok") == 10_000
     page = client_for("v@test.com").get(f"/campana/{cid}").get_data(as_text=True)
     assert "10,00 $" in page and "100,00 $" in page and "Sin máximo" in page and "hasta" not in page
-    home = client_for("v@test.com").get("/").get_data(as_text=True)
+    home = client_for("v@test.com").get("/campanas").get_data(as_text=True)
     assert "Mín. hasta 10,00 $" in home and "Sin máximo por clip" in home
     # un mínimo mayor que el máximo no se puede guardar
     r = post(admin, f"/admin/campana/{cid}/editar", song="MinMax", artist="Pablo", budget="5000", status="activa",
@@ -1116,7 +1116,7 @@ def test_full_campaigns_go_last_on_home(monkeypatch):
         a = A.Campaign(song="Primera Llena", artist="X", rate=1000, budget=100, status="activa", full=True)
         b = A.Campaign(song="Segunda Abierta", artist="Y", rate=1000, budget=100, status="activa")
         A.db.session.add_all([a, b]); A.db.session.commit()
-    html = client_for("mira-orden@test.com").get("/").get_data(as_text=True)
+    html = client_for("mira-orden@test.com").get("/campanas").get_data(as_text=True)
     grid = html[html.index("Campañas para ti"):]
     assert grid.index("Segunda Abierta") < grid.index("Primera Llena")
 
@@ -1666,15 +1666,15 @@ def test_home_feature_announcement_and_campaign():
     a = client_for("a@test.com")
     post(admin, "/admin/destacado", mode="announce", title="Nueva forma de cobrar", body="Ya puedes cobrar al momento.",
          btn_text="Ver más", btn_url="/ganancias", notify="on")
-    home = a.get("/").get_data(as_text=True)
+    home = a.get("/campanas").get_data(as_text=True)
     assert "Nueva forma de cobrar" in home and 'class="featured home-ann"' in home
     with A.app.app_context():
         assert A.Notice.query.filter_by(kind="destacado").count() >= 1
     post(admin, "/admin/destacado", mode="campaign", campaign_id=str(cid))
-    home = a.get("/").get_data(as_text=True)
+    home = a.get("/campanas").get_data(as_text=True)
     assert "home-ann" not in home and "Campaña destacada" in home
     post(admin, "/admin/destacado", mode="none")
-    assert "Campaña destacada" not in a.get("/").get_data(as_text=True)
+    assert "Campaña destacada" not in a.get("/campanas").get_data(as_text=True)
 
 
 def test_review_cards_filters_and_video_copy(monkeypatch):
@@ -1721,12 +1721,16 @@ def test_whatsapp_general_group_on_home():
     a = client_for("a@test.com", tiktok="ana")
     post(admin, "/admin/destacado", act="whatsapp", whatsapp_url="https://evil.com/x")
     home = a.get("/").get_data(as_text=True)
-    assert "evil.com" not in home and "chat.whatsapp.com" not in home
+    assert "evil.com" not in home and "grupo-whatsapp" not in home
     post(admin, "/admin/destacado", act="whatsapp", whatsapp_url="https://chat.whatsapp.com/Grupo123?mode=ems_copy_t")
     page = a.get("/").get_data(as_text=True)
-    assert "https://chat.whatsapp.com/Grupo123" in page and "Únete al grupo de WhatsApp" in page
+    assert "/grupo-whatsapp" in page and "Únete al grupo de WhatsApp" in page
+    r = a.get("/grupo-whatsapp")
+    assert r.status_code == 302 and r.headers["Location"].startswith("https://chat.whatsapp.com/Grupo123")
+    with A.app.app_context():
+        assert A.User.query.filter_by(email="a@test.com").one().wa_joined_at is not None
     post(admin, "/admin/destacado", act="whatsapp", whatsapp_url="")
-    assert "chat.whatsapp.com" not in a.get("/").get_data(as_text=True)
+    assert "grupo-whatsapp" not in a.get("/").get_data(as_text=True)
 
 
 def test_hub_sections_only_for_members_with_rules_preview():
@@ -1851,3 +1855,32 @@ def test_bell_groups_by_day_with_campaign_cover():
     assert "Gana tu parte de 5.000" in hook and "500.000 vistas" in hook
     page = a.get("/").get_data(as_text=True)
     assert page.index(">Hoy<") < page.index(">Ayer<") and "Nueva campaña de Luna" in page
+
+
+def test_home_dashboard_steps_week_clips_and_ranking():
+    cid = make_campaign(song="Neón")
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/destacado", act="whatsapp", whatsapp_url="https://chat.whatsapp.com/G1")
+    a = client_for("a@test.com", tiktok="ana", verify=False)
+    page = a.get("/").get_data(as_text=True)
+    assert "Empieza a ganar en 2 pasos" in page and "Aplica a una campaña" in page and "Bienvenido a" in page
+    with A.app.app_context():
+        c = A.Course(title="Cómo clipear desde cero", published=True)
+        A.db.session.add(c); A.db.session.flush()
+        ch = A.Chapter(course_id=c.id, title="Inicio"); A.db.session.add(ch); A.db.session.flush()
+        A.db.session.add(A.Lesson(chapter_id=ch.id, title="L1", body="x"))
+        A.db.session.commit()
+        A.rename_beginner_course()
+        assert A.Course.query.one().title == "Guía para principiantes"
+    page = a.get("/").get_data(as_text=True)
+    assert "en 3 pasos" in page and "Mira la guía para principiantes" in page and "Guía para principiantes" in page
+    b = client_for("b@test.com", tiktok="bea")
+    post(b, f"/campana/{cid}", url=tt("bea", 1))
+    with A.app.app_context():
+        s_ = A.Submission.query.one()
+        s_.status, s_.views, s_.earned = "aprobado", 50000, 10.0
+        A.db.session.commit()
+    page = a.get("/").get_data(as_text=True)
+    assert "Clips de la semana" in page and "10,00" in page
+    assert "Tu puesto" in page
+    assert "Neón" in a.get("/campanas").get_data(as_text=True)

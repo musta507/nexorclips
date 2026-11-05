@@ -16,7 +16,8 @@
       <a class="adm-view" href="{{ url_for('index') }}">{{ icon("out") }} Ver la web como clipper</a>
       {% else %}
       <nav class="tabs" aria-label="Secciones">
-        <a class="tab {% if ep in ['index', 'campaign', 'ranking_page'] %}on{% endif %}" href="{{ url_for('index') }}" {% if ep in ['index', 'campaign', 'ranking_page'] %}aria-current="page"{% endif %}>{{ icon("home") }}Inicio</a>
+        <a class="tab {% if ep in ['index', 'ranking_page'] %}on{% endif %}" href="{{ url_for('index') }}" {% if ep in ['index', 'ranking_page'] %}aria-current="page"{% endif %}>{{ icon("home") }}Inicio</a>
+        <a class="tab {% if ep in ['campaigns_page', 'campaign'] %}on{% endif %}" href="{{ url_for('campaigns_page') }}" {% if ep in ['campaigns_page', 'campaign'] %}aria-current="page"{% endif %}>{{ icon("flag") }}Campañas</a>
         <a class="tab {% if ep == 'my_clips' %}on{% endif %}" href="{{ url_for('my_clips') }}" {% if ep == 'my_clips' %}aria-current="page"{% endif %}>{{ icon("film") }}Mis clips</a>
         <a class="tab {% if ep in ['earnings', 'account'] %}on{% endif %}" href="{{ url_for('earnings') }}" {% if ep in ['earnings', 'account'] %}aria-current="page"{% endif %}>{{ icon("wallet") }}Ganancias</a>
         <a class="tab {% if ep in ['courses', 'course', 'lesson'] %}on{% endif %}" href="{{ url_for('courses') }}" {% if ep in ['courses', 'course', 'lesson'] %}aria-current="page"{% endif %}>{{ icon("cap") }}Formación</a>
