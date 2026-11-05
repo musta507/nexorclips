@@ -1439,3 +1439,6 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
   table.rt.hm-week td:nth-child(4){grid-column:3;grid-row:2;text-align:right;font-size:12.5px;color:var(--muted)}
   table.rt.hm-week td:nth-child(5){grid-column:3;grid-row:1;text-align:right}
 }
+.hm-step-list.solo li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;column-gap:14px}
+.hm-step-list.solo li>div{flex:none}
+@media (max-width:640px){.hm-step-list.solo li{grid-template-columns:28px minmax(0,1fr)}.hm-step-list.solo li .btn{grid-column:2}}
