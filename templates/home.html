@@ -56,23 +56,7 @@
   <a class="card hm-q{% if quick.stats %} alert{% endif %}" href="{{ url_for('my_clips', tab='estadisticas') }}"><span class="hm-ql">{{ icon("film") }} Estadísticas pendientes</span><b class="tnum">{{ quick.stats }}</b><small>{% if quick.stats %}Súbelas antes de que caduquen{% else %}Todo al día{% endif %}</small></a>
 </section>
 
-{% if home_camps %}
-<section>
-  <h2 class="hm-h">Campañas <a class="link small push" href="{{ url_for('campaigns_page') }}">Ver todas →</a></h2>
-  <div class="hm-camps">
-    {% for c in home_camps %}{% set js = my_join.get(c.id) %}
-    <a class="card hm-camp-card" href="{{ url_for('campaign', cid=c.id) }}">
-      <span class="hm-cover">{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="56" height="56" loading="lazy">{% else %}{{ c.song[:1] }}{% endif %}</span>
-      <span class="hm-cinfo"><b>{{ c.song }}</b><small>{{ c.artist }} · {% if c.rates_vary %}hasta {% endif %}{{ c.rate|rate_k }} / 1.000 vistas</small>
-      {% if js == 'aceptada' %}<span class="hm-tag in">Ya participas</span>
-      {% elif js == 'pendiente' %}<span class="hm-tag wait">Solicitud enviada</span>
-      {% elif c.full %}<span class="hm-tag full">Plazas completas</span>
-      {% else %}<span class="hm-tag open">Plazas libres</span>{% endif %}</span>
-    </a>
-    {% endfor %}
-  </div>
-</section>
-{% endif %}
+
 
 <div class="hm-two">
   <section>
@@ -131,4 +115,23 @@
     </div>
   </section>
 </div>
+
+{% if home_camps %}
+<section class="hm-camps-sec">
+  <h2 class="hm-h">Campañas <a class="link small push" href="{{ url_for('campaigns_page') }}">Ver todas →</a></h2>
+  <div class="hm-camps n{{ home_camps|length }}">
+    {% for c in home_camps %}{% set js = my_join.get(c.id) %}
+    <a class="card hm-camp-card" href="{{ url_for('campaign', cid=c.id) }}">
+      <span class="hm-cover">{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="56" height="56" loading="lazy">{% else %}{{ c.song[:1] }}{% endif %}</span>
+      <span class="hm-cinfo"><b>{{ c.song }}</b><small>{{ c.artist }} · {% if c.rates_vary %}hasta {% endif %}{{ c.rate|rate_k }} / 1.000 vistas</small>
+      {% if js == 'aceptada' %}<span class="hm-tag in">Ya participas</span>
+      {% elif js == 'pendiente' %}<span class="hm-tag wait">Solicitud enviada</span>
+      {% elif c.full %}<span class="hm-tag full">Plazas completas</span>
+      {% else %}<span class="hm-tag open">Plazas libres</span>{% endif %}</span>
+      {% if home_camps|length == 1 %}<span class="btn sm dark hm-cbtn">{{ "Enviar clip" if js == 'aceptada' else "Ver campaña" }} {{ icon("arrow") }}</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 {% endblock %}

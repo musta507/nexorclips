@@ -1467,3 +1467,8 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .hm-aico{width:32px;height:32px;border-radius:10px;background:var(--soft);display:grid;place-items:center;flex:none}.hm-aico svg{width:16px;height:16px}
 .hm-act a>span:last-child{display:flex;flex-direction:column;min-width:0}.hm-act b{font-weight:600;font-size:14px}.hm-act small{color:var(--muted);font-size:12.5px}
 @media (max-width:900px){.hm-quick{grid-template-columns:repeat(2,minmax(0,1fr))}.hm-camps{grid-template-columns:1fr}}
+.hm-camps-sec{margin-top:4px}
+.hm-camps.n1{grid-template-columns:1fr}.hm-camps.n2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.hm-camps.n1 .hm-camp-card{padding:16px}.hm-camps.n1 .hm-cover{width:80px;height:80px}
+.hm-cbtn{flex:none}
+@media (max-width:640px){.hm-camps.n1 .hm-cbtn{display:none}}
