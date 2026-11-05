@@ -1789,7 +1789,7 @@ def test_stats_video_required_blocks_approval_and_expires(monkeypatch):
     a.post(f"/mis-clips/{sid}/estadisticas/listo", data={"_csrf": "t"})
     with A.app.app_context():
         assert A.clip_stage(A.db.session.get(A.Submission, sid)) == "revisar"
-    assert "Estadísticas que subió" in admin.get(f"/admin/campana/{cid}/revisar").get_data(as_text=True)
+    assert "Verificación de vistas que subió" in admin.get(f"/admin/campana/{cid}/revisar").get_data(as_text=True)
     post(admin, f"/admin/envio/{sid}/aprobar")
     with A.app.app_context():
         assert A.db.session.get(A.Submission, sid).status == "aprobado"
