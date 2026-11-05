@@ -38,19 +38,39 @@
 <div class="stats-list">
   {% for s in subs %}
   {% set due = stats_due(s) %}{% set left = ((due - now).total_seconds() / 3600)|round(0, 'floor')|int %}
-  <article class="card stats-item" id="st{{ s.id }}">
-    <div class="stats-top">
-      <span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>
-      <div class="stats-meta"><b>{{ s.campaign.song }}</b><span class="small muted">{{ s.views|num }} vistas · <a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver clip</a></span></div>
-      <span class="stats-left{% if left < 24 %} hot{% endif %}">{% if left > 0 %}Te quedan {{ left }} h{% else %}Último momento{% endif %}</span>
-    </div>
-    {% if s.stats_reason %}<p class="stats-note redo small"><b>Te pedimos otra grabación:</b> {{ s.stats_reason }}</p>{% endif %}
-    {% if s.campaign.stats_note %}<p class="stats-note small"><b>Qué se pide:</b> {{ s.campaign.stats_note }}</p>{% endif %}
-    <div class="stats-up" data-bunny-upload data-csrf="{{ csrf_token() }}" data-prepare="{{ url_for('stats_video_prepare', sid=s.id) }}" data-done="{{ url_for('stats_video_done', sid=s.id) }}" data-title="Estadísticas clip {{ s.id }}" data-max="{{ 100 * 1024 * 1024 }}">
-      <label class="btn soft sm file-btn">{{ icon("plus") }} Elegir vídeo<input type="file" accept="video/*" data-file></label>
-      <button type="button" class="btn accent sm" data-start>Subir vídeo</button>
-      <div class="up-bar" data-bar hidden><span></span></div>
-      <span class="small muted" data-msg>{% if s.stats_status == 'subiendo' %}La subida anterior no terminó. Vuelve a subirlo.{% endif %}</span>
+  {% set pct_left = [[(left / STATS_HOURS * 100)|round|int, 0]|max, 100]|min %}
+  <article class="card vv-card" id="st{{ s.id }}">
+    <header class="vv-head">
+      <span class="vv-plat {{ s.platform }}">{{ icon(s.platform) }}</span>
+      <div class="vv-meta"><b>{{ s.campaign.song }}</b><span>{{ s.views|num }} vistas · <a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver clip</a></span></div>
+      <div class="vv-time{% if left < 24 %} hot{% endif %}">
+        <span>{{ icon("clock") }} {% if left > 0 %}Te quedan <b>{{ left }} h</b>{% else %}<b>Último momento</b>{% endif %}</span>
+        <i><em style="width:{{ pct_left }}%"></em></i>
+      </div>
+    </header>
+    {% if s.stats_reason %}<p class="vv-note redo">⚠️ <b>Te pedimos otra grabación:</b> {{ s.stats_reason }}</p>{% endif %}
+    {% if s.stats_status == 'subiendo' %}<p class="vv-note redo">La subida anterior no terminó. Vuelve a subir el vídeo.</p>{% endif %}
+    {% if s.campaign.stats_note %}<p class="vv-note">🎯 <b>Qué se pide:</b> {{ s.campaign.stats_note }}</p>{% endif %}
+    <div class="vv-up" data-bunny-upload data-csrf="{{ csrf_token() }}" data-prepare="{{ url_for('stats_video_prepare', sid=s.id) }}" data-done="{{ url_for('stats_video_done', sid=s.id) }}" data-title="Estadísticas clip {{ s.id }}" data-max="{{ 100 * 1024 * 1024 }}">
+      <label class="vv-drop" data-drop>
+        <input type="file" accept="video/*" data-file hidden>
+        <span class="vv-drop-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
+        <b>Sube la grabación de tus estadísticas</b>
+        <span>Arrástrala aquí o <u>pulsa para elegirla</u></span>
+        <small>Vídeo de 1 a 3 min · máx. 100 MB · <button type="button" class="vv-guide" data-open="stats-guide">cómo hacerla</button></small>
+      </label>
+      <div class="vv-file" data-picked hidden>
+        <video data-preview muted playsinline preload="metadata"></video>
+        <div class="vv-file-info">
+          <b data-fname></b><span data-fsize></span>
+          <div class="vv-bar" data-bar hidden><span></span></div>
+          <span class="vv-msg" data-msg></span>
+        </div>
+        <div class="vv-actions">
+          <button type="button" class="btn sm soft" data-change>Cambiar</button>
+          <button type="button" class="btn accent sm" data-start>Subir vídeo {{ icon("arrow") }}</button>
+        </div>
+      </div>
     </div>
   </article>
   {% endfor %}

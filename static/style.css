@@ -1498,3 +1498,39 @@ body.has-tabs>.site-footer{flex:none}
 .sup-item>span:nth-of-type(2){display:flex;flex-direction:column;min-width:0;flex:1}.sup-item small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 @media (max-width:800px){.sup-admin{grid-template-columns:1fr}}
+/* ---------- Verificar vistas: tarjeta de subida */
+.vv-card{padding:18px;display:flex;flex-direction:column;gap:12px}
+.vv-head{display:flex;align-items:center;gap:12px}
+.vv-plat{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--soft);flex:none}
+.vv-plat svg{width:20px;height:20px}
+.vv-plat.tiktok{background:#111;color:#fff}.vv-plat.instagram{background:linear-gradient(135deg,#f58529,#dd2a7b 50%,#8134af);color:#fff}.vv-plat.youtube{background:#ff0033;color:#fff}
+.vv-meta{display:flex;flex-direction:column;min-width:0;flex:1}.vv-meta b{font:600 15.5px var(--display)}.vv-meta span{font-size:13px;color:var(--muted)}
+.vv-time{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+.vv-time>span{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-2);background:var(--soft);border-radius:99px;padding:5px 10px}
+.vv-time svg{width:13px;height:13px}
+.vv-time i{display:block;width:120px;height:4px;border-radius:9px;background:var(--soft);overflow:hidden}.vv-time em{display:block;height:100%;background:var(--money);border-radius:9px}
+.vv-time.hot>span{background:#fdecec;color:#b42318}.vv-time.hot em{background:#ef4444}
+.vv-note{margin:0;font-size:13px;background:var(--soft);border-radius:12px;padding:9px 12px}.vv-note.redo{background:#fff5f5;color:#9b2c2c}
+.vv-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:4px;padding:26px 16px;border:1.5px dashed #cfd2d8;border-radius:18px;background:linear-gradient(180deg,#fafbfc,#f4f6f8);cursor:pointer;transition:border-color .15s,background .15s,transform .15s}
+.vv-drop:hover,.vv-drop.over{border-color:var(--money);background:linear-gradient(180deg,#f3fbf6,#e9f8ef)}
+.vv-drop.over{transform:scale(1.01)}
+.vv-drop-ico{width:52px;height:52px;border-radius:50%;background:#fff;box-shadow:0 4px 14px rgba(0,0,0,.08);display:grid;place-items:center;color:var(--money);margin-bottom:6px;transition:transform .2s}
+.vv-drop:hover .vv-drop-ico{transform:translateY(-2px)}
+.vv-drop-ico svg{width:24px;height:24px}
+.vv-drop b{font:600 15px var(--display)}.vv-drop>span{font-size:13.5px;color:var(--ink-2)}.vv-drop u{text-decoration-color:var(--money);text-underline-offset:3px}
+.vv-drop small{font-size:12px;color:var(--muted)}
+.vv-guide{border:0;background:none;padding:0;font:inherit;color:var(--ink);text-decoration:underline;cursor:pointer}
+.vv-file{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:14px;align-items:center;border:1px solid var(--line);border-radius:18px;padding:12px}
+.vv-file video{width:72px;height:96px;object-fit:cover;border-radius:12px;background:#111}
+.vv-file-info{display:flex;flex-direction:column;gap:3px;min-width:0}
+.vv-file-info b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vv-file-info>span{font-size:12.5px;color:var(--muted)}
+.vv-bar{height:8px;border-radius:9px;background:var(--soft);overflow:hidden;margin-top:6px}.vv-bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,#12b76a,#2ee88f);border-radius:9px;transition:width .2s}
+.vv-msg{font-size:12.5px;color:var(--ink-2)}
+.vv-actions{display:flex;gap:8px;align-items:center}
+.vv-up.busy .vv-actions [data-change]{display:none}
+.vv-up.done .vv-file{border-color:#b7ebcc;background:#f3fbf6}.vv-up.done .vv-msg{color:var(--money-ink);font-weight:600}.vv-up.done .vv-actions{display:none}
+.vv-up.err .vv-msg{color:#b42318}
+@media (max-width:640px){
+  .vv-head{flex-wrap:wrap}.vv-time{align-items:flex-start;width:100%}.vv-time i{width:100%}
+  .vv-file{grid-template-columns:60px minmax(0,1fr)}.vv-file video{width:60px;height:80px}.vv-actions{grid-column:1/-1}.vv-actions .btn{flex:1}
+}

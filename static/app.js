@@ -753,14 +753,39 @@ function subidaUna(box) {
       fill = bar.querySelector("span"), msg = box.querySelector("[data-msg]");
   var CHUNK = 16 * 1024 * 1024, MAX = parseInt(box.getAttribute("data-max") || "0", 10);
   function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
-  function fail(t) { msg.textContent = t; start.disabled = false; }
-  file.addEventListener("change", function () { var f = file.files && file.files[0]; if (f) msg.textContent = f.name; });
+  function fail(t) { msg.textContent = t; start.disabled = false; box.classList.remove("busy"); box.classList.add("err"); }
+  var drop = box.querySelector("[data-drop]"), picked = box.querySelector("[data-picked]"), prev = box.querySelector("[data-preview]");
+  function mb(n) { return (n / 1048576).toFixed(n < 10485760 ? 1 : 0).replace(".", ",") + " MB"; }
+  function elegido() {
+    var f = file.files && file.files[0];
+    if (!f) return;
+    if (!drop) { msg.textContent = f.name; return; }
+    drop.hidden = true; picked.hidden = false; msg.textContent = ""; box.classList.remove("done", "err");
+    box.querySelector("[data-fname]").textContent = f.name;
+    box.querySelector("[data-fsize]").textContent = mb(f.size) + (MAX && f.size > MAX ? " · demasiado grande" : "");
+    if (prev) { try { if (prev.src) URL.revokeObjectURL(prev.src); prev.src = URL.createObjectURL(f) + "#t=0.5"; } catch (e) {} }
+  }
+  file.addEventListener("change", elegido);
+  if (drop) {
+    ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+    ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+    drop.addEventListener("drop", function (e) {
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+      try { var dt = new DataTransfer(); dt.items.add(f); file.files = dt.files; } catch (x) { return; }
+      elegido();
+    });
+    var guide = drop.querySelector(".vv-guide");
+    if (guide) guide.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); var d = document.getElementById("stats-guide"); if (d && d.showModal) d.showModal(); });
+    var ch = box.querySelector("[data-change]");
+    if (ch) ch.addEventListener("click", function () { if (!start.disabled) file.click(); });
+  }
   start.addEventListener("click", function () {
     var f = file.files && file.files[0];
     if (!f) { msg.textContent = "Elige primero el vídeo."; return; }
     if (MAX && f.size > MAX) { msg.textContent = "El vídeo pesa demasiado (máximo " + Math.round(MAX / 1048576) + " MB)."; return; }
     if (f.type && f.type.indexOf("video/") !== 0) { msg.textContent = "Tiene que ser un vídeo."; return; }
-    start.disabled = true; msg.textContent = "Preparando la subida…";
+    start.disabled = true; box.classList.add("busy"); box.classList.remove("err"); msg.textContent = "Preparando la subida…";
     var fd = new FormData(); fd.append("_csrf", box.getAttribute("data-csrf"));
     fetch(box.getAttribute("data-prepare"), { method: "POST", body: fd, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
       .then(function (r) { return r.json(); })
@@ -805,7 +830,7 @@ function subidaUna(box) {
     msg.textContent = "¡Subido! Guardando…";
     var fd = new FormData(); fd.append("_csrf", box.getAttribute("data-csrf"));
     fetch(done, { method: "POST", body: fd, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
-      .then(function (r) { if (!r.ok) throw 0; msg.textContent = "Enviado. Ya está en revisión."; setTimeout(function () { location.reload(); }, 900); })
+      .then(function (r) { if (!r.ok) throw 0; box.classList.remove("busy"); box.classList.add("done"); msg.textContent = "✓ Enviado. Ya está en revisión."; setTimeout(function () { location.reload(); }, 1200); })
       .catch(function () { fail("Se subió, pero no se pudo guardar. Recarga la página."); });
   }
   function estado() {
