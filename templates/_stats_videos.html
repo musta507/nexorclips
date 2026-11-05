@@ -42,7 +42,12 @@
   <article class="card vv-card" id="st{{ s.id }}">
     <header class="vv-head">
       <span class="vv-plat {{ s.platform }}">{{ icon(s.platform) }}</span>
-      <div class="vv-meta"><b>{{ s.campaign.song }}</b><span>{{ s.views|num }} vistas · <a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver clip</a></span></div>
+      <div class="vv-meta">
+        <span class="vv-eb">El clip que tienes que grabar</span>
+        <b>{% if s.author %}@{{ s.author }}{% else %}Tu clip{% endif %} en {{ PLATFORMS[s.platform] }}</b>
+        <span>{{ s.campaign.song }} · {% if s.posted_at %}publicado el {{ s.posted_at|date }} · {% endif %}{{ s.views|num }} vistas</span>
+        <a class="vv-url" href="{{ s.url }}" target="_blank" rel="noopener">{{ icon("out") }}<span>{{ s.url.split('://')[-1].replace('www.', '') }}</span></a>
+      </div>
       <div class="vv-time{% if left < 24 %} hot{% endif %}">
         <span>{{ icon("clock") }} {% if left > 0 %}Te quedan <b>{{ left }} h</b>{% else %}<b>Último momento</b>{% endif %}</span>
         <i><em style="width:{{ pct_left }}%"></em></i>
