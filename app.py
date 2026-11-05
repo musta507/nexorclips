@@ -2454,7 +2454,22 @@ def home_data(u):
     rank = {"top": full[:5], "me": me, "total": len(full), "above": above,
             "pct": (round(me["pos"] / len(full) * 100) if me else None),
             "bar": (min(100, round(me["views"] / above["views"] * 100)) if me and above and above["views"] else 100)}
-    return {"summary": summary, "learn": learn, "steps": steps, "show_steps": show_steps,
+    # tu resumen rápido
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    money_ = user_money(u)
+    quick = {"available": money_["available"], "live": money_["live"],
+             "views_week": sum(s_.views or 0 for s_ in subs if s_.created_at >= week_ago and s_.status != "rechazado"),
+             "counting": stage.get("contando", 0) + stage.get("revisar", 0), "stats": stage.get("estadisticas", 0)}
+    # campañas activas (las que tienen plazas, primero)
+    my_join = {m.campaign_id: m.status for m in CampaignMember.query.filter_by(user_id=u.id)}
+    camps = [c for c in active_campaigns() if not c.exhausted]
+    camps.sort(key=lambda c: (my_join.get(c.id) == "aceptada", bool(c.full)))
+    # actividad reciente (lo último de su campanita)
+    acts = Notice.query.filter_by(user_id=u.id).order_by(Notice.created_at.desc()).limit(6).all()
+    activity = [{"icon": BELL_ICONS.get(n_.kind, "bell"), "title": n_.title, "body": n_.body, "ago": ago(n_.created_at),
+                 "url": url_for("open_notice", nid=n_.id)} for n_ in acts]
+    return {"quick": quick, "home_camps": camps[:3], "my_join": my_join, "activity": activity,
+            "summary": summary, "learn": learn, "steps": steps, "show_steps": show_steps,
             "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
             "rank": rank, "masked": mask_name}
 

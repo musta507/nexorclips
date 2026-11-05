@@ -49,6 +49,31 @@
 </a>
 {% endif %}
 
+<section class="hm-quick">
+  <a class="card hm-q" href="{{ url_for('earnings') }}"><span class="hm-ql">{{ icon("wallet") }} Saldo disponible</span><b class="tnum">{{ quick.available|money }}</b><small>{% if quick.live %}+ {{ quick.live|money }} en campañas abiertas{% else %}Ver ganancias →{% endif %}</small></a>
+  <a class="card hm-q" href="{{ url_for('my_clips') }}"><span class="hm-ql">{{ icon("eye") }} Vistas esta semana</span><b class="tnum">{{ quick.views_week|short }}</b><small>De los clips que enviaste en 7 días</small></a>
+  <a class="card hm-q" href="{{ url_for('my_clips', tab='contando') }}"><span class="hm-ql">{{ icon("clock") }} Clips en marcha</span><b class="tnum">{{ quick.counting }}</b><small>Contando vistas o en revisión</small></a>
+  <a class="card hm-q{% if quick.stats %} alert{% endif %}" href="{{ url_for('my_clips', tab='estadisticas') }}"><span class="hm-ql">{{ icon("film") }} Estadísticas pendientes</span><b class="tnum">{{ quick.stats }}</b><small>{% if quick.stats %}Súbelas antes de que caduquen{% else %}Todo al día{% endif %}</small></a>
+</section>
+
+{% if home_camps %}
+<section>
+  <h2 class="hm-h">Campañas <a class="link small push" href="{{ url_for('campaigns_page') }}">Ver todas →</a></h2>
+  <div class="hm-camps">
+    {% for c in home_camps %}{% set js = my_join.get(c.id) %}
+    <a class="card hm-camp-card" href="{{ url_for('campaign', cid=c.id) }}">
+      <span class="hm-cover">{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="56" height="56" loading="lazy">{% else %}{{ c.song[:1] }}{% endif %}</span>
+      <span class="hm-cinfo"><b>{{ c.song }}</b><small>{{ c.artist }} · {% if c.rates_vary %}hasta {% endif %}{{ c.rate|rate_k }} / 1.000 vistas</small>
+      {% if js == 'aceptada' %}<span class="hm-tag in">Ya participas</span>
+      {% elif js == 'pendiente' %}<span class="hm-tag wait">Solicitud enviada</span>
+      {% elif c.full %}<span class="hm-tag full">Plazas completas</span>
+      {% else %}<span class="hm-tag open">Plazas libres</span>{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <div class="hm-two">
   <section>
     <h2 class="hm-h">🔥 Clips de la semana</h2>
@@ -71,6 +96,12 @@
       {% else %}
       <div class="empty"><h3>Aún no hay clips esta semana</h3><p class="muted">Los clips aprobados con más vistas de los últimos 7 días saldrán aquí.</p></div>
       {% endif %}
+    </div>
+    <h2 class="hm-h" style="margin-top:20px">Actividad reciente</h2>
+    <div class="card hm-act">
+      {% if activity %}
+      <ul>{% for a in activity %}<li><a href="{{ a.url }}"><span class="hm-aico">{{ icon(a.icon) }}</span><span><b>{{ a.title }}</b><small>{% if a.body %}{{ a.body|truncate(70) }} · {% endif %}{{ a.ago }}</small></span></a></li>{% endfor %}</ul>
+      {% else %}<p class="small muted" style="margin:0">Aquí verás lo que te pase: clips aprobados, solicitudes aceptadas, retiros…</p>{% endif %}
     </div>
   </section>
   <section>
