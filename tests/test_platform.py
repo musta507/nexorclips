@@ -382,7 +382,7 @@ def test_all_pages_render():
     admin = client_for("admin@test.com")
     a = client_for("a@test.com", tiktok="ana")
     post(a, f"/campana/{cid}", url=tt("ana", 1))
-    for path in ["/", "/?cat=musica", f"/campana/{cid}", "/enviar", "/ganancias", "/ganancias?tab=pendiente",
+    for path in ["/", "/?cat=musica", f"/campana/{cid}", "/enviar", "/ganancias", "/mis-clips?tab=revisar",
                  "/ganancias?tab=retiros", "/cuenta", "/terminos", "/privacidad"]:
         assert a.get(path).status_code == 200, path
     for path in ["/admin", f"/admin/campana/{cid}", f"/admin/campana/{cid}?estado=avisos", f"/admin/campana/{cid}/editar",
@@ -1727,3 +1727,127 @@ def test_whatsapp_general_group_on_home():
     assert "https://chat.whatsapp.com/Grupo123" in page and "Únete al grupo de WhatsApp" in page
     post(admin, "/admin/destacado", act="whatsapp", whatsapp_url="")
     assert "chat.whatsapp.com" not in a.get("/").get_data(as_text=True)
+
+
+def test_hub_sections_only_for_members_with_rules_preview():
+    cid = make_campaign(rules="Menciona @artista en cada vídeo")
+    client_for("admin@test.com")
+    out = client_for("fuera@test.com", verify=False)
+    page = out.get(f"/campana/{cid}").get_data(as_text=True)
+    assert "Menciona @artista" in page and "hub-side" not in page and 'tab=recursos' not in page
+    assert "hub-ch" not in out.get(f"/campana/{cid}?tab=recursos").get_data(as_text=True)
+    a = client_for("a@test.com", tiktok="ana")
+    _auto_accept()
+    assert "hub-ch" in a.get(f"/campana/{cid}").get_data(as_text=True)
+
+
+def test_earnings_grouped_by_campaign_and_review_lives_in_my_clips():
+    cid = make_campaign(song="Neón")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    post(a, f"/campana/{cid}", url=tt("ana", 2))
+    with A.app.app_context():
+        for s_ in A.Submission.query.all():
+            s_.status, s_.views, s_.earned = "aprobado", 10000, 2.0
+        A.db.session.commit()
+    page = a.get("/ganancias").get_data(as_text=True)
+    assert "Por campaña" in page and "Neón" in page and "4,00" in page
+    r = a.get("/ganancias?tab=pendiente")
+    assert r.status_code == 302 and "/mis-clips" in r.headers["Location"]
+    assert ">Ganado<" not in a.get("/mis-clips").get_data(as_text=True).split("<section>")[0]
+
+
+def test_stats_video_required_blocks_approval_and_expires(monkeypatch):
+    monkeypatch.setattr(A, "BUNNY_LIBRARY_ID", "lib")
+    monkeypatch.setattr(A, "BUNNY_API_KEY", "key")
+    monkeypatch.setattr(A, "bunny_call", lambda m, p, **k: (True, 200, {"guid": "st-1"}))
+    cid = make_campaign(stats_required=True, stats_note="60 % España")
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        s_ = A.Submission.query.one()
+        s_.views, s_.review_since = 50000, datetime.utcnow()
+        A.db.session.commit()
+        sid = s_.id
+        A.auto_review(A.db.session.get(A.Submission, sid))
+        A.db.session.commit()
+        assert A.db.session.get(A.Submission, sid).stats_status == "pedido"
+        assert A.clip_stage(A.db.session.get(A.Submission, sid)) == "estadisticas"
+    page = a.get("/mis-clips?tab=estadisticas").get_data(as_text=True)
+    assert "60 % España" in page and "Subir vídeo" in page
+    assert "falta que el clipper suba" in flashes(post(admin, f"/admin/envio/{sid}/aprobar"))[0][1]
+    d = a.post(f"/mis-clips/{sid}/estadisticas", data={"_csrf": "t"}).get_json()
+    assert d["ok"] and d["guid"] == "st-1"
+    a.post(f"/mis-clips/{sid}/estadisticas/listo", data={"_csrf": "t"})
+    with A.app.app_context():
+        assert A.clip_stage(A.db.session.get(A.Submission, sid)) == "revisar"
+    assert "Estadísticas que subió" in admin.get(f"/admin/campana/{cid}/revisar").get_data(as_text=True)
+    post(admin, f"/admin/envio/{sid}/aprobar")
+    with A.app.app_context():
+        assert A.db.session.get(A.Submission, sid).status == "aprobado"
+    # otro clip que no sube el vídeo a tiempo se rechaza solo
+    post(a, f"/campana/{cid}", url=tt("ana", 2))
+    with A.app.app_context():
+        s2 = A.Submission.query.filter(A.Submission.id != sid).one()
+        s2.views, s2.review_since, s2.stats_status = 50000, datetime.utcnow() - timedelta(hours=80), "pedido"
+        A.db.session.commit()
+        assert A.auto_review(s2) == "rechazado"
+        assert s2.reject_code == "sin_estadisticas"
+    other = client_for("b@test.com", tiktok="bea")
+    assert other.post(f"/mis-clips/{sid}/estadisticas", data={"_csrf": "t"}).status_code == 404
+
+
+def test_campaign_mods_permissions():
+    cid = make_campaign()
+    cid2 = make_campaign(song="Otra")
+    admin = client_for("admin@test.com")
+    mod = client_for("mod@test.com", tiktok="modo")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    post(mod, f"/campana/{cid}", url=tt("modo", 2))
+    assert mod.get(f"/admin/campana/{cid}/revisar").status_code == 403
+    post(admin, f"/admin/campana/{cid}/mods", act="poner", email="mod@test.com")
+    with A.app.app_context():
+        assert A.CampaignMod.query.count() == 1
+        mine = A.Submission.query.join(A.User).filter(A.User.email == "mod@test.com").one().id
+        other = A.Submission.query.join(A.User).filter(A.User.email == "a@test.com").one().id
+    page = mod.get(f"/admin/campana/{cid}/revisar").get_data(as_text=True)
+    assert mod.get(f"/admin/campana/{cid}/revisar").status_code == 200 and "Ajustes" not in page.split("cn-tabs")[1][:600]
+    assert mod.get(f"/admin/campana/{cid2}/revisar").status_code == 403
+    assert mod.get(f"/admin/campana/{cid}").status_code == 403            # resumen con dinero: no
+    assert mod.get(f"/admin/campana/{cid}/editar").status_code == 403
+    assert mod.get("/admin/retiros").status_code == 403
+    assert "propios clips" in flashes(post(mod, f"/admin/envio/{mine}/aprobar"))[0][1]
+    assert mod.post(f"/admin/envio/{other}/visitas", data={"_csrf": "t", "views": "999999"}).status_code == 403
+    post(mod, f"/admin/envio/{other}/aprobar")
+    with A.app.app_context():
+        assert A.db.session.get(A.Submission, other).status == "aprobado"
+        assert A.db.session.get(A.Submission, mine).status == "pendiente"
+    # canales: publica, pero no cambia secciones ni el grupo
+    mod.get(f"/admin/campana/{cid}/canales")
+    with A.app.app_context():
+        ch = A.Channel.query.filter_by(campaign_id=cid, kind="posts").first().id
+    post(mod, f"/admin/campana/{cid}/canales?canal={ch}", act="publicar", canal=str(ch), body="Hola desde el mod")
+    assert mod.post(f"/admin/campana/{cid}/canales", data={"_csrf": "t", "act": "whatsapp", "whatsapp_url": ""}).status_code == 403
+    _auto_accept()
+    hub = a.get(f"/campana/{cid}?canal={ch}").get_data(as_text=True)
+    assert "Hola desde el mod" in hub and "MOD" in hub
+    post(admin, f"/admin/campana/{cid}/mods", act="quitar", email="mod@test.com")
+    assert mod.get(f"/admin/campana/{cid}/revisar").status_code == 403
+
+
+def test_bell_groups_by_day_with_campaign_cover():
+    cid = make_campaign(song="Neón", artist="Luna", budget=5000, rate=200)
+    a = client_for("a@test.com", tiktok="ana")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="a@test.com").one()
+        A.db.session.add(A.Notice(user_id=u.id, kind="campana_nueva", title="Nueva campaña de Luna",
+                                  body=A.campaign_hook(A.db.session.get(A.Campaign, cid)), url=f"/campana/{cid}", campaign_id=cid))
+        A.db.session.add(A.Notice(user_id=u.id, kind="retiro", title="Retiro pagado", body="x", url="/ganancias",
+                                  created_at=datetime.utcnow() - timedelta(days=1)))
+        A.db.session.commit()
+        hook = A.campaign_hook(A.db.session.get(A.Campaign, cid))
+    assert "Gana tu parte de 5.000" in hook and "500.000 vistas" in hook
+    page = a.get("/").get_data(as_text=True)
+    assert page.index(">Hoy<") < page.index(">Ayer<") and "Nueva campaña de Luna" in page

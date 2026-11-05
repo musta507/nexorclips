@@ -12,7 +12,7 @@
   <div class="table-scroll"><table class="rt">
     <thead><tr><th>Clipper</th><th>Cuenta</th><th>Comprobación</th><th>Acción</th></tr></thead>
     <tbody>{% for a in accounts %}
-      <tr><td data-label="Clipper">{{ av(a.user) }} <a class="link" href="{{ url_for('admin_clipper', uid=a.user_id) }}"><b>{{ a.user.name }}</b></a></td>
+      <tr><td data-label="Clipper">{{ av(a.user) }} {% if admin_can('admin_clipper') %}<a class="link" href="{{ url_for('admin_clipper', uid=a.user_id) }}"><b>{{ a.user.name }}</b></a>{% else %}<b>{{ a.user.name }}</b>{% endif %}</td>
         <td data-label="Cuenta"><a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener">@{{ a.handle }}</a> <span class="small muted">· {{ PLATFORMS[a.platform] }}</span></td>
         <td data-label="Comprobación" class="small muted">{{ a.bio_status or "Aún no ha comprobado la bio" }}</td>
         <td data-label="Acción"><div class="inline" style="gap:6px;flex-wrap:wrap">
@@ -34,7 +34,7 @@
       <tbody>
       {% for a in joins %}
       <tr>
-        <td data-label="Clipper">{{ av(a.user) }} <a class="link" href="{{ url_for('admin_clipper', uid=a.user_id) }}"><b>{{ a.user.name }}</b></a><div class="small muted">{{ a.user.email }}</div></td>
+        <td data-label="Clipper">{{ av(a.user) }} {% if admin_can('admin_clipper') %}<a class="link" href="{{ url_for('admin_clipper', uid=a.user_id) }}"><b>{{ a.user.name }}</b></a>{% else %}<b>{{ a.user.name }}</b>{% endif %}<div class="small muted">{{ a.user.email }}</div></td>
         <td data-label="{{ 'Respuestas' if camp else 'Campaña' }}">{% if not camp %}{{ a.campaign.song }}{% endif %}{% if a.answer_list %}
           <details class="answers"><summary>Respuestas ({{ a.answer_list|length }})</summary>
             {% for q, ans in a.answer_list %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}

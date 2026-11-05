@@ -1,16 +1,16 @@
 {# Cabecera y pestañas de una campaña en el panel #}
-<a class="back" href="{{ url_for('admin_campaigns') }}">← Campañas</a>
+{% if acting_as_mod() %}<a class="back" href="{{ url_for('campaign', cid=camp.id) }}">← Volver a la campaña</a>{% else %}<a class="back" href="{{ url_for('admin_campaigns') }}">← Campañas</a>{% endif %}
 <div class="cn-head">
   {% set _t, lqip = cover_meta(camp) %}
   <span class="dthumb"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(camp) %}<img src="{{ cover_src(camp, 160) }}" alt="" width="56" height="56">{% endif %}</span>
   <div class="cn-title"><h1>{{ camp.song }}</h1><span class="small muted">{{ camp.artist }} · <span class="status {{ camp.status }}">{{ camp.status|capitalize }}</span>{% if camp.full %} · Plazas completas{% endif %}</span></div>
-  <a class="btn soft sm push" href="{{ url_for('campaign', cid=camp.id) }}">Ver como clipper</a>
+  {% if acting_as_mod() %}<span class="mod-tag push">Eres MOD</span>{% else %}<a class="btn soft sm push" href="{{ url_for('campaign', cid=camp.id) }}">Ver como clipper</a>{% endif %}
 </div>
 <nav class="seg cn-tabs" aria-label="Secciones de la campaña">
   {% for k, label, ep, n in [("resumen", "Resumen", "admin_campaign", 0), ("revisar", "Revisar clips", "admin_campaign_review", pend.get("clips", 0)),
                              ("solicitudes", "Solicitudes", "admin_campaign_requests", pend.get("requests", 0) + pend.get("accounts", 0)),
                              ("clippers", "Clippers", "admin_campaign_clippers", 0), ("canales", "Canales", "admin_campaign_channels", 0),
                              ("ajustes", "Ajustes", "admin_campaign_form", 0)] %}
-  {% if admin_can(ep) %}<a class="{% if sec == k %}on{% endif %}" href="{{ url_for(ep, cid=camp.id) }}">{{ label }}{% if n %} <b class="cn-n">{{ n }}</b>{% endif %}</a>{% endif %}
+  {% if staff_can(ep, camp.id) %}<a class="{% if sec == k %}on{% endif %}" href="{{ url_for(ep, cid=camp.id) }}">{{ label }}{% if n %} <b class="cn-n">{{ n }}</b>{% endif %}</a>{% endif %}
   {% endfor %}
 </nav>

@@ -3,6 +3,14 @@
 {% block title %}Clippers · {{ camp.song }}{% endblock %}
 {% block content %}
 {% include "admin/_camp_nav.html" %}
+<section class="card tight form-stack mods-card">
+  <div class="inline" style="justify-content:space-between;flex-wrap:wrap"><h3 style="margin:0">Mods de la campaña</h3>
+    <form method="post" action="{{ url_for('admin_campaign_mods', cid=camp.id) }}" class="inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="poner"><input type="email" name="email" placeholder="correo@ejemplo.com" required aria-label="Correo del nuevo mod"><button class="btn sm">Añadir mod</button></form></div>
+  <p class="small muted" style="margin:0">Un mod publica en los canales, borra comentarios, revisa clips (nunca los suyos) y acepta solicitudes. No toca dinero, presupuesto ni ajustes.</p>
+  {% if mods %}<ul class="mods-list">{% for md in mods %}<li>{{ av(md.user) }}<span class="mods-who"><b>{{ md.user.name }}</b> <span class="mod-tag">MOD</span><span class="small muted">{{ md.user.email }}</span></span>
+    <form method="post" action="{{ url_for('admin_campaign_mods', cid=camp.id) }}" data-confirm="¿Quitar a {{ md.user.name }} como mod?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="quitar"><input type="hidden" name="uid" value="{{ md.user_id }}"><button class="btn sm soft">Quitar</button></form></li>{% endfor %}</ul>
+  {% else %}<p class="small muted" style="margin:0">Aún no hay mods. Usa «Hacer mod» en un clipper o añade uno por su correo.</p>{% endif %}
+</section>
 <div class="table-card">
   {% if rows %}
   <div class="table-scroll"><table class="rt">
@@ -16,7 +24,9 @@
       <td data-label="Vistas" class="r tnum">{{ st.views|short }}</td>
       <td data-label="Ganado" class="r tnum money-txt"><b>{{ st.earned|money }}</b></td>
       <td data-label="Último clip" class="small muted">{{ st.last|ago if st.last else "—" }}</td>
-      <td data-label="" class="r"><a class="btn sm soft" href="{{ url_for('admin_chat', uid=m.user_id) }}">Escribir</a></td>
+      <td data-label="" class="r"><div class="inline" style="justify-content:flex-end;gap:6px">
+        {% if m.user_id not in mod_ids %}<form method="post" action="{{ url_for('admin_campaign_mods', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="poner"><input type="hidden" name="uid" value="{{ m.user_id }}"><button class="btn sm soft">Hacer mod</button></form>{% else %}<span class="mod-tag">MOD</span>{% endif %}
+        <a class="btn sm soft" href="{{ url_for('admin_chat', uid=m.user_id) }}">Escribir</a></div></td>
     </tr>
     {% endfor %}
     </tbody>

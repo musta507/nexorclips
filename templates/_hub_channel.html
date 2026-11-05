@@ -14,15 +14,15 @@
 {% endif %}
 {% for p in posts %}
 <article class="card post" id="p{{ p.id }}">
-  <header class="post-head"><span class="avatar sm team"><span class="logo-mark"></span></span><div><b>Equipo {{ APP_NAME }}</b><span class="small muted">{{ p.created_at|ago }}{% if p.pinned %} · 📌 Fijado{% endif %}</span></div></header>
+  <header class="post-head">{% if p.author_id in mod_ids %}{{ av(p.author) }}{% else %}<span class="avatar sm team"><span class="logo-mark"></span></span>{% endif %}<div><b>{% if p.author_id in mod_ids %}{{ p.author.name }} <span class="mod-tag">MOD</span>{% else %}Equipo {{ APP_NAME }}{% endif %}</b><span class="small muted">{{ p.created_at|ago }}{% if p.pinned %} · 📌 Fijado{% endif %}</span></div></header>
   {% if p.body %}<div class="post-body">{{ p.body|linkify }}</div>{% endif %}
   {% if p.image_mime %}<img class="post-img" src="{{ url_for('post_image', pid=p.id) }}" alt="" loading="lazy">{% endif %}
   <footer class="post-foot">
     <form method="post" action="{{ url_for('post_like', cid=camp.id, pid=p.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="post-btn{% if p.id in liked %} on{% endif %}" aria-pressed="{{ 'true' if p.id in liked else 'false' }}">♥ <span>{{ p.likes|length }}</span></button></form>
     <span class="post-btn">{{ icon("chat") }} <span>{{ p.comments|length }}</span></span>
   </footer>
-  {% if p.comments %}<ul class="post-comments">{% for co in p.comments %}<li>{{ av(co.user) }}<div><b>{{ co.user.name }}</b> <span class="small muted">{{ co.created_at|ago }}</span><p>{{ co.body }}</p></div>
-    {% if co.user_id == current_user.id %}<form method="post" action="{{ url_for('delete_comment', coid=co.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="icon-btn" aria-label="Borrar mi comentario">✕</button></form>{% endif %}</li>{% endfor %}</ul>{% endif %}
+  {% if p.comments %}<ul class="post-comments">{% for co in p.comments %}<li>{{ av(co.user) }}<div><b>{{ co.user.name }}</b>{% if co.user_id in mod_ids %} <span class="mod-tag">MOD</span>{% elif co.user.is_admin %} <span class="mod-tag">EQUIPO</span>{% endif %} <span class="small muted">{{ co.created_at|ago }}</span><p>{{ co.body }}</p></div>
+    {% if co.user_id == current_user.id or i_mod %}<form method="post" action="{{ url_for('delete_comment', coid=co.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="icon-btn" aria-label="Borrar mi comentario">✕</button></form>{% endif %}</li>{% endfor %}</ul>{% endif %}
   <form method="post" action="{{ url_for('post_comment', cid=camp.id, pid=p.id) }}" class="post-reply"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <input name="body" maxlength="1000" placeholder="Escribe un comentario…" aria-label="Comentario" required><button class="btn sm soft">Enviar</button></form>
 </article>

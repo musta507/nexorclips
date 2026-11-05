@@ -3,7 +3,7 @@
 {% block title %}{{ camp.song }} - {{ camp.artist }} · {{ APP_NAME }}{% endblock %}
 {% block content %}
 {% if not member and accepted %}{% set member = {"status": "aceptada"} %}{% endif %}
-{% if hub %}{% set ctab = 'resumen' %}{% endif %}
+{% set ctab = 'resumen' %}{# las secciones (normas, recursos, comunidad…) solo existen dentro del hub de los aceptados #}
 <a class="back" href="{{ url_for('index') }}">← Campañas</a>
 {% set open_camp = camp.status == 'activa' and not st.exhausted %}
 {% if hub %}<div class="hub">{% include "_hub_side.html" %}<section class="hub-main">{% if chan %}{% include "_hub_channel.html" %}{% endif %}{% endif %}
@@ -86,10 +86,6 @@
   </section>
 
   {% set mats = camp.material_list %}
-  {% set tabs = [("resumen", "Resumen", True), ("normas", "Normas", camp.rules_text), ("recursos", "Recursos", mats)] %}
-  {% if not hub %}<nav class="seg ctabs" aria-label="Secciones de la campaña">
-    {% for k, label, show in tabs %}{% if show %}<a class="{% if ctab == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, tab=k if k != 'resumen' else None) }}">{{ label }}</a>{% endif %}{% endfor %}
-  </nav>{% endif %}
 
   {% if ctab == 'normas' %}
   <section class="card box">
@@ -146,6 +142,14 @@
     {% endfor %}
   </div>
 
+  {% if not hub and camp.rules_text %}
+  <section class="card box rules-peek">
+    <div class="box-head">{{ icon("doc") }} Normas de la campaña</div>
+    <details class="box-body"><summary class="rules-clip">{{ camp.rules_text|truncate(320, True, "…") }}{% if camp.rules_text|length > 320 %} <span class="link small">Leer todas</span>{% endif %}</summary>
+      {% if camp.rules_text|length > 320 %}<div class="rules">{{ camp.rules_text }}</div>{% endif %}</details>
+    <p class="box-foot small muted">Cuando te acepten tendrás acceso a todo: recursos, ideas virales, cuentas TOP, clips ganadores y la comunidad.</p>
+  </section>
+  {% endif %}
   {# ---------- presupuesto y materiales #}
   {% set mats = camp.material_list %}
   <div class="duo solo">

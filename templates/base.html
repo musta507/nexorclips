@@ -28,13 +28,18 @@
       <details class="bell-menu" data-bell>
         <summary class="bell-btn" aria-label="Notificaciones{% if bell.unread %} · {{ bell.unread }} sin leer{% endif %}">{{ icon("bell") }}<span class="bell-n" id="bell-n"{% if not bell.unread %} hidden{% endif %}>{{ bell.unread if bell.unread < 100 else "99+" }}</span></summary>
         <div class="bell-panel">
-          <div class="bell-head"><b>Notificaciones</b>{% if bell.unread and not current_user.is_admin %}<form method="post" action="{{ url_for('read_notices') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link small">Marcar todo como leído</button></form>{% endif %}</div>
+          <div class="bell-head"><h3>Notificaciones</h3>{% if bell.unread and not current_user.is_admin %}<form method="post" action="{{ url_for('read_notices') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link small">Marcar todo como leído</button></form>{% endif %}</div>
           {% if bell.rows %}
-          <ul class="bell-list">
-            {% for it in bell.rows %}
-            <li class="{{ 'unread' if it.unread }}"><a href="{{ it.url }}"><span class="bell-ico">{{ icon(it.icon) }}</span><span class="bell-txt"><b>{{ it.title }}</b>{% if it.body %}<span>{{ it.body }}</span>{% endif %}{% if it.ago %}<small>{{ it.ago }}</small>{% endif %}</span></a></li>
+          <div class="bell-list">
+            {% for g, items in bell.rows|groupby_keep("group") %}
+            <h4 class="bell-group">{{ g }}</h4>
+            <ul>
+            {% for it in items %}
+            <li class="{{ 'unread' if it.unread }}"><a href="{{ it.url }}">{% if it.img %}<img class="bell-img" src="{{ it.img }}" alt="" loading="lazy" width="52" height="52">{% else %}<span class="bell-ico">{{ icon(it.icon) }}</span>{% endif %}<span class="bell-txt"><b>{{ it.title }}</b>{% if it.body %}<span>{{ it.body }}</span>{% endif %}{% if it.ago %}<small>{{ it.ago }}</small>{% endif %}</span>{% if it.unread %}<i class="bell-dot" aria-label="Sin leer"></i>{% endif %}</a></li>
             {% endfor %}
-          </ul>
+            </ul>
+            {% endfor %}
+          </div>
           {% else %}<p class="bell-empty small muted">No tienes notificaciones.</p>{% endif %}
         </div>
       </details>
@@ -46,6 +51,7 @@
           <div class="who"><b>{{ current_user.name }}</b><div class="small muted">{{ current_user.email }}</div></div>
           <a href="{{ url_for('account') }}">Mi cuenta</a>
           {% if not current_user.is_admin %}<a href="{{ url_for('onboarding') }}">Editar perfil</a>{% endif %}
+          {% for mc in mod_campaigns(current_user) %}<a href="{{ url_for('admin_campaign_review', cid=mc.id) }}"><span class="mod-tag">MOD</span> {{ mc.song }}</a>{% endfor %}
           <a href="{{ url_for('ranking_page') }}">Ranking</a>
           <a href="{{ url_for('notification_settings') }}">Notificaciones</a>
           {% if current_user.is_admin %}

@@ -15,6 +15,9 @@
   </div>
   {% endif %}
   {% endfor %}
+  {% if i_mod %}
+  <a class="hub-mod-btn" href="{{ url_for('admin_campaign_review', cid=camp.id) }}"><span class="mod-tag">MOD</span> Panel de moderador</a>
+  {% endif %}
   {% if camp.whatsapp_url %}
   <a class="hub-wa-btn" href="{{ camp.whatsapp_url }}" target="_blank" rel="noopener">
     {% include "_wa_icon.html" %}

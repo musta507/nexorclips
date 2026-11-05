@@ -44,7 +44,7 @@
       {% set lvl, bot = bots[s.id] %}
       <article class="cr-card" id="clip-{{ s.id }}" data-card tabindex="-1">
         <header class="cr-head">
-          <div class="who-cell">{{ av(s.user) }}<div class="cr-who"><b>{% if s.author %}@{{ s.author }}{% else %}{{ s.user.name }}{% endif %}</b><small class="muted">{{ s.created_at|date }} · #{{ s.id }} · <a class="link" href="{{ url_for('admin_clipper', uid=s.user_id) }}">{{ s.user.name }}</a> · {{ s.campaign.song }}</small></div></div>
+          <div class="who-cell">{{ av(s.user) }}<div class="cr-who"><b>{% if s.author %}@{{ s.author }}{% else %}{{ s.user.name }}{% endif %}</b><small class="muted">{{ s.created_at|date }} · #{{ s.id }} · {% if admin_can('admin_clipper') %}<a class="link" href="{{ url_for('admin_clipper', uid=s.user_id) }}">{{ s.user.name }}</a>{% else %}{{ s.user.name }}{% endif %} · {{ s.campaign.song }}</small></div></div>
           <div class="cr-actions">
             {% if nxt %}<a class="btn sm soft cr-next" href="#clip-{{ nxt.id }}" data-next>Revisar el siguiente</a>{% endif %}
             {% if tab != 'contando' %}
@@ -71,9 +71,10 @@
             <details class="cr-more">
               <summary class="btn sm soft" aria-label="Más opciones">···</summary>
               <div class="cr-pop cr-menu">
-                <a href="{{ url_for('admin_clipper', uid=s.user_id) }}">Ficha del clipper</a>
-                <a href="{{ url_for('admin_chat', uid=s.user_id) }}">Escribirle</a>
-                <a href="{{ url_for('admin_campaign', cid=s.campaign_id) }}">Ver la campaña</a>
+                {% if admin_can('admin_clipper') %}<a href="{{ url_for('admin_clipper', uid=s.user_id) }}">Ficha del clipper</a>{% endif %}
+                {% if admin_can('admin_chat') %}<a href="{{ url_for('admin_chat', uid=s.user_id) }}">Escribirle</a>{% endif %}
+                {% if admin_can('admin_campaign') %}<a href="{{ url_for('admin_campaign', cid=s.campaign_id) }}">Ver la campaña</a>{% endif %}
+                <a href="{{ s.url }}" target="_blank" rel="noopener">Abrir publicación</a>
                 {% if s.flag_list %}<form method="post" action="{{ url_for('admin_review', sid=s.id, accion='quitar_avisos') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button>Quitar avisos</button></form>{% endif %}
               </div>
             </details>
@@ -89,6 +90,9 @@
           <div class="cr-video">
             {% if player %}<iframe src="{{ player }}" title="Vídeo del clip" loading="lazy" allow="accelerometer; gyroscope; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
             {% else %}<a class="cr-novideo" href="{{ s.url }}" target="_blank" rel="noopener">{{ icon(s.platform) }}<span>Ver en {{ PLATFORMS[s.platform] }}</span></a>{% endif %}
+            {% if s.stats_status == 'enviado' and stats_embed(s) %}
+            <div class="cr-stats-video"><b>📊 Estadísticas que subió el clipper</b><iframe src="{{ stats_embed(s) }}" title="Vídeo de estadísticas" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
+            {% endif %}
           </div>
           <div class="cr-stats">
             {% set g = growth[s.id] %}
@@ -128,12 +132,12 @@
   </div>
 </div>
 
-<div class="cr-bar">
+{% if not acting_as_mod() %}<div class="cr-bar">
   <span class="cr-bar-name">{% if camp %}{{ camp.song }} - {{ camp.artist }}{% else %}Todas las campañas{% endif %}</span>
   <form method="post" action="{{ url_for('admin_refresh') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">↻ Actualizar vistas</button></form>
   {% if camp %}
   <a class="btn sm soft" href="{{ url_for('admin_campaign_form', cid=camp.id) }}">{{ icon("doc") }} Editar</a>
   <a class="btn sm cr-recharge" href="{{ url_for('admin_campaign', cid=camp.id) }}#presupuesto">{{ icon("cash") }} Recargar</a>
   {% endif %}
-</div>
+</div>{% endif %}
 {% endblock %}

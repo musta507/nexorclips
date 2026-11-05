@@ -1,0 +1,51 @@
+{# Mis clips → Estadísticas: los clips que llegaron al mínimo y piden la grabación de sus estadísticas #}
+<div class="stats-help card tight">
+  <b>Cómo grabar tus estadísticas</b>
+  <ol class="small">
+    <li>Abre el vídeo en la app (TikTok, Instagram o YouTube) y entra en <b>Estadísticas / Analíticas</b>.</li>
+    <li>Graba la pantalla y baja hasta <b>Espectadores → Ubicaciones / Países</b>. Que se vea que es tu cuenta y este vídeo.</li>
+    <li>Súbelo aquí. Máximo 60 segundos y 100 MB.</li>
+  </ol>
+</div>
+
+{% if subs %}
+<h3 class="stats-h">Pendientes</h3>
+<div class="stats-list">
+  {% for s in subs %}
+  {% set due = stats_due(s) %}{% set left = ((due - now).total_seconds() / 3600)|round(0, 'floor')|int %}
+  <article class="card stats-item" id="st{{ s.id }}">
+    <div class="stats-top">
+      <span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>
+      <div class="stats-meta"><b>{{ s.campaign.song }}</b><span class="small muted">{{ s.views|num }} vistas · <a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver clip</a></span></div>
+      <span class="stats-left{% if left < 24 %} hot{% endif %}">{% if left > 0 %}Te quedan {{ left }} h{% else %}Último momento{% endif %}</span>
+    </div>
+    {% if s.campaign.stats_note %}<p class="stats-note small"><b>Qué se pide:</b> {{ s.campaign.stats_note }}</p>{% endif %}
+    <div class="stats-up" data-bunny-upload data-csrf="{{ csrf_token() }}" data-prepare="{{ url_for('stats_video_prepare', sid=s.id) }}" data-done="{{ url_for('stats_video_done', sid=s.id) }}" data-title="Estadísticas clip {{ s.id }}" data-max="{{ 100 * 1024 * 1024 }}">
+      <label class="btn soft sm file-btn">{{ icon("plus") }} Elegir vídeo<input type="file" accept="video/*" data-file></label>
+      <button type="button" class="btn accent sm" data-start>Subir vídeo</button>
+      <div class="up-bar" data-bar hidden><span></span></div>
+      <span class="small muted" data-msg>{% if s.stats_status == 'subiendo' %}La subida anterior no terminó. Vuelve a subirlo.{% endif %}</span>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<div class="table-card"><div class="empty"><h3>No tienes estadísticas pendientes</h3><p class="muted">Cuando un clip llegue al mínimo en una campaña que las pida, aparecerá aquí. Tendrás {{ STATS_HOURS }} h para subir el vídeo.</p></div></div>
+{% endif %}
+
+{% if stats_sent %}
+<h3 class="stats-h">Enviados</h3>
+<div class="table-card"><div class="table-scroll"><table class="rt">
+  <thead><tr><th>Enviado</th><th>Campaña</th><th class="r">Vistas</th><th>Estado del clip</th></tr></thead>
+  <tbody>
+  {% for s in stats_sent %}{% set stg = clip_stage(s) %}
+  <tr>
+    <td data-label="Enviado" class="small muted">{{ (s.stats_at or s.created_at)|date }}</td>
+    <td data-label="Campaña">{{ s.campaign.song }}<div class="small"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver clip</a></div></td>
+    <td data-label="Vistas" class="r tnum">{{ s.views|num }}</td>
+    <td data-label="Estado del clip"><span class="status {{ 'pendiente' if stg in ('contando', 'revisar', 'estadisticas') else s.status }}">{{ STAGE_LABELS[stg] }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div></div>
+{% endif %}

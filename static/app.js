@@ -681,19 +681,23 @@ function avisosPush() {
 
 // =============================================================== formación: subir vídeo a Bunny (directo desde el navegador)
 function subidaVideo() {
-  var box = document.querySelector("[data-bunny-upload]");
-  if (!box) return;
+  document.querySelectorAll("[data-bunny-upload]").forEach(function (box) { if (!box.dataset.ready) { box.dataset.ready = "1"; subidaUna(box); } });
+}
+function subidaUna(box) {
   var file = box.querySelector("[data-file]"), start = box.querySelector("[data-start]"), bar = box.querySelector("[data-bar]"),
       fill = bar.querySelector("span"), msg = box.querySelector("[data-msg]");
-  var CHUNK = 16 * 1024 * 1024;
+  var CHUNK = 16 * 1024 * 1024, MAX = parseInt(box.getAttribute("data-max") || "0", 10);
   function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
   function fail(t) { msg.textContent = t; start.disabled = false; }
+  file.addEventListener("change", function () { var f = file.files && file.files[0]; if (f) msg.textContent = f.name; });
   start.addEventListener("click", function () {
     var f = file.files && file.files[0];
     if (!f) { msg.textContent = "Elige primero el vídeo."; return; }
+    if (MAX && f.size > MAX) { msg.textContent = "El vídeo pesa demasiado (máximo " + Math.round(MAX / 1048576) + " MB)."; return; }
+    if (f.type && f.type.indexOf("video/") !== 0) { msg.textContent = "Tiene que ser un vídeo."; return; }
     start.disabled = true; msg.textContent = "Preparando la subida…";
     var fd = new FormData(); fd.append("_csrf", box.getAttribute("data-csrf"));
-    fetch(box.getAttribute("data-prepare"), { method: "POST", body: fd, credentials: "same-origin" })
+    fetch(box.getAttribute("data-prepare"), { method: "POST", body: fd, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) return fail(d.error || "No se pudo preparar la subida.");
@@ -706,11 +710,11 @@ function subidaVideo() {
         x.setRequestHeader("Upload-Metadata", "filetype " + b64(f.type || "video/mp4") + ",title " + b64(box.getAttribute("data-title") || f.name));
         x.onload = function () {
           var loc = x.getResponseHeader("Location");
-          if (x.status !== 201 || !loc) return fail("Bunny no aceptó la subida (" + x.status + ").");
+          if (x.status !== 201 || !loc) return fail("No se aceptó la subida (" + x.status + "). Vuelve a intentarlo.");
           loc = new URL(loc, d.endpoint).href;
           bar.hidden = false;
           (function send(offset) {
-            if (offset >= f.size) { fill.style.width = "100%"; msg.textContent = "¡Subido! Bunny lo está procesando (unos minutos)."; return estado(); }
+            if (offset >= f.size) { fill.style.width = "100%"; return terminado(); }
             var p = new XMLHttpRequest();
             p.open("PATCH", loc);
             Object.keys(h).forEach(function (k) { p.setRequestHeader(k, h[k]); });
@@ -725,11 +729,20 @@ function subidaVideo() {
             p.send(f.slice(offset, offset + CHUNK));
           })(0);
         };
-        x.onerror = function () { fail("No se pudo conectar con Bunny."); };
+        x.onerror = function () { fail("No se pudo conectar con el servidor de vídeos."); };
         x.send(null);
       })
       .catch(function () { fail("No se pudo preparar la subida."); });
   });
+  function terminado() {
+    var done = box.getAttribute("data-done");
+    if (!done) { msg.textContent = "¡Subido! Bunny lo está procesando (unos minutos)."; return estado(); }
+    msg.textContent = "¡Subido! Guardando…";
+    var fd = new FormData(); fd.append("_csrf", box.getAttribute("data-csrf"));
+    fetch(done, { method: "POST", body: fd, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
+      .then(function (r) { if (!r.ok) throw 0; msg.textContent = "Enviado. Ya está en revisión."; setTimeout(function () { location.reload(); }, 900); })
+      .catch(function () { fail("Se subió, pero no se pudo guardar. Recarga la página."); });
+  }
   function estado() {
     var t = setInterval(function () {
       fetch(box.getAttribute("data-status"), { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
