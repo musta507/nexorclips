@@ -19,7 +19,7 @@
   <div class="cr-main">
     <div class="cr-top">
       <nav class="seg" aria-label="Bandeja">
-        {% for t, label in [("revisar", "Por revisar"), ("contando", "Contando vistas"), ("apelaciones", "Apelaciones")] %}
+        {% for t, label in [("revisar", "Por revisar"), ("contando", "Contando vistas"), ("apelaciones", "Apelaciones"), ("aprobados", "Aprobados"), ("rechazados", "Rechazados")] %}
         <a class="{% if tab == t %}on{% endif %}" href="{{ url_for(rev_ep, **(dict(tab=t, cid=cid) if in_camp else dict(tab=t, c=cid or None))) }}">{{ label }} <b class="tnum">{{ n[t] }}</b></a>
         {% endfor %}
       </nav>
@@ -30,7 +30,7 @@
       </form>
     </div>
     <div class="cr-title">
-      {% if f == "atrasados" %}<span class="cr-late-t">{{ icon("clock") }} Atrasados</span>{% else %}<b>{{ filters[f][0] if f != "todos" else {"revisar": "Por revisar", "contando": "Contando vistas", "apelaciones": "Apelaciones"}[tab] }}</b>{% endif %}
+      {% if f == "atrasados" %}<span class="cr-late-t">{{ icon("clock") }} Atrasados</span>{% else %}<b>{{ filters[f][0] if f != "todos" else {"revisar": "Por revisar", "contando": "Contando vistas", "apelaciones": "Apelaciones", "aprobados": "Aprobados", "rechazados": "Rechazados"}[tab] }}</b>{% endif %}
       <span class="muted tnum">{{ total }}</span>
       <span class="small muted push">Atajos: ← → cambiar de clip · A aprobar · R rechazar</span>
     </div>
@@ -47,7 +47,9 @@
           <div class="who-cell">{{ av(s.user) }}<div class="cr-who"><b>{% if s.author %}@{{ s.author }}{% else %}{{ s.user.name }}{% endif %}</b><small class="muted">{{ s.created_at|date }} · #{{ s.id }} · {% if admin_can('admin_clipper') %}<a class="link" href="{{ url_for('admin_clipper', uid=s.user_id) }}">{{ s.user.name }}</a>{% else %}{{ s.user.name }}{% endif %} · {{ s.campaign.song }}</small></div></div>
           <div class="cr-actions">
             {% if nxt %}<a class="btn sm soft cr-next" href="#clip-{{ nxt.id }}" data-next>Revisar el siguiente</a>{% endif %}
-            {% if tab != 'contando' %}
+            {% if tab in ('aprobados', 'rechazados') %}
+              <span class="cr-wait">{% if s.status == 'aprobado' %}Aprobado · {{ s.earned|money }}{% else %}Rechazado: {{ s.reject_reason or "—" }}{% endif %}</span>
+            {% elif tab != 'contando' %}
               {% set d, hh = (h // 24)|int, (h % 24)|int %}
               {% if h >= sla %}<span class="cr-late">{{ icon("clock") }} {% if d %}{{ d }}d {% endif %}{{ hh }}h atrasado</span>
               {% else %}<span class="cr-wait">{% if d %}{{ d }}d {% endif %}{{ hh }}h esperando</span>{% endif %}
@@ -56,7 +58,7 @@
               <form method="post" action="{{ url_for('admin_review', sid=s.id, accion='apelacion_rechazar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm cr-no" data-key-reject>Mantener rechazo</button></form>
               <form method="post" action="{{ url_for('admin_review', sid=s.id, accion='apelacion_aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="approve" value="1"><button class="btn sm cr-yes" data-key-approve{% if not account_verified(s) %} disabled title="La cuenta no está verificada en esta campaña"{% endif %}>Darle la razón y aprobar</button></form>
             {% else %}
-              <details class="cr-reject">
+              {% if s.status != 'rechazado' %}<details class="cr-reject">
                 <summary class="btn sm cr-no" data-key-reject>Rechazar</summary>
                 <form method="post" action="{{ url_for('admin_review', sid=s.id, accion='rechazar') }}" class="cr-pop form-stack">
                   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -65,8 +67,8 @@
                   <input name="reason" placeholder="Mensaje para el clipper (opcional)" aria-label="Mensaje para el clipper">
                   <button class="btn sm cr-no">Rechazar clip</button>
                 </form>
-              </details>
-              <form method="post" action="{{ url_for('admin_review', sid=s.id, accion='aprobar') }}"{% if s.flag_list %} data-confirm="Este clip tiene avisos. ¿Aprobarlo igualmente?"{% endif %}><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm cr-yes" data-key-approve{% if not account_verified(s) %} disabled title="La cuenta no está verificada en esta campaña"{% endif %}>Aprobar</button></form>
+              </details>{% endif %}
+              {% if s.status != 'aprobado' %}<form method="post" action="{{ url_for('admin_review', sid=s.id, accion='aprobar') }}"{% if s.flag_list %} data-confirm="Este clip tiene avisos. ¿Aprobarlo igualmente?"{% endif %}><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm cr-yes" data-key-approve{% if not account_verified(s) %} disabled title="La cuenta no está verificada en esta campaña"{% endif %}>Aprobar</button></form>{% endif %}
             {% endif %}
             <details class="cr-more">
               <summary class="btn sm soft" aria-label="Más opciones">···</summary>
@@ -75,6 +77,7 @@
                 {% if admin_can('admin_chat') %}<a href="{{ url_for('admin_chat', uid=s.user_id) }}">Escribirle</a>{% endif %}
                 {% if admin_can('admin_campaign') %}<a href="{{ url_for('admin_campaign', cid=s.campaign_id) }}">Ver la campaña</a>{% endif %}
                 <a href="{{ s.url }}" target="_blank" rel="noopener">Abrir publicación</a>
+                {% if s.status == 'aprobado' and admin_can('admin_clipper') %}<form method="post" action="{{ url_for('admin_review', sid=s.id, accion='visitas') }}" class="inline" style="padding:6px 10px;gap:6px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input name="views" type="number" min="0" value="{{ s.views or 0 }}" style="width:110px" aria-label="Vistas"><button class="btn sm soft">Corregir vistas</button></form>{% endif %}
                 {% if s.flag_list %}<form method="post" action="{{ url_for('admin_review', sid=s.id, accion='quitar_avisos') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button>Quitar avisos</button></form>{% endif %}
               </div>
             </details>
@@ -84,6 +87,7 @@
         {% if tab == 'apelaciones' %}
         <div class="cr-appeal"><span class="small"><b>Se rechazó por:</b> {{ s.reject_reason or "—" }}</span><span class="small"><b>El clipper dice:</b> {{ s.appeal_text }}</span></div>
         {% endif %}
+        {% if clip_stage(s) == 'estadisticas' %}<div class="cr-appeal warn"><span class="small">Esperando la prueba de estadísticas del clipper{% if s.stats_reason %} (le pediste otra: {{ s.stats_reason }}){% endif %}. Hasta que la suba no se puede aprobar.</span></div>{% endif %}
         {% if not account_verified(s) %}<div class="cr-appeal warn"><span class="small">La cuenta {% if s.author %}@{{ s.author }} {% endif %}no está verificada en esta campaña: no se puede aprobar hasta que lo esté.</span></div>{% endif %}
 
         <div class="cr-body">
@@ -91,7 +95,10 @@
             {% if player %}<iframe src="{{ player }}" title="Vídeo del clip" loading="lazy" allow="accelerometer; gyroscope; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
             {% else %}<a class="cr-novideo" href="{{ s.url }}" target="_blank" rel="noopener">{{ icon(s.platform) }}<span>Ver en {{ PLATFORMS[s.platform] }}</span></a>{% endif %}
             {% if s.stats_status == 'enviado' and stats_embed(s) %}
-            <div class="cr-stats-video"><b>📊 Estadísticas que subió el clipper</b><iframe src="{{ stats_embed(s) }}" title="Vídeo de estadísticas" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
+            <div class="cr-stats-video"><b>📊 Estadísticas que subió el clipper</b><iframe src="{{ stats_embed(s) }}" title="Vídeo de estadísticas" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+              {% if s.status == 'pendiente' %}<details class="cr-redo"><summary class="small link">Pedir otra grabación</summary>
+                <form method="post" action="{{ url_for('admin_review', sid=s.id, accion='pedir_estadisticas') }}" class="form-stack"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                  <input name="reason" maxlength="300" required placeholder="Qué corregir (p. ej. no se ven los países)" aria-label="Qué corregir"><button class="btn sm soft">Pedir otra</button></form></details>{% endif %}</div>
             {% endif %}
           </div>
           <div class="cr-stats">

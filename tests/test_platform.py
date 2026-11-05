@@ -1709,6 +1709,9 @@ def test_review_cards_filters_and_video_copy(monkeypatch):
     monkeypatch.setattr(A.requests, "put", lambda *a_, **k: type("P", (), {"status_code": 200})())
     with A.app.app_context():
         assert A.copy_review_videos() == 2
+        for s_ in A.Submission.query.all():          # la prueba de estadísticas ya está subida
+            s_.stats_status = "enviado"
+        A.db.session.commit()
         s2 = get(A.Submission, sid2)
         assert s2.video_guid == "g-9" and s2.video_status == "listo"
     assert "iframe.mediadelivery.net/embed/1/g-9" in admin.get("/admin/clips").get_data(as_text=True)
@@ -1765,7 +1768,7 @@ def test_stats_video_required_blocks_approval_and_expires(monkeypatch):
     monkeypatch.setattr(A, "BUNNY_LIBRARY_ID", "lib")
     monkeypatch.setattr(A, "BUNNY_API_KEY", "key")
     monkeypatch.setattr(A, "bunny_call", lambda m, p, **k: (True, 200, {"guid": "st-1"}))
-    cid = make_campaign(stats_required=True, stats_note="60 % España")
+    cid = make_campaign(stats_note="60 % España")
     admin = client_for("admin@test.com")
     a = client_for("a@test.com", tiktok="ana")
     post(a, f"/campana/{cid}", url=tt("ana", 1))
@@ -1795,6 +1798,7 @@ def test_stats_video_required_blocks_approval_and_expires(monkeypatch):
     with A.app.app_context():
         s2 = A.Submission.query.filter(A.Submission.id != sid).one()
         s2.views, s2.review_since, s2.stats_status = 50000, datetime.utcnow() - timedelta(hours=80), "pedido"
+        s2.stats_asked_at = datetime.utcnow() - timedelta(hours=80)
         A.db.session.commit()
         assert A.auto_review(s2) == "rechazado"
         assert s2.reject_code == "sin_estadisticas"
@@ -1886,3 +1890,61 @@ def test_home_dashboard_steps_week_clips_and_ranking():
     assert "Clips de la semana" in page and "10,00" in page
     assert "Tu puesto" in page
     assert "Neón" in a.get("/campanas").get_data(as_text=True)
+
+
+def test_stats_redo_request_and_fresh_deadline(monkeypatch):
+    monkeypatch.setattr(A, "BUNNY_LIBRARY_ID", "lib")
+    monkeypatch.setattr(A, "BUNNY_API_KEY", "key")
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        s_ = A.Submission.query.one()
+        s_.views, s_.review_since = 50000, datetime.utcnow() - timedelta(days=10)   # ya estaba en revisión antes del cambio
+        A.db.session.commit()
+        sid = s_.id
+        assert A.auto_review(s_) == ""                 # no se rechaza de golpe: el plazo empieza ahora
+        assert s_.stats_status == "pedido" and s_.stats_asked_at
+        s_.stats_status, s_.stats_guid = "enviado", "g"
+        A.db.session.commit()
+    post(admin, f"/admin/envio/{sid}/pedir_estadisticas", reason="No se ven los países")
+    with A.app.app_context():
+        s_ = A.db.session.get(A.Submission, sid)
+        assert s_.stats_status == "pedido" and s_.stats_reason == "No se ven los países" and s_.status == "pendiente"
+    assert "No se ven los países" in a.get("/mis-clips?tab=estadisticas").get_data(as_text=True)
+
+
+def test_campaign_support_chat_with_mods():
+    cid = make_campaign(song="Neón")
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    mod = client_for("mod@test.com", tiktok="modo")
+    out = client_for("fuera@test.com", verify=False)
+    _auto_accept()
+    post(admin, f"/admin/campana/{cid}/mods", act="poner", email="mod@test.com")
+    assert "Soporte" in a.get(f"/campana/{cid}").get_data(as_text=True)
+    post(a, f"/campana/{cid}/soporte", body="¿Vale el audio original?")
+    assert out.post(f"/campana/{cid}/soporte", data={"_csrf": "t", "body": "hola"}).status_code == 403
+    with A.app.app_context():
+        uid = A.User.query.filter_by(email="a@test.com").one().id
+        mod_id = A.User.query.filter_by(email="mod@test.com").one().id
+        assert A.Notice.query.filter_by(user_id=mod_id, kind="mensaje").count() == 1
+        assert A.pending_by_campaign()[cid]["support"] == 1
+    page = mod.get(f"/admin/campana/{cid}/soporte?u={uid}").get_data(as_text=True)
+    assert "¿Vale el audio original?" in page
+    post(mod, f"/admin/campana/{cid}/soporte", u=str(uid), body="Sí, usa el original")
+    with A.app.app_context():
+        assert A.pending_by_campaign().get(cid, {}).get("support", 0) == 0
+        assert A.Notice.query.filter_by(user_id=uid, kind="mensaje").count() == 1
+    hub = a.get(f"/campana/{cid}?soporte=1").get_data(as_text=True)
+    assert "Sí, usa el original" in hub and "MOD" in hub
+    assert admin.get(f"/admin/campana/{cid}/soporte").status_code == 200
+
+
+def test_admin_sees_campaign_as_outsider_unless_hub():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    page = admin.get(f"/campana/{cid}").get_data(as_text=True)
+    assert "hub-ch" not in page and "Ver el hub" in page
+    assert "hub-ch" in admin.get(f"/campana/{cid}?hub=1").get_data(as_text=True)

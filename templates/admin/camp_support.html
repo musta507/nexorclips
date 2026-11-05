@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon, av %}
+{% block title %}Soporte · {{ camp.song }}{% endblock %}
+{% block content %}
+{% include "admin/_camp_nav.html" %}
+<div class="sup-admin">
+  <aside class="card tight sup-list">
+    <b class="small muted">Conversaciones</b>
+    {% for t in threads %}
+    <a class="sup-item{% if who and t.user.id == who.id %} on{% endif %}" href="{{ url_for('admin_campaign_support', cid=camp.id, u=t.user.id) }}">
+      {{ av(t.user) }}<span><b>{{ t.user.name }}</b><small>{{ t.last.body|truncate(48) }}</small></span>
+      {% if t.unread %}<span class="hub-count hot">{{ t.unread }}</span>{% else %}<small class="muted">{{ t.last.created_at|ago }}</small>{% endif %}
+    </a>
+    {% else %}<p class="small muted" style="margin:8px 0 0">Aún no ha escrito nadie al soporte de esta campaña.</p>{% endfor %}
+  </aside>
+  <section class="sup-main">
+    {% if who %}
+    <div class="card tight row-head">{{ av(who) }} <b>{{ who.name }}</b>{% if admin_can('admin_chat') %} <a class="link small push" href="{{ url_for('admin_chat', uid=who.id) }}">Abrir su chat general</a>{% endif %}</div>
+    <div class="card sup-thread">
+      {% for m in msgs %}
+      {% set mine = m.from_staff %}
+      <div class="msg {{ 'mine' if mine else 'theirs' }}">
+        {% if mine %}<span class="small muted sup-who">{{ m.sender.name if m.sender else "Equipo" }} {% if m.sender_id in mod_ids %}<span class="mod-tag">MOD</span>{% else %}<span class="mod-tag">EQUIPO</span>{% endif %}</span>{% endif %}
+        <div class="bubble">{{ m.body }}</div>
+        <span class="small muted">{{ m.created_at|ago }}</span>
+      </div>
+      {% endfor %}
+      <span id="fin"></span>
+    </div>
+    <form method="post" class="card hub-compose sup-form"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="u" value="{{ who.id }}">
+      <textarea name="body" rows="2" maxlength="2000" required placeholder="Responde a {{ who.name }}… (lo verá como respuesta del equipo de la campaña)" aria-label="Respuesta"></textarea>
+      <button class="btn accent sm">Responder</button>
+    </form>
+    {% else %}
+    <div class="table-card"><div class="empty"><h3>Elige una conversación</h3><p class="muted">Aquí escriben los clippers de esta campaña. Las responden los admins y los mods.</p></div></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

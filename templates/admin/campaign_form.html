@@ -83,12 +83,9 @@
 {% endfor %}</textarea>
             <span class="hint">«Nombre | enlace». Si pones solo el enlace, el nombre y el icono se ponen solos.</span></div>
           <input type="hidden" name="stats_form" value="1">
-          <div class="field">
-            <label class="check"><input type="checkbox" name="stats_required" {% if camp.stats_required %}checked{% endif %}{% if not bunny_ready() %} disabled{% endif %}> Pedir vídeo de estadísticas cuando un clip llegue al mínimo</label>
-            <span class="hint">{% if bunny_ready() %}El clipper tiene {{ STATS_HOURS }} h para subir una grabación de las estadísticas del vídeo (países). Si no lo sube, el clip se rechaza solo.{% else %}Necesita Bunny configurado (BUNNY_LIBRARY_ID y BUNNY_API_KEY).{% endif %}</span>
-          </div>
-          <div class="field"><label for="stats_note">Qué países se piden (opcional)</label>
+          <div class="field"><label for="stats_note">Prueba de estadísticas: qué países se piden (opcional)</label>
             <input id="stats_note" name="stats_note" maxlength="300" value="{{ camp.stats_note or '' }}" placeholder="Ej.: mínimo 60 % de España y LATAM">
+            <span class="hint">La prueba es obligatoria en todas las campañas: el clipper la sube al llegar al mínimo. Esto solo añade qué países pide este creador.</span>
           </div>
         </fieldset>
 

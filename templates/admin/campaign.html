@@ -35,39 +35,4 @@
   </div>
 </div>
 
-<div class="form-stack">
-  <nav class="seg" aria-label="Filtrar clips">
-    {% for f, label in [("", "Todos"), ("pendiente", "Pendientes"), ("avisos", "Con avisos"), ("aprobado", "Aprobados"), ("rechazado", "Rechazados")] %}
-      <a class="{% if filt == f %}on{% endif %}" href="{{ url_for('admin_campaign', cid=camp.id, estado=f) }}">{{ label }}</a>
-    {% endfor %}
-  </nav>
-  <div class="table-card">
-    {% if subs %}
-    <div class="table-scroll"><table class="rt">
-      <thead><tr><th>Clipper</th><th>Clip</th><th>Vistas</th><th class="r">Gana</th><th>Estado</th><th>Acción</th></tr></thead>
-      <tbody>
-      {% for s in subs %}
-      <tr{% if s.flag_list %} class="row-flag"{% endif %}>
-        <td data-label="Clipper">{{ av(s.user) }} <b>{{ s.user.name }}</b>{% if s.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">{{ s.created_at|ago }}</div></td>
-        <td data-label="Clip"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">{{ PLATFORMS[s.platform] }}</a>{% include "admin/_flags.html" %}</td>
-        <td data-label="Vistas">
-          <form class="inline" method="post" action="{{ url_for('admin_review', sid=s.id, accion='visitas') }}" data-confirm="¿Corregir las vistas de este clip a mano? Su dinero se recalculará.">
-            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-            <input id="views-{{ s.id }}" name="views" value="{{ s.views }}" style="width:110px" inputmode="numeric" aria-label="Vistas" title="Puedes corregir las vistas a mano">
-            <button class="btn sm soft" aria-label="Guardar vistas">✓</button>
-          </form>
-          {% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}
-        </td>
-        <td data-label="Gana" class="r tnum">{% if s.status == 'aprobado' %}{{ s.earned|money }}{% elif s.status == 'pendiente' %}<span class="muted">~{{ st.estimates.get(s.id, 0)|money }}</span>{% else %}—{% endif %}</td>
-        <td data-label="Estado">{% set stg = clip_stage(s) %}<span class="status {{ s.status }}">{{ STAGE_LABELS[stg] }}</span>{% if s.appeal_status == 'pendiente' %} <span class="flag">Apelado</span>{% endif %}{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
-        <td data-label="Acción">{% include "admin/_review_buttons.html" %}</td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table></div>
-    {% else %}
-    <div class="empty"><h3>No hay clips aquí</h3><p class="muted">Cuando los clippers envíen vídeos, aparecerán en esta lista.</p></div>
-    {% endif %}
-  </div>
-</div>
 {% endblock %}

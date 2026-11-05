@@ -1472,3 +1472,29 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .hm-camps.n1 .hm-camp-card{padding:16px}.hm-camps.n1 .hm-cover{width:80px;height:80px}
 .hm-cbtn{flex:none}
 @media (max-width:640px){.hm-camps.n1 .hm-cbtn{display:none}}
+/* pie de página siempre abajo aunque la página tenga poco contenido */
+body.has-tabs{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+body.has-tabs>main.wrap{flex:1 0 auto;width:100%}
+body.has-tabs>.site-footer{flex:none}
+.stats-help-top{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.stats-guide{width:min(640px,calc(100vw - 32px));max-height:86vh;overflow:auto}
+.sg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.sg-h{font-size:15px;margin:16px 0 8px}.sg-h.ok{color:var(--money-ink)}.sg-h.no{color:#d92d20}
+.sg-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:14px}
+.sg-list li{display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-bottom:1px solid var(--line)}.sg-list li:last-child{border:0}
+.sg-list b{font-size:14px}.sg-list span{font-size:13px;color:var(--muted)}
+.stats-note.redo{background:#fff5f5;color:#9b2c2c}
+.cr-redo{padding:8px 12px}.cr-redo form{margin-top:8px}
+.staff-note{background:#eef4ff;color:#1e3a8a;border-radius:12px;padding:9px 14px;margin-bottom:14px}
+.hub-count.hot{background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-weight:700}
+.sup-thread{padding:16px;display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto}
+.sup-thread .msg.mine{align-self:flex-end;align-items:flex-end}
+.sup-who{display:flex;align-items:center;gap:6px}
+.sup-form{display:flex;gap:10px;align-items:flex-end;margin-top:10px;padding:12px}.sup-form textarea{flex:1}
+.sup-admin{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start}
+.sup-list{display:flex;flex-direction:column;gap:2px}
+.sup-item{display:flex;align-items:center;gap:10px;padding:9px;border-radius:12px;color:inherit;text-decoration:none}
+.sup-item:hover,.sup-item.on{background:var(--soft)}
+.sup-item>span:nth-of-type(2){display:flex;flex-direction:column;min-width:0;flex:1}.sup-item small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+@media (max-width:800px){.sup-admin{grid-template-columns:1fr}}

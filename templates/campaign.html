@@ -5,9 +5,11 @@
 {% if not member and accepted %}{% set member = {"status": "aceptada"} %}{% endif %}
 {% set ctab = 'resumen' %}{# las secciones (normas, recursos, comunidad…) solo existen dentro del hub de los aceptados #}
 <a class="back" href="{{ url_for('campaigns_page') }}">← Campañas</a>
+{% if current_user.is_admin %}<div class="staff-note small">{% if staff_view %}Estás viendo el hub de la campaña como equipo. <a class="link" href="{{ url_for('campaign', cid=camp.id) }}">Verla como un clipper de fuera</a>{% else %}Estás viendo la campaña como un clipper que aún no está dentro. <a class="link" href="{{ url_for('campaign', cid=camp.id, hub=1) }}">Ver el hub (secciones)</a> · <a class="link" href="{{ url_for('admin_campaign', cid=camp.id) }}">Panel de la campaña</a>{% endif %}</div>{% endif %}
 {% set open_camp = camp.status == 'activa' and not st.exhausted %}
-{% if hub %}<div class="hub">{% include "_hub_side.html" %}<section class="hub-main">{% if chan %}{% include "_hub_channel.html" %}{% endif %}{% endif %}
-{% if not chan %}
+{% set sup_open = support and support.open %}
+{% if hub %}<div class="hub">{% include "_hub_side.html" %}<section class="hub-main">{% if sup_open %}{% include "_hub_support.html" %}{% elif chan %}{% include "_hub_channel.html" %}{% endif %}{% endif %}
+{% if not chan and not sup_open %}
 <div class="cdetail">
   <header class="album">
     {% set _t, lqip = cover_meta(camp) %}

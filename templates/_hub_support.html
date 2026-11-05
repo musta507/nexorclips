@@ -1,0 +1,21 @@
+{# Soporte de la campaña: chat privado del clipper con el equipo y los mods de esta campaña #}
+<div class="hub-top card tight"><b>💬 Soporte de {{ camp.song }}</b></div>
+<p class="small muted hub-note">Escribe aquí tus dudas sobre esta campaña. Te responde el equipo o un mod de la campaña. Para pagos, Whop o tu cuenta, usa el <a class="link" href="{{ url_for('support') }}">chat general</a>.</p>
+<div class="card sup-thread">
+  {% for m in support.msgs %}
+  {% set mine = not m.from_staff %}
+  <div class="msg {{ 'mine' if mine else 'theirs' }}">
+    {% if not mine %}<span class="small muted sup-who">{% if m.sender %}{{ m.sender.name if m.sender_id in mod_ids_all else "Equipo " ~ APP_NAME }}{% else %}Equipo {{ APP_NAME }}{% endif %} {% if m.sender_id in mod_ids_all %}<span class="mod-tag">MOD</span>{% else %}<span class="mod-tag">EQUIPO</span>{% endif %}</span>{% endif %}
+    <div class="bubble">{{ m.body }}</div>
+    <span class="small muted">{{ m.created_at|ago }}</span>
+  </div>
+  {% else %}
+  <div class="empty" style="padding:28px 10px"><h3>¿Tienes alguna duda de la campaña?</h3><p class="muted">Pregunta lo que necesites: normas, audios, por qué te rechazaron un clip…</p></div>
+  {% endfor %}
+  <span id="fin"></span>
+</div>
+<form method="post" action="{{ url_for('campaign_support_send', cid=camp.id) }}" class="card hub-compose sup-form">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <textarea name="body" rows="2" maxlength="2000" required placeholder="Escribe tu mensaje…" aria-label="Mensaje"></textarea>
+  <button class="btn accent sm">Enviar</button>
+</form>

@@ -1,12 +1,37 @@
 {# Mis clips → Estadísticas: los clips que llegaron al mínimo y piden la grabación de sus estadísticas #}
 <div class="stats-help card tight">
-  <b>Cómo grabar tus estadísticas</b>
-  <ol class="small">
-    <li>Abre el vídeo en la app (TikTok, Instagram o YouTube) y entra en <b>Estadísticas / Analíticas</b>.</li>
-    <li>Graba la pantalla y baja hasta <b>Espectadores → Ubicaciones / Países</b>. Que se vea que es tu cuenta y este vídeo.</li>
-    <li>Súbelo aquí. Máximo 60 segundos y 100 MB.</li>
-  </ol>
+  <div class="stats-help-top">
+    <div><b>Prueba de estadísticas</b><p class="small muted" style="margin:2px 0 0">Cuando un clip llega al mínimo, graba sus estadísticas y súbela aquí. Tienes {{ STATS_HOURS }} h o el clip no cobra.</p></div>
+    <button type="button" class="btn sm soft" data-open="stats-guide">📖 Cómo hacer la prueba</button>
+  </div>
 </div>
+<dialog class="wd-dialog stats-guide" id="stats-guide" aria-labelledby="sg-title">
+  <div class="sg-head"><h2 id="sg-title">Cómo hacer la prueba</h2><button type="button" class="icon-btn" data-close aria-label="Cerrar">✕</button></div>
+  <h3 class="sg-h ok">✓ Qué tiene que verse</h3>
+  <ul class="sg-list">
+    <li><b>Grábalo con el móvil</b><span>Con la app oficial de la red (en YouTube, la app YouTube Studio), no desde el navegador del ordenador.</span></li>
+    <li><b>Sin cortes, desde antes de abrir la app</b><span>Empieza a grabar la pantalla antes de abrir la app y no pares hasta terminar.</span></li>
+    <li><b>El clip que te pedimos</b><span>El de la lista, no otro de la cuenta.</span></li>
+    <li><b>Entre 1 y 3 minutos</b><span>Lo justo para enseñar el clip, sus estadísticas, las fuentes de tráfico y los países.</span></li>
+    <li><b>Sus estadísticas</b><span>Que se lean las vistas, las fuentes de tráfico y los países de la audiencia.</span></li>
+    <li><b>La fecha visible</b><span>Vale la del propio móvil.</span></li>
+  </ul>
+  <h3 class="sg-h no">✕ Qué la invalida</h3>
+  <ul class="sg-list">
+    <li><b>Cortes o montaje</b><span>Cualquier pausa, corte o edición.</span></li>
+    <li><b>Fotos en vez de vídeo</b><span>Las capturas no valen: tiene que ser una grabación.</span></li>
+    <li><b>Números ilegibles</b><span>Cifras borrosas o pixeladas.</span></li>
+    <li><b>Algo tapando las cifras</b><span>Burbujas, emojis o pegatinas encima de los números.</span></li>
+    <li><b>Otra cuenta</b><span>Tiene que verse la cuenta con la que enviaste el clip.</span></li>
+    <li><b>La misma grabación para varios clips</b><span>Cada clip necesita la suya.</span></li>
+  </ul>
+  <h3 class="sg-h">Qué pasa después</h3>
+  <ul class="sg-list">
+    <li><b>Si está mal grabada</b><span>Te pedimos otra y te decimos qué corregir. El clip sigue vivo.</span></li>
+    <li><b>Si el clip no es legítimo</b><span>Se rechaza y su dinero vuelve a la campaña.</span></li>
+    <li><b>Si no llega a tiempo</b><span>Pasadas {{ STATS_HOURS }} h sin subirla, el clip se rechaza y no cobra.</span></li>
+  </ul>
+</dialog>
 
 {% if subs %}
 <h3 class="stats-h">Pendientes</h3>
@@ -19,6 +44,7 @@
       <div class="stats-meta"><b>{{ s.campaign.song }}</b><span class="small muted">{{ s.views|num }} vistas · <a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver clip</a></span></div>
       <span class="stats-left{% if left < 24 %} hot{% endif %}">{% if left > 0 %}Te quedan {{ left }} h{% else %}Último momento{% endif %}</span>
     </div>
+    {% if s.stats_reason %}<p class="stats-note redo small"><b>Te pedimos otra grabación:</b> {{ s.stats_reason }}</p>{% endif %}
     {% if s.campaign.stats_note %}<p class="stats-note small"><b>Qué se pide:</b> {{ s.campaign.stats_note }}</p>{% endif %}
     <div class="stats-up" data-bunny-upload data-csrf="{{ csrf_token() }}" data-prepare="{{ url_for('stats_video_prepare', sid=s.id) }}" data-done="{{ url_for('stats_video_done', sid=s.id) }}" data-title="Estadísticas clip {{ s.id }}" data-max="{{ 100 * 1024 * 1024 }}">
       <label class="btn soft sm file-btn">{{ icon("plus") }} Elegir vídeo<input type="file" accept="video/*" data-file></label>
@@ -30,7 +56,7 @@
   {% endfor %}
 </div>
 {% else %}
-<div class="table-card"><div class="empty"><h3>No tienes estadísticas pendientes</h3><p class="muted">Cuando un clip llegue al mínimo en una campaña que las pida, aparecerá aquí. Tendrás {{ STATS_HOURS }} h para subir el vídeo.</p></div></div>
+<div class="table-card"><div class="empty"><h3>No tienes estadísticas pendientes</h3><p class="muted">Cuando un clip llegue al mínimo, aparecerá aquí. Tendrás {{ STATS_HOURS }} h para subir el vídeo.</p></div></div>
 {% endif %}
 
 {% if stats_sent %}
