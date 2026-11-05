@@ -24,10 +24,10 @@
 {% if show_steps %}
 <section class="card hm-steps">
   <div class="hm-steps-head">
-    <div><h2>Empieza a ganar en {{ steps|length }} pasos</h2><span class="small muted">{{ steps_done }} de {{ steps|length }} hecho{{ "s" if steps_done != 1 }} · desaparece cuando completes todos</span></div>
+    <div><h2>{% if steps|length == 1 %}Tu primer paso para empezar a ganar{% else %}Empieza a ganar en {{ steps|length }} pasos{% endif %}</h2><span class="small muted">{% if steps|length > 1 %}{{ steps_done }} de {{ steps|length }} hechos · {% endif %}desaparece cuando lo completes</span></div>
     <div class="hm-steps-bar" role="progressbar" aria-valuemin="0" aria-valuemax="{{ steps|length }}" aria-valuenow="{{ steps_done }}"><span style="width:{{ (steps_done / steps|length * 100)|round|int }}%"></span></div>
   </div>
-  <ol class="hm-step-list" style="grid-template-columns:repeat({{ steps|length }},minmax(0,1fr))">
+  <ol class="hm-step-list" style="grid-template-columns:repeat({{ [steps|length, 2]|max }},minmax(0,1fr))">
     {% set ns = namespace(cur=None) %}
     {% for st in steps %}{% if not st.done and ns.cur is none %}{% set ns.cur = loop.index %}{% endif %}{% endfor %}
     {% for st in steps %}

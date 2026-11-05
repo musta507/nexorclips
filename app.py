@@ -2425,8 +2425,12 @@ def home_data(u):
         win = None
         if mine:
             win = next((c for sec in campaign_channels(mine) for c in sec.channels if c.kind == "winners"), None)
-        learn = {"eyebrow": "Ideas", "title": "Mira lo que funciona", "text": "Los clips con más vistas de tus campañas, para coger ideas.",
-                 "btn": "Ver clips ganadores", "url": url_for("campaign", cid=mine.id, canal=win.id) if win else url_for("campaigns_page")}
+        if mine and win:
+            learn = {"eyebrow": "Ideas", "title": "Mira lo que funciona", "text": "Los clips con más vistas de tus campañas, para coger ideas.",
+                     "btn": "Ver clips ganadores", "url": url_for("campaign", cid=mine.id, canal=win.id)}
+        else:                                     # aún sin campaña: que aprenda primero
+            learn = {"eyebrow": "Formación", "title": "Aprende a clipear", "text": "Vídeos cortos para que tus clips se aprueben y sumen vistas.",
+                     "btn": "Ver formación", "url": url_for("courses")}
     # paso a paso
     wa = get_setting("whatsapp_general", "")
     steps = []
