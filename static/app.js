@@ -182,7 +182,31 @@ function comprobarBio() {
 
 // =============================================================== gráfica de estadísticas (informe y panel)
 var MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-var METRICA = { views: "Visualizaciones", likes: "Me gusta", comments: "Comentarios", shares: "Compartidos" };
+var METRICA = { views: "Visualizaciones", likes: "Me gusta", comments: "Comentarios", shares: "Compartidos",
+                earned: "Ganado", sent: "Envíos", approved: "Aprobados" };
+function cifra(metric, v) {         // el dinero con decimales y su símbolo; el resto, número entero
+  if (metric === "earned") return (Math.round(v * 100) / 100).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " $";
+  return numES(v);
+}
+function curva(xs, ys) {            // línea suave que no se pasa de los puntos (monótona): sin bajar de 0 ni hacer picos falsos
+  var n = ys.length;
+  if (n < 3) return ys.map(function (y, i) { return (i ? "L" : "M") + xs[i].toFixed(1) + " " + y.toFixed(1); }).join(" ");
+  var dx = [], m = [], t = [];
+  for (var i = 0; i < n - 1; i++) { dx[i] = xs[i + 1] - xs[i]; m[i] = (ys[i + 1] - ys[i]) / (dx[i] || 1); }
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+  for (i = 0; i < n - 1; i++) {
+    if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+    var a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
+    if (h > 9) { var k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+  }
+  var d = "M" + xs[0].toFixed(1) + " " + ys[0].toFixed(1);
+  for (i = 0; i < n - 1; i++) {
+    var c = dx[i] / 3;
+    d += " C" + (xs[i] + c).toFixed(1) + " " + (ys[i] + t[i] * c).toFixed(1) + " " + (xs[i + 1] - c).toFixed(1) + " " + (ys[i + 1] - t[i + 1] * c).toFixed(1) + " " + xs[i + 1].toFixed(1) + " " + ys[i + 1].toFixed(1);
+  }
+  return d;
+}
 function numES(v) { return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
 function corto(v) {                // 12,5M · 380K · 2,5K: hasta un decimal, sin «,0»
   var f = function (x) { return (Math.round(x * 10) / 10).toString().replace(".", ","); };
@@ -209,6 +233,7 @@ function graficas() {
     if (!src || !plot) return;
     box.dataset.ready = "1";
     var data = JSON.parse(src.textContent), state = { mode: "cumulative", metric: "views" };
+    var suave = box.hasAttribute("data-chart-smooth");        // Mis clips: también el diario va en línea suave
     var NS = "http://www.w3.org/2000/svg";
     function el(tag, attrs, parent) {
       var e = document.createElementNS(NS, tag);
@@ -235,11 +260,15 @@ function graficas() {
       var base = T + ih, ys = vals.map(function (v) { return y(v); }), linePath = null, fillPath = null, bars = [];
       var step = Math.max(1, Math.ceil(n / (W < 560 ? 4 : 7)));   // fechas del eje X
       for (var i = 0; i < n; i += step) el("text", { x: x(i), y: H - 8, class: "an-axis", "text-anchor": "middle" }, svg).textContent = fechaCorta(labels[i]);
-      if (state.mode === "daily") {                        // barras por día
+      var trazo = function (arr) {
+        var xs = arr.map(function (_, i) { return x(i); });
+        return suave ? curva(xs, arr) : arr.map(function (yy, i) { return (i ? "L" : "M") + xs[i].toFixed(1) + " " + yy.toFixed(1); }).join(" ");
+      };
+      if (state.mode === "daily" && !suave) {              // barras por día
         var bw = Math.max(2, Math.min(18, iw / n * 0.7));
         vals.forEach(function (v, i) { bars.push(el("rect", { x: x(i) - bw / 2, y: v > 0 ? ys[i] : base, width: bw, height: v > 0 ? Math.max(1, base - ys[i]) : 0, rx: Math.min(4, bw / 2), class: "an-barv" }, svg)); });
       } else {                                             // línea con relleno
-        var d = ys.map(function (yy, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + yy.toFixed(1); }).join(" ");
+        var d = trazo(ys);
         var defs = el("defs", {}, svg), grad = el("linearGradient", { id: "an-fill-g", x1: 0, x2: 0, y1: 0, y2: 1 }, defs);
         el("stop", { offset: "0%", class: "an-g0" }, grad); el("stop", { offset: "100%", class: "an-g1" }, grad);
         var clip = el("clipPath", { id: uid + "-c" }, defs), rect = el("rect", { x: 0, y: 0, width: W, height: H }, clip);
@@ -248,7 +277,7 @@ function graficas() {
       }
       function ponY(arr) {                                 // mueve la línea / las barras a estas alturas (en píxeles)
         if (linePath) {
-          var dd = arr.map(function (yy, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + yy.toFixed(1); }).join(" ");
+          var dd = trazo(arr);
           linePath.setAttribute("d", dd);
           fillPath.setAttribute("d", dd + " L" + x(n - 1).toFixed(1) + " " + base + " L" + x(0).toFixed(1) + " " + base + " Z");
         } else {
@@ -270,7 +299,7 @@ function graficas() {
       geo = { mode: state.mode, ys: ys, W: W };
       var play = function () {};
       if (anim && !calma) {
-        if (state.mode === "daily") {                      // barras: crecen desde abajo una detrás de otra
+        if (bars.length) {                                 // barras: crecen desde abajo una detrás de otra
           var stagger = Math.min(18, 500 / Math.max(1, bars.length));
           bars.forEach(function (b, i) { b.classList.add("an-grow"); b.style.transitionDelay = (i * stagger) + "ms"; });
           play = function () { bars.forEach(function (b) { b.classList.add("in"); }); };
@@ -297,7 +326,7 @@ function graficas() {
         if (jump) [guide, dot, tip].forEach(function (e) { e.style.transition = "none"; });   // al entrar aparece en su sitio, sin deslizar desde la izquierda
         guide.style.transform = "translate(" + cx + "px,0)";
         dot.style.transform = "translate(" + cx + "px," + cy + "px)";
-        tip.innerHTML = "<b>" + numES(vals[i]) + "</b><span>" + fechaCorta(labels[i]) + "</span>";
+        tip.innerHTML = "<b>" + cifra(state.metric, vals[i]) + "</b><span>" + fechaCorta(labels[i]) + "</span>";
         var tw = tip.offsetWidth, th = tip.offsetHeight, sx = r.width / W;
         var left = Math.min(Math.max(cx * sx - tw / 2, 0), r.width - tw), top = Math.max(0, cy * r.height / H - th - 12);
         tip.style.transform = "translate(" + left + "px," + top + "px)";
@@ -320,7 +349,9 @@ function graficas() {
       function leave() { box.classList.remove("an-hover"); shown = false; cur = -1; }
       svg.addEventListener("mousemove", move); svg.addEventListener("touchmove", move, { passive: true });
       svg.addEventListener("mouseleave", leave); svg.addEventListener("touchend", leave);
-      box.querySelector("[data-chart-total]").textContent = numES(data.totals[state.metric] || 0);
+      var tot = data.totals[state.metric] || 0;
+      box.querySelector("[data-chart-total]").textContent = suave && state.metric !== "earned" && tot >= 10000 ? corto(tot) : cifra(state.metric, tot);
+      box.setAttribute("data-metric", state.metric);
       box.querySelector("[data-chart-label]").textContent = METRICA[state.metric];
       return play;
     }
@@ -332,7 +363,12 @@ function graficas() {
       if (state[key] === nuevo) return;
       state[key] = nuevo;
       b.parentNode.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
-      if (key === "mode") {                               // otro tipo de gráfica: animación de entrada
+      if (b.hasAttribute("data-chart-kpi")) {              // tarjeta de arriba: la fila de «Me gusta / Comentarios…» vuelve a Visualizaciones
+        box.querySelectorAll(".mc-sub button").forEach(function (x) { x.classList.toggle("on", x.getAttribute("data-chart-metric") === "views"); });
+      } else if (key === "metric") {                       // «Me gusta», etc. pertenecen a la tarjeta de Visualizaciones
+        box.querySelectorAll("[data-chart-kpi]").forEach(function (x) { x.classList.toggle("on", x.getAttribute("data-chart-metric") === "views"); });
+      }
+      if (key === "mode" || suave && b.hasAttribute("data-chart-kpi")) {   // otro tipo de gráfica: animación de entrada
         var go = draw(true); requestAnimationFrame(function () { requestAnimationFrame(go); });
         return;
       }
@@ -1027,6 +1063,16 @@ function progresoLeccion() {
 // Botón «Descargar PDF / imprimir» del informe (el navegador deja guardarlo como PDF)
 document.addEventListener("click", function (e) {
   if (e.target.closest("[data-print]")) window.print();
+});
+
+// Mis clips: desplegar la fila con más detalles (motivo, apelación, verificación)
+document.addEventListener("click", function (e) {
+  var b = e.target.closest && e.target.closest("[data-row-toggle]");
+  if (!b) return;
+  var row = document.getElementById(b.getAttribute("data-row-toggle"));
+  if (!row) return;
+  row.hidden = !row.hidden;
+  b.setAttribute("aria-expanded", row.hidden ? "false" : "true");
 });
 
 // «Otro país»: aparece un campo para escribirlo

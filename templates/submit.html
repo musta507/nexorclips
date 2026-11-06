@@ -35,64 +35,124 @@
   </div>
 </details>
 
-<div class="kpis k4">
-  <div class="kpi card tight"><span class="small muted">Vistas</span><b class="tnum">{{ stats.views|short }}</b></div>
-
-  <div class="kpi card tight"><span class="small muted">Enviados</span><b class="tnum">{{ stats.sent }}</b></div>
-  <div class="kpi card tight"><span class="small muted">Aprobados</span><b class="tnum">{{ stats.approved }}{% if stats.rate is not none %} <span class="small muted">· {{ stats.rate }} %</span>{% endif %}</b></div>
-  <div class="kpi card tight"><span class="small muted">Rechazados</span><b class="tnum">{{ counts.rechazado }}</b></div>
-</div>
-
-<section>
-  <nav class="seg" aria-label="Estado de los clips">
-    {% for t, label in [("todos", "Todos"), ("contando", "Contando vistas"), ("estadisticas", "Verificar vistas"), ("revisar", "En revisión"), ("aprobado", "Aprobados"), ("rechazado", "Rechazados")] %}
-    {% if t != 'estadisticas' or show_stats %}<a class="{% if tab == t %}on{% endif %}{% if t == 'estadisticas' and counts[t] %} seg-alert{% endif %}" href="{{ url_for('my_clips', tab=t, campana=fc or None, red=fp or None) }}">{{ label }} <b class="tnum">{{ counts[t] }}</b></a>{% endif %}
-    {% endfor %}
-  </nav>
-  {% if my_camps and tab != 'estadisticas' %}
-  <form method="get" class="adm-filters" data-autosubmit>
-    <input type="hidden" name="tab" value="{{ tab }}">
-    <select name="campana" aria-label="Campaña"><option value="">Todas las campañas</option>{% for c in my_camps %}<option value="{{ c.id }}"{% if fc == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}</select>
-    <select name="red" aria-label="Red"><option value="">Todas las redes</option>{% for k, label in PLATFORMS.items() %}<option value="{{ k }}"{% if fp == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+{% set qs = {'campana': fc or None, 'red': fp or None, 'dias': dias if dias != 30 else None} %}
+<section class="mc" data-chart data-chart-smooth data-metric="views">
+  <form method="get" class="mc-bar" data-autosubmit>
+    <input type="hidden" name="tab" value="{{ tab }}">{% if fp %}<input type="hidden" name="red" value="{{ fp }}">{% endif %}
+    <div class="mc-plats" role="group" aria-label="Red">
+      {% for k, label in PLATFORMS.items() %}
+      <a class="mc-plat{{ ' on' if fp == k }}" href="{{ url_for('my_clips', tab=tab, campana=fc or None, dias=qs.dias, red=None if fp == k else k) }}" title="{{ label }}" aria-label="{{ label }}"{% if fp == k %} aria-current="true"{% endif %}>{{ icon(k) }}</a>
+      {% endfor %}
+    </div>
+    {% if my_camps %}<select name="campana" aria-label="Campaña"><option value="">Todas las campañas</option>{% for c in my_camps %}<option value="{{ c.id }}"{% if fc == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}</select>{% endif %}
+    <select name="dias" aria-label="Periodo">{% for d, label in ranges.items() %}<option value="{{ d }}"{% if dias == d %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
     <noscript><button class="btn sm soft">Filtrar</button></noscript>
   </form>
+
+  <div class="mc-kpis" role="group" aria-label="Qué ver en la gráfica">
+    <button type="button" class="mc-kpi k-views on" data-chart-metric="views" data-chart-kpi><span class="mc-ico">{{ icon("eye") }}</span><span><b class="tnum">{{ an.totals.views|short }}</b><small>Visualizaciones</small></span></button>
+    <button type="button" class="mc-kpi k-earned" data-chart-metric="earned" data-chart-kpi><span class="mc-ico">{{ icon("wallet") }}</span><span><b class="tnum">{{ an.totals.earned|money }}</b><small>Ganado</small></span></button>
+    <button type="button" class="mc-kpi k-sent" data-chart-metric="sent" data-chart-kpi><span class="mc-ico">{{ icon("film") }}</span><span><b class="tnum">{{ an.totals.sent|num }}</b><small>Envíos</small></span></button>
+    <button type="button" class="mc-kpi k-approved" data-chart-metric="approved" data-chart-kpi><span class="mc-ico">{{ icon("ok") }}</span><span><b class="tnum">{{ an.totals.approved|num }}</b><small>Aprobados</small></span></button>
+  </div>
+
+  <div class="card mc-chart">
+    <div class="mc-chart-head">
+      <div class="an-total mc-total"><b class="tnum" data-chart-total>{{ an.totals.views|short if an.totals.views >= 10000 else an.totals.views|num }}</b> <span data-chart-label>Visualizaciones</span></div>
+      <div class="an-toggles">
+        <div class="an-tg mc-sub" role="group" aria-label="Métrica">
+          <button type="button" data-chart-metric="views" class="on">Visualizaciones</button>
+          <button type="button" data-chart-metric="likes">Me gusta</button>
+          <button type="button" data-chart-metric="comments">Comentarios</button>
+          <button type="button" data-chart-metric="shares">Compartidos</button>
+        </div>
+        <div class="an-tg" role="group" aria-label="Forma de ver">
+          <button type="button" data-chart-mode="cumulative" class="on">Acumulado</button>
+          <button type="button" data-chart-mode="daily">Diario</button>
+        </div>
+      </div>
+    </div>
+    {% if an.totals.sent %}
+    <script type="application/json" data-chart-data>{{ {"series": an.series, "totals": an.totals}|tojson }}</script>
+    <div class="an-plot" data-chart-plot></div>
+    {% else %}
+    <div class="empty"><h3>Aún no hay datos en este periodo</h3><p class="muted">Cuando tengas clips, aquí verás cómo crecen sus vistas y lo que ganas.</p></div>
+    {% endif %}
+  </div>
+
+  {% if an.by_platform %}
+  <div class="card mc-plat-list">
+    <span class="small muted">Visualizaciones por plataforma</span>
+    {% set maxv = an.by_platform|map(attribute="views")|max %}
+    {% for p in an.by_platform %}
+    <div class="mc-prow p-{{ p.key }}"><span class="mc-pfill" style="width:{{ (p.views / maxv * 100)|round(1) if maxv else 0 }}%"></span><span class="mc-pname">{{ icon(p.key) }} {{ p.name }}</span><span class="mc-pnum"><span class="muted">{{ p.posts }} clip{{ 's' if p.posts != 1 }} ·</span> <b class="tnum">{{ p.views|short }}</b></span></div>
+    {% endfor %}
+  </div>
   {% endif %}
+</section>
+
+<section class="mc-list">
+  <nav class="seg" aria-label="Estado de los clips">
+    {% for t, label in [("todos", "Todos"), ("contando", "Contando vistas"), ("estadisticas", "Verificar vistas"), ("revisar", "En revisión"), ("aprobado", "Aprobados"), ("rechazado", "Rechazados")] %}
+    {% if t != 'estadisticas' or show_stats %}<a class="{% if tab == t %}on{% endif %}{% if t == 'estadisticas' and counts[t] %} seg-alert{% endif %}" href="{{ url_for('my_clips', tab=t, campana=fc or None, red=fp or None, dias=qs.dias) }}">{{ label }} <span class="seg-n">{{ counts[t] }}</span></a>{% endif %}
+    {% endfor %}
+  </nav>
   {% if tab == 'estadisticas' %}
   {% include "_stats_videos.html" %}
   {% else %}
+  <form method="get" class="mc-tools" data-autosubmit>
+    <input type="hidden" name="tab" value="{{ tab }}">{% if fc %}<input type="hidden" name="campana" value="{{ fc }}">{% endif %}{% if fp %}<input type="hidden" name="red" value="{{ fp }}">{% endif %}{% if dias != 30 %}<input type="hidden" name="dias" value="{{ dias }}">{% endif %}
+    <label class="cr-q mc-q">{{ icon("search") }}<input type="search" name="q" value="{{ q }}" placeholder="Buscar por campaña, cuenta, enlace o #ID" aria-label="Buscar clip"></label>
+    <select name="orden" aria-label="Ordenar">{% for k, label in [("recientes", "Más recientes"), ("vistas", "Más vistas"), ("ganado", "Más ganado")] %}<option value="{{ k }}"{% if orden == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+  </form>
   <div class="table-card">
     {% if subs %}
-    <div class="table-scroll"><table class="rt">
-      <thead><tr><th>Fecha</th><th>Clip</th><th>Campaña</th><th class="r">Vistas</th><th>Estado</th><th class="r">Ganado</th></tr></thead>
+    <div class="table-scroll"><table class="rt mc-table">
+      <thead><tr><th>ID</th><th>Clip</th><th>Estado</th><th class="r">Vistas</th><th class="r">Ganado</th><th>Actualizado</th><th>Avisos</th><th></th></tr></thead>
       <tbody>
       {% for s in subs %}
-      {% set stg = clip_stage(s) %}
+      {% set stg = clip_stage(s) %}{% set mv = s.campaign.min_views_for(s.platform) %}
+      {% set more = s.reject_reason or (s.status == 'rechazado' and not s.appeal_status and s.reject_code != 'caducado') or s.appeal_status or stg == 'estadisticas' or s.flag_list %}
       <tr>
-        <td data-label="Fecha" class="small muted">{{ s.created_at|date }}</td>
-        <td data-label="Clip"><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener"><span class="plat" style="background:var(--soft)">{{ icon(s.platform) }}</span>Ver clip</a>{% if s.source == 'auto' %}<div class="small muted">Detectado solo{% if s.author %} · @{{ s.author }}{% endif %}</div>{% endif %}</td>
-        <td data-label="Campaña"><a class="link" href="{{ url_for('campaign', cid=s.campaign_id) }}">{{ s.campaign.song }}</a><div class="small muted">{{ s.campaign.artist }}</div></td>
-        <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b>{% set mv = s.campaign.min_views_for(s.platform) %}{% if stg == 'contando' and mv %}<div class="mini-bar" title="{{ s.views|num }} de {{ mv|num }}"><span style="width:{{ [100, ((s.views or 0) / mv * 100)|round]|min }}%"></span></div><div class="small muted">mín. {{ mv|short }}</div>{% endif %}{% if s.views_error %}<div class="small" style="color:var(--amber)">{{ s.views_error }}</div>{% else %}<div class="small muted">{{ s|checked }}</div>{% endif %}</td>
-        <td data-label="Estado"><span class="status {{ 'pendiente' if stg in ('contando', 'revisar', 'estadisticas') else s.status }}{% if stg == 'contando' %} counting{% endif %}">{{ STAGE_LABELS[stg] }}</span>
-          {% if stg == 'estadisticas' %}<div class="small"><a class="link" href="{{ url_for('my_clips', tab='estadisticas') }}#st{{ s.id }}">Subir vídeo</a></div>{% endif %}
-          {% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}
-          {% if s.status == 'rechazado' and not s.appeal_status and s.reject_code != 'caducado' %}
-          <details class="appeal"><summary class="link small">Apelar</summary>
-            <form method="post" action="{{ url_for('appeal_clip', sid=s.id) }}" class="form-stack">
-              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-              <textarea name="text" rows="3" minlength="10" maxlength="1000" required placeholder="¿Por qué crees que cumple las reglas? Solo puedes apelar una vez."></textarea>
-              <button class="btn sm">Enviar apelación</button>
-            </form>
-          </details>
-          {% elif s.appeal_status == 'pendiente' %}<div class="small muted">Apelación en revisión</div>
-          {% elif s.appeal_status == 'rechazada' %}<div class="small muted">Apelación rechazada</div>{% endif %}
+        <td data-label="ID" class="mc-id tnum">#{{ s.id }}</td>
+        <td data-label="Clip"><div class="mc-clip"><span class="mc-pico p-{{ s.platform }}">{{ icon(s.platform) }}</span><div><b>{{ s.campaign.song }}</b><small>{% if s.author %}@{{ s.author }} · {% endif %}{{ s.campaign.artist }} · {{ s.created_at|ago }}{% if s.source == 'auto' %} · detectado solo{% endif %}</small></div></div></td>
+        <td data-label="Estado"><span class="mc-st st-{{ stg }}">{{ STAGE_LABELS[stg] }}</span></td>
+        <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b></td>
+        <td data-label="Ganado" class="r tnum{{ ' money-txt' if s.status == 'aprobado' and s.earned }}">{{ (s.earned if s.status == 'aprobado' else 0)|money }}</td>
+        <td data-label="Actualizado" class="small muted">{{ (s.views_updated_at or s.created_at)|ago }}</td>
+        <td data-label="Avisos" class="small">
+          {% if stg == 'contando' and mv %}<span class="mc-av wait">⏳ Faltan {{ [mv - (s.views or 0), 0]|max|num }}</span>
+          {% elif stg == 'estadisticas' %}<a class="mc-av warn" href="{{ url_for('my_clips', tab='estadisticas') }}#st{{ s.id }}">● Sube la verificación</a>
+          {% elif stg == 'revisar' %}<span class="mc-av muted">● En revisión</span>
+          {% elif s.status == 'aprobado' %}<span class="mc-av ok">● {{ "Cobrando" if s.campaign.status != 'finalizada' else "Listo para retirar" }}</span>
+          {% elif s.status == 'rechazado' %}<span class="mc-av bad">● {{ s.reject_reason|truncate(28, True, '…') if s.reject_reason else "Rechazado" }}</span>
+          {% else %}<span class="muted">—</span>{% endif %}
         </td>
-        <td data-label="Ganado" class="r tnum small muted">{% if s.status == 'aprobado' %}{{ s.earned|money }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="r mc-acts">
+          <a class="mc-btn" href="{{ s.url }}" target="_blank" rel="noopener" aria-label="Abrir el clip" title="Abrir el clip">{{ icon("ext") }}</a>
+          {% if more %}<button type="button" class="mc-btn" data-row-toggle="mr{{ s.id }}" aria-expanded="false" aria-controls="mr{{ s.id }}" aria-label="Más detalles" title="Más detalles"><span class="mc-chev"></span></button>{% endif %}
+        </td>
       </tr>
+      {% if more %}
+      <tr class="mc-more" id="mr{{ s.id }}" hidden><td colspan="8">
+        {% if s.reject_reason %}<p class="small"><b>Motivo:</b> {{ s.reject_reason }}</p>{% endif %}
+        {% if stg == 'estadisticas' %}<p class="small">Este clip ha llegado al mínimo: sube la grabación de sus estadísticas para que lo revisen. <a class="link" href="{{ url_for('my_clips', tab='estadisticas') }}#st{{ s.id }}">Verificar vistas →</a></p>{% endif %}
+        {% if s.status == 'rechazado' and not s.appeal_status and s.reject_code != 'caducado' %}
+        <form method="post" action="{{ url_for('appeal_clip', sid=s.id) }}" class="form-stack mc-appeal">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <textarea name="text" rows="3" minlength="10" maxlength="1000" required placeholder="¿Por qué crees que cumple las reglas? Solo puedes apelar una vez."></textarea>
+          <button class="btn sm">Enviar apelación</button>
+        </form>
+        {% elif s.appeal_status == 'pendiente' %}<p class="small muted">Apelación en revisión.</p>
+        {% elif s.appeal_status == 'rechazada' %}<p class="small muted">Apelación rechazada.</p>
+        {% elif s.appeal_status == 'aceptada' %}<p class="small muted">Apelación aceptada.</p>{% endif %}
+      </td></tr>
+      {% endif %}
       {% endfor %}
       </tbody>
     </table></div>
     {% else %}
-    <div class="empty"><h3>{{ "Aún no has enviado clips" if tab == 'todos' and not fc and not fp else "Nada por aquí" }}</h3><p class="muted">{{ "Elige una campaña, publica tu vídeo y pega aquí el enlace." if tab == 'todos' else "No tienes clips con este filtro." }}</p></div>
+    <div class="empty"><h3>{{ "Aún no tienes clips" if tab == 'todos' and not fc and not fp and not q else "Nada por aquí" }}</h3><p class="muted">{{ "Publica en tu cuenta de campaña y aparecerán aquí solos." if tab == 'todos' and not q else "Prueba con otro filtro o búsqueda." }}</p></div>
     {% endif %}
   </div>
   {% endif %}

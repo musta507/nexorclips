@@ -1429,7 +1429,7 @@ def test_my_clips_tabs_and_stats(monkeypatch):
     a = client_for("a@test.com", tiktok="ana")
     post(a, f"/campana/{cid}", url=tt("ana", 1))
     page = a.get("/mis-clips?tab=contando").get_data(as_text=True)
-    assert "Contando vistas" in page and "mín. 5K" in page
+    assert "Contando vistas" in page and "Faltan" in page
     assert "Nada por aquí" in a.get("/mis-clips?tab=aprobado").get_data(as_text=True)
 
 
@@ -1821,7 +1821,7 @@ def test_earnings_grouped_by_campaign_and_review_lives_in_my_clips():
     assert "Por campaña" in page and "Neón" in page and "4,00" in page
     r = a.get("/ganancias?tab=pendiente")
     assert r.status_code == 302 and "/mis-clips" in r.headers["Location"]
-    assert ">Ganado<" not in a.get("/mis-clips").get_data(as_text=True).split("<section>")[0]
+    assert "Visualizaciones por plataforma" in a.get("/mis-clips").get_data(as_text=True)
 
 
 def test_stats_video_required_blocks_approval_and_expires(monkeypatch):
@@ -2047,7 +2047,7 @@ def test_discover_clips_from_profiles_and_daily_reminder(monkeypatch):
         due, _ = A.reminders_due(datetime(2026, 11, 6, 0, 30))   # 00:30 UTC = 01:30 Madrid (invierno)
         assert due
         assert not A.reminders_due(datetime(2026, 11, 6, 9, 0))[0]
-    assert "Detectado solo" in a.get("/mis-clips").get_data(as_text=True)
+    assert "detectado solo" in a.get("/mis-clips").get_data(as_text=True)
 
 
 def test_account_only_in_one_campaign():
@@ -2188,3 +2188,27 @@ def test_onboarding_other_country():
     with A.app.app_context():
         u = A.User.query.filter_by(email="otro@test.com").one()
         assert (u.country_other, u.country_name) == ("", "España")
+
+
+def test_my_clips_panel_filters_and_series():
+    cid = make_campaign()
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    post(a, f"/campana/{cid}", url=tt("ana", 2))
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="a@test.com").one()
+        subs = A.Submission.query.all()
+        subs[0].views, subs[0].status, subs[0].earned, subs[0].reviewed_at = 9000, "aprobado", 4.5, datetime.utcnow()
+        A.db.session.commit()
+        an = A.clipper_analytics(list(u.submissions), 7)
+        assert an["totals"]["sent"] == 2 and an["totals"]["approved"] == 1 and an["totals"]["earned"] == 4.5
+        assert len(an["series"]["labels"]) == 7 and an["series"]["cumulative"]["sent"][-1] == 2
+        assert an["series"]["cumulative"]["views"][-1] == 9000 and an["by_platform"][0]["key"] == "tiktok"
+    page = a.get("/mis-clips?dias=7&orden=vistas").get_data(as_text=True)
+    assert "Visualizaciones por plataforma" in page and "Cobrando" in page and "data-chart-smooth" in page
+    sid = subs_id = None
+    with A.app.app_context():
+        sid = A.Submission.query.filter_by(status="aprobado").one().id
+    assert f"#{sid}" in a.get(f"/mis-clips?q=%23{sid}").get_data(as_text=True)
+    assert "Nada por aquí" in a.get("/mis-clips?q=noexiste").get_data(as_text=True)
+    assert "Aún no hay datos" in a.get("/mis-clips?red=youtube").get_data(as_text=True)

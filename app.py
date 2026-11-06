@@ -1467,6 +1467,71 @@ def campaign_analytics(camp, max_days=180):
     return out
 
 
+CLIP_RANGES = {7: "Últimos 7 días", 30: "Últimos 30 días", 90: "Últimos 90 días", 0: "Todo"}
+CLIP_METRICS = ("views", "likes", "comments", "shares", "earned", "sent", "approved")
+
+
+def clipper_analytics(subs, days=30):
+    """Panel de Mis clips: totales, evolución día a día de cada métrica y vistas por red de los clips del periodo."""
+    today = datetime.utcnow().date()
+    if days:
+        start = today - timedelta(days=days - 1)
+    else:
+        start = max(min((s.created_at.date() for s in subs), default=today), today - timedelta(days=364))
+    subs = [s for s in subs if s.created_at.date() >= start]
+    live = [s for s in subs if s.status != "rechazado"]
+    approved = [s for s in subs if s.status == "aprobado"]
+    totals = {m: sum(getattr(s, m) or 0 for s in live) for m in METRICS}
+    totals.update({"earned": cents(sum(s.earned or 0 for s in approved)), "sent": len(subs), "approved": len(approved)})
+    by_platform = sorted(({"key": p, "name": PLATFORMS[p], "posts": sum(1 for s in subs if s.platform == p),
+                           "views": sum(s.views or 0 for s in live if s.platform == p)} for p in PLATFORMS
+                          if any(s.platform == p for s in subs)), key=lambda r: -r["views"])
+    dates = [start + timedelta(days=i) for i in range((today - start).days + 1)]
+    cum = {m: [0] * len(dates) for m in CLIP_METRICS}
+    idx = {d: i for i, d in enumerate(dates)}
+    snaps = {}
+    if live:
+        for sn in (ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_([s.id for s in live]))
+                   .order_by(ViewSnapshot.taken_at).all()):
+            snaps.setdefault(sn.submission_id, []).append(sn)
+    now = datetime.utcnow()
+    for s in live:                                      # vistas, me gusta…: la última lectura de cada día (se arrastra)
+        cur_views = s.views or 0
+        ratio = {m: (getattr(s, m) or 0) / cur_views if cur_views else 0 for m in METRICS[1:]}
+        points = [(s.created_at, {m: 0 for m in METRICS})]
+        for sn in snaps.get(s.id, []):
+            vals = {"views": sn.views or 0}
+            for m in METRICS[1:]:
+                v = getattr(sn, m)
+                vals[m] = v if v is not None else round(vals["views"] * ratio[m])
+            points.append((sn.taken_at, vals))
+        points.append((now, {m: getattr(s, m) or 0 for m in METRICS}))
+        j, last = 0, points[0][1]
+        for i, d in enumerate(dates):
+            end = datetime.combine(d, datetime.max.time())
+            while j < len(points) and points[j][0] <= end:
+                last = points[j][1]
+                j += 1
+            for m in METRICS:
+                cum[m][i] += last[m]
+    def add_from(day, metric, amount):                  # suma desde ese día en adelante
+        i = idx.get(max(day, start))
+        if i is None:
+            return
+        for k in range(i, len(dates)):
+            cum[metric][k] += amount
+    for s in subs:
+        add_from(s.created_at.date(), "sent", 1)
+    for s in approved:
+        when = (s.reviewed_at or s.created_at).date()
+        add_from(when, "approved", 1)
+        add_from(when, "earned", float(s.earned or 0))
+    cum["earned"] = [round(v, 2) for v in cum["earned"]]
+    daily = {m: [max(0, round(cum[m][i] - (cum[m][i - 1] if i else 0), 2)) for i in range(len(dates))] for m in CLIP_METRICS}
+    return {"totals": totals, "by_platform": by_platform,
+            "series": {"labels": [d.isoformat() for d in dates], "cumulative": cum, "daily": daily}}
+
+
 def user_money(user):
     """Disponible = ganado en clips aprobados de campañas ya cerradas − retirado.
     En curso = ganado en campañas que siguen abiertas (se libera al cerrarse). Pendiente = clips en revisión."""
@@ -3080,10 +3145,23 @@ def my_clips():
     tab = tab if tab in CLIP_TABS else "todos"
     fc = request.args.get("campana", type=int)
     fp = request.args.get("red", "")
-    subs = [s for s in allsubs if (tab == "todos" or clip_stage(s) == tab)
-            and (not fc or s.campaign_id == fc) and (not fp or s.platform == fp)]
-    counts = {t: sum(1 for s in allsubs if clip_stage(s) == t) for t in CLIP_TABS if t != "todos"}
-    counts["todos"] = len(allsubs)
+    fp = fp if fp in PLATFORMS else ""
+    dias = request.args.get("dias", 30, type=int)
+    dias = dias if dias in CLIP_RANGES else 30
+    q = " ".join((request.args.get("q") or "").split())[:80]
+    orden = request.args.get("orden", "recientes")
+    orden = orden if orden in ("recientes", "vistas", "ganado") else "recientes"
+    scoped = [s for s in allsubs if (not fc or s.campaign_id == fc) and (not fp or s.platform == fp)]
+    an = clipper_analytics(scoped, dias)
+    ql = q.lower().lstrip("#@")
+    subs = [s for s in scoped if (tab == "todos" or clip_stage(s) == tab)
+            and (not ql or ql in f"{s.id} {s.url} {s.author or ''} {s.campaign.song} {s.campaign.artist}".lower())]
+    if orden == "vistas":
+        subs.sort(key=lambda s: -(s.views or 0))
+    elif orden == "ganado":
+        subs.sort(key=lambda s: -float(s.earned or 0))
+    counts = {t: sum(1 for s in scoped if clip_stage(s) == t) for t in CLIP_TABS if t != "todos"}
+    counts["todos"] = len(scoped)
     my_camps = sorted({s.campaign for s in allsubs}, key=lambda c: c.song.lower())
     stats_sent = sorted((s for s in allsubs if s.stats_status == "enviado"), key=lambda s: s.stats_at or s.created_at,
                         reverse=True)[:30]
@@ -3092,7 +3170,8 @@ def my_clips():
         return redirect(url_for("my_clips"))
     return render_template("submit.html", camps=camps, subs=subs, selected=request.args.get("c", type=int),
                            tab=tab, counts=counts, stats=clipper_stats(allsubs), my_camps=my_camps, fc=fc, fp=fp,
-                           stats_sent=stats_sent, show_stats=show_stats, now=datetime.utcnow())
+                           stats_sent=stats_sent, show_stats=show_stats, now=datetime.utcnow(), an=an, dias=dias,
+                           q=q, orden=orden, ranges=CLIP_RANGES)
 
 
 # ---------------------------------------------------------------- ranking
