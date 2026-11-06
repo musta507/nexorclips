@@ -583,6 +583,14 @@ class Message(db.Model):
     sender = db.relationship("User", foreign_keys=[sender_id])
 
 
+class IgnoredClip(db.Model):
+    """Vídeo que el clipper borró de Mis clips: la detección automática no lo vuelve a añadir."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    video_key = db.Column(db.String(120), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class CampMessage(db.Model):
     """Soporte de una campaña: conversación privada de un clipper con el equipo y los mods de esa campaña."""
     id = db.Column(db.Integer, primary_key=True)
@@ -1911,8 +1919,8 @@ def discover_clips(now=None):
                 if not posted or posted < since:
                     continue                                  # solo cuentan los vídeos publicados después de entrar
                 key = f"{platform}:{it['vid']}"
-                if Submission.query.filter_by(video_key=key).first():
-                    continue
+                if Submission.query.filter_by(video_key=key).first() or IgnoredClip.query.filter_by(video_key=key).first():
+                    continue                                  # ya está, o el clipper lo borró a propósito
                 camp = acc.campaign
                 sub = Submission(user_id=acc.user_id, campaign_id=camp.id, url=viewcounter.normalize_url(it["url"], resolve=False),
                                  platform=platform, video_key=key, author=acc.handle, source="auto", posted_at=posted,
@@ -2263,7 +2271,7 @@ def inject_globals():
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year, "now_utc": datetime.utcnow(),
             "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
             "REJECT_REASONS": REJECT_REASONS, "COUNTRIES": COUNTRIES, "LANGUAGES": LANGUAGES, "CAMPAIGN_KINDS": CAMPAIGN_KINDS,
-            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
+            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
             "mod_campaigns": mod_campaigns, "acting_as_mod": acting_as_mod,
             "STATS_HOURS": STATS_HOURS, "bunny_ready": bunny_ready, "reached_min": reached_min,
             "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
@@ -2775,6 +2783,7 @@ def submit_clip(camp, raw_url):
         return False, f"Ese vídeo es de @{author}, que no es una de tus cuentas aceptadas en esta campaña."
     if Submission.query.filter_by(video_key=f"{platform}:{vid}").first():
         return False, "Ese vídeo ya se envió antes."
+    IgnoredClip.query.filter_by(video_key=f"{platform}:{vid}").delete()   # lo había borrado y lo vuelve a añadir a mano
     db.session.add(Submission(user_id=current_user.id, campaign_id=camp.id, url=url, platform=platform,
                               video_key=f"{platform}:{vid}", author=author,
                               review_since=None if camp.min_for(platform) else datetime.utcnow()))
@@ -3172,6 +3181,30 @@ def my_clips():
                            tab=tab, counts=counts, stats=clipper_stats(allsubs), my_camps=my_camps, fc=fc, fp=fp,
                            stats_sent=stats_sent, show_stats=show_stats, now=datetime.utcnow(), an=an, dias=dias,
                            q=q, orden=orden, ranges=CLIP_RANGES)
+
+
+def clip_deletable(s):
+    """El clipper puede borrar un clip suyo si no ha cobrado nada por él (no aprobado) ni tiene una apelación en curso."""
+    return s.status != "aprobado" and s.appeal_status != "pendiente"
+
+
+@app.route("/mis-clips/<int:sid>/eliminar", methods=["POST"])
+@login_required
+def delete_clip(sid):
+    s = db.session.get(Submission, sid)
+    if not s or s.user_id != current_user.id:
+        abort(404)
+    if not clip_deletable(s):
+        flash("Este clip ya está aprobado o tiene una apelación en curso: no se puede borrar. Escribe a soporte si hay un problema.", "error")
+        return redirect(request.referrer or url_for("my_clips"))
+    if not IgnoredClip.query.filter_by(video_key=s.video_key).first():
+        db.session.add(IgnoredClip(user_id=current_user.id, video_key=s.video_key))
+    ViewSnapshot.query.filter_by(submission_id=s.id).delete(synchronize_session=False)
+    audit("clip_borrado_por_clipper", f"#{s.id} · {s.url} · «{s.campaign.song}»")
+    db.session.delete(s)
+    db.session.commit()
+    flash("Clip eliminado. No volverá a aparecer solo; si te equivocaste, añádelo a mano con su enlace.", "ok")
+    return redirect(request.referrer or url_for("my_clips"))
 
 
 # ---------------------------------------------------------------- ranking
@@ -5444,7 +5477,7 @@ def admin_wipe():
         admin_ids.append(current_user.id)
     keep_campaigns = request.form.get("mode") == "keep_campaigns"
     models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, CampaignLead,
-              Notice, PushSub, LessonProgress, PostComment, PostLike, Post, Channel, ChannelSection, CampaignMod, CampMessage,
+              Notice, PushSub, LessonProgress, PostComment, PostLike, Post, Channel, ChannelSection, CampaignMod, CampMessage, IgnoredClip,
               Campaign, Creator,
               AuditLog, Setting)
     for model in models:
@@ -5522,7 +5555,7 @@ def delete_user_account(user):
     if sub_ids:
         ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(sub_ids)).delete(synchronize_session=False)
     for model in (Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, Notice, PushSub, LessonProgress,
-                  PostComment, PostLike, CampaignMod, CampMessage):
+                  PostComment, PostLike, CampaignMod, CampMessage, IgnoredClip):
         model.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     CampMessage.query.filter_by(sender_id=user.id).update({"sender_id": None}, synchronize_session=False)
     Post.query.filter_by(author_id=user.id).update({"author_id": None}, synchronize_session=False)

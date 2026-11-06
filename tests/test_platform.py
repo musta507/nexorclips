@@ -2212,3 +2212,23 @@ def test_my_clips_panel_filters_and_series():
     assert f"#{sid}" in a.get(f"/mis-clips?q=%23{sid}").get_data(as_text=True)
     assert "Nada por aquí" in a.get("/mis-clips?q=noexiste").get_data(as_text=True)
     assert "No hay datos que ver" in a.get("/mis-clips?red=youtube").get_data(as_text=True)
+
+
+def test_clipper_deletes_clip_and_it_is_not_rediscovered(monkeypatch):
+    cid = make_campaign()
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        s = A.Submission.query.one(); sid, key = s.id, s.video_key
+    assert "Eliminar clip" in a.get("/mis-clips").get_data(as_text=True)
+    assert post(client_for("b@test.com"), f"/mis-clips/{sid}/eliminar").status_code == 404
+    post(a, f"/mis-clips/{sid}/eliminar")
+    with A.app.app_context():
+        assert A.Submission.query.count() == 0 and A.IgnoredClip.query.filter_by(video_key=key).one()
+    post(a, f"/campana/{cid}", url=tt("ana", 1))                         # a mano sí se puede volver a añadir
+    with A.app.app_context():
+        assert A.Submission.query.count() == 1 and A.IgnoredClip.query.count() == 0
+        s = A.Submission.query.one(); s.status = "aprobado"; A.db.session.commit(); sid = s.id
+    post(a, f"/mis-clips/{sid}/eliminar")                                # aprobado: no se borra
+    with A.app.app_context():
+        assert A.Submission.query.count() == 1

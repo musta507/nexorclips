@@ -108,7 +108,7 @@
       <tbody>
       {% for s in subs %}
       {% set stg = clip_stage(s) %}{% set mv = s.campaign.min_views_for(s.platform) %}
-      {% set more = s.reject_reason or (s.status == 'rechazado' and not s.appeal_status and s.reject_code != 'caducado') or s.appeal_status or stg == 'estadisticas' or s.flag_list %}
+      {% set can_del = clip_deletable(s) %}{% set more = s.reject_reason or (s.status == 'rechazado' and not s.appeal_status and s.reject_code != 'caducado') or s.appeal_status or stg == 'estadisticas' or can_del %}
       <tr>
         <td data-label="ID" class="mc-id tnum">#{{ s.id }}</td>
         <td data-label="Clip"><div class="mc-clip"><span class="mc-pico p-{{ s.platform }}">{{ icon(s.platform) }}</span><div><b>{{ s.campaign.song }}</b><small>{% if s.author %}@{{ s.author }} · {% endif %}{{ s.campaign.artist }} · {{ s.created_at|ago }}{% if s.source == 'auto' %} · detectado solo{% endif %}</small></div></div></td>
@@ -142,6 +142,7 @@
         {% elif s.appeal_status == 'pendiente' %}<p class="small muted">Apelación en revisión.</p>
         {% elif s.appeal_status == 'rechazada' %}<p class="small muted">Apelación rechazada.</p>
         {% elif s.appeal_status == 'aceptada' %}<p class="small muted">Apelación aceptada.</p>{% endif %}
+        {% if can_del %}<form method="post" action="{{ url_for('delete_clip', sid=s.id) }}" class="mc-del" data-confirm="¿Eliminar este clip de Mis clips? Dejará de contar vistas y no volverá a aparecer solo."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link small">Eliminar clip</button></form>{% endif %}
       </td></tr>
       {% endif %}
       {% endfor %}
