@@ -2658,7 +2658,14 @@ def home_data(u):
     quick = {"available": money_["available"], "live": money_["live"],
              "views_week": sum(s_.views or 0 for s_ in subs if s_.created_at >= week_ago and s_.status != "rechazado"),
              "counting": stage.get("contando", 0) + stage.get("revisar", 0), "stats": stage.get("estadisticas", 0)}
-    return {"quick": quick,
+    # banner de bienvenida: portadas de campañas activas (primero las que tienen plazas libres)
+    live = [c for c in active_campaigns() if not c.exhausted]
+    live.sort(key=lambda c: (bool(c.full), not c.cover_version))
+    open_n = sum(1 for c in live if not c.full)
+    if not bits and open_n:
+        summary = (f"{open_n} {'campaña activa' if open_n == 1 else 'campañas activas'} con plazas libres. "
+                   "Elige una y empieza a ganar.")
+    return {"quick": quick, "hero_camps": live[:3],
             "summary": summary, "learn": learn, "steps": steps, "show_steps": show_steps,
             "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
             "rank": rank, "masked": mask_name}

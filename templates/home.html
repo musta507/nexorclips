@@ -2,16 +2,22 @@
 {% from "_icons.html" import icon, av %}
 {% block content %}
 <div class="hm-heroes">
-  <section class="hm-hero dark">
+  <section class="hm-hero welcome{{ ' has-covers' if hero_camps }}">
     <div>
       <span class="hm-eb">Hola, {{ current_user.name.split()[0] if current_user.name else "clipper" }}</span>
       <h1>Bienvenido a {{ APP_NAME }}</h1>
       <p>{{ summary }}</p>
     </div>
-    <a class="btn hm-money" href="{{ url_for('campaigns_page') }}">Ver campañas {{ icon("arrow") }}</a>
+    <a class="btn dark" href="{{ url_for('campaigns_page') }}">Ver campañas {{ icon("arrow") }}</a>
+    {% if hero_camps %}
+    <a class="hm-covers n{{ hero_camps|length }}" href="{{ url_for('campaigns_page') }}" aria-label="Ver campañas">
+      {% for c in hero_camps %}{% set tint, lqip = cover_meta(c) %}
+      <span class="hm-cv" title="{{ c.song }}"{% if tint %} style="background:{{ tint }}"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 720) }}" alt="" loading="lazy">{% else %}<b>{{ c.artist[:1] }}</b>{% endif %}</span>
+      {% endfor %}
+    </a>
+    {% endif %}
   </section>
   <section class="hm-hero light">
-    <span class="hm-play" aria-hidden="true">▶</span>
     <div>
       <span class="hm-eb">{{ learn.eyebrow }}</span>
       <h2>{{ learn.title }}</h2>

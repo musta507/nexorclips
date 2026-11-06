@@ -1429,16 +1429,21 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .btn.dark{background:var(--ink);color:#fff}
 .hm-heroes{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}
 .hm-hero{border-radius:22px;padding:26px;position:relative;overflow:hidden;min-height:190px;display:flex;flex-direction:column;justify-content:space-between;gap:16px}
-.hm-hero.dark{background:linear-gradient(135deg,#0e0e0e,#24262b);color:#fff}
-.hm-hero.dark::after{content:"";position:absolute;right:-40px;bottom:-60px;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.09),transparent 70%);pointer-events:none}
+.hm-hero.welcome{background:var(--card);border:1px solid var(--line)}
+.hm-hero.welcome.has-covers{padding-right:250px}
+.hm-covers{position:absolute;right:24px;top:50%;transform:translateY(-50%);display:flex;gap:10px;align-items:center}
+.hm-cv{width:64px;height:112px;border-radius:14px;overflow:hidden;display:grid;place-items:center;background:linear-gradient(160deg,#2a2a2e,#0e0e0e);color:#fff;box-shadow:0 8px 20px rgba(16,24,40,.14);transition:transform .2s}
+.hm-cv img{width:100%;height:100%;object-fit:cover}
+.hm-cv b{font:700 22px var(--display)}
+.hm-covers.n3 .hm-cv:nth-child(2),.hm-covers.n2 .hm-cv:nth-child(2){transform:translateY(-12px)}
+.hm-covers:hover .hm-cv{transform:translateY(-4px)}
+.hm-covers.n3:hover .hm-cv:nth-child(2),.hm-covers.n2:hover .hm-cv:nth-child(2){transform:translateY(-16px)}
+@media (max-width:640px){.hm-hero.welcome.has-covers{padding-right:26px}.hm-covers{display:none}}
 .hm-hero.light{background:var(--card);border:1px solid var(--line)}
-.hm-hero.light::after{content:"";position:absolute;right:-30px;bottom:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(14,14,14,.05),transparent 70%);pointer-events:none}
 .hm-hero h1,.hm-hero h2{font:700 clamp(22px,2.6vw,30px)/1.15 var(--display);letter-spacing:-.02em;margin:6px 0}
 .hm-hero p{margin:0;font-size:14px;opacity:.78;max-width:400px}
 .hm-hero .btn{align-self:flex-start;position:relative;z-index:1}
 .hm-eb{font:600 11px var(--font);letter-spacing:.08em;text-transform:uppercase;opacity:.7}
-.hm-money{background:#fff;color:var(--ink)}.hm-money:hover{background:#ececee}
-.hm-play{position:absolute;right:26px;top:22px;font-size:46px;color:var(--ink);opacity:.08}
 .hm-steps{padding:20px;margin-top:-16px}
 .hm-steps-head{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:14px;flex-wrap:wrap}
 .hm-steps-head h2{font:600 18px var(--display);margin:0}
