@@ -10,8 +10,8 @@
     <thead><tr><th>Clipper</th><th>Cuentas en la campaña</th><th class="r">Clips</th><th class="r">Vistas aprobadas</th><th class="r">Ganado aquí</th><th>Último clip</th><th></th></tr></thead>
     <tbody>
     {% for m, st, accs in rows %}
-    <tr data-search="{{ m.user.name }} {{ m.user.email }} {% for a in accs %}{{ a.handle }} {% endfor %}">
-      <td data-label="Clipper">{{ av(m.user) }} <a class="link" href="{{ url_for('admin_clipper', uid=m.user_id) }}"><b>{{ m.user.name }}</b></a>{% if m.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">Entró {{ m.created_at|ago }}</div></td>
+    <tr data-search="{{ m.user.name }} {% if not acting_as_mod() %}{{ m.user.email }}{% endif %} {% for a in accs %}{{ a.handle }} {% endfor %}">
+      <td data-label="Clipper">{{ av(m.user) }} {% if not acting_as_mod() %}<a class="link" href="{{ url_for('admin_clipper', uid=m.user_id) }}"><b>{{ m.user.name }}</b></a>{% else %}<b>{{ m.user.name }}</b>{% endif %}{% if m.user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}<div class="small muted">Entró {{ m.created_at|ago }}</div></td>
       <td data-label="Cuentas" class="small">{% for a in accs %}<div class="hl">{{ icon(a.platform) }} @{{ a.handle }} {% if a.status != 'aceptada' %}<span class="muted">· {{ "sin verificar" if a.status == 'pendiente' else "rechazada" }}</span>{% endif %}</div>{% else %}<span class="muted">Aún sin cuenta</span>{% endfor %}</td>
       <td data-label="Clips" class="r tnum">{{ st.clips }}{% if st.approved %} <span class="small muted">· {{ st.approved }} ✓</span>{% endif %}</td>
       <td data-label="Vistas" class="r tnum">{{ st.views|short }}</td>
@@ -19,7 +19,7 @@
       <td data-label="Último clip" class="small muted">{{ st.last|ago if st.last else "—" }}</td>
       <td data-label="" class="r"><div class="inline" style="justify-content:flex-end;gap:6px">
         {% if m.user_id in mod_ids %}<span class="mod-tag">MOD</span>{% endif %}
-        <a class="btn sm soft" href="{{ url_for('admin_chat', uid=m.user_id) }}">Escribir</a></div></td>
+        {% if not acting_as_mod() %}<a class="btn sm soft" href="{{ url_for('admin_chat', uid=m.user_id) }}">Escribir</a>{% endif %}</div></td>
     </tr>
     {% endfor %}
     </tbody>

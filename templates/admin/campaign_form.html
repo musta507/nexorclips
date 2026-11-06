@@ -4,16 +4,18 @@
 {% block content %}
 {% if editing %}
 {% include "admin/_camp_nav.html" %}
+{% if can.estado or can.csv or not acting_as_mod() %}
 <div class="card tight cn-actions">
   <div><h3>Acciones rápidas</h3><p class="small muted">Sin tocar el resto de la campaña.</p></div>
   <div class="inline" style="flex-wrap:wrap;gap:8px">
-    {% if camp.status in ('activa', 'pausada') %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="{{ 'pausar' if camp.status == 'activa' else 'reanudar' }}"><button class="btn soft sm">{{ "Pausar" if camp.status == 'activa' else "Reanudar" }}</button></form>{% endif %}
-    {% if camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="plazas"><button class="btn soft sm">{{ "Abrir plazas" if camp.full else "Marcar plazas completas" }}</button></form>{% endif %}
-    <form method="post" action="{{ url_for('admin_campaign_duplicate', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft sm">Duplicar</button></form>
-    <a class="btn soft sm" href="{{ url_for('admin_campaign_csv', cid=camp.id) }}" data-turbo="false">Descargar CSV</a>
-    {% if camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_close', cid=camp.id) }}" data-confirm="¿Cerrar «{{ camp.song }}»? Dejará de aceptar clips y los clippers podrán retirar lo que ganaron."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn red sm">Cerrar campaña</button></form>{% endif %}
+    {% if can.estado and camp.status in ('activa', 'pausada') %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="{{ 'pausar' if camp.status == 'activa' else 'reanudar' }}"><button class="btn soft sm">{{ "Pausar" if camp.status == 'activa' else "Reanudar" }}</button></form>{% endif %}
+    {% if can.estado and camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="plazas"><button class="btn soft sm">{{ "Abrir plazas" if camp.full else "Marcar plazas completas" }}</button></form>{% endif %}
+    {% if not acting_as_mod() %}<form method="post" action="{{ url_for('admin_campaign_duplicate', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft sm">Duplicar</button></form>{% endif %}
+    {% if can.csv %}<a class="btn soft sm" href="{{ url_for('admin_campaign_csv', cid=camp.id) }}" data-turbo="false">Descargar CSV</a>{% endif %}
+    {% if can.estado and camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_close', cid=camp.id) }}" data-confirm="¿Cerrar «{{ camp.song }}»? Dejará de aceptar clips y los clippers podrán retirar lo que ganaron."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn red sm">Cerrar campaña</button></form>{% endif %}
   </div>
 </div>
+{% endif %}
 {% else %}
 <a class="back" href="{{ url_for('admin_campaigns') }}">← Volver</a>
 <h1 style="margin:4px 0 14px">Nueva campaña</h1>
@@ -52,8 +54,9 @@
           </div>
         </fieldset>
 
-        <fieldset class="wz-step form-stack">
+        <fieldset class="wz-step form-stack"{% if not can.dinero %} inert{% endif %}>
           <legend>Cuánto se paga</legend>
+          {% if not can.dinero %}<p class="flash info">Solo lectura: no tienes permiso para cambiar el presupuesto ni las tarifas.</p>{% endif %}
           <div class="field">
             <span class="label">Redes y pago ({{ CUR_CODE }})</span>
             <div class="rate-rows">
@@ -96,7 +99,7 @@
             <span class="hint">Las ves antes de aceptar a cada clipper. Vacío = sin preguntas.</span></div>
           <div class="form-grid">
             <div class="field"><label for="max_members">Plazas</label><input id="max_members" name="max_members" value="{{ camp.max_members or '' }}" inputmode="numeric" placeholder="Sin límite"><span class="hint">Al aceptar a ese número de clippers pasa sola a «plazas completas».</span></div>
-            <div class="field"><label for="status">Estado</label>
+            <div class="field"{% if not can.estado %} inert{% endif %}><label for="status">Estado{% if not can.estado %} <span class="muted">(solo lectura)</span>{% endif %}</label>
               <select id="status" name="status">
                 {% for s, label in [("activa", "Activa: visible y acepta clips"), ("pausada", "Pausada: oculta"), ("finalizada", "Finalizada: vistas congeladas")] %}
                   <option value="{{ s }}" {% if camp.status == s %}selected{% endif %}>{{ label }}</option>

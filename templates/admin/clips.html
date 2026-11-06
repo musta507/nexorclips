@@ -77,7 +77,7 @@
                 {% if admin_can('admin_chat') %}<a href="{{ url_for('admin_chat', uid=s.user_id) }}">Escribirle</a>{% endif %}
                 {% if admin_can('admin_campaign') %}<a href="{{ url_for('admin_campaign', cid=s.campaign_id) }}">Ver la campaña</a>{% endif %}
                 <a href="{{ s.url }}" target="_blank" rel="noopener">Abrir publicación</a>
-                {% if s.status == 'aprobado' and admin_can('admin_clipper') %}<form method="post" action="{{ url_for('admin_review', sid=s.id, accion='visitas') }}" class="inline" style="padding:6px 10px;gap:6px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input name="views" type="number" min="0" value="{{ s.views or 0 }}" style="width:110px" aria-label="Vistas"><button class="btn sm soft">Corregir vistas</button></form>{% endif %}
+                {% if s.status == 'aprobado' and ((current_user.is_admin and admin_can('admin_clipper')) or (not current_user.is_admin and mod_can(current_user, s.campaign_id, 'vistas'))) %}<form method="post" action="{{ url_for('admin_review', sid=s.id, accion='visitas') }}" class="inline" style="padding:6px 10px;gap:6px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input name="views" type="number" min="0" value="{{ s.views or 0 }}" style="width:110px" aria-label="Vistas"><button class="btn sm soft">Corregir vistas</button></form>{% endif %}
                 {% if s.flag_list %}<form method="post" action="{{ url_for('admin_review', sid=s.id, accion='quitar_avisos') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button>Quitar avisos</button></form>{% endif %}
               </div>
             </details>

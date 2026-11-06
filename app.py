@@ -72,8 +72,8 @@ db_url = db_url or "sqlite:///plataforma.db"
 if PRODUCTION and not db_url.startswith(("postgres://", "postgresql")):
     seen = sorted(k for k in os.environ if "DATABASE" in k or k.startswith("PG"))
     raise RuntimeError("Falta la base de datos. En Railway: añade PostgreSQL y en la web la variable "
-                       "DATABASE_URL=${{Postgres.DATABASE_URL}}. Variables de base de datos que veo: "
-                       + (", ".join(f"{k}={'(vacía)' if not os.environ.get(k) else os.environ[k][:11] + '…'}" for k in seen) or "ninguna"))
+                       "DATABASE_URL=${{Postgres.DATABASE_URL}}. Variables de base de datos que veo (solo el nombre, "
+                       "nunca el valor): " + (", ".join(f"{k}{' (vacía)' if not os.environ.get(k) else ''}" for k in seen) or "ninguna"))
 for prefix in ("postgres://", "postgresql://"):   # Railway da "postgresql://"; usamos el conector psycopg2
     if db_url.startswith(prefix):
         db_url = "postgresql+psycopg2://" + db_url[len(prefix):]
@@ -115,7 +115,8 @@ BUNNY_TOKEN_KEY = os.environ.get("BUNNY_TOKEN_KEY", "").strip()     # opcional: 
 WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
 WHOP_APP_API_KEY = os.environ.get("WHOP_APP_API_KEY", "").strip()   # prueba de la opción 2: la app de Whop que instalan los creadores
 WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip("/")
-WHOP_AUTO_MAX = float(os.environ.get("WHOP_AUTO_MAX", "0"))     # 0 = siempre automático; si se pone, por encima lo aprueba un admin
+WHOP_AUTO_MAX = float(os.environ.get("WHOP_AUTO_MAX", "50"))    # retiros por encima de esto los aprueba un admin (0 = sin tope)
+WHOP_AUTO_DAILY = float(os.environ.get("WHOP_AUTO_DAILY", "300"))  # máximo pagado solo en 24 h entre todos; lo que pase espera a un admin (0 = sin tope)
 WHOP_USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,40}$")
 BASE_URL = os.environ.get("BASE_URL", "").strip().strip('"').rstrip("/")
 if BASE_URL and not BASE_URL.startswith("http"):
@@ -469,6 +470,8 @@ class Campaign(db.Model):
 
 
 class Submission(db.Model):
+    __table_args__ = (db.Index("ix_submission_status", "status"),                       # casi todo filtra por estado
+                      db.Index("ix_submission_campaign_status", "campaign_id", "status"))
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
@@ -767,14 +770,14 @@ class CampaignMod(db.Model):
     campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    perms = db.Column(db.String(200), default="")             # permisos separados por comas ("" = todos)
+    perms = db.Column(db.String(300), default="")             # permisos separados por comas ("" = los de siempre: MOD_DEFAULT)
     user = db.relationship("User")
     campaign = db.relationship("Campaign")
     __table_args__ = (db.UniqueConstraint("campaign_id", "user_id"),)
 
     @property
     def perm_set(self):
-        return set(MOD_PERMS) if not self.perms else {p_ for p_ in self.perms.split(",") if p_ in MOD_PERMS}
+        return set(MOD_DEFAULT) if not self.perms else {p_ for p_ in self.perms.split(",") if p_ in MOD_PERMS}
 
 
 def is_mod(user, cid):
@@ -793,12 +796,22 @@ def mod_campaigns(user):
     return [m.campaign for m in CampaignMod.query.filter_by(user_id=user.id).all() if m.campaign]
 
 
+# Todo lo que se puede hacer en una campaña. Los 6 primeros vienen marcados al añadir un mod; el resto, desmarcados.
 MOD_PERMS = {"revisar": "Revisar clips", "verificar": "Pedir otra verificación de vistas", "solicitudes": "Solicitudes y cuentas",
-             "canales": "Publicar en canales", "comentarios": "Moderar comentarios", "soporte": "Soporte de la campaña"}
-ENDPOINT_PERM = {"admin_campaign_review": "revisar", "admin_review": "revisar", "admin_review_bulk": "revisar",
+             "canales": "Publicar en canales", "comentarios": "Moderar comentarios", "soporte": "Soporte de la campaña",
+             "estadisticas": "Ver estadísticas", "clippers": "Ver clippers y lo que gana cada uno",
+             "gestionar_canales": "Gestionar canales y grupo de WhatsApp", "informe": "Informe del creador",
+             "csv": "Descargar CSV de clips", "editar": "Editar la campaña (normas, materiales, plazas…)",
+             "vistas": "Corregir vistas a mano", "dinero": "Presupuesto y tarifas",
+             "estado": "Pausar, abrir/cerrar plazas y finalizar"}
+MOD_DEFAULT = ("revisar", "verificar", "solicitudes", "canales", "comentarios", "soporte")
+MOD_RISKY = {"vistas": "cambia lo que se paga", "dinero": "toca el dinero de la campaña", "estado": "puede cerrar la campaña"}
+ENDPOINT_PERM = {"admin_campaign_review": "revisar", "admin_review": ("revisar", "verificar", "vistas"), "admin_review_bulk": "revisar",
                  "admin_campaign_requests": "solicitudes", "admin_campaign_member": "solicitudes",
-                 "admin_campaign_account": "solicitudes", "admin_campaign_channels": "canales",
-                 "admin_campaign_support": "soporte"}
+                 "admin_campaign_account": "solicitudes", "admin_campaign_channels": ("canales", "gestionar_canales"),
+                 "admin_campaign_support": "soporte", "admin_campaign": ("estadisticas", "informe"),
+                 "admin_campaign_clippers": "clippers", "admin_campaign_csv": "csv", "admin_campaign_form": "editar",
+                 "admin_campaign_state": ("estado", "dinero"), "admin_campaign_close": "estado"}
 
 
 def mod_perms(user, cid):
@@ -809,21 +822,31 @@ def mod_perms(user, cid):
 
 
 def mod_can(user, cid, perm):
+    if isinstance(perm, (tuple, set, list)):
+        return bool(set(perm) & mod_perms(user, cid))
     return perm in mod_perms(user, cid)
+
+
+def perm_ok(cid, perm, admin_ep=None):
+    """Para pantallas compartidas: el admin según su rol; el mod según sus permisos en esa campaña."""
+    if getattr(current_user, "is_admin", False):
+        return admin_can(admin_ep or request.endpoint)
+    return mod_can(current_user, cid, perm)
 
 
 def mod_home(cid, user=None):
     """Primera pantalla del panel de la campaña a la que el mod tiene acceso."""
     ps = mod_perms(user or current_user, cid)
     for perm, ep in (("revisar", "admin_campaign_review"), ("solicitudes", "admin_campaign_requests"),
-                     ("soporte", "admin_campaign_support"), ("canales", "admin_campaign_channels")):
+                     ("soporte", "admin_campaign_support"), ("canales", "admin_campaign_channels"),
+                     ("gestionar_canales", "admin_campaign_channels"), ("estadisticas", "admin_campaign"),
+                     ("informe", "admin_campaign"), ("clippers", "admin_campaign_clippers"), ("editar", "admin_campaign_form")):
         if perm in ps:
             return url_for(ep, cid=cid)
     return url_for("campaign", cid=cid)
 
 
-MOD_ENDPOINTS = {"admin_campaign_support", "admin_campaign_review", "admin_campaign_requests", "admin_campaign_channels", "admin_review",
-                 "admin_review_bulk", "admin_campaign_member", "admin_campaign_account"}
+MOD_ENDPOINTS = set(ENDPOINT_PERM)
 MOD_CHANNEL_ACTS = {"publicar", "post_editar", "post_borrar", "post_fijar"}
 
 
@@ -1022,6 +1045,11 @@ def ensure_schema():
             with db.engine.begin() as conn:
                 conn.execute(text(ddl))
             log.info("Columna añadida: %s.%s", table.name, col.name)
+        have = {ix["name"] for ix in insp.get_indexes(table.name)}
+        for ix in table.indexes:                       # índices nuevos en tablas que ya existían
+            if ix.name and ix.name not in have:
+                ix.create(bind=db.engine, checkfirst=True)
+                log.info("Índice añadido: %s", ix.name)
 
 
 MONEY_COLUMNS = {
@@ -2156,10 +2184,10 @@ def inject_globals():
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
-            "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year,
+            "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year, "now_utc": datetime.utcnow(),
             "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
             "REJECT_REASONS": REJECT_REASONS, "COUNTRIES": COUNTRIES, "LANGUAGES": LANGUAGES, "CAMPAIGN_KINDS": CAMPAIGN_KINDS,
-            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
+            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
             "mod_campaigns": mod_campaigns, "acting_as_mod": acting_as_mod,
             "STATS_HOURS": STATS_HOURS, "bunny_ready": bunny_ready, "reached_min": reached_min,
             "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
@@ -2966,8 +2994,18 @@ def verify_bio(cid, aid):
                 log.exception("Fallo comprobando la bio")
                 db.session.rollback()
     threading.Thread(target=run, daemon=True).start()
-    flash("Comprobando tu bio… tarda menos de un minuto. Recarga la página para ver el resultado.", "info")
     return redirect(url_for("campaign", cid=cid))
+
+
+@app.route("/campana/<int:cid>/cuenta/<int:aid>/estado")
+@login_required
+def bio_state(cid, aid):
+    """Para que la página sepa sola cuándo ha terminado la comprobación de la bio (sin recargar a mano)."""
+    acc = db.session.get(CampaignAccount, aid)
+    if not acc or acc.user_id != current_user.id or acc.campaign_id != cid:
+        abort(404)
+    stuck = acc.bio_checked_at and (datetime.utcnow() - acc.bio_checked_at).total_seconds() > 300
+    return {"checking": acc.bio_status == "Comprobando…" and not stuck, "verified": bool(acc.bio_verified)}
 
 
 CLIP_TABS = {"todos": "Todos", "contando": "Contando vistas", "estadisticas": "Verificar vistas", "revisar": "En revisión", "aprobado": "Aprobados", "rechazado": "Rechazados"}
@@ -3223,8 +3261,12 @@ def withdraw():
             return redirect(url_for("earnings"))
         amount = cents(sum(t for _, t in parts))
         created = []
+        auto_today = auto_paid_last_day()
         for cid, take in parts:
-            auto = wallet_ready(cid) and (WHOP_AUTO_MAX <= 0 or take <= WHOP_AUTO_MAX)
+            auto = (wallet_ready(cid) and (WHOP_AUTO_MAX <= 0 or take <= WHOP_AUTO_MAX)
+                    and (WHOP_AUTO_DAILY <= 0 or auto_today + take <= WHOP_AUTO_DAILY))
+            if auto:
+                auto_today += take
             p = Payout(user_id=current_user.id, creator_id=cid, amount=take, method=current_user.payout_method,
                        status="procesando" if auto else "solicitado",
                        note="" if auto or wallet_ready(cid) else "Esperando a que se conecte el Whop del creador",
@@ -3330,8 +3372,24 @@ def account():
 
 
 # ---------------------------------------------------------------- panel de admin
+def _per_request(key, fn):
+    """Calcula algo una sola vez por petición (la campanita y el menú del panel piden lo mismo varias veces)."""
+    if not has_request_context():
+        return fn()
+    memo = g.setdefault("_memo", {})
+    if key not in memo:
+        memo[key] = fn()
+    return memo[key]
+
+
 def review_queue(cid=None):
     """Clips pendientes repartidos en «por revisar» y «contando vistas»."""
+    if cid is None:
+        return _per_request("review_queue", lambda: _review_queue(None))
+    return _review_queue(cid)
+
+
+def _review_queue(cid):
     q = (Submission.query.filter_by(status="pendiente")
          .options(joinedload(Submission.user), joinedload(Submission.campaign)).order_by(Submission.created_at))
     if cid:
@@ -3344,6 +3402,10 @@ def review_queue(cid=None):
 
 def pending_by_campaign():
     """{campaña: {"clips": por revisar + apelaciones, "requests": solicitudes, "accounts": cuentas sin verificar}}."""
+    return _per_request("pending_by_campaign", _pending_by_campaign)
+
+
+def _pending_by_campaign():
     out = {}
     rev, _ = review_queue()
     for s_ in rev:
@@ -3370,6 +3432,10 @@ def review_queue_count():
 
 def admin_counts():
     """Números del menú lateral del panel: lo que está esperando a que hagas algo."""
+    return _per_request("admin_counts", _admin_counts)
+
+
+def _admin_counts():
     req, clips = CampaignMember.query.filter_by(status="pendiente").count(), review_queue_count()
     accs = CampaignAccount.query.filter_by(status="pendiente").count()
     sup = (db.session.query(db.func.count(db.distinct(CampMessage.user_id)))
@@ -3534,7 +3600,7 @@ def admin_campaign_review(cid):
 
 
 @app.route("/admin/campana/<int:cid>/clippers")
-@admin_required
+@staff_required(lambda kw: kw.get("cid"))
 def admin_campaign_clippers(cid):
     """Los clippers aceptados en la campaña con lo que llevan en ella."""
     camp = db.session.get(Campaign, cid) or abort(404)
@@ -3562,8 +3628,9 @@ def admin_mods():
     """Todos los mods en un sitio: en qué campañas están, qué pueden hacer y cuánto trabajan."""
     if request.method == "POST":
         act = request.form.get("act", "")
-        perms = [p_ for p_ in request.form.getlist("perms") if p_ in MOD_PERMS]
-        perm_str = "" if set(perms) == set(MOD_PERMS) else ",".join(perms)
+        chosen = set(request.form.getlist("perms"))
+        perms = [p_ for p_ in MOD_PERMS if p_ in chosen]
+        perm_str = ",".join(perms)
         if act == "anadir":
             email = (request.form.get("email") or "").strip().lower()
             u = User.query.filter(db.func.lower(User.email) == email).first() if email else None
@@ -3636,7 +3703,7 @@ def admin_mods():
         }
     camps = Campaign.query.filter(Campaign.status != "finalizada").order_by(Campaign.created_at.desc()).all()
     return render_template("admin/mods.html", mods=sorted(mods.values(), key=lambda m: m["user"].name.lower()),
-                           camps=camps, perms=MOD_PERMS)
+                           camps=camps, perms=MOD_PERMS, defaults=MOD_DEFAULT, risky=MOD_RISKY)
 
 
 @app.route("/campana/<int:cid>/soporte", methods=["POST"])
@@ -4306,7 +4373,7 @@ def _campaign_from_form(camp):
 
 @app.route("/admin/campana/nueva", methods=["GET", "POST"])
 @app.route("/admin/campana/<int:cid>/editar", methods=["GET", "POST"])
-@admin_required
+@staff_required(lambda kw: kw.get("cid"))
 def admin_campaign_form(cid=None):
     camp = db.session.get(Campaign, cid) if cid else Campaign(platforms="tiktok,instagram,youtube", status="activa",
                                                               category="streamer", spent=0.0)
@@ -4318,8 +4385,21 @@ def admin_campaign_form(cid=None):
         camp.sound_url = lead.link if lead.link.startswith(("https://", "http://")) else ""
     if cid and not camp:
         abort(404)
+    as_mod = bool(cid) and acting_as_mod()
+    keep = {}
+    if as_mod:                                  # lo que el mod no puede cambiar se queda como estaba, mande lo que mande
+        locked = ["featured", "creator_id", "category", "kind"]
+        if not mod_can(current_user, cid, "dinero"):
+            locked += [c.name for c in Campaign.__table__.columns
+                       if c.name.startswith(("rate", "min_", "max_")) and c.name != "max_members"]
+            locked += ["budget", "spent", "platforms", "bonus_per_clip", "earn_days", "expire_days"]
+        if not mod_can(current_user, cid, "estado"):
+            locked += ["status", "ended_at"]
+        keep = {k: getattr(camp, k) for k in locked if hasattr(camp, k)}
     if request.method == "POST":
         error = _campaign_from_form(camp)
+        for k, v in keep.items():
+            setattr(camp, k, v)
         if not error:
             if camp.status == "activa" and camp.exhausted and cid:
                 return_msg = "Guardada, pero sigue sin presupuesto libre: súbelo para reactivarla."
@@ -4350,6 +4430,7 @@ def admin_campaign_form(cid=None):
         if cid:
             camp = db.session.get(Campaign, cid)
     return render_template("admin/campaign_form.html", camp=camp, editing=bool(cid), creators=Creator.query.order_by(Creator.name).all(),
+                           can={k: perm_ok(cid, k) for k in ("dinero", "estado", "csv")} if cid else {"dinero": True, "estado": True, "csv": True},
                            pend=pending_by_campaign().get(cid, {}) if cid else {}, sec="ajustes")
 
 
@@ -4465,11 +4546,13 @@ def admin_campaign_duplicate(cid):
 
 
 @app.route("/admin/campana/<int:cid>/estado", methods=["POST"])
-@admin_required
+@staff_required(lambda kw: kw.get("cid"))
 def admin_campaign_state(cid):
     """Botones rápidos: pausar, reanudar o añadir presupuesto."""
     camp = lock_row(Campaign, cid) or abort(404)
     accion = request.form.get("accion", "")
+    if not perm_ok(cid, "dinero" if accion == "presupuesto" else "estado"):
+        abort(403)
     if accion == "pausar" and camp.status == "activa":
         camp.status = "pausada"
         flash("Campaña pausada: ya no se ve ni acepta clips.", "ok")
@@ -4544,7 +4627,7 @@ def admin_campaign_channels(cid):
         name = " ".join((request.form.get("name") or "").split())[:60]
         emoji = (request.form.get("emoji") or "").strip()[:8]
         back = lambda c=None: redirect(url_for("admin_campaign_channels", cid=cid, canal=c or chid or None))  # noqa: E731
-        if acting_as_mod() and act not in MOD_CHANNEL_ACTS:
+        if acting_as_mod() and not mod_can(current_user, cid, "canales" if act in MOD_CHANNEL_ACTS else "gestionar_canales"):
             abort(403)
         if act == "whatsapp":
             url = (request.form.get("whatsapp_url") or "").strip()[:300]
@@ -4552,7 +4635,7 @@ def admin_campaign_channels(cid):
                 flash("Pega un enlace de grupo de WhatsApp (empieza por https://chat.whatsapp.com/…).", "error")
                 return back()
             camp.whatsapp_url = url
-            flash("Discord guardado." if url else "Discord quitado.", "ok")
+            flash("Grupo de WhatsApp guardado." if url else "Grupo de WhatsApp quitado.", "ok")
         elif act == "seccion_nueva" and name:
             db.session.add(ChannelSection(campaign_id=cid, title=name[:80], position=len(sections)))
         elif act.startswith("seccion_"):
@@ -4737,7 +4820,7 @@ def admin_creator_form(crid=None):
 
 
 @app.route("/admin/campana/<int:cid>")
-@admin_required
+@staff_required(lambda kw: kw.get("cid"))
 def admin_campaign(cid):
     camp = db.session.get(Campaign, cid) or abort(404)
     if not camp.report_token:
@@ -4745,18 +4828,19 @@ def admin_campaign(cid):
         db.session.commit()
     st = campaign_stats(camp)
     report_url = (BASE_URL or request.host_url.rstrip("/")) + url_for("report", token=camp.report_token)
+    can = {k: perm_ok(cid, k) for k in ("estadisticas", "informe", "dinero", "estado")}
     shortfall = None
-    if camp.status == "activa" and wallet_ready(camp.creator_id):
+    if not acting_as_mod() and camp.status == "activa" and wallet_ready(camp.creator_id):
         bal, _ = whop_balance(camp.creator_id)
         owed = creator_owed(camp.creator_id)
         if bal is not None and bal + CENT < owed:
             shortfall = {"balance": bal, "owed": owed, "missing": cents(owed - bal)}
-    return render_template("admin/campaign.html", camp=camp, st=st, report_url=report_url,
-                           an=campaign_analytics(camp), shortfall=shortfall, pend=pending_by_campaign().get(cid, {}), sec="resumen")
+    return render_template("admin/campaign.html", camp=camp, st=st, report_url=report_url, can=can,
+                           an=campaign_analytics(camp) if can["estadisticas"] else None, shortfall=shortfall, pend=pending_by_campaign().get(cid, {}), sec="resumen")
 
 
 @app.route("/admin/campana/<int:cid>/clips.csv")
-@admin_required
+@staff_required(lambda kw: kw.get("cid"))
 def admin_campaign_csv(cid):
     camp = db.session.get(Campaign, cid) or abort(404)
     out = io.StringIO()
@@ -4791,9 +4875,8 @@ def admin_review(sid, accion):
         if sub.user_id == current_user.id:
             flash("No puedes revisar tus propios clips: los revisa otra persona del equipo.", "error")
             return _back()
-        if accion in ("visitas",):                    # tocar vistas es tocar dinero: solo el equipo
-            abort(403)
-        if accion == "pedir_estadisticas" and not mod_can(current_user, sub.campaign_id, "verificar"):
+        need = "vistas" if accion == "visitas" else "verificar" if accion == "pedir_estadisticas" else "revisar"
+        if not mod_can(current_user, sub.campaign_id, need):
             abort(403)
     nxt = request.form.get("next", "")
     if accion == "aprobar":
@@ -4945,7 +5028,7 @@ def admin_probe():
 
 
 @app.route("/admin/campana/<int:cid>/cerrar", methods=["POST"])
-@admin_required
+@staff_required(lambda kw: kw.get("cid"))
 def admin_campaign_close(cid):
     camp = db.session.get(Campaign, cid) or abort(404)
     if camp.status == "finalizada":
@@ -5156,6 +5239,14 @@ def _whop_apply(payout, ok, code, data):
                  f"{payout.user.name}: {str(reason or code)[:150]}. El dinero ha vuelto a su saldo.",
                  url_for("admin_clippers") if has_request_context() else "", tags="warning")
     return "fallido"
+
+
+def auto_paid_last_day():
+    """Lo que ha salido (o está saliendo) por Whop en las últimas 24 h: para el tope diario de pagos automáticos."""
+    since = datetime.utcnow() - timedelta(hours=24)
+    total = db.session.query(db.func.coalesce(db.func.sum(Payout.amount), 0)).filter(
+        Payout.method == WHOP_METHOD, Payout.status.in_(("procesando", "pagado")), Payout.created_at >= since).scalar()
+    return cents(total or 0)
 
 
 def whop_pay(payout):

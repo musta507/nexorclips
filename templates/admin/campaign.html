@@ -6,14 +6,15 @@
 
 {% if camp.status == 'finalizada' %}<div class="flash ok">Campaña completada{% if camp.ended_at %} el {{ camp.ended_at|date }}{% endif %}. Ya no acepta clips ni se actualizan sus vistas, y los clippers ya pueden retirar lo que ganaron. Para reabrirla, sube el presupuesto y ponla en «Activa».</div>{% endif %}
 
+{% if can.estadisticas %}
 <div class="card tight camp-budget" id="presupuesto">
   <div class="camp-budget-top">
     <div><span class="small muted">Presupuesto</span><b class="tnum">{{ st.spent|money }} <span class="muted">de {{ camp.budget|money }}</span></b>{% if camp.low_budget %} <span class="flag serious">Queda poco: {{ camp.remaining|money }}</span>{% endif %}</div>
-    <form class="inline" method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}">
+    {% if can.dinero %}<form class="inline" method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="presupuesto">
       <input name="amount" inputmode="decimal" placeholder="500" style="width:100px" aria-label="Presupuesto a añadir" required>
       <button class="btn sm">+ Añadir presupuesto</button>
-    </form>
+    </form>{% endif %}
   </div>
   <div class="dbar" role="img" aria-label="{{ st.pct }} % gastado"><span style="width:{{ st.pct }}%"></span></div>
   <div class="small muted camp-meta">
@@ -22,7 +23,9 @@
 </div>
 
 {% include "_analytics.html" %}
+{% endif %}
 
+{% if can.informe %}
 <div class="card tight report-link">
   <div>
     <h3>Informe para el creador</h3>
@@ -34,5 +37,6 @@
     <a class="btn sm soft" href="{{ url_for('report', token=camp.report_token) }}" target="_blank" rel="noopener">Abrir</a>
   </div>
 </div>
+{% endif %}
 
 {% endblock %}

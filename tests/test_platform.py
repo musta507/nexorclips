@@ -2024,10 +2024,75 @@ def test_mods_page_and_permissions():
     assert mod.get(f"/admin/campana/{cid}/revisar").status_code == 403
     assert mod.get(f"/admin/campana/{cid}/soporte").status_code == 200
     page = admin.get("/admin/mods").get_data(as_text=True)
-    assert "mod@test.com" in page and "2 de 6 permisos" in page
+    assert "mod@test.com" in page and f"2 de {len(A.MOD_PERMS)} permisos" in page
     post(admin, "/admin/mods", act="permisos", mid=str(mid), perms=list(A.MOD_PERMS))
     assert mod.get(f"/admin/campana/{cid}/revisar").status_code == 200
     post(admin, "/admin/mods", act="quitar", mid=str(mid))
     assert mod.get(f"/admin/campana/{cid}/soporte").status_code == 403
     clip_page = admin.get("/admin/clipper/%d" % 1)
     assert clip_page.status_code in (200, 404)
+
+
+def test_whop_daily_cap_waits_for_admin(monkeypatch):
+    """Por encima del tope diario de pagos automáticos, el retiro espera a un admin."""
+    c, admin = _clipper_with_balance(monkeypatch)
+    calls = _whop_fake(monkeypatch)
+    monkeypatch.setattr(A, "WHOP_AUTO_DAILY", 40.0)
+    post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    post(c, "/ganancias/retirar")
+    assert not [x for x in calls if "/transfers" in x[1]]
+    with A.app.app_context():
+        assert A.Payout.query.one().status == "solicitado"
+
+
+def test_default_whop_cap_is_set():
+    assert A.WHOP_AUTO_MAX > 0 and A.WHOP_AUTO_DAILY > 0      # nunca pagos automáticos sin tope por defecto
+
+
+def test_bio_check_state_endpoint():
+    cid = make_campaign()
+    c = client_for("bio@test.com")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="bio@test.com").one()
+        acc = A.CampaignAccount(user_id=u.id, campaign_id=cid, platform="tiktok", handle="biocheck",
+                                status="pendiente", bio_status="Comprobando…", bio_checked_at=datetime.utcnow())
+        A.db.session.add(acc); A.db.session.commit(); aid = acc.id
+    assert c.get(f"/campana/{cid}/cuenta/{aid}/estado").get_json() == {"checking": True, "verified": False}
+    with A.app.app_context():
+        acc = A.db.session.get(A.CampaignAccount, aid)
+        acc.bio_status, acc.bio_verified = "Verificada", True; A.db.session.commit()
+    assert c.get(f"/campana/{cid}/cuenta/{aid}/estado").get_json() == {"checking": False, "verified": True}
+    assert client_for("otro@test.com").get(f"/campana/{cid}/cuenta/{aid}/estado").status_code == 404
+
+
+def test_mod_extra_permissions():
+    """Los mods antiguos conservan los 6 de siempre; los permisos nuevos van desmarcados y se activan uno a uno."""
+    cid = make_campaign(song="Permisos", budget=1000)
+    admin = client_for("admin@test.com")
+    mod = client_for("mod2@test.com", tiktok="modo2")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="mod2@test.com").one()
+        row = A.CampaignMod(campaign_id=cid, user_id=u.id, perms="")      # mod de antes del cambio
+        A.db.session.add(row); A.db.session.commit(); mid = row.id
+        assert row.perm_set == set(A.MOD_DEFAULT)
+    for path in ("", "/clippers", "/editar", "/clips.csv"):
+        assert mod.get(f"/admin/campana/{cid}{path}").status_code == 403
+    assert post(mod, f"/admin/campana/{cid}/estado", accion="pausar").status_code == 403
+    post(admin, "/admin/mods", act="permisos", mid=str(mid), perms=list(A.MOD_DEFAULT) + ["estadisticas", "clippers", "editar", "csv"])
+    page = mod.get(f"/admin/campana/{cid}").get_data(as_text=True)
+    assert "Añadir presupuesto" not in page and "Informe para el creador" not in page
+    assert mod.get(f"/admin/campana/{cid}/clippers").status_code == 200
+    assert mod.get(f"/admin/campana/{cid}/clips.csv").status_code == 200
+    form = mod.get(f"/admin/campana/{cid}/editar").get_data(as_text=True)
+    assert "Solo lectura" in form and "Cerrar campaña" not in form
+    # edita las normas e intenta subir el presupuesto: las normas cambian, el dinero no
+    post(mod, f"/admin/campana/{cid}/editar", song="Permisos", artist="Rafa", rate_k="9", budget="99999",
+         pf_tiktok="on", status="finalizada", rules="Normas nuevas", wizard="1")
+    with A.app.app_context():
+        camp = A.db.session.get(A.Campaign, cid)
+        assert camp.budget == 1000 and camp.status == "activa" and "Normas nuevas" in (camp.rules or "")
+    assert post(mod, f"/admin/campana/{cid}/estado", accion="presupuesto", amount="50").status_code == 403
+    post(admin, "/admin/mods", act="permisos", mid=str(mid), perms=list(A.MOD_DEFAULT) + ["estado"])
+    post(mod, f"/admin/campana/{cid}/estado", accion="pausar")
+    with A.app.app_context():
+        assert A.db.session.get(A.Campaign, cid).status == "pausada"

@@ -158,6 +158,25 @@ function pagina() {
   desplegables();
   destacado();
   canalVisible();
+  comprobarBio();
+}
+
+// =============================================================== código en la bio: el resultado aparece solo, sin recargar a mano
+function comprobarBio() {
+  document.querySelectorAll("[data-bio-poll]").forEach(function (box) {
+    var url = box.getAttribute("data-bio-poll"), tries = 0;
+    var t = setInterval(function () {
+      tries++;
+      fetch(url, { credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.checking && tries < 60) return;
+          clearInterval(t);
+          if (window.Turbo) Turbo.visit(location.href, { action: "replace" }); else location.reload();
+        }).catch(function () {});
+    }, 4000);
+    limpiar.push(function () { clearInterval(t); });
+  });
 }
 
 // =============================================================== gráfica de estadísticas (informe y panel)

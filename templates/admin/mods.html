@@ -2,6 +2,14 @@
 {% import "admin/_ui.html" as ui %}
 {% from "_icons.html" import icon, av %}
 {% block title %}Mods · Admin{% endblock %}
+{% macro perm_checks(perms, on, defaults, risky) %}
+<div class="mods-perms">
+  <span class="mods-group">Básicos</span>
+  <div class="mods-checks">{% for k, label in perms.items() if k in defaults %}<label class="check"><input type="checkbox" name="perms" value="{{ k }}"{% if k in on %} checked{% endif %}> {{ label }}</label>{% endfor %}</div>
+  <span class="mods-group">Más permisos</span>
+  <div class="mods-checks">{% for k, label in perms.items() if k not in defaults %}<label class="check"><input type="checkbox" name="perms" value="{{ k }}"{% if k in on %} checked{% endif %}> {{ label }}{% if k in risky %} <span class="mods-risk">{{ risky[k] }}</span>{% endif %}</label>{% endfor %}</div>
+</div>
+{% endmacro %}
 {% block content %}
 {% call ui.head("Mods", "Quién modera cada campaña, qué puede hacer y cuánto ha trabajado esta semana.") %}{% endcall %}
 
@@ -15,8 +23,8 @@
     <div class="field"><span class="label">Campañas</span>
       <div class="mods-checks">{% for c in camps %}<label class="check"><input type="checkbox" name="campaigns" value="{{ c.id }}"> {{ c.song }}</label>{% else %}<span class="small muted">No hay campañas activas.</span>{% endfor %}</div></div>
     <div class="field"><span class="label">Permisos</span>
-      <div class="mods-checks">{% for k, label in perms.items() %}<label class="check"><input type="checkbox" name="perms" value="{{ k }}" checked> {{ label }}</label>{% endfor %}</div>
-      <span class="hint">Ningún mod puede tocar dinero, editar la campaña ni bloquear clippers.</span></div>
+      {{ perm_checks(perms, defaults, defaults, risky) }}
+      <span class="hint">Vienen marcados los básicos. Los demás actívalos solo si confías en esa persona. Retiros, bloquear clippers y borrar campañas son siempre solo tuyos.</span></div>
     <button class="btn accent" style="align-self:flex-start">Añadir mod</button>
   </form>
 </details>
@@ -46,7 +54,7 @@
         <summary><span class="mod-camp-name">{{ r.campaign.song }}</span><span class="small muted">{{ ps|length }} de {{ perms|length }} permisos</span><span class="link small">Gestionar</span></summary>
         <form method="post" class="form-stack" style="margin-top:10px">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="permisos"><input type="hidden" name="mid" value="{{ r.id }}">
-          <div class="mods-checks">{% for k, label in perms.items() %}<label class="check"><input type="checkbox" name="perms" value="{{ k }}"{% if k in ps %} checked{% endif %}> {{ label }}</label>{% endfor %}</div>
+          {{ perm_checks(perms, ps, defaults, risky) }}
           <div class="inline" style="gap:8px"><button class="btn sm">Guardar permisos</button></div>
         </form>
         <form method="post" data-confirm="¿Quitar a {{ m.user.name }} como mod de «{{ r.campaign.song }}»?" style="margin-top:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="quitar"><input type="hidden" name="mid" value="{{ r.id }}"><button class="btn sm soft">Quitar de esta campaña</button></form>
