@@ -5,7 +5,7 @@
   <section class="hm-hero welcome{{ ' has-covers' if hero_camps }}">
     <div>
       <span class="hm-eb">Hola, {{ current_user.name.split()[0] if current_user.name else "clipper" }}</span>
-      <h1>Bienvenido a {{ APP_NAME }}</h1>
+      {% if pot %}<h1><span class="tnum">{{ pot|money(0) }}</span> para repartir en campañas activas</h1>{% else %}<h1>Elige tu primera campaña</h1>{% endif %}
       <p>{{ summary }}</p>
     </div>
     <a class="btn dark" href="{{ url_for('campaigns_page') }}">Ver campañas {{ icon("arrow") }}</a>

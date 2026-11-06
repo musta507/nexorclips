@@ -2650,7 +2650,8 @@ def home_data(u):
     if not bits and open_n:
         summary = (f"{open_n} {'campaña activa' if open_n == 1 else 'campañas activas'} con plazas libres. "
                    "Elige una y empieza a ganar.")
-    return {"quick": quick, "hero_camps": live[:3],
+    pot = cents(sum(max(c.remaining or 0, 0) for c in active_campaigns()))   # lo que queda por repartir (con o sin plazas)
+    return {"quick": quick, "hero_camps": live[:3], "pot": pot,
             "summary": summary, "learn_url": learn_url, "learn": learn, "steps": steps, "show_steps": show_steps,
             "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
             "rank": rank, "masked": mask_name}

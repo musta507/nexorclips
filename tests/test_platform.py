@@ -1927,7 +1927,7 @@ def test_home_dashboard_steps_week_clips_and_ranking():
     post(admin, "/admin/destacado", act="whatsapp", whatsapp_url="https://chat.whatsapp.com/G1")
     a = client_for("a@test.com", tiktok="ana", verify=False)
     page = a.get("/").get_data(as_text=True)
-    assert "Empieza a ganar en 3 pasos" in page and "Ver formación" in page and "Aplica a una campaña" in page and "Bienvenido a" in page
+    assert "Empieza a ganar en 3 pasos" in page and "Ver formación" in page and "Aplica a una campaña" in page and "para repartir en campañas activas" in page
     with A.app.app_context():
         c = A.Course(title="Cómo clipear desde cero", published=True)
         A.db.session.add(c); A.db.session.flush()
