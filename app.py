@@ -2613,6 +2613,11 @@ def home_data(u):
     learn = {"courses": len(pub), "lessons": les_total, "done": les_done,
              "pct": round(les_done / les_total * 100) if les_total else 0,
              "duration": dur_label(sum(ls.duration or 0 for c in pub for ls in c.visible_lessons))}
+    seen_ids = set().union(*[p["done_ids"] for p in prs]) if prs else set()
+    all_les = [ls for c in sorted(pub, key=lambda c: (c.position, c.id)) for ls in c.visible_lessons]
+    pick = [ls for ls in all_les if ls.id not in seen_ids][:3] or all_les[:3]     # las siguientes que le tocan
+    learn["thumbs"] = [{"title": ls.title, "img": lesson_thumb(ls),
+                        "dur": f"{ls.duration // 60}:{ls.duration % 60:02d}" if ls.duration else ""} for ls in pick]
     learn_url = url_for("courses")              # el banner lleva a Formación en general, sin marcar ningún curso
     # paso a paso
     wa = get_setting("whatsapp_general", "")
@@ -2650,8 +2655,11 @@ def home_data(u):
     if not bits and open_n:
         summary = (f"{open_n} {'campaña activa' if open_n == 1 else 'campañas activas'} con plazas libres. "
                    "Elige una y empieza a ganar.")
-    pot = cents(sum(max(c.remaining or 0, 0) for c in active_campaigns()))   # lo que queda por repartir (con o sin plazas)
-    return {"quick": quick, "hero_camps": live[:3], "pot": pot,
+    actives = active_campaigns()
+    pot = cents(sum(max(c.remaining or 0, 0) for c in actives))   # lo que queda por repartir (con o sin plazas)
+    hero_stats = {"active": len(actives), "open": sum(1 for c in actives if not c.full and not c.exhausted),
+                  "best": max([max([c.rate or 0] + [r for _, r in c.platform_rates]) for c in actives] or [0])}
+    return {"quick": quick, "hero_camps": live[:3], "pot": pot, "hero_stats": hero_stats,
             "summary": summary, "learn_url": learn_url, "learn": learn, "steps": steps, "show_steps": show_steps,
             "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
             "rank": rank, "masked": mask_name}

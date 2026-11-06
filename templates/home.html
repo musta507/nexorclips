@@ -8,6 +8,13 @@
       <span class="hm-pill">{{ icon("trend") }} Hola, {{ current_user.name.split()[0] if current_user.name else "clipper" }}</span>
       {% if pot %}<h1><span class="tnum hm-acc">{{ pot|money(0) }}</span> para repartir en campañas activas</h1>{% else %}<h1>Elige tu primera campaña</h1>{% endif %}
       <p>{{ summary }}</p>
+      {% if hero_stats.active %}
+      <div class="hm-learn light">
+        <span>{{ icon("flag") }} {{ hero_stats.active }} activa{{ 's' if hero_stats.active != 1 }}</span>
+        <span>{{ icon("users") }} {{ hero_stats.open }} con plazas</span>
+        {% if hero_stats.best %}<span>{{ icon("wallet") }} hasta {{ hero_stats.best|rate_k }} por 1.000 vistas</span>{% endif %}
+      </div>
+      {% endif %}
     </div>
     <a class="btn dark hm-cta" href="{{ url_for('campaigns_page') }}">Ver campañas {{ icon("arrow") }}</a>
     {% if hero_camps %}
@@ -19,7 +26,13 @@
     {% endif %}
   </section>
   <section class="hm-hero light">
-    <span class="hm-3d" aria-hidden="true"><span class="hm-3d-box"><i></i></span><span class="hm-3d-ring"></span><span class="hm-3d-spark"></span></span>
+    {% if learn.thumbs %}
+    <a class="hm-lessons n{{ learn.thumbs|length }}" href="{{ learn_url }}" aria-label="Ir a formación">
+      {% for th in learn.thumbs %}
+      <span class="hm-ls" title="{{ th.title }}">{% if th.img %}<img src="{{ th.img }}" alt="" loading="lazy" data-hide-broken>{% endif %}<i class="hm-cv-play" aria-hidden="true"></i>{% if th.dur %}<em class="tnum">{{ th.dur }}</em>{% endif %}</span>
+      {% endfor %}
+    </a>
+    {% endif %}
     <div class="hm-ht">
       <span class="hm-pill dark">{{ icon("cap") }} Formación</span>
       <h2>Aprende a <span class="hm-acc">clipear</span></h2>
