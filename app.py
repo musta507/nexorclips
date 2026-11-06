@@ -2613,16 +2613,7 @@ def home_data(u):
     learn = {"courses": len(pub), "lessons": les_total, "done": les_done,
              "pct": round(les_done / les_total * 100) if les_total else 0,
              "duration": dur_label(sum(ls.duration or 0 for c in pub for ls in c.visible_lessons))}
-    # banner de formación: un botón a Formación (marca el curso que tiene a medias, o la guía si aún no la ha hecho)
-    learn_url = url_for("courses")
-    if guide and gp["total"] and not gp["finished"]:
-        learn_url = url_for("courses", destacar=guide.id)
-    else:
-        for c in Course.query.filter_by(published=True).order_by(Course.position, Course.id).all():
-            pr = course_progress(c, u.id)
-            if pr["total"] and pr["done"] and not pr["finished"]:
-                learn_url = url_for("courses", destacar=c.id)
-                break
+    learn_url = url_for("courses")              # el banner lleva a Formación en general, sin marcar ningún curso
     # paso a paso
     wa = get_setting("whatsapp_general", "")
     steps = [{"title": "Únete al grupo de WhatsApp", "text": "Avisos, plazas nuevas y comunidad de clippers.",
