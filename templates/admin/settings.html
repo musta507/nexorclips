@@ -82,6 +82,17 @@
   </form>
 </div>
 
+<div class="card tight toolbar">
+  <div>
+    <h3>Mi demo como clipper</h3>
+    <p class="small muted">{% if my_demo_n %}Tu cuenta tiene {{ my_demo_n }} clips de demostración, con vistas, ganancias y avisos. Al quitarla se borra solo esto: la demo de la plataforma y lo real siguen igual.{% else %}Llena tu propia cuenta como si fueras un clipper: campañas, cuentas, clips con vistas, ganancias y avisos. Va aparte de la demo de la plataforma. Lo ves con «Ver la web como clipper».{% endif %}</p>
+  </div>
+  <form method="post" action="{{ url_for('admin_my_demo') }}"{% if my_demo_n %} data-confirm="¿Quitar tu demo como clipper?"{% endif %}>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="{{ 'quitar' if my_demo_n else 'cargar' }}">
+    <button class="btn {{ 'soft' if my_demo_n else 'accent' }}">{{ "Quitar mi demo" if my_demo_n else "Cargar mi demo" }}</button>
+  </form>
+</div>
+
 {% if allow_wipe %}
 <details class="card wipe">
   <summary><b>Empezar de cero</b> <span class="small muted">· borrar todos los datos de prueba</span></summary>

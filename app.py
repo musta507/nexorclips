@@ -516,6 +516,7 @@ class Submission(db.Model):
     checked_at = db.Column(db.DateTime, nullable=True)
     views_error = db.Column(db.String(255), default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    my_demo = db.Column(db.Boolean, default=False)          # demo personal del admin (se quita aparte)
     user = db.relationship("User", backref="submissions")
 
     @property
@@ -621,6 +622,7 @@ class CampaignAccount(db.Model):
     bio_checked_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime, nullable=True)
+    my_demo = db.Column(db.Boolean, default=False)          # demo personal del admin (se quita aparte)
     last_post_at = db.Column(db.DateTime, nullable=True)       # último vídeo que vimos en su perfil
     last_scan_at = db.Column(db.DateTime, nullable=True)       # última vez que miramos su perfil
     user = db.relationship("User")
@@ -645,6 +647,7 @@ class CampaignMember(db.Model):
     answers = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     decided_at = db.Column(db.DateTime, nullable=True)
+    my_demo = db.Column(db.Boolean, default=False)          # demo personal del admin (se quita aparte)
     user = db.relationship("User")
     campaign = db.relationship("Campaign")
 
@@ -721,6 +724,7 @@ class Notice(db.Model):
     campaign_id = db.Column(db.Integer, nullable=True)    # para enseñar la portada de la campaña (sin clave ajena: se borra aparte)
     read = db.Column(db.Boolean, default=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    my_demo = db.Column(db.Boolean, default=False)          # demo personal del admin (se quita aparte)
 
 
 class ChannelSection(db.Model):
@@ -1643,6 +1647,11 @@ def is_demo(user):
     return bool(user and (user.email or "").endswith(DEMO_DOMAIN))
 
 
+def is_fake(obj):
+    """Clip o cuenta inventados: de un clipper de demostración o de la demo personal del admin. Nunca se leen en Apify."""
+    return bool(getattr(obj, "my_demo", False)) or is_demo(getattr(obj, "user", None))
+
+
 def apply_reading(sub, info, now):
     """Guarda una lectura de Apify en el clip: vistas, likes, autor, historial y avisos."""
     views = info["views"] if isinstance(info, dict) else int(info)
@@ -1695,7 +1704,7 @@ def refresh_views():
         subs = q.order_by(Submission.created_at).all()
         apply_schedule()
         now0 = datetime.utcnow()
-        subs = [s for s in subs if not s.campaign.exhausted and not earn_window_closed(s, now0) and not is_demo(s.user)]
+        subs = [s for s in subs if not s.campaign.exhausted and not earn_window_closed(s, now0) and not is_fake(s)]
         read, errors = 0, []
         for platform in PLATFORMS:
             group = [s for s in subs if s.platform == platform]
@@ -1728,7 +1737,7 @@ def refresh_views():
         for s in pend:                                   # reglas automáticas (también caduca lo que no llegó al mínimo)
             if not s.review_since and reached_min(s):
                 s.review_since = datetime.utcnow()
-            if is_demo(s.user):
+            if is_fake(s):
                 continue
             r = auto_review(s)
             if r:
@@ -1815,7 +1824,7 @@ def copy_review_videos(limit=30):
                                     Submission.video_guid == "", Submission.video_tries < 3,
                                     Submission.platform.in_(("tiktok", "instagram")))
             .order_by(Submission.review_since).limit(limit).all())
-    todo = [s_ for s_ in todo if not is_demo(s_.user)]
+    todo = [s_ for s_ in todo if not is_fake(s_)]
     tiktok = [s_ for s_ in todo if s_.platform == "tiktok" and not s_.media_url]
     if tiktok:
         try:
@@ -1889,7 +1898,7 @@ def discover_clips(now=None):
     accs = (CampaignAccount.query.join(Campaign)
             .filter(CampaignAccount.status == "aceptada", Campaign.status == "activa",
                     CampaignAccount.platform.in_(AUTO_PLATFORMS)).all())
-    accs = [a for a in accs if not a.campaign.exhausted and a.platform in a.campaign.platform_list and not is_demo(a.user)]
+    accs = [a for a in accs if not a.campaign.exhausted and a.platform in a.campaign.platform_list and not is_fake(a)]
     added, errors = 0, []
     by_platform = {}
     for a in accs:
@@ -1947,7 +1956,7 @@ def inactivity_reminders(now=None):
     n = 0
     for a in accs:
         camp = a.campaign
-        if camp.exhausted or is_demo(a.user) or (a.user and a.user.is_banned):
+        if camp.exhausted or is_fake(a) or (a.user and a.user.is_banned):
             continue
         if (a.decided_at or a.created_at or now) > now - timedelta(hours=12):
             continue                                          # recién aceptada: aún no toca
@@ -2113,7 +2122,7 @@ ROLE_ENDPOINTS = {
 
 
 TECH_ENDPOINTS = {"admin_settings", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
-                  "admin_demo", "admin_wipe", "admin_activity", "admin_activity_delete", "admin_creators", "admin_creator_form"}
+                  "admin_demo", "admin_my_demo", "admin_wipe", "admin_activity", "admin_activity_delete", "admin_creators", "admin_creator_form"}
 
 
 def is_tech(user=None):
@@ -4144,7 +4153,8 @@ def admin_settings(app_test=None):
     return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"), allow_wipe=ALLOW_WIPE,
                            alerts=tech_alerts(), creators_on=CREATORS_ENABLED, tech_set=bool(TECH_EMAILS),
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
-                           demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count())
+                           demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
+                           my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count())
 
 
 DEMO_NAMES = ["Lucía Fernández", "Mateo Rodríguez", "Valentina Gómez", "Hugo Martín", "Camila Torres", "Leo Sánchez",
@@ -4322,6 +4332,124 @@ def remove_demo():
         delete_user_account(u)
     db.session.commit()
     return len(demo)
+
+
+MY_DEMO_NOTICES = [("clip", "Clip aprobado", "Tu clip ya cuenta para el pago."),
+                   ("clip", "¡Tu clip va muy bien!", "Ha pasado las 100.000 vistas."),
+                   ("campana", "Te han aceptado en la campaña", "Ya puedes subir clips."),
+                   ("clip", "Clip rechazado", "No cumplía las reglas de la campaña.")]
+
+
+def load_my_demo(user, days=21, seed=11):
+    """Demo personal: llena la cuenta del admin como si fuera un clipper (campañas, cuentas, clips, vistas y avisos).
+    Va marcada aparte (my_demo) y no se mezcla con los clippers de demostración de la plataforma."""
+    import random as rnd
+    r = rnd.Random(seed + user.id)
+    now = datetime.utcnow()
+    camps = [c for c in Campaign.query.order_by(Campaign.id).all() if c.status != "finalizada" and not c.exhausted]
+    if not camps:
+        return "No hay campañas activas con presupuesto: crea alguna antes."
+    base = (user.name or "admin").split()[0]
+    handle = (viewcounter.clean_handle(base + ".demo").encode("ascii", "ignore").decode() or "admin.demo") + str(user.id)
+    plan, n = [], 0
+    for c in r.sample(camps, k=min(len(camps), 3)):
+        joined = now - timedelta(days=days - r.randint(0, 4), hours=r.randint(0, 23))
+        if not campaign_member(user.id, c.id):
+            db.session.add(CampaignMember(user_id=user.id, campaign_id=c.id, status="aceptada", created_at=joined,
+                                          decided_at=joined + timedelta(hours=r.randint(1, 12)), my_demo=True,
+                                          answers=demo_answers(c.question_list, r)))
+        plats = c.platform_list[:2] or ["tiktok"]
+        for p in plats:
+            if not CampaignAccount.query.filter_by(campaign_id=c.id, platform=p, handle=handle).first():
+                db.session.add(CampaignAccount(user_id=user.id, campaign_id=c.id, platform=p, handle=handle, status="aceptada",
+                                               bio_verified=True, bio_status="Verificada", created_at=joined,
+                                               decided_at=joined, my_demo=True))
+        for _ in range(r.randint(5, 9)):
+            created = joined + timedelta(hours=r.randint(6, max(7, int((now - joined).total_seconds() // 3600) - 2)))
+            p = r.choice(plats)
+            n += 1
+            vid = str(7500000000000000000 + user.id * 100000 + n) if p == "tiktok" else f"MYDEMO{user.id}x{n}"
+            url = {"tiktok": f"https://www.tiktok.com/@{handle}/video/{vid}",
+                   "instagram": f"https://www.instagram.com/reel/{vid}/",
+                   "youtube": f"https://www.youtube.com/shorts/{vid}",
+                   "facebook": f"https://www.facebook.com/reel/{vid}"}.get(p, f"https://www.tiktok.com/@{handle}/video/{vid}")
+            age = (now - created).total_seconds() / 86400
+            final = int(r.lognormvariate(9.8, 1.1) * (6 if r.random() < .12 else 1) * min(1, .35 + age / 6))
+            minv = c.min_views_for(p)
+            if minv and final < minv and age >= 2 and r.random() < .7:
+                final = int(minv * r.uniform(1.1, 5))
+            s_ = Submission(user_id=user.id, campaign_id=c.id, url=url, platform=p, video_key=f"{p}:mydemo{user.id}x{n}",
+                            author=handle, created_at=created, posted_at=created - timedelta(minutes=r.randint(5, 300)),
+                            views=final, my_demo=True)
+            db.session.add(s_)
+            plan.append((s_, created))
+    db.session.flush()
+    for s_, created in plan:                                   # historial de vistas (sube rápido y se frena)
+        final, age_h, speed, t = s_.views or 0, max(1, (now - created).total_seconds() / 3600), r.uniform(18, 60), created
+        while True:
+            t += timedelta(hours=r.choice((6, 12, 24)))
+            if t >= now:
+                break
+            frac = (1 - math.exp(-(t - created).total_seconds() / 3600 / speed)) / (1 - math.exp(-age_h / speed))
+            v = int(final * min(1, frac))
+            db.session.add(ViewSnapshot(submission_id=s_.id, views=v, likes=int(v * .062), comments=int(v * .004),
+                                        shares=int(v * .006), taken_at=t))
+        s_.likes, s_.comments, s_.shares = int(final * r.uniform(.04, .09)), int(final * r.uniform(.002, .006)), int(final * r.uniform(.003, .01))
+        s_.views_updated_at = s_.checked_at = now - timedelta(hours=r.randint(1, 5))
+    caps = {c.id: (c.spent or 0) + c.remaining * .25 for c in camps}    # como mucho, el 25 % de lo que queda en cada campaña
+    for s_, created in sorted(plan, key=lambda x: x[1]):
+        c, old = s_.campaign, (now - created).days >= 2
+        if not reached_min(s_, c):
+            if old and r.random() < .3:
+                s_.status, s_.reject_code = "rechazado", "caducado"
+                s_.reject_reason = reject_text("caducado", "No llegó al pago mínimo a tiempo.")
+            continue
+        if old and r.random() < .12:
+            s_.status, s_.reject_code, s_.reject_reason = "rechazado", "reglas", reject_text("reglas")
+            s_.reviewed_at = created + timedelta(hours=r.randint(5, 30))
+        elif (old or r.random() < .4) and (c.spent or 0) + raw_earning(s_, c) <= caps[c.id]:
+            s_.status, s_.reviewed_at = "aprobado", created + timedelta(hours=r.randint(4, 30))
+            accrue(s_)
+    for i, (kind, title, body) in enumerate(MY_DEMO_NOTICES):
+        db.session.add(Notice(user_id=user.id, kind=kind, title=title, body=body, url="/mis-clips", read=i > 1,
+                              created_at=now - timedelta(hours=3 + i * 9), my_demo=True))
+    db.session.commit()
+    return f"Tu demo como clipper está cargada: {len(plan)} clips en {len({s_.campaign_id for s_, _ in plan})} campañas."
+
+
+def remove_my_demo(user):
+    """Quita solo la demo personal del admin. Lo que ganaron sus clips vuelve al presupuesto de cada campaña."""
+    subs = Submission.query.filter_by(user_id=user.id, my_demo=True).all()
+    for s_ in subs:
+        if s_.earned and s_.campaign:
+            camp = lock_row(Campaign, s_.campaign_id)
+            camp.spent = max(0.0, cents((camp.spent or 0) - s_.earned))
+    ids = [s_.id for s_ in subs]
+    if ids:
+        ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(ids)).delete(synchronize_session=False)
+        Submission.query.filter(Submission.id.in_(ids)).delete(synchronize_session=False)
+    for model in (CampaignAccount, CampaignMember, Notice):
+        model.query.filter_by(user_id=user.id, my_demo=True).delete(synchronize_session=False)
+    db.session.commit()
+    return len(ids)
+
+
+@app.route("/admin/ajustes/mi-demo", methods=["POST"])
+@admin_required
+def admin_my_demo():
+    if request.form.get("accion") == "quitar":
+        n = remove_my_demo(current_user)
+        audit("mi_demo_quitada", f"{n} clips")
+        db.session.commit()
+        flash(f"Tu demo como clipper se ha quitado ({n} clips). La demo de la plataforma y lo real siguen igual.", "ok")
+    elif Submission.query.filter_by(user_id=current_user.id, my_demo=True).first():
+        flash("Ya tienes tu demo cargada. Quítala primero si quieres volver a cargarla.", "error")
+    else:
+        msg = load_my_demo(current_user)
+        audit("mi_demo_cargada", msg)
+        db.session.commit()
+        flash(msg, "ok")
+    return redirect(url_for("admin_settings"))
 
 
 @app.route("/admin/ajustes/demo", methods=["POST"])

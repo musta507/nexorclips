@@ -2253,3 +2253,35 @@ def test_last_seen_shown_to_admin():
     assert "llevan más de 7 días sin entrar" in html
     post(a, f"/campana/{cid}", url=tt("ana", 1))
     assert "Última vez" in admin.get(f"/admin/campana/{cid}/clippers").get_data(as_text=True)
+
+
+def test_my_demo_is_separate_from_platform_demo(monkeypatch):
+    cid = make_campaign(budget=500)
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))          # un clip real
+    post(admin, "/admin/ajustes/demo", accion="cargar")    # demo de la plataforma
+    with A.app.app_context():
+        spent_before = get(A.Campaign, cid).spent
+        platform_demo = A.User.query.filter(A.User.email.like(f"%{A.DEMO_DOMAIN}")).count()
+    post(admin, "/admin/ajustes/mi-demo", accion="cargar")
+    with A.app.app_context():
+        me = A.User.query.filter_by(email="admin@test.com").first()
+        mine = A.Submission.query.filter_by(user_id=me.id, my_demo=True).all()
+        assert mine and all(A.is_fake(s) for s in mine)
+        assert A.ViewSnapshot.query.filter(A.ViewSnapshot.submission_id.in_([s.id for s in mine])).count()
+        assert A.Notice.query.filter_by(user_id=me.id, my_demo=True).count() == 4
+    assert admin.get("/mis-clips").status_code == 200 and admin.get("/ganancias").status_code == 200
+    assert "Quitar mi demo" in admin.get("/admin/ajustes").get_data(as_text=True)
+    post(admin, "/admin/ajustes/mi-demo", accion="cargar")             # no se duplica
+    with A.app.app_context():
+        assert A.Submission.query.filter_by(user_id=me.id, my_demo=True).count() == len(mine)
+    post(admin, "/admin/ajustes/mi-demo", accion="quitar")
+    with A.app.app_context():
+        assert A.Submission.query.filter_by(my_demo=True).count() == 0
+        assert A.CampaignAccount.query.filter_by(my_demo=True).count() == 0
+        assert A.CampaignMember.query.filter_by(my_demo=True).count() == 0
+        assert A.Notice.query.filter_by(my_demo=True).count() == 0
+        assert abs(get(A.Campaign, cid).spent - spent_before) < 0.01          # el presupuesto vuelve a como estaba
+        assert A.User.query.filter(A.User.email.like(f"%{A.DEMO_DOMAIN}")).count() == platform_demo   # la otra demo sigue
+        assert A.Submission.query.filter_by(user_id=A.User.query.filter_by(email="a@test.com").first().id).count() == 1
