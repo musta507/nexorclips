@@ -41,12 +41,6 @@
     {% endfor %}
   </ol>
 </section>
-{% elif wa_general %}
-<a class="wa-general" href="{{ url_for('join_whatsapp') }}" target="_blank" rel="noopener">
-  <span class="wa-general-ico">{% include "_wa_icon.html" %}</span>
-  <span class="wa-general-txt"><b>Únete al grupo de WhatsApp de {{ APP_NAME }}</b><span>Avisos, plazas nuevas y comunidad de clippers.</span></span>
-  <span class="btn wa-general-btn">Unirme</span>
-</a>
 {% endif %}
 
 <section class="hm-quick">
@@ -127,5 +121,12 @@
     {% endfor %}
   </div>
 </section>
+{% endif %}
+{% if wa_general and not show_steps %}
+<a class="wa-mini" href="{{ url_for('join_whatsapp') }}" target="_blank" rel="noopener">
+  <span class="wa-mini-ico">{% include "_wa_icon.html" %}</span>
+  <span>Grupo de WhatsApp de {{ APP_NAME }}: avisos y plazas nuevas</span>
+  <b>Abrir →</b>
+</a>
 {% endif %}
 {% endblock %}
