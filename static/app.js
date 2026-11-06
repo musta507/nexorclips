@@ -38,7 +38,7 @@ document.addEventListener("click", function (e) {
   if (!btn) return;
   var target = document.getElementById(btn.getAttribute("data-copy"));
   if (!target) return;
-  var text = target.value || target.textContent;
+  var text = (target.value || target.textContent).trim();
   var done = function () { var t = btn.textContent; btn.textContent = "Copiado"; setTimeout(function () { btn.textContent = t; }, 1600); };
   if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () { target.select && target.select(); });
   else if (target.select) target.select();
