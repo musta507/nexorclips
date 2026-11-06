@@ -20,7 +20,7 @@
         {% for l in vis %}{% set th = thumb(l) %}
         <li>
           <a class="lx-item{% if l.id == ls.id %} on{% endif %}{% if l.id in pr.done_ids %} done{% endif %}" href="{{ url_for('lesson', lid=l.id) }}" data-lesson-item="{{ l.id }}"{% if l.id == ls.id %} aria-current="page"{% endif %}>
-            <span class="lx-thumb">{% if th %}<img src="{{ th }}" alt="" loading="lazy" data-hide-broken>{% endif %}<span class="lx-play" aria-hidden="true">▶</span><span class="lx-check" aria-label="Vista">✓</span></span>
+            <span class="lx-thumb">{% if th %}<img src="{{ th }}" alt="" loading="lazy" data-hide-broken>{% endif %}<span class="lx-play" aria-hidden="true">▶</span><span class="lx-check" aria-label="Vista">✓</span>{% if 0 < seen.get(l.id, 0) < 100 %}<span class="lx-part" style="width:{{ seen[l.id] }}%"></span>{% endif %}</span>
             <span class="lx-it"><b>{{ l.title }}</b><small>{% if l.video_guid or l.video_url %}Vídeo{% elif l.file_name %}Archivo{% else %}Lectura{% endif %}{% if l.duration %} · {{ l.duration // 60 }}:{{ '%02d'|format(l.duration % 60) }}{% endif %}</small></span>
           </a>
         </li>
@@ -36,11 +36,7 @@
       <button type="button" class="lx-toggle" data-lx-toggle aria-label="Ocultar o mostrar la lista de lecciones">‹</button>
       <a class="lx-back lx-back-m" href="{{ url_for('courses') }}">← Atrás</a>
       <div class="lx-nav">
-        <form method="post" action="{{ url_for('lesson_progress', lid=ls.id) }}" data-lesson-done>
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <input type="hidden" name="done" value="{{ '0' if done else '1' }}">
-          <button class="btn sm {{ 'soft lx-seen' if done else 'soft' }}" data-done-btn>{% if done %}✓ Vista{% else %}Marcar como vista{% endif %}</button>
-        </form>
+        <span class="lx-chip{{ ' ok' if done }}" data-watch-chip title="Se marca sola al ver el 90 % del vídeo">{% if done %}✓ Vista{% elif seen[ls.id] %}Visto {{ seen[ls.id] }} %{% endif %}</span>
         {% if prev_ %}<a class="btn sm soft" href="{{ url_for('lesson', lid=prev_.id) }}">« Anterior</a>{% endif %}
         {% if next_ %}<a class="btn sm dark" href="{{ url_for('lesson', lid=next_.id) }}">Siguiente »</a>{% endif %}
       </div>
@@ -50,10 +46,11 @@
       <h1>{{ ls.title }}</h1>
     </div>
     {% if embed %}
-    <div class="lesson-video lx-video" data-lesson-player data-url="{{ url_for('lesson_progress', lid=ls.id) }}" data-lesson="{{ ls.id }}" data-csrf="{{ csrf_token() }}" data-start="{{ mine.seconds if mine and not mine.completed_at else 0 }}">
+    <div class="lesson-video lx-video" data-lesson-player data-url="{{ url_for('lesson_progress', lid=ls.id) }}" data-lesson="{{ ls.id }}" data-csrf="{{ csrf_token() }}" data-kind="{{ 'youtube' if 'youtube' in embed else ('vimeo' if 'vimeo' in embed else 'bunny') }}" data-start="{{ mine.seconds if mine and not mine.completed_at else 0 }}">
       <iframe src="{{ embed }}" title="{{ ls.title }}" loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
     </div>
     {% elif ls.video_guid %}<div class="card tight"><p class="muted">El vídeo se está preparando. Vuelve en unos minutos.</p></div>{% endif %}
+    {% if not embed and not ls.video_guid and not done %}<span hidden data-auto-done="{{ url_for('lesson_progress', lid=ls.id) }}" data-lesson="{{ ls.id }}" data-csrf="{{ csrf_token() }}"></span>{% endif %}
     {% if ls.body or ls.file_name %}
     <div class="card lx-body">
       {% if ls.body %}<div class="pre">{{ ls.body }}</div>{% endif %}

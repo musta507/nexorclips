@@ -1525,7 +1525,11 @@ def test_courses_lessons_and_progress():
     assert "Curso de clips" in a.get("/formacion").get_data(as_text=True)
     page = a.get(f"/formacion/leccion/{lid}").get_data(as_text=True)
     assert "youtube-nocookie.com/embed/abcdefghijk" in page and "Empieza fuerte" in page
-    post(a, f"/formacion/leccion/{lid}/progreso", done="1")
+    post(a, f"/formacion/leccion/{lid}/progreso", done="1")                     # un vídeo no se marca a mano
+    assert "100%" not in a.get("/formacion").get_data(as_text=True)
+    with A.app.app_context():
+        A.LessonProgress.query.update({"updated_at": datetime.utcnow() - timedelta(minutes=2)}); A.db.session.commit()
+    post(a, f"/formacion/leccion/{lid}/progreso", ranges="0-60", duration="60")  # lo ha visto entero
     html = a.get("/formacion").get_data(as_text=True)
     assert "100%" in html and "1 capítulo · 1 lección" in html
     assert "i.ytimg.com/vi/abcdefghijk" in a.get(f"/formacion/leccion/{lid}").get_data(as_text=True)   # miniatura
@@ -2149,3 +2153,25 @@ def test_mod_extra_permissions():
     post(mod, f"/admin/campana/{cid}/estado", accion="pausar")
     with A.app.app_context():
         assert A.db.session.get(A.Campaign, cid).status == "pausada"
+
+
+def test_lesson_counts_only_real_watching():
+    """Saltar al final no cuenta, y no se puede «ver» más rápido de lo que pasa el tiempo."""
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/formacion", title="Curso")
+    with A.app.app_context():
+        c = A.Course.query.one(); c.published = True
+        ls = A.Lesson(chapter_id=c.chapters[0].id, title="Vídeo", video_url="https://youtu.be/abcdefghijk", duration=600)
+        A.db.session.add(ls); A.db.session.commit(); lid = ls.id
+    a = client_for("a@test.com")
+    url = f"/formacion/leccion/{lid}/progreso"
+    d = a.post(url, data={"_csrf": "t", "ranges": "540-600"}, headers={"X-Requested-With": "fetch"}).get_json()
+    assert d == {"ok": True, "done": False, "pct": 10}
+    d = a.post(url, data={"_csrf": "t", "ranges": "0-540"}, headers={"X-Requested-With": "fetch"}).get_json()
+    assert d["done"] is False and d["pct"] == 10                                   # 9 minutos «vistos» en un segundo: no
+    with A.app.app_context():
+        row = A.LessonProgress.query.one(); row.updated_at = datetime.utcnow() - timedelta(minutes=10); A.db.session.commit()
+    d = a.post(url, data={"_csrf": "t", "ranges": "0-540"}, headers={"X-Requested-With": "fetch"}).get_json()
+    assert d["done"] is True and d["pct"] == 100
+    with A.app.app_context():
+        assert A.parse_ranges("0-10,5-20,30-40,999-2000", 600) == [(0, 20), (30, 40)]

@@ -6,7 +6,7 @@
 {% if rows %}
 <div class="cx-grid">
   {% for c, pr in rows %}
-  <a class="cx-card" href="{{ url_for('course', cid=c.id) }}">
+  <a class="cx-card" href="{{ url_for('course', cid=c.id) }}"{% if hl == c.id %} data-highlight{% endif %}>
     <span class="cx-cover">
       {% if c.cover_version %}<img src="{{ url_for('course_cover', cid=c.id, v=c.cover_version) }}" alt="" loading="lazy">
       {% else %}<span class="cx-cover-gen"><b>{{ APP_NAME.split()[0] }}</b><small>{{ c.title }}</small></span>{% endif %}

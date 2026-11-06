@@ -155,6 +155,7 @@ function pagina() {
   avisosPush();
   subidaVideo();
   progresoLeccion();
+  destacarCurso();
   desplegables();
   destacado();
   canalVisible();
@@ -864,12 +865,14 @@ function subidaUna(box) {
 }
 
 // =============================================================== formación: progreso de la lección (sigue donde lo dejaste)
-// Al acabar el vídeo: check en la lista, progreso arriba y botón «✓ Vista», sin recargar
-function vista() {
-  var box = document.querySelector("[data-lesson-player]"), id = box && box.getAttribute("data-lesson");
+// Lección vista: check en la lista, progreso arriba y «✓ Vista», sin recargar
+function vista(id) {
   var item = id && document.querySelector('[data-lesson-item="' + id + '"]');
+  var chip = document.querySelector("[data-watch-chip]");
+  if (chip) { chip.textContent = "✓ Vista"; chip.classList.add("ok"); }
   if (!item || item.classList.contains("done")) return;
   item.classList.add("done");
+  var part = item.querySelector(".lx-part"); if (part) part.remove();
   var pr = document.querySelector("[data-pr]");
   if (pr) {
     var total = parseInt(pr.getAttribute("data-total"), 10) || 1, n = (parseInt(pr.getAttribute("data-done"), 10) || 0) + 1;
@@ -878,11 +881,6 @@ function vista() {
     pr.querySelector("[data-pr-n]").textContent = n;
     pr.querySelector("[data-pr-bar]").style.width = pct + "%";
     pr.querySelector("[data-pr-pct]").textContent = pct + "%";
-  }
-  var form = document.querySelector("[data-lesson-done]");
-  if (form) {
-    form.querySelector("[name=done]").value = "0";
-    var b = form.querySelector("[data-done-btn]"); b.textContent = "✓ Vista"; b.classList.add("lx-seen");
   }
 }
 
@@ -897,6 +895,16 @@ document.addEventListener("click", function (e) {
 document.addEventListener("error", function (e) {
   if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-hide-broken")) e.target.remove();
 }, true);
+// Formación: si vienes del inicio, el curso se marca un momento con un recuadro (no se abre)
+function destacarCurso() {
+  var card = document.querySelector("[data-highlight]");
+  if (!card) return;
+  var r = card.getBoundingClientRect();
+  if (r.top < 0 || r.bottom > window.innerHeight) card.scrollIntoView({ block: "center", behavior: "smooth" });
+  setTimeout(function () { card.classList.add("ring"); }, 150);
+  setTimeout(function () { card.classList.remove("ring"); }, 1700);
+  try { history.replaceState(history.state, "", location.pathname); } catch (err) {}
+}
 function listaLecciones() {
   var lx = document.querySelector("[data-lx]"); if (!lx) return;
   try { if (localStorage.getItem("lx-closed") === "1") lx.classList.add("closed"); } catch (err) {}
@@ -906,33 +914,100 @@ function listaLecciones() {
 
 function progresoLeccion() {
   listaLecciones();
+  // Lección sin vídeo (texto o archivo): cuenta como vista tras 10 s con la página abierta
+  var auto = document.querySelector("[data-auto-done]");
+  if (auto) {
+    var waited = 0, ti = setInterval(function () {
+      if (document.visibilityState === "visible") waited++;
+      if (waited < 10) return;
+      clearInterval(ti);
+      var f = new FormData(); f.append("_csrf", auto.getAttribute("data-csrf")); f.append("done", "1");
+      fetch(auto.getAttribute("data-auto-done"), { method: "POST", body: f, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
+        .then(function (r) { return r.json(); }).then(function (d) { if (d.done) vista(auto.getAttribute("data-lesson")); }).catch(function () {});
+    }, 1000);
+    limpiar.push(function () { clearInterval(ti); });
+  }
   var box = document.querySelector("[data-lesson-player]");
   if (!box) return;
+  // Vídeo: se apuntan solo los tramos que se reproducen de verdad (si se salta hacia delante, ese hueco no cuenta).
+  // El servidor suma los tramos y la marca como vista al llegar al 90 % del vídeo.
   var frame = box.querySelector("iframe"), url = box.getAttribute("data-url"), csrf = box.getAttribute("data-csrf");
-  var start = parseInt(box.getAttribute("data-start") || "0", 10), last = 0, ended = false;
-  function save(extra) {
+  var kind = box.getAttribute("data-kind"), id = box.getAttribute("data-lesson");
+  var start = parseInt(box.getAttribute("data-start") || "0", 10);
+  var tramos = [], cur = null, lastT = null, dur = 0, dirty = false, done = false, ytOk = false, ytState = -1;
+  function apunta(t, d) {
+    if (d) dur = d;
+    if (lastT !== null && t >= lastT && t - lastT <= 3) { cur[1] = t; dirty = true; }
+    else { cur = [t, t]; tramos.push(cur); }
+    lastT = t;
+  }
+  function envia() {
+    if (!dirty || done) return;
+    dirty = false;
     var f = new FormData(); f.append("_csrf", csrf);
-    Object.keys(extra).forEach(function (k) { f.append(k, extra[k]); });
-    return fetch(url, { method: "POST", body: f, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } });
+    f.append("ranges", tramos.filter(function (r) { return r[1] - r[0] >= 1; })
+      .map(function (r) { return Math.floor(r[0]) + "-" + Math.ceil(r[1]); }).join(","));
+    if (lastT !== null) f.append("seconds", Math.floor(lastT));
+    if (dur) f.append("duration", Math.round(dur));
+    fetch(url, { method: "POST", body: f, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
+      .then(function (r) { return r.json(); }).then(function (d) {
+        if (d.done) { done = true; vista(id); return; }
+        var chip = document.querySelector("[data-watch-chip]");
+        if (chip && d.pct) chip.textContent = "Visto " + d.pct + " %";
+        var item = document.querySelector('[data-lesson-item="' + id + '"] .lx-thumb');
+        if (item && d.pct) {
+          var p = item.querySelector(".lx-part");
+          if (!p) { p = document.createElement("span"); p.className = "lx-part"; item.appendChild(p); }
+          p.style.width = d.pct + "%";
+        }
+      }).catch(function () { dirty = true; });
   }
-  function cmd(method, value) {
-    frame.contentWindow.postMessage(JSON.stringify({ context: "player.js", version: "0.0.11", method: method, value: value, listener: "cp" }), "*");
-  }
+  function manda(obj) { try { frame.contentWindow.postMessage(JSON.stringify(obj), "*"); } catch (err) {} }
   function onMsg(e) {
     if (!frame || e.source !== frame.contentWindow) return;
     var d; try { d = typeof e.data === "string" ? JSON.parse(e.data) : e.data; } catch (err) { return; }
-    if (!d || d.context !== "player.js") return;
-    if (d.event === "ready") {
-      cmd("addEventListener", "timeupdate"); cmd("addEventListener", "ended");
-      if (start > 5) cmd("setCurrentTime", start);
-    } else if (d.event === "timeupdate" && d.value) {
-      var s = Math.floor(d.value.seconds || 0);
-      if (Math.abs(s - last) >= 15) { last = s; save({ seconds: s }); }
-      if (!ended && d.value.duration && s >= d.value.duration * 0.92) { ended = true; save({ done: "1", seconds: s }).then(vista); }
-    } else if (d.event === "ended" && !ended) { ended = true; save({ done: "1" }).then(vista); }
+    if (!d) return;
+    if (kind === "youtube") {                      // YouTube: manda «infoDelivery» con el segundo actual
+      if (d.event === "onReady" || d.event === "initialDelivery") { ytOk = true; if (start > 5) manda({ event: "command", func: "seekTo", args: [start, true] }); }
+      var info = d.info || {};
+      if (typeof info.duration === "number" && info.duration) dur = info.duration;
+      if (typeof info.playerState === "number") {
+        ytState = info.playerState;
+        if (ytState === 2 || ytState === 0) { lastT = null; envia(); }
+      }
+      if (typeof info.currentTime === "number" && ytState === 1) apunta(info.currentTime);
+      return;
+    }
+    if (d.context === "player.js") {               // Bunny
+      if (d.event === "ready") {
+        ["timeupdate", "pause", "ended"].forEach(function (ev) { manda({ context: "player.js", version: "0.0.11", method: "addEventListener", value: ev, listener: "cp" }); });
+        if (start > 5) manda({ context: "player.js", version: "0.0.11", method: "setCurrentTime", value: start, listener: "cp" });
+      } else if (d.event === "timeupdate" && d.value) apunta(d.value.seconds || 0, d.value.duration);
+      else if (d.event === "pause" || d.event === "ended") { lastT = null; envia(); }
+      return;
+    }
+    if (kind === "vimeo") {                        // Vimeo
+      if (d.event === "ready") {
+        ["timeupdate", "pause", "ended"].forEach(function (ev) { manda({ method: "addEventListener", value: ev }); });
+        if (start > 5) manda({ method: "setCurrentTime", value: start });
+      } else if (d.event === "timeupdate" && d.data) apunta(d.data.seconds || 0, d.data.duration);
+      else if (d.event === "pause" || d.event === "ended") { lastT = null; envia(); }
+    }
   }
   window.addEventListener("message", onMsg);
-  limpiar.push(function () { window.removeEventListener("message", onMsg); });
+  var cada = setInterval(envia, 10000);
+  var yt = kind === "youtube" ? setInterval(function () {          // YouTube no habla hasta que le decimos que escuchamos
+    if (ytOk) { clearInterval(yt); return; }
+    manda({ event: "listening", id: "cp", channel: "widget" });
+  }, 1000) : null;
+  function oculto() { if (document.visibilityState === "hidden") { lastT = null; envia(); } }
+  document.addEventListener("visibilitychange", oculto);
+  limpiar.push(function () {
+    envia();
+    window.removeEventListener("message", onMsg);
+    document.removeEventListener("visibilitychange", oculto);
+    clearInterval(cada); if (yt) clearInterval(yt);
+  });
 }
 
 // Botón «Descargar PDF / imprimir» del informe (el navegador deja guardarlo como PDF)

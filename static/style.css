@@ -976,6 +976,9 @@ select[multiple]{min-height:120px}
 .cx-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px}
 .cx-card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden;transition:transform .15s,box-shadow .15s}
 .cx-card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.cx-card.ring{animation:cxRing 1.4s ease}
+@keyframes cxRing{0%{box-shadow:0 0 0 0 rgba(14,14,14,0)}15%,70%{box-shadow:0 0 0 3px var(--ink),0 0 0 9px rgba(14,14,14,.12)}100%{box-shadow:0 0 0 0 rgba(14,14,14,0)}}
+@media (prefers-reduced-motion:reduce){.cx-card.ring{animation:none;outline:3px solid var(--ink)}}
 .cx-cover{aspect-ratio:16/10;background:#fff;border-bottom:1px solid var(--line);display:block;overflow:hidden}
 .cx-cover img{width:100%;height:100%;object-fit:cover}
 .cx-cover-gen{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px;text-align:center}
@@ -1026,7 +1029,10 @@ select[multiple]{min-height:120px}
 .lx.closed .lx-toggle{transform:rotate(180deg)}
 .lx-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .lx-nav form{margin:0}
-.lx-seen{color:var(--money-ink)}
+.lx-chip{font-size:13px;font-weight:600;color:var(--muted);padding:0 4px;white-space:nowrap}
+.lx-chip:empty{display:none}
+.lx-chip.ok{color:var(--money-ink)}
+.lx-part{position:absolute;left:0;bottom:0;height:3px;background:var(--money);z-index:1}
 .lx-head{display:flex;flex-direction:column;gap:2px}
 .lx-head h1{font-size:clamp(22px,2.6vw,28px)}
 .lx-video{border-radius:var(--radius-sm)}
@@ -1040,6 +1046,7 @@ select[multiple]{min-height:120px}
   .lx-back-m{display:inline}
   .lx-nav{width:100%;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px}
   .lx-nav .btn{width:100%;justify-content:center;padding-inline:8px;white-space:nowrap}
+  .lx-chip{text-align:center}
   .lx-side>.lx-back{display:none}
 }
 .lesson-video{aspect-ratio:16/9;border-radius:20px;overflow:hidden;background:#000}

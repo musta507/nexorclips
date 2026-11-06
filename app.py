@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from functools import wraps
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 import requests
 from flask import (Flask, Response, abort, flash, has_request_context, redirect, render_template,
@@ -989,6 +989,7 @@ class LessonProgress(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     lesson_id = db.Column(db.Integer, db.ForeignKey("lesson.id"), nullable=False, index=True)
     seconds = db.Column(db.Integer, default=0)               # hasta dónde lo vio (para seguir)
+    watched = db.Column(db.Text, default="")                 # tramos vistos de verdad, en segundos: "0-120,300-410"
     completed_at = db.Column(db.DateTime, nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -2601,13 +2602,13 @@ def home_data(u):
     learn = None
     if guide and gp["total"] and not gp["finished"] and is_new:
         learn = {"eyebrow": "Formación", "title": guide.title, "text": "Lo básico para que tus clips se aprueben y sumen vistas.",
-                 "btn": "Empezar" if not gp["done"] else "Continuar", "url": url_for("course", cid=guide.id)}
+                 "btn": "Empezar" if not gp["done"] else "Continuar", "url": url_for("courses", destacar=guide.id)}
     else:
         for c in Course.query.filter_by(published=True).order_by(Course.position, Course.id).all():
             pr = course_progress(c, u.id)
             if pr["total"] and not pr["finished"]:
                 learn = {"eyebrow": "Sigue aprendiendo", "title": c.title, "text": f"Llevas {pr['done']} de {pr['total']} lecciones.",
-                         "btn": "Continuar", "url": url_for("course", cid=c.id)}
+                         "btn": "Continuar", "url": url_for("courses", destacar=c.id)}
                 break
     if not learn:
         mine = next((m.campaign for m in CampaignMember.query.filter_by(user_id=u.id, status="aceptada")
@@ -2628,7 +2629,7 @@ def home_data(u):
               "soon": not wa}]                               # sin enlace aún: sale como «Próximamente» y no cuenta
     if guide and gp["total"]:
         steps.append({"title": "Mira la guía para principiantes", "text": "Lo básico para que te aprueben los clips.",
-                      "done": gp["finished"], "btn": "Empezar", "url": url_for("course", cid=guide.id)})
+                      "done": gp["finished"], "btn": "Empezar", "url": url_for("courses", destacar=guide.id)})
     else:                                                    # aún no hay guía publicada: lleva a Formación
         any_done = any(course_progress(c, u.id)["finished"] for c in Course.query.filter_by(published=True).all())
         steps.append({"title": "Mira la guía para principiantes", "text": "Lo básico para que te aprueben los clips.",
@@ -5675,7 +5676,8 @@ def lesson_embed(lesson):
     u = lesson.video_url or ""
     if "youtu" in u:
         vid = viewcounter.video_id(u)
-        return f"https://www.youtube-nocookie.com/embed/{vid}" if vid else ""
+        origin = (BASE_URL or (request.host_url if has_request_context() else "")).rstrip("/")
+        return f"https://www.youtube-nocookie.com/embed/{vid}?enablejsapi=1&rel=0&origin={quote(origin, safe='')}" if vid else ""
     m = re.search(r"vimeo\.com/(?:video/)?(\d+)", u)
     if m:
         return f"https://player.vimeo.com/video/{m.group(1)}"
@@ -5718,7 +5720,7 @@ def course_progress(course, user_id):
 def courses():
     rows = [(c, course_progress(c, current_user.id)) for c in
             Course.query.filter_by(published=True).order_by(Course.position, Course.id).all()]
-    return render_template("courses.html", rows=[r for r in rows if r[1]["total"]])
+    return render_template("courses.html", rows=[r for r in rows if r[1]["total"]], hl=request.args.get("destacar", type=int))
 
 
 @app.route("/formacion/<int:cid>")
@@ -5762,32 +5764,83 @@ def lesson(lid):
     i = order.index(ls) if ls in order else 0
     pr = course_progress(c, current_user.id)
     mine = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=ls.id).first()
-    return render_template("lesson.html", ls=ls, c=c, pr=pr, embed=lesson_embed(ls), mine=mine, thumb=lesson_thumb,
+    rows = {r.lesson_id: r for r in LessonProgress.query.filter(LessonProgress.user_id == current_user.id,
+                                                                  LessonProgress.lesson_id.in_([x.id for x in order] or [0]))}
+    seen = {x.id: (100 if rows.get(x.id) and rows[x.id].completed_at else watch_pct(rows.get(x.id), x.duration)) for x in order}
+    return render_template("lesson.html", ls=ls, c=c, pr=pr, embed=lesson_embed(ls), mine=mine, thumb=lesson_thumb, seen=seen,
                            prev_=order[i - 1] if i > 0 else None, next_=order[i + 1] if i < len(order) - 1 else None)
+
+
+WATCH_DONE = 0.9          # la lección cuenta como vista al ver de verdad el 90 % del vídeo (saltar al final no vale)
+WATCH_MAX_SPEED = 2.2     # como mucho se pueden ver así de rápido (vídeo a 2x + margen); más rápido = no se cuenta
+
+
+def parse_ranges(text_, limit):
+    """"0-120,300-410" → [(0, 120), (300, 410)], unidos y dentro de [0, limit]."""
+    out = []
+    for part in (text_ or "").split(",")[:400]:
+        a, _, b = part.partition("-")
+        try:
+            a, b = max(int(float(a)), 0), min(int(float(b)), limit)
+        except ValueError:
+            continue
+        if b > a:
+            out.append((a, b))
+    out.sort()
+    merged = []
+    for a, b in out:
+        if merged and a <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    return merged
+
+
+def ranges_total(rs):
+    return sum(b - a for a, b in rs)
+
+
+def watch_pct(row, duration):
+    if not row or not duration:
+        return 0
+    return min(round(ranges_total(parse_ranges(row.watched, duration)) / duration * 100), 100)
 
 
 @app.route("/formacion/leccion/<int:lid>/progreso", methods=["POST"])
 @login_required
 def lesson_progress(lid):
+    """Guarda lo que se ha visto de verdad del vídeo y marca la lección como vista sola al llegar al 90 %.
+    Las lecciones sin vídeo (texto o archivo) se marcan al abrirlas un rato (done=1)."""
     ls = db.session.get(Lesson, lid) or abort(404)
     row = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=ls.id).first()
+    now = datetime.utcnow()
     if not row:
-        row = LessonProgress(user_id=current_user.id, lesson_id=ls.id)
+        row = LessonProgress(user_id=current_user.id, lesson_id=ls.id, watched="", updated_at=now - timedelta(seconds=30))
         db.session.add(row)
     secs = request.form.get("seconds", type=int)
     if secs is not None and secs >= 0:
         row.seconds = min(secs, 24 * 3600)
-    done = request.form.get("done")
-    if done == "1" and not row.completed_at:
-        row.completed_at = datetime.utcnow()
-    elif done == "0":
-        row.completed_at = None
-    row.updated_at = datetime.utcnow()
+    has_video = bool(lesson_embed(ls))
+    duration = ls.duration or 0
+    if has_video and not duration:                              # YouTube / Vimeo: la duración la dice el reproductor
+        duration = min(max(request.form.get("duration", type=int) or 0, 0), 6 * 3600)
+    if has_video and duration and request.form.get("ranges"):
+        old = parse_ranges(row.watched, duration)
+        new = parse_ranges((row.watched or "") + "," + request.form["ranges"], duration)
+        gained = ranges_total(new) - ranges_total(old)
+        elapsed = (now - (row.updated_at or now)).total_seconds()
+        if gained <= elapsed * WATCH_MAX_SPEED + 15:            # no se puede «ver» más rápido de lo que pasa el tiempo
+            row.watched = ",".join(f"{a}-{b}" for a, b in new)
+        if not row.completed_at and ranges_total(parse_ranges(row.watched, duration)) >= duration * WATCH_DONE:
+            row.completed_at = now
+    elif not has_video and request.form.get("done") == "1" and not row.completed_at:
+        row.completed_at = now
+    row.updated_at = now
     db.session.commit()
+    pct = 100 if row.completed_at else watch_pct(row, duration)
     if wants_json():
-        return {"ok": True, "done": bool(row.completed_at)}
-    nxt = request.form.get("next", "")
-    return redirect(nxt if nxt.startswith("/formacion/") else url_for("lesson", lid=ls.id))
+        return {"ok": True, "done": bool(row.completed_at), "pct": pct}
+    return redirect(url_for("lesson", lid=ls.id))
 
 
 @app.route("/formacion/leccion/<int:lid>/archivo")
