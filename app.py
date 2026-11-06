@@ -2658,11 +2658,7 @@ def home_data(u):
     quick = {"available": money_["available"], "live": money_["live"],
              "views_week": sum(s_.views or 0 for s_ in subs if s_.created_at >= week_ago and s_.status != "rechazado"),
              "counting": stage.get("contando", 0) + stage.get("revisar", 0), "stats": stage.get("estadisticas", 0)}
-    # campañas activas (las que tienen plazas, primero)
-    my_join = {m.campaign_id: m.status for m in CampaignMember.query.filter_by(user_id=u.id)}
-    camps = [c for c in active_campaigns() if not c.exhausted]
-    camps.sort(key=lambda c: (my_join.get(c.id) == "aceptada", bool(c.full)))
-    return {"quick": quick, "home_camps": camps[:3], "my_join": my_join,
+    return {"quick": quick,
             "summary": summary, "learn": learn, "steps": steps, "show_steps": show_steps,
             "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
             "rank": rank, "masked": mask_name}
@@ -3147,7 +3143,7 @@ def first_steps(user):
 def clips_of_week(limit=3):
     return (Submission.query.join(Campaign).join(User, User.id == Submission.user_id)
             .filter(Submission.status == "aprobado", Submission.created_at >= datetime.utcnow() - timedelta(days=7),
-                    User.is_banned.is_(False))
+                    User.is_banned.is_(False), User.is_admin.is_(False), Submission.views > 0)   # igual que el ranking
             .order_by(Submission.views.desc()).limit(limit).all())
 
 

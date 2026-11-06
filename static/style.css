@@ -1501,27 +1501,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .hm-q b{font:700 24px var(--display);letter-spacing:-.02em}
 .hm-q small{font-size:12px;color:var(--muted)}
 .hm-q.alert{background:#fff5f5;border-color:#f6cfcf}.hm-q.alert b{color:#d92d20}
-.hm-camps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.hm-camp-card{display:flex;align-items:center;gap:12px;padding:12px;color:inherit;text-decoration:none;transition:border-color .15s}
-.hm-camp-card:hover{border-color:var(--ink-2)}
-.hm-cover{width:64px;height:64px;border-radius:12px;overflow:hidden;flex:none;background:var(--soft);display:grid;place-items:center;font:700 20px var(--display)}
-.hm-cover img{width:100%;height:100%;object-fit:cover}
-.hm-cinfo{display:flex;flex-direction:column;min-width:0;flex:1}.hm-cinfo b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hm-cinfo small{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hm-cinfo .hm-tag{align-self:flex-start;margin-top:6px}
-.hm-tag{font:600 11.5px var(--font);border-radius:99px;padding:4px 9px;white-space:nowrap;flex:none}
-.hm-tag.in,.hm-tag.open{background:var(--money-soft);color:var(--money-ink)}.hm-tag.full{background:var(--soft);color:var(--muted)}.hm-tag.wait{background:#fff7e6;color:#b45309}
-.hm-act{padding:8px}
-.hm-act ul{list-style:none;margin:0;padding:0}
-.hm-act a{display:flex;gap:12px;align-items:flex-start;padding:10px;border-radius:12px;color:inherit;text-decoration:none}
-.hm-act a:hover{background:var(--soft)}
-.hm-aico{width:32px;height:32px;border-radius:10px;background:var(--soft);display:grid;place-items:center;flex:none}.hm-aico svg{width:16px;height:16px}
-.hm-act a>span:last-child{display:flex;flex-direction:column;min-width:0}.hm-act b{font-weight:600;font-size:14px}.hm-act small{color:var(--muted);font-size:12.5px}
-@media (max-width:900px){.hm-quick{grid-template-columns:repeat(2,minmax(0,1fr))}.hm-camps{grid-template-columns:1fr}}
-.hm-camps-sec{margin-top:4px}
-.hm-camps.n1{grid-template-columns:1fr}.hm-camps.n2{grid-template-columns:repeat(2,minmax(0,1fr))}
-.hm-camps.n1 .hm-camp-card{padding:16px}.hm-camps.n1 .hm-cover{width:80px;height:80px}
-.hm-cbtn{flex:none}
-@media (max-width:640px){.hm-camps.n1 .hm-cbtn{display:none}}
+@media (max-width:900px){.hm-quick{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* pie de página siempre abajo aunque la página tenga poco contenido */
 body.has-tabs{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 body.has-tabs>main.wrap{flex:1 0 auto;width:100%}
