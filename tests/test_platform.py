@@ -1433,11 +1433,10 @@ def test_my_clips_tabs_and_stats(monkeypatch):
     assert "Nada por aquí" in a.get("/mis-clips?tab=aprobado").get_data(as_text=True)
 
 
-def test_onboarding_three_steps():
+def test_onboarding_two_steps():
     a = client_for("a@test.com", verify=False)
     post(a, "/bienvenida?paso=1", name="Ana García", tiktok="@anag")
-    post(a, "/bienvenida?paso=2", country="MX", languages=["es", "en"])
-    post(a, "/bienvenida?paso=3")
+    post(a, "/bienvenida?paso=2", country="MX", languages=["es", "en"])           # el paso 2 ya termina
     with A.app.app_context():
         u = A.User.query.filter_by(email="a@test.com").one()
         assert (u.name, u.country, u.languages) == ("Ana García", "MX", "es")
@@ -2175,3 +2174,17 @@ def test_lesson_counts_only_real_watching():
     assert d["done"] is True and d["pct"] == 100
     with A.app.app_context():
         assert A.parse_ranges("0-10,5-20,30-40,999-2000", 600) == [(0, 20), (30, 40)]
+
+
+def test_onboarding_other_country():
+    a = client_for("otro@test.com")
+    r = post(a, "/bienvenida?paso=2", country="OT")
+    assert "Escribe en qué país vives" in r.get_data(as_text=True)
+    post(a, "/bienvenida?paso=2", country="OT", country_other="  Alemania ")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="otro@test.com").one()
+        assert (u.country, u.country_other, u.country_name) == ("OT", "Alemania", "Alemania")
+    post(a, "/bienvenida?paso=2", country="ES", country_other="Alemania")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="otro@test.com").one()
+        assert (u.country_other, u.country_name) == ("", "España")

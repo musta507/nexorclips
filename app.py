@@ -211,6 +211,13 @@ class User(UserMixin, db.Model):
     accepted_terms_at = db.Column(db.DateTime, nullable=True)
     trusted = db.Column(db.Boolean, default=False)                # de confianza: sus clips se pueden aprobar solos
     country = db.Column(db.String(2), default="")
+    country_other = db.Column(db.String(60), default="")       # si elige «Otro país», el que escribe
+
+    @property
+    def country_name(self):
+        if self.country == "OT":
+            return self.country_other or "Otro país"
+        return COUNTRIES.get(self.country or "", "")
     languages = db.Column(db.String(60), default="")
     whatsapp = db.Column(db.String(30), default="")
     onboarded_at = db.Column(db.DateTime, nullable=True)
@@ -3149,7 +3156,7 @@ def clips_of_week(limit=3):
 @login_required
 def onboarding():
     step = request.args.get("paso", 1, type=int)
-    step = step if step in (1, 2, 3) else 1
+    step = step if step in (1, 2) else 1
     u = current_user
     if request.method == "POST":
         if request.form.get("saltar"):
@@ -3179,20 +3186,16 @@ def onboarding():
                     u.tiktok_handles = ",".join(u.handles("tiktok") + [tt_])
         elif step == 2:
             c = request.form.get("country", "")
+            other = " ".join((request.form.get("country_other") or "").split())[:60]
             if c not in COUNTRIES:
                 flash("Elige tu país.", "error")
                 return redirect(url_for("onboarding", paso=2))
-            u.country = c
+            if c == "OT" and len(other) < 2:
+                flash("Escribe en qué país vives.", "error")
+                return redirect(url_for("onboarding", paso=2))
+            u.country, u.country_other = c, (other if c == "OT" else "")
             u.languages = "es"                       # todos publican en español: ya no se pregunta
-        else:
-            username = (request.form.get("whop_username") or "").strip().lstrip("@")
-            if username and whop_enabled() and WHOP_USERNAME_RE.match(username):
-                uid, uname = whop_find_user(username)
-                if uid:
-                    u.whop_user_id, u.whop_username, u.payout_method = uid, uname[:80], WHOP_METHOD
-                else:
-                    flash(f"No encontramos @{username} en Whop. Puedes conectarlo más tarde en «Mi cuenta».", "info")
-            u.onboarded_at = datetime.utcnow()
+            u.onboarded_at = datetime.utcnow()       # el cobro (Whop) se conecta luego en «Mi cuenta»
             db.session.commit()
             flash("¡Perfil listo! Elige una campaña y pide unirte.", "ok")
             return redirect(url_for("index"))

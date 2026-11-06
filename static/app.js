@@ -1029,6 +1029,16 @@ document.addEventListener("click", function (e) {
   if (e.target.closest("[data-print]")) window.print();
 });
 
+// «Otro país»: aparece un campo para escribirlo
+document.addEventListener("change", function (e) {
+  var sel = e.target.closest && e.target.closest("[data-other-toggle]");
+  if (!sel) return;
+  var box = document.querySelector(sel.getAttribute("data-other-toggle")), on = sel.value === "OT";
+  if (!box) return;
+  box.hidden = !on;
+  var inp = box.querySelector("input"); if (inp) { inp.required = on; if (on) inp.focus(); }
+});
+
 // Selectores de archivo: enseñar el nombre del archivo elegido y, en la foto de perfil, la vista previa
 document.addEventListener("change", function (e) {
   var inp = e.target;
@@ -1075,8 +1085,10 @@ function desplegables() {
       var o = sel.options[sel.selectedIndex];
       var t = btn.firstChild || btn.appendChild(document.createElement("span"));   // sin rehacer el botón: el clic sigue «dentro»
       t.textContent = o ? o.text : "";
+      btn.classList.toggle("dd-empty", !o || !o.value);          // «Elige tu país»: se ve como texto de ayuda
       list.innerHTML = "";
       Array.prototype.forEach.call(sel.options, function (op, i) {
+        if (op.hidden) return;                                     // el texto de ayuda no es una opción
         var li = document.createElement("li");
         li.setAttribute("role", "option"); li.textContent = op.text; li.dataset.i = i;
         if (i === sel.selectedIndex) { li.className = "on"; li.setAttribute("aria-selected", "true"); }
@@ -1096,7 +1108,8 @@ function desplegables() {
       paint(); list.hidden = false; box.classList.add("open"); btn.setAttribute("aria-expanded", "true");
       var r = box.getBoundingClientRect();
       box.classList.toggle("up", window.innerHeight - r.bottom < Math.min(280, list.scrollHeight + 16) && r.top > 300);
-      mark(sel.selectedIndex);
+      var cur = list.querySelector("li.on");
+      mark(cur ? Array.prototype.indexOf.call(list.children, cur) : 0);
     }
     function close() { list.hidden = true; box.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); }
     box.ddClose = close;
@@ -1112,7 +1125,7 @@ function desplegables() {
     list.addEventListener("click", function (e) { var li = e.target.closest("li"); if (li) choose(parseInt(li.dataset.i, 10)); });
     btn.addEventListener("keydown", function (e) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (list.hidden) open(); else mark(hi + (e.key === "ArrowDown" ? 1 : -1)); }
-      else if (e.key === "Enter" || e.key === " ") { if (!list.hidden && hi >= 0) { e.preventDefault(); choose(hi); } }
+      else if (e.key === "Enter" || e.key === " ") { if (!list.hidden && hi >= 0) { e.preventDefault(); choose(parseInt(list.children[hi].dataset.i, 10)); } }
       else if (e.key === "Escape" || e.key === "Tab") close();
     });
     btn.addEventListener("blur", function () { setTimeout(function () { if (!box.contains(document.activeElement)) close(); }, 120); });

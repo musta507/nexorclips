@@ -4,7 +4,7 @@
 {% block content %}
 <div class="onb card">
   <ol class="onb-steps" aria-label="Pasos">
-    {% for label in ["Tu perfil", "Dónde estás", "Cobros"] %}
+    {% for label in ["Tu perfil", "Dónde estás"] %}
     <li class="{% if loop.index == step %}on{% elif loop.index < step %}done{% endif %}"><b>{{ loop.index }}</b><span>{{ label }}</span></li>
     {% endfor %}
   </ol>
@@ -25,19 +25,17 @@
       <h1>¿Desde dónde clipeas?</h1>
       <p class="muted">Algunas campañas son solo para ciertos países.</p>
       <div class="field"><label for="country">País</label>
-        <select id="country" name="country" required><option value="">Elige tu país</option>
+        <select id="country" name="country" required data-other-toggle="#country-other">
+          <option value="" disabled hidden{% if not current_user.country %} selected{% endif %}>Elige tu país</option>
           {% for k, label in COUNTRIES.items() %}<option value="{{ k }}"{% if current_user.country == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
         </select></div>
-    {% else %}
-      <h1>¿Dónde te pagamos?</h1>
-      <p class="muted">Es opcional: puedes conectarlo más tarde en «Mi cuenta».</p>
-      <div class="field"><label for="whop_username"><img class="whop-ico" src="{{ static_url('whop.png') }}" alt="" width="16" height="16"> Tu usuario de Whop</label>
-        <input id="whop_username" name="whop_username" placeholder="@tuusuario" value="{{ current_user.whop_username or '' }}"><span class="hint">Ahí te llega el dinero al momento cuando retiras.</span></div>
+      <div class="field" id="country-other"{% if current_user.country != 'OT' %} hidden{% endif %}><label for="country_other">¿En qué país vives?</label>
+        <input id="country_other" name="country_other" maxlength="60" value="{{ current_user.country_other or '' }}" placeholder="Escribe tu país" autocomplete="country-name"{% if current_user.country == 'OT' %} required{% endif %}></div>
     {% endif %}
     <div class="onb-foot">
       <button class="btn soft" name="saltar" value="1" formnovalidate>Saltar por ahora</button>
       <span>{% if step > 1 %}<a class="btn soft" href="{{ url_for('onboarding', paso=step - 1) }}">← Atrás</a>{% endif %}
-      <button class="btn accent">{{ "Terminar" if step == 3 else "Siguiente" }} {{ icon("arrow") }}</button></span>
+      <button class="btn accent">{{ "Terminar" if step == 2 else "Siguiente" }} {{ icon("arrow") }}</button></span>
     </div>
   </form>
 </div>

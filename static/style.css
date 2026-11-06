@@ -951,8 +951,8 @@ select[multiple]{min-height:120px}
 
 /* =============================================================== bienvenida */
 .onb{max-width:620px;margin:10px auto;width:100%}
-.onb-steps{list-style:none;margin:0 0 18px;padding:0;display:flex;gap:8px}
-.onb-steps li{flex:1;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--muted)}
+.onb-steps{list-style:none;margin:0 0 18px;padding:0;display:flex;gap:28px}
+.onb-steps li{flex:0 0 auto;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--muted)}
 .onb-steps b{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--soft);color:var(--ink);font-size:12px;flex:none}
 .onb-steps li.on{color:var(--ink)}.onb-steps li.on b{background:var(--ink);color:#fff}
 .onb-steps li.done b{background:var(--money);color:#fff}
@@ -1635,3 +1635,4 @@ body.has-tabs>.site-footer{flex:none}
 .acc-del button:hover{color:var(--red-ink)}
 .hl .acc-del{margin-left:6px}
 .upload-box [data-start]{align-self:flex-start}
+.dd-btn.dd-empty>span:first-child{color:var(--muted);font-weight:500}
