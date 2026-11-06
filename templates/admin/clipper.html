@@ -8,7 +8,7 @@
     <span class="avatar lg">{% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ user.initial }}{% endif %}</span>
     <div>
       <h1>{{ user.name }}{% if user.is_banned %} <span class="flag">Bloqueado</span>{% endif %}</h1>
-      <p class="small muted"><span class="selectable">{{ user.email }}</span> · entra con {{ "Google" if user.google_sub else "correo" }} · desde {{ user.created_at|date }}{% if user.country_name %} · {{ user.country_name }}{% endif %}{% if user.last_seen_at %} · visto {{ user.last_seen_at|ago }}{% endif %}</p>
+      <p class="small muted"><span class="selectable">{{ user.email }}</span> · entra con {{ "Google" if user.google_sub else "correo" }} · desde {{ user.created_at|date }}{% if user.country_name %} · {{ user.country_name }}{% endif %} · <span class="seen-dot {{ user.last_seen_at|seen_level }}"></span> {{ "En línea ahora" if user.last_seen_at|seen == "En línea" else ("Última vez " + user.last_seen_at|seen if user.last_seen_at else "Nunca ha entrado") }}</p>
     </div>
   </div>
   {% if not user.is_admin %}

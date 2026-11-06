@@ -2232,3 +2232,24 @@ def test_clipper_deletes_clip_and_it_is_not_rediscovered(monkeypatch):
     post(a, f"/mis-clips/{sid}/eliminar")                                # aprobado: no se borra
     with A.app.app_context():
         assert A.Submission.query.count() == 1
+
+
+def test_last_seen_shown_to_admin():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    client_for("b@test.com", tiktok="beto")
+    a.get("/")                                           # Ana acaba de entrar
+    with A.app.app_context():
+        b = A.User.query.filter_by(email="b@test.com").first()
+        b.last_seen_at = datetime.utcnow() - timedelta(days=9)   # Beto lleva 9 días sin entrar
+        A.db.session.commit()
+        assert A.seen(None) == "Nunca" and A.seen_level(None) == "off"
+        assert A.seen(datetime.utcnow()) == "En línea" and A.seen_level(datetime.utcnow()) == "on"
+        assert A.seen(datetime.utcnow() - timedelta(hours=3)) == "hace 3 h"
+    html = admin.get("/admin/clippers?orden=actividad").get_data(as_text=True)
+    assert "Última vez" in html and "En línea" in html and "hace 9 d" in html
+    assert html.index("a@test.com") < html.index("b@test.com")   # el más reciente, primero
+    assert "llevan más de 7 días sin entrar" in html
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    assert "Última vez" in admin.get(f"/admin/campana/{cid}/clippers").get_data(as_text=True)

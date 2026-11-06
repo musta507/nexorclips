@@ -1734,3 +1734,8 @@ body.has-tabs>.site-footer{flex:none}
 .bio-code-row{display:flex;gap:8px;align-items:stretch}
 .bio-code-row .bio-code{flex:1}
 .bio-copy{flex:none;align-self:center}
+
+/* última vez que entró un clipper */
+.seen-dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin-right:4px;background:#d0d5dd}
+.seen-dot.on{background:#12b76a;box-shadow:0 0 0 3px rgba(18,183,106,.18)}.seen-dot.day{background:#98a2b3}.seen-dot.week{background:#f79009}.seen-dot.off{background:#ef4444}
+.nowrap{white-space:nowrap}

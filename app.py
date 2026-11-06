@@ -2034,6 +2034,10 @@ def _start_timer():
     g._t0 = time.perf_counter()
 
 
+SEEN_EVERY = 120      # cada cuánto se guarda la última visita de un usuario (segundos)
+ONLINE_FOR = 300      # si entró hace menos de esto, sale «En línea»
+
+
 @app.before_request
 def before():
     if request.method == "POST":
@@ -2042,7 +2046,7 @@ def before():
             abort(400, description="csrf")
     if current_user.is_authenticated:
         now = datetime.utcnow()
-        if not current_user.last_seen_at or (now - current_user.last_seen_at).total_seconds() > 600:
+        if not current_user.last_seen_at or (now - current_user.last_seen_at).total_seconds() > SEEN_EVERY:
             current_user.last_seen_at = now
             db.session.commit()
         if current_user.is_banned and request.endpoint not in ("logout", "static", "terms", "privacy", "health",
@@ -2346,6 +2350,25 @@ def ago(dt):
     if secs < 86400:
         return f"hace {int(secs // 3600)} h"
     return f"hace {int(secs // 86400)} d"
+
+
+@app.template_filter("seen")
+def seen(dt):
+    """Última vez que alguien entró en la web: «En línea», «hace 3 h», «Nunca»."""
+    if not dt:
+        return "Nunca"
+    if (datetime.utcnow() - dt).total_seconds() < ONLINE_FOR:
+        return "En línea"
+    return ago(dt)
+
+
+@app.template_filter("seen_level")
+def seen_level(dt):
+    """Color del punto: verde en línea, gris claro hoy, ámbar esta semana, rojo más de 7 días o nunca."""
+    if not dt:
+        return "off"
+    secs = (datetime.utcnow() - dt).total_seconds()
+    return "on" if secs < ONLINE_FOR else "day" if secs < 86400 else "week" if secs < 7 * 86400 else "off"
 
 
 @app.template_filter("checked")
@@ -5540,8 +5563,17 @@ def admin_clippers():
         users = [u for u in users if q in u.email.lower() or q in u.name.lower()
                  or any(q in h for p in PLATFORMS for h in u.handles(p))]
     rows = [(u, user_money(u), len(u.submissions)) for u in users]
-    rows.sort(key=lambda r: -r[1]["earned"])
-    return render_template("admin/clippers.html", rows=rows, q=q)
+    order = request.args.get("orden", "ganado")
+    if order == "actividad":                       # los que entraron hace menos, primero; los que nunca, al final
+        rows.sort(key=lambda r: r[0].last_seen_at or datetime.min, reverse=True)
+    else:
+        rows.sort(key=lambda r: -r[1]["earned"])
+    now = datetime.utcnow()
+    clippers = [u for u in users if not u.is_admin]
+    activity = {"online": sum(1 for u in clippers if u.last_seen_at and (now - u.last_seen_at).total_seconds() < ONLINE_FOR),
+                "day": sum(1 for u in clippers if u.last_seen_at and now - u.last_seen_at < timedelta(days=1)),
+                "idle": sum(1 for u in clippers if not u.last_seen_at or now - u.last_seen_at >= timedelta(days=7))}
+    return render_template("admin/clippers.html", rows=rows, q=q, order=order, activity=activity)
 
 
 def delete_user_account(user):
