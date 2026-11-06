@@ -57,7 +57,8 @@
       <ul class="acc-rows">
         {% for a in accounts %}
         <li class="acc-row">
-          <div class="acc-top">{{ icon(a.platform) }} <b>@{{ a.handle }}</b><span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span></div>
+          <div class="acc-top">{{ icon(a.platform) }} <b>@{{ a.handle }}</b><span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span>
+            <form method="post" action="{{ url_for('remove_account', cid=camp.id, aid=a.id) }}" class="acc-del" data-confirm="¿Quitar @{{ a.handle }} de esta campaña? Ya no se buscarán clips nuevos en esa cuenta. Los clips ya aprobados no se tocan."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link small muted" aria-label="Quitar @{{ a.handle }} de la campaña">Quitar</button></form></div>
           {% if a.status == 'pendiente' %}
           {% set checking = a.bio_status == 'Comprobando…' and a.bio_checked_at and (now_utc - a.bio_checked_at).total_seconds() < 300 %}
           <div class="bio-box"{% if checking %} data-bio-poll="{{ url_for('bio_state', cid=camp.id, aid=a.id) }}"{% endif %}>

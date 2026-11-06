@@ -3,10 +3,22 @@
 {% block title %}{{ c.title }} · Formación{% endblock %}
 {% block content %}
 <a class="back" href="{{ url_for('admin_courses') }}">← Formación</a>
-<form method="post" class="card form-stack">
+<form method="post" class="card form-stack" enctype="multipart/form-data">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="guardar">
   <div class="field"><label for="title">Nombre del curso</label><input id="title" name="title" value="{{ c.title }}" required maxlength="160"></div>
-  <div class="field"><label for="description">Descripción</label><textarea id="description" name="description" rows="3">{{ c.description }}</textarea></div>
+  <div class="field"><label for="description">Descripción corta</label><textarea id="description" name="description" rows="2" maxlength="300">{{ c.description }}</textarea>
+    <span class="hint">Sale en la tarjeta del curso (2 líneas). Ej.: «Mira esto si quieres entender cómo funciona todo».</span></div>
+  <div class="field">
+    <span class="label">Portada</span>
+    <div class="cover-pick">
+      <span class="cover-prev cx-adm-prev" data-cover-prev{% if c.cover_version %} style="background-image:url('{{ url_for('course_cover', cid=c.id, v=c.cover_version) }}')"{% endif %}>{% if not c.cover_version %}<b>{{ APP_NAME.split()[0] }}</b>{% endif %}</span>
+      <div class="form-stack" style="gap:6px">
+        <label class="btn soft sm file-btn">{{ "Cambiar imagen" if c.cover_version else "Subir imagen" }}<input type="file" name="cover_file" accept="image/*" data-cover-input></label>
+        <span class="hint">Formato horizontal (16:10), por ejemplo 1600 × 1000. Sin portada se pone una con el logo y el nombre del curso.</span>
+        {% if c.cover_version %}<label class="check"><input type="checkbox" name="remove_cover"> Quitar la imagen</label>{% endif %}
+      </div>
+    </div>
+  </div>
   <label class="check"><input type="checkbox" name="published" {% if c.published %}checked{% endif %}> Publicado (lo ven los clippers)</label>
   <div class="inline" style="flex-wrap:wrap"><button class="btn accent">Guardar</button><a class="btn soft" href="{{ url_for('course', cid=c.id) }}">Ver como clipper</a></div>
 </form>

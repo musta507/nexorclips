@@ -2,35 +2,64 @@
 {% from "_icons.html" import icon %}
 {% block title %}{{ ls.title }} · {{ c.title }}{% endblock %}
 {% block content %}
-<a class="back" href="{{ url_for('course', cid=c.id) }}">← {{ c.title }}</a>
-<div class="lesson-grid">
-  <div class="lesson-main">
+{% set done = mine and mine.completed_at %}
+<div class="lx" data-lx>
+  <aside class="lx-side" aria-label="Lecciones del curso">
+    <a class="lx-back" href="{{ url_for('courses') }}">← Atrás</a>
+    <section class="lx-prog" data-pr data-total="{{ pr.total }}" data-done="{{ pr.done }}">
+      <b>Progreso</b>
+      <span class="small muted"><span data-pr-n>{{ pr.done }}</span> de {{ pr.total }} lecciones completadas</span>
+      <span class="cx-prog"><span class="cx-bar"><span data-pr-bar style="width:{{ pr.pct }}%"></span></span><b class="tnum" data-pr-pct>{{ pr.pct }}%</b></span>
+    </section>
+    {% for ch in c.chapters %}
+    {% set vis = ch.lessons if current_user.is_admin else ch.lessons|selectattr('published')|list %}
+    {% if vis %}
+    <details class="lx-ch" open>
+      <summary><span class="lx-chev" aria-hidden="true">›</span>{{ ch.title }}</summary>
+      <ol>
+        {% for l in vis %}{% set th = thumb(l) %}
+        <li>
+          <a class="lx-item{% if l.id == ls.id %} on{% endif %}{% if l.id in pr.done_ids %} done{% endif %}" href="{{ url_for('lesson', lid=l.id) }}" data-lesson-item="{{ l.id }}"{% if l.id == ls.id %} aria-current="page"{% endif %}>
+            <span class="lx-thumb">{% if th %}<img src="{{ th }}" alt="" loading="lazy" data-hide-broken>{% endif %}<span class="lx-play" aria-hidden="true">▶</span><span class="lx-check" aria-label="Vista">✓</span></span>
+            <span class="lx-it"><b>{{ l.title }}</b><small>{% if l.video_guid or l.video_url %}Vídeo{% elif l.file_name %}Archivo{% else %}Lectura{% endif %}{% if l.duration %} · {{ l.duration // 60 }}:{{ '%02d'|format(l.duration % 60) }}{% endif %}</small></span>
+          </a>
+        </li>
+        {% endfor %}
+      </ol>
+    </details>
+    {% endif %}
+    {% endfor %}
+  </aside>
+
+  <div class="lx-main">
+    <div class="lx-top">
+      <button type="button" class="lx-toggle" data-lx-toggle aria-label="Ocultar o mostrar la lista de lecciones">‹</button>
+      <a class="lx-back lx-back-m" href="{{ url_for('courses') }}">← Atrás</a>
+      <div class="lx-nav">
+        <form method="post" action="{{ url_for('lesson_progress', lid=ls.id) }}" data-lesson-done>
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="done" value="{{ '0' if done else '1' }}">
+          <button class="btn sm {{ 'soft lx-seen' if done else 'soft' }}" data-done-btn>{% if done %}✓ Vista{% else %}Marcar como vista{% endif %}</button>
+        </form>
+        {% if prev_ %}<a class="btn sm soft" href="{{ url_for('lesson', lid=prev_.id) }}">« Anterior</a>{% endif %}
+        {% if next_ %}<a class="btn sm dark" href="{{ url_for('lesson', lid=next_.id) }}">Siguiente »</a>{% endif %}
+      </div>
+    </div>
+    <div class="lx-head">
+      <span class="small muted">{{ ls.chapter.title }}</span>
+      <h1>{{ ls.title }}</h1>
+    </div>
     {% if embed %}
-    <div class="lesson-video" data-lesson-player data-url="{{ url_for('lesson_progress', lid=ls.id) }}" data-csrf="{{ csrf_token() }}" data-start="{{ mine.seconds if mine and not mine.completed_at else 0 }}">
+    <div class="lesson-video lx-video" data-lesson-player data-url="{{ url_for('lesson_progress', lid=ls.id) }}" data-lesson="{{ ls.id }}" data-csrf="{{ csrf_token() }}" data-start="{{ mine.seconds if mine and not mine.completed_at else 0 }}">
       <iframe src="{{ embed }}" title="{{ ls.title }}" loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
     </div>
     {% elif ls.video_guid %}<div class="card tight"><p class="muted">El vídeo se está preparando. Vuelve en unos minutos.</p></div>{% endif %}
-    <div class="card lesson-body">
-      <h1>{{ ls.title }}</h1>
+    {% if ls.body or ls.file_name %}
+    <div class="card lx-body">
       {% if ls.body %}<div class="pre">{{ ls.body }}</div>{% endif %}
       {% if ls.file_name %}<a class="mat-row" href="{{ url_for('lesson_file', lid=ls.id) }}" data-turbo="false"><span class="mat-ico">{{ icon("doc") }}</span><span class="mat-name">{{ ls.file_name }}</span><span class="mat-out">↓</span></a>{% endif %}
-      <div class="lesson-foot">
-        {% if prev_ %}<a class="btn soft" href="{{ url_for('lesson', lid=prev_.id) }}">← Anterior</a>{% else %}<span></span>{% endif %}
-        <form method="post" action="{{ url_for('lesson_progress', lid=ls.id) }}" data-lesson-done>
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          {% set done = mine and mine.completed_at %}
-          <input type="hidden" name="done" value="{{ '0' if done else '1' }}">
-          {% if next_ and not done %}<input type="hidden" name="next" value="{{ url_for('lesson', lid=next_.id) }}">{% endif %}
-          <button class="btn {{ 'soft' if done else 'accent' }}">{% if done %}✓ Vista{% elif next_ %}Marcar como vista y seguir →{% else %}Marcar como vista{% endif %}</button>
-        </form>
-        {% if next_ %}<a class="btn soft" href="{{ url_for('lesson', lid=next_.id) }}">Siguiente →</a>{% else %}<span></span>{% endif %}
-      </div>
     </div>
+    {% endif %}
   </div>
-  <aside class="lesson-side">
-    <div class="small muted"><b class="tnum">{{ pr.done }} de {{ pr.total }}</b> vistas</div>
-    <div class="dbar"><span style="width:{{ pr.pct }}%"></span></div>
-    {% include "_course_index.html" %}
-  </aside>
 </div>
 {% endblock %}

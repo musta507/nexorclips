@@ -864,7 +864,48 @@ function subidaUna(box) {
 }
 
 // =============================================================== formación: progreso de la lección (sigue donde lo dejaste)
+// Al acabar el vídeo: check en la lista, progreso arriba y botón «✓ Vista», sin recargar
+function vista() {
+  var box = document.querySelector("[data-lesson-player]"), id = box && box.getAttribute("data-lesson");
+  var item = id && document.querySelector('[data-lesson-item="' + id + '"]');
+  if (!item || item.classList.contains("done")) return;
+  item.classList.add("done");
+  var pr = document.querySelector("[data-pr]");
+  if (pr) {
+    var total = parseInt(pr.getAttribute("data-total"), 10) || 1, n = (parseInt(pr.getAttribute("data-done"), 10) || 0) + 1;
+    pr.setAttribute("data-done", n);
+    var pct = Math.round(n / total * 100);
+    pr.querySelector("[data-pr-n]").textContent = n;
+    pr.querySelector("[data-pr-bar]").style.width = pct + "%";
+    pr.querySelector("[data-pr-pct]").textContent = pct + "%";
+  }
+  var form = document.querySelector("[data-lesson-done]");
+  if (form) {
+    form.querySelector("[name=done]").value = "0";
+    var b = form.querySelector("[data-done-btn]"); b.textContent = "✓ Vista"; b.classList.add("lx-seen");
+  }
+}
+
+// Formación: ocultar la lista de lecciones (se recuerda en este navegador) y quitar miniaturas que no cargan
+document.addEventListener("click", function (e) {
+  var t = e.target.closest && e.target.closest("[data-lx-toggle]");
+  if (!t) return;
+  var lx = document.querySelector("[data-lx]"); if (!lx) return;
+  lx.classList.toggle("closed");
+  try { localStorage.setItem("lx-closed", lx.classList.contains("closed") ? "1" : ""); } catch (err) {}
+});
+document.addEventListener("error", function (e) {
+  if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-hide-broken")) e.target.remove();
+}, true);
+function listaLecciones() {
+  var lx = document.querySelector("[data-lx]"); if (!lx) return;
+  try { if (localStorage.getItem("lx-closed") === "1") lx.classList.add("closed"); } catch (err) {}
+  var on = lx.querySelector(".lx-item.on"), side = lx.querySelector(".lx-side");
+  if (on && side && window.innerWidth > 900) side.scrollTop = Math.max(on.offsetTop - side.clientHeight / 2, 0);
+}
+
 function progresoLeccion() {
+  listaLecciones();
   var box = document.querySelector("[data-lesson-player]");
   if (!box) return;
   var frame = box.querySelector("iframe"), url = box.getAttribute("data-url"), csrf = box.getAttribute("data-csrf");
@@ -887,8 +928,8 @@ function progresoLeccion() {
     } else if (d.event === "timeupdate" && d.value) {
       var s = Math.floor(d.value.seconds || 0);
       if (Math.abs(s - last) >= 15) { last = s; save({ seconds: s }); }
-      if (!ended && d.value.duration && s >= d.value.duration * 0.92) { ended = true; save({ done: "1", seconds: s }); }
-    } else if (d.event === "ended" && !ended) { ended = true; save({ done: "1" }); }
+      if (!ended && d.value.duration && s >= d.value.duration * 0.92) { ended = true; save({ done: "1", seconds: s }).then(vista); }
+    } else if (d.event === "ended" && !ended) { ended = true; save({ done: "1" }).then(vista); }
   }
   window.addEventListener("message", onMsg);
   limpiar.push(function () { window.removeEventListener("message", onMsg); });

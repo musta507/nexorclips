@@ -4,15 +4,19 @@
 {% block content %}
 <div class="section-head" style="margin:0"><h1>Formación</h1><p class="muted">Aprende a hacer clips que consiguen vistas.</p></div>
 {% if rows %}
-<div class="course-grid">
+<div class="cx-grid">
   {% for c, pr in rows %}
-  <a class="card course-card" href="{{ url_for('lesson', lid=pr.next.id) if pr.done and not pr.finished else url_for('course', cid=c.id) }}">
-    <span class="course-ico">{{ icon("cap") }}</span>
-    <b>{{ c.title }}</b>
-    {% if c.description %}<span class="small muted course-desc">{{ c.description }}</span>{% endif %}
-    <span class="small muted">{{ pr.total }} lecciones · {{ c.chapters|length }} capítulo{{ 's' if c.chapters|length != 1 }}</span>
-    <div class="dbar"><span style="width:{{ pr.pct }}%"></span></div>
-    <span class="small"><b class="tnum">{{ pr.pct }} %</b> <span class="muted">{% if pr.finished %}· ¡Completado!{% elif pr.done %}· Continuar{% else %}· Empezar{% endif %}</span></span>
+  <a class="cx-card" href="{{ url_for('course', cid=c.id) }}">
+    <span class="cx-cover">
+      {% if c.cover_version %}<img src="{{ url_for('course_cover', cid=c.id, v=c.cover_version) }}" alt="" loading="lazy">
+      {% else %}<span class="cx-cover-gen"><b>{{ APP_NAME.split()[0] }}</b><small>{{ c.title }}</small></span>{% endif %}
+    </span>
+    <span class="cx-body">
+      <b class="cx-title">{{ c.title }}</b>
+      {% if c.description %}<span class="cx-desc">{{ c.description }}</span>{% endif %}
+      <span class="cx-prog"><span class="cx-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ pr.pct }}" aria-label="Progreso del curso"><span style="width:{{ pr.pct }}%"></span></span><b class="tnum">{{ pr.pct }}%</b></span>
+      <span class="cx-meta">{{ pr.chapters }} capítulo{{ 's' if pr.chapters != 1 }} · {{ pr.total }} lecci{{ 'ones' if pr.total != 1 else 'ón' }}{% if pr.duration %} · {{ pr.duration }}{% endif %}</span>
+    </span>
   </a>
   {% endfor %}
 </div>

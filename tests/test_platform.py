@@ -1526,7 +1526,60 @@ def test_courses_lessons_and_progress():
     page = a.get(f"/formacion/leccion/{lid}").get_data(as_text=True)
     assert "youtube-nocookie.com/embed/abcdefghijk" in page and "Empieza fuerte" in page
     post(a, f"/formacion/leccion/{lid}/progreso", done="1")
-    assert "100 %" in a.get("/formacion").get_data(as_text=True)
+    html = a.get("/formacion").get_data(as_text=True)
+    assert "100%" in html and "1 capítulo · 1 lección" in html
+    assert "i.ytimg.com/vi/abcdefghijk" in a.get(f"/formacion/leccion/{lid}").get_data(as_text=True)   # miniatura
+
+
+def test_course_opens_where_you_left_off():
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/formacion", title="Curso")
+    with A.app.app_context():
+        c = A.Course.query.one(); c.published = True
+        ch = c.chapters[0]
+        ls = [A.Lesson(chapter_id=ch.id, title=f"L{i}", position=i, duration=120) for i in range(3)]
+        A.db.session.add_all(ls); A.db.session.commit()
+        cid, ids = c.id, [x.id for x in ls]
+    a = client_for("a@test.com")
+    assert a.get(f"/formacion/{cid}").headers["Location"].endswith(f"/formacion/leccion/{ids[0]}")
+    post(a, f"/formacion/leccion/{ids[0]}/progreso", done="1")
+    assert a.get(f"/formacion/{cid}").headers["Location"].endswith(f"/formacion/leccion/{ids[1]}")
+    post(a, f"/formacion/leccion/{ids[2]}/progreso", seconds="40")              # empezó la 3.ª sin acabarla
+    assert a.get(f"/formacion/{cid}").headers["Location"].endswith(f"/formacion/leccion/{ids[2]}")
+    html = a.get("/formacion").get_data(as_text=True)
+    assert "33%" in html and "6 min" in html and "ClipProfit" in html            # portada generada sin imagen
+
+
+def test_course_cover_upload():
+    from PIL import Image
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/formacion", title="Con portada")
+    with A.app.app_context():
+        cid = A.Course.query.one().id
+    buf = io.BytesIO(); Image.new("RGB", (160, 100), "red").save(buf, "PNG"); buf.seek(0)
+    admin.post(f"/admin/formacion/{cid}", data={"_csrf": "t", "act": "guardar", "title": "Con portada",
+                                               "cover_file": (buf, "p.png")}, content_type="multipart/form-data")
+    with A.app.app_context():
+        assert A.db.session.get(A.Course, cid).cover_version == 1
+    r = admin.get(f"/formacion/{cid}/portada?v=1")
+    assert r.status_code == 200 and r.mimetype == "image/webp"
+
+
+def test_remove_campaign_account():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("acc@test.com", tiktok="cuenta1")
+    post(a, f"/campana/{cid}", url=tt("cuenta1", 1))
+    with A.app.app_context():
+        acc = A.CampaignAccount.query.filter_by(handle="cuenta1").one(); aid = acc.id
+    r = post(a, f"/campana/{cid}/cuenta/{aid}/quitar")
+    assert "en marcha" in r.get_data(as_text=True)                     # tiene un clip contando: no se deja
+    with A.app.app_context():
+        assert A.db.session.get(A.CampaignAccount, aid)
+    assert post(client_for("x@test.com"), f"/campana/{cid}/cuenta/{aid}/quitar").status_code == 404
+    post(admin, f"/admin/cuenta-campana/{aid}/quitar")                  # el equipo sí puede
+    with A.app.app_context():
+        assert A.db.session.get(A.CampaignAccount, aid) is None
 
 
 def test_bunny_upload_signature(monkeypatch):

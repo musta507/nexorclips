@@ -112,6 +112,7 @@ WHATSAPP_LANG = os.environ.get("WHATSAPP_LANG", "es").strip()
 BUNNY_LIBRARY_ID = os.environ.get("BUNNY_LIBRARY_ID", "").strip()
 BUNNY_API_KEY = os.environ.get("BUNNY_API_KEY", "").strip()
 BUNNY_TOKEN_KEY = os.environ.get("BUNNY_TOKEN_KEY", "").strip()     # opcional: solo se ven los vídeos desde la web
+BUNNY_CDN_HOST = os.environ.get("BUNNY_CDN_HOST", "").strip().removeprefix("https://").strip("/")   # vz-xxxx.b-cdn.net: miniaturas
 WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
 WHOP_APP_API_KEY = os.environ.get("WHOP_APP_API_KEY", "").strip()   # prueba de la opción 2: la app de Whop que instalan los creadores
 WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip("/")
@@ -941,6 +942,8 @@ class Course(db.Model):
     position = db.Column(db.Integer, default=0)
     published = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    cover_data = db.deferred(db.Column(db.LargeBinary, nullable=True))   # portada de la tarjeta del curso
+    cover_version = db.Column(db.Integer, default=0)                     # 0 = sin portada (se dibuja una con el nombre)
     chapters = db.relationship("Chapter", backref="course", lazy=True, order_by="Chapter.position",
                                cascade="all, delete-orphan")
 
@@ -2994,6 +2997,38 @@ def verify_bio(cid, aid):
                 log.exception("Fallo comprobando la bio")
                 db.session.rollback()
     threading.Thread(target=run, daemon=True).start()
+    return redirect(url_for("campaign", cid=cid))
+
+
+def account_open_clips(acc):
+    """Clips de esa cuenta en la campaña que aún no están cerrados (contando, verificando o en revisión)."""
+    q = Submission.query.filter(Submission.user_id == acc.user_id, Submission.campaign_id == acc.campaign_id,
+                                Submission.platform == acc.platform, Submission.status == "pendiente")
+    return q.filter(db.or_(Submission.author == acc.handle, Submission.author == "", Submission.author.is_(None))).count()
+
+
+def remove_campaign_account(acc, by_staff=False):
+    """Quita la cuenta de la campaña. Devuelve un error si no se puede (tiene clips en marcha)."""
+    n = account_open_clips(acc)
+    if n and not by_staff:
+        return (f"@{acc.handle} tiene {n} {'clip' if n == 1 else 'clips'} en marcha en esta campaña. "
+                "Espera a que se aprueben o se rechacen, o escribe a soporte.")
+    label = f"@{acc.handle} ({PLATFORMS.get(acc.platform, acc.platform)})"
+    audit("cuenta_quitada", f"{acc.user.email} · {label} · «{acc.campaign.song}»" + (" · por el equipo" if by_staff else ""))
+    db.session.delete(acc)
+    db.session.commit()
+    return None
+
+
+@app.route("/campana/<int:cid>/cuenta/<int:aid>/quitar", methods=["POST"])
+@login_required
+def remove_account(cid, aid):
+    acc = db.session.get(CampaignAccount, aid)
+    if not acc or acc.user_id != current_user.id or acc.campaign_id != cid:
+        abort(404)
+    handle = acc.handle
+    err = remove_campaign_account(acc)
+    flash(err or f"Has quitado @{handle} de esta campaña. Ya no se buscarán clips nuevos en esa cuenta.", "error" if err else "ok")
     return redirect(url_for("campaign", cid=cid))
 
 
@@ -5282,7 +5317,7 @@ def whop_sync(payouts):
         db.session.commit()
 
 
-BACKUP_SKIP = {("campaign", "cover_data"), ("message", "image_data")}    # imágenes: pesan mucho y no son datos de negocio
+BACKUP_SKIP = {("campaign", "cover_data"), ("message", "image_data"), ("course", "cover_data")}    # imágenes: pesan mucho y no son datos de negocio
 
 
 @app.route("/admin/copia-de-seguridad.json")
@@ -5647,14 +5682,35 @@ def lesson_embed(lesson):
     return ""
 
 
+def lesson_thumb(lesson):
+    """Miniatura de la lección: la de Bunny o la de YouTube. Vacío = se pinta una gris con el icono de play."""
+    if lesson.video_guid and BUNNY_CDN_HOST and lesson.video_status in ("", "listo"):
+        return f"https://{BUNNY_CDN_HOST}/{lesson.video_guid}/thumbnail.jpg"
+    u = lesson.video_url or ""
+    if "youtu" in u:
+        vid = viewcounter.video_id(u)
+        return f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg" if vid else ""
+    return ""
+
+
+def dur_label(secs):
+    """1 h 34 min · 57 min · 3:52 (lecciones)."""
+    secs = int(secs or 0)
+    if secs >= 3600:
+        return f"{secs // 3600} h {secs % 3600 // 60} min"
+    return f"{max(secs // 60, 1)} min" if secs else ""
+
+
 def course_progress(course, user_id):
     ids = [ls.id for ls in course.visible_lessons]
     done = {p.lesson_id for p in LessonProgress.query.filter(LessonProgress.user_id == user_id,
                                                              LessonProgress.lesson_id.in_(ids or [0]),
                                                              LessonProgress.completed_at.isnot(None))}
     nxt = next((ls for ls in course.visible_lessons if ls.id not in done), None)
+    chapters = sum(1 for ch in course.chapters if any(ls.published for ls in ch.lessons))
     return {"total": len(ids), "done": len(done), "pct": round(len(done) / len(ids) * 100) if ids else 0,
-            "next": nxt or (course.visible_lessons[0] if ids else None), "done_ids": done, "finished": bool(ids) and not nxt}
+            "next": nxt or (course.visible_lessons[0] if ids else None), "done_ids": done, "finished": bool(ids) and not nxt,
+            "chapters": chapters, "duration": dur_label(sum(ls.duration or 0 for ls in course.visible_lessons))}
 
 
 @app.route("/formacion")
@@ -5671,7 +5727,28 @@ def course(cid):
     c = db.session.get(Course, cid)
     if not c or (not c.published and not current_user.is_admin):
         abort(404)
-    return render_template("course.html", c=c, pr=course_progress(c, current_user.id))
+    pr = course_progress(c, current_user.id)
+    order = c.visible_lessons if not current_user.is_admin else c.lessons
+    if not order:
+        flash("Este curso aún no tiene lecciones.", "info")
+        return redirect(url_for("courses"))
+    # como en Whop: entras directamente donde lo dejaste (la última lección empezada y sin acabar, o la siguiente sin ver)
+    ids = [ls.id for ls in order]
+    last = (LessonProgress.query.filter(LessonProgress.user_id == current_user.id, LessonProgress.lesson_id.in_(ids),
+                                        LessonProgress.completed_at.is_(None))
+            .order_by(LessonProgress.updated_at.desc()).first())
+    target = db.session.get(Lesson, last.lesson_id) if last else (pr["next"] if pr["next"] in order else order[0])
+    return redirect(url_for("lesson", lid=target.id))
+
+
+@app.route("/formacion/<int:cid>/portada")
+def course_cover(cid):
+    c = db.session.get(Course, cid)
+    if not c or not c.cover_version:
+        abort(404)
+    resp = Response(c.cover_data, mimetype="image/webp")
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
 
 
 @app.route("/formacion/leccion/<int:lid>")
@@ -5685,7 +5762,7 @@ def lesson(lid):
     i = order.index(ls) if ls in order else 0
     pr = course_progress(c, current_user.id)
     mine = LessonProgress.query.filter_by(user_id=current_user.id, lesson_id=ls.id).first()
-    return render_template("lesson.html", ls=ls, c=c, pr=pr, embed=lesson_embed(ls), mine=mine,
+    return render_template("lesson.html", ls=ls, c=c, pr=pr, embed=lesson_embed(ls), mine=mine, thumb=lesson_thumb,
                            prev_=order[i - 1] if i > 0 else None, next_=order[i + 1] if i < len(order) - 1 else None)
 
 
@@ -5774,6 +5851,15 @@ def admin_course(cid):
             c.title = (request.form.get("title") or c.title).strip()[:160] or c.title
             c.description = (request.form.get("description") or "").strip()[:4000]
             c.published = bool(request.form.get("published"))
+            f = request.files.get("cover_file")
+            if f and f.filename:
+                data = process_cover(f)
+                if not data:
+                    flash("La portada tiene que ser una imagen (JPG, PNG o WEBP).", "error")
+                    return redirect(url_for("admin_course", cid=c.id))
+                c.cover_data, c.cover_version = data, (c.cover_version or 0) + 1
+            elif request.form.get("remove_cover"):
+                c.cover_data, c.cover_version = None, 0
             flash("Curso guardado.", "ok")
         elif act == "capitulo":
             db.session.add(Chapter(course_id=c.id, title=(request.form.get("title") or "Capítulo nuevo").strip()[:160],
@@ -6326,6 +6412,12 @@ def admin_chat_poll(uid):
 @staff_required(_account_camp)
 def admin_campaign_account(aid, accion):
     acc = db.session.get(CampaignAccount, aid) or abort(404)
+    if accion == "quitar":
+        cid_, name, handle = acc.campaign_id, acc.user.name, acc.handle
+        n = account_open_clips(acc)
+        remove_campaign_account(acc, by_staff=True)
+        flash(f"@{handle} de {name} quitada de la campaña." + (f" Sus {n} clips en marcha siguen ahí, pero ya no podrás aprobarlos si no vuelve a añadir la cuenta." if n else ""), "ok")
+        return redirect(request.referrer or url_for("admin_campaign_clippers", cid=cid_))
     if accion not in ("aceptar", "rechazar"):
         abort(400)
     label = f"@{acc.handle} ({PLATFORMS.get(acc.platform, acc.platform)})"
