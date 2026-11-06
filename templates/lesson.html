@@ -36,7 +36,7 @@
       <button type="button" class="lx-toggle" data-lx-toggle aria-label="Ocultar o mostrar la lista de lecciones">‹</button>
       <a class="lx-back lx-back-m" href="{{ url_for('courses') }}">← Atrás</a>
       <div class="lx-nav">
-        <span class="lx-chip{{ ' ok' if done }}" data-watch-chip title="Se marca sola al ver el 90 % del vídeo">{% if done %}✓ Vista{% elif seen[ls.id] %}Visto {{ seen[ls.id] }} %{% endif %}</span>
+        <span class="lx-chip{{ ' ok' if done }}" data-watch-chip title="Se marca sola al ver el 90 % del vídeo">{% if done %}✓ Vista{% endif %}</span>
         {% if prev_ %}<a class="btn sm soft" href="{{ url_for('lesson', lid=prev_.id) }}">« Anterior</a>{% endif %}
         {% if next_ %}<a class="btn sm dark" href="{{ url_for('lesson', lid=next_.id) }}">Siguiente »</a>{% endif %}
       </div>

@@ -934,7 +934,7 @@ function progresoLeccion() {
   var frame = box.querySelector("iframe"), url = box.getAttribute("data-url"), csrf = box.getAttribute("data-csrf");
   var kind = box.getAttribute("data-kind"), id = box.getAttribute("data-lesson");
   var start = parseInt(box.getAttribute("data-start") || "0", 10);
-  var tramos = [], cur = null, lastT = null, dur = 0, dirty = false, done = false, ytOk = false, ytState = -1;
+  var tramos = [], cur = null, lastT = null, dur = 0, dirty = false, done = false, ytOk = false, ytState = -1, playing = false;
   function apunta(t, d) {
     if (d) dur = d;
     if (lastT !== null && t >= lastT && t - lastT <= 3) { cur[1] = t; dirty = true; }
@@ -952,8 +952,6 @@ function progresoLeccion() {
     fetch(url, { method: "POST", body: f, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
       .then(function (r) { return r.json(); }).then(function (d) {
         if (d.done) { done = true; vista(id); return; }
-        var chip = document.querySelector("[data-watch-chip]");
-        if (chip && d.pct) chip.textContent = "Visto " + d.pct + " %";
         var item = document.querySelector('[data-lesson-item="' + id + '"] .lx-thumb');
         if (item && d.pct) {
           var p = item.querySelector(".lx-part");
@@ -972,7 +970,7 @@ function progresoLeccion() {
       var info = d.info || {};
       if (typeof info.duration === "number" && info.duration) dur = info.duration;
       if (typeof info.playerState === "number") {
-        ytState = info.playerState;
+        ytState = info.playerState; playing = ytState === 1;
         if (ytState === 2 || ytState === 0) { lastT = null; envia(); }
       }
       if (typeof info.currentTime === "number" && ytState === 1) apunta(info.currentTime);
@@ -980,21 +978,36 @@ function progresoLeccion() {
     }
     if (d.context === "player.js") {               // Bunny
       if (d.event === "ready") {
-        ["timeupdate", "pause", "ended"].forEach(function (ev) { manda({ context: "player.js", version: "0.0.11", method: "addEventListener", value: ev, listener: "cp" }); });
+        ["timeupdate", "play", "pause", "ended"].forEach(function (ev) { manda({ context: "player.js", version: "0.0.11", method: "addEventListener", value: ev, listener: "cp" }); });
         if (start > 5) manda({ context: "player.js", version: "0.0.11", method: "setCurrentTime", value: start, listener: "cp" });
-      } else if (d.event === "timeupdate" && d.value) apunta(d.value.seconds || 0, d.value.duration);
-      else if (d.event === "pause" || d.event === "ended") { lastT = null; envia(); }
+      } else if (d.event === "timeupdate" && d.value) { playing = true; apunta(d.value.seconds || 0, d.value.duration); }
+      else if (d.event === "play") playing = true;
+      else if (d.event === "pause" || d.event === "ended") { playing = false; lastT = null; envia(); }
       return;
     }
     if (kind === "vimeo") {                        // Vimeo
       if (d.event === "ready") {
-        ["timeupdate", "pause", "ended"].forEach(function (ev) { manda({ method: "addEventListener", value: ev }); });
+        ["timeupdate", "play", "pause", "ended"].forEach(function (ev) { manda({ method: "addEventListener", value: ev }); });
         if (start > 5) manda({ method: "setCurrentTime", value: start });
-      } else if (d.event === "timeupdate" && d.data) apunta(d.data.seconds || 0, d.data.duration);
-      else if (d.event === "pause" || d.event === "ended") { lastT = null; envia(); }
+      } else if (d.event === "timeupdate" && d.data) { playing = true; apunta(d.data.seconds || 0, d.data.duration); }
+      else if (d.event === "play") playing = true;
+      else if (d.event === "pause" || d.event === "ended") { playing = false; lastT = null; envia(); }
     }
   }
   window.addEventListener("message", onMsg);
+  // Barra espaciadora: pausa o sigue el vídeo (salvo escribiendo en un campo)
+  function tecla(e) {
+    if (e.code !== "Space" && e.key !== " ") return;
+    var t = e.target, tag = t && t.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || (t && t.isContentEditable)) return;
+    e.preventDefault();
+    var poner = !playing;
+    if (kind === "youtube") manda({ event: "command", func: poner ? "playVideo" : "pauseVideo", args: [] });
+    else if (kind === "vimeo") manda({ method: poner ? "play" : "pause" });
+    else manda({ context: "player.js", version: "0.0.11", method: poner ? "play" : "pause", listener: "cp" });
+    playing = poner;
+  }
+  document.addEventListener("keydown", tecla);
   var cada = setInterval(envia, 10000);
   var yt = kind === "youtube" ? setInterval(function () {          // YouTube no habla hasta que le decimos que escuchamos
     if (ytOk) { clearInterval(yt); return; }
@@ -1006,6 +1019,7 @@ function progresoLeccion() {
     envia();
     window.removeEventListener("message", onMsg);
     document.removeEventListener("visibilitychange", oculto);
+    document.removeEventListener("keydown", tecla);
     clearInterval(cada); if (yt) clearInterval(yt);
   });
 }
