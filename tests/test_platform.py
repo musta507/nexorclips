@@ -2211,4 +2211,4 @@ def test_my_clips_panel_filters_and_series():
         sid = A.Submission.query.filter_by(status="aprobado").one().id
     assert f"#{sid}" in a.get(f"/mis-clips?q=%23{sid}").get_data(as_text=True)
     assert "Nada por aquí" in a.get("/mis-clips?q=noexiste").get_data(as_text=True)
-    assert "Aún no hay datos" in a.get("/mis-clips?red=youtube").get_data(as_text=True)
+    assert "No hay datos que ver" in a.get("/mis-clips?red=youtube").get_data(as_text=True)

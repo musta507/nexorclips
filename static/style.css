@@ -1728,3 +1728,5 @@ body.has-tabs>.site-footer{flex:none}
 .mc-appeal{max-width:520px}
 @media (max-width:900px){.mc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:640px){.mc-kpi{padding:10px}.mc-kpi .mc-ico{width:34px;height:34px}.mc-bar select{flex:1;min-width:0}}
+.mc-empty{min-height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 16px}
+.mc-empty p{max-width:420px}

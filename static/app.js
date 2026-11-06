@@ -250,6 +250,20 @@ function graficas() {
       var x = function (i) { return L + (n > 1 ? i / (n - 1) : 0.5) * iw; };
       var y = function (v) { return T + ih - (v / max) * ih; };
       plot.innerHTML = "";
+      if (suave && !vals.some(function (v) { return v > 0; })) {   // nada que dibujar: se dice, no se deja la gráfica plana
+        var vacio = document.createElement("div");
+        vacio.className = "empty mc-empty";
+        vacio.innerHTML = "<h3>No hay datos que ver</h3><p class=\"muted\">" + (data.totals.sent
+          ? "Aún no hay " + (state.metric === "earned" ? "dinero ganado" : METRICA[state.metric].toLowerCase()) + " en este periodo. Prueba con otro filtro o con un periodo más largo."
+          : "Aún no hay clips en este periodo. Cuando los tengas, aquí verás cómo crecen sus vistas y lo que ganas.") + "</p>";
+        plot.appendChild(vacio);
+        geo = null;
+        var t0v = data.totals[state.metric] || 0;
+        box.querySelector("[data-chart-total]").textContent = cifra(state.metric, t0v);
+        box.querySelector("[data-chart-label]").textContent = METRICA[state.metric];
+        box.setAttribute("data-metric", state.metric);
+        return function () {};
+      }
       var svg = el("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img",
         "aria-label": METRICA[state.metric] + " " + (state.mode === "daily" ? "por día" : "acumuladas") }, plot);
       for (var gv = 0; gv <= max + eje.step / 2; gv += eje.step) {   // rejilla y eje Y

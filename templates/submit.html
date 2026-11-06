@@ -72,12 +72,8 @@
         </div>
       </div>
     </div>
-    {% if an.totals.sent %}
     <script type="application/json" data-chart-data>{{ {"series": an.series, "totals": an.totals}|tojson }}</script>
-    <div class="an-plot" data-chart-plot></div>
-    {% else %}
-    <div class="empty"><h3>Aún no hay datos en este periodo</h3><p class="muted">Cuando tengas clips, aquí verás cómo crecen sus vistas y lo que ganas.</p></div>
-    {% endif %}
+    <div class="an-plot" data-chart-plot>{% if not an.totals.sent %}<div class="empty mc-empty"><h3>No hay datos que ver</h3><p class="muted">Aún no hay clips en este periodo. Cuando los tengas, aquí verás cómo crecen sus vistas y lo que ganas.</p></div>{% endif %}</div>
   </div>
 
   {% if an.by_platform %}
