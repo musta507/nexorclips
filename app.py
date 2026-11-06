@@ -2605,6 +2605,14 @@ def home_data(u):
     # formación: guía para principiantes → siguiente curso → lo que funciona
     guide = beginner_course()
     gp = course_progress(guide, u.id) if guide else None
+    # banner de formación: cuánto hay para aprender y cuánto llevas
+    pub = [c for c in Course.query.filter_by(published=True).all() if c.visible_lessons]
+    prs = [course_progress(c, u.id) for c in pub]
+    les_total = sum(p["total"] for p in prs)
+    les_done = sum(p["done"] for p in prs)
+    learn = {"courses": len(pub), "lessons": les_total, "done": les_done,
+             "pct": round(les_done / les_total * 100) if les_total else 0,
+             "duration": dur_label(sum(ls.duration or 0 for c in pub for ls in c.visible_lessons))}
     # banner de formación: un botón a Formación (marca el curso que tiene a medias, o la guía si aún no la ha hecho)
     learn_url = url_for("courses")
     if guide and gp["total"] and not gp["finished"]:
@@ -2652,7 +2660,7 @@ def home_data(u):
         summary = (f"{open_n} {'campaña activa' if open_n == 1 else 'campañas activas'} con plazas libres. "
                    "Elige una y empieza a ganar.")
     return {"quick": quick, "hero_camps": live[:3],
-            "summary": summary, "learn_url": learn_url, "steps": steps, "show_steps": show_steps,
+            "summary": summary, "learn_url": learn_url, "learn": learn, "steps": steps, "show_steps": show_steps,
             "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
             "rank": rank, "masked": mask_name}
 

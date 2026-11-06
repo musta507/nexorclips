@@ -1620,3 +1620,9 @@ body.has-tabs>.site-footer{flex:none}
 .wa-mini-ico svg{width:14px;height:14px}
 .wa-mini span:not(.wa-mini-ico){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wa-mini b{color:#128c4b;font-weight:600;white-space:nowrap}
+.hm-learn{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.hm-learn span{font:600 12px var(--font);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);border-radius:99px;padding:4px 10px}
+.hm-learn-pr{display:flex;align-items:center;gap:10px;margin-top:12px;max-width:320px}
+.hm-learn-pr .cx-bar{background:rgba(255,255,255,.15)}
+.hm-learn-pr small{font-size:12px;opacity:.75;white-space:nowrap}
+.hm-learn-pr .cx-bar span{background:#fff}

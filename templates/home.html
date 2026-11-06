@@ -19,10 +19,17 @@
   </section>
   <section class="hm-hero light">
     <div>
-      <h2>Formación</h2>
-      <p>Vídeos cortos para que tus clips se aprueben y sumen vistas.</p>
+      <span class="hm-eb">Formación</span>
+      <h2>Aprende a clipear</h2>
+      <p>Qué publicar, cómo editar para que retengan y cómo hacer que te aprueben los clips.</p>
+      {% if learn.lessons %}
+      <div class="hm-learn">
+        <span>{{ learn.courses }} curso{{ 's' if learn.courses != 1 }}</span><span>{{ learn.lessons }} lecciones</span>{% if learn.duration %}<span>{{ learn.duration }}</span>{% endif %}
+      </div>
+      {% if learn.done %}<div class="hm-learn-pr"><span class="cx-bar"><span style="width:{{ learn.pct }}%"></span></span><small>{{ learn.done }} de {{ learn.lessons }} vistas</small></div>{% endif %}
+      {% endif %}
     </div>
-    <a class="btn dark" href="{{ learn_url }}">Ir a formación {{ icon("arrow") }}</a>
+    <a class="btn dark" href="{{ learn_url }}">{% if learn.done and learn.done < learn.lessons %}Seguir aprendiendo{% else %}Ir a formación{% endif %} {{ icon("arrow") }}</a>
   </section>
 </div>
 
