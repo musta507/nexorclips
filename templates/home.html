@@ -5,16 +5,8 @@
   <section class="hm-hero welcome{{ ' has-covers' if hero_camps }}">
     <span class="hm-swoosh" aria-hidden="true"></span>
     <div class="hm-ht">
-      <span class="hm-pill">{{ icon("trend") }} Hola, {{ current_user.name.split()[0] if current_user.name else "clipper" }}</span>
+      <span class="hm-eb">Hola, {{ current_user.name.split()[0] if current_user.name else "clipper" }}</span>
       {% if pot %}<h1><span class="tnum hm-acc">{{ pot|money(0) }}</span> para repartir en campañas activas</h1>{% else %}<h1>Elige tu primera campaña</h1>{% endif %}
-      <p>{{ summary }}</p>
-      {% if hero_stats.active %}
-      <div class="hm-learn light">
-        <span>{{ icon("flag") }} {{ hero_stats.active }} activa{{ 's' if hero_stats.active != 1 }}</span>
-        <span>{{ icon("users") }} {{ hero_stats.open }} con plazas</span>
-        {% if hero_stats.best %}<span>{{ icon("wallet") }} hasta {{ hero_stats.best|rate_k }} por 1.000 vistas</span>{% endif %}
-      </div>
-      {% endif %}
     </div>
     <a class="btn dark hm-cta" href="{{ url_for('campaigns_page') }}">Ver campañas {{ icon("arrow") }}</a>
     {% if hero_camps %}
@@ -34,15 +26,8 @@
     </a>
     {% endif %}
     <div class="hm-ht">
-      <span class="hm-pill dark">{{ icon("cap") }} Formación</span>
+      <span class="hm-eb">Formación{% if learn.lessons %} · {{ learn.lessons }} lecciones{% endif %}</span>
       <h2>Aprende a <span class="hm-acc">clipear</span></h2>
-      <p>Qué publicar, cómo editar para que retengan y cómo hacer que te aprueben los clips.</p>
-      {% if learn.lessons %}
-      <div class="hm-learn">
-        <span>{{ icon("play") }} {{ learn.lessons }} lecciones</span><span>{{ icon("cap") }} {{ learn.courses }} curso{{ 's' if learn.courses != 1 }}</span>{% if learn.duration %}<span>{{ icon("clock") }} {{ learn.duration }}</span>{% endif %}
-      </div>
-      {% if learn.done %}<div class="hm-learn-pr"><span class="cx-bar"><span style="width:{{ learn.pct }}%"></span></span><small>{{ learn.done }} de {{ learn.lessons }} vistas</small></div>{% endif %}
-      {% endif %}
     </div>
     <a class="btn hm-cta" href="{{ learn_url }}">{% if learn.done and learn.done < learn.lessons %}Seguir aprendiendo{% else %}Ir a formación{% endif %} {{ icon("arrow") }}</a>
   </section>

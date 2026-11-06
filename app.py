@@ -2657,9 +2657,7 @@ def home_data(u):
                    "Elige una y empieza a ganar.")
     actives = active_campaigns()
     pot = cents(sum(max(c.remaining or 0, 0) for c in actives))   # lo que queda por repartir (con o sin plazas)
-    hero_stats = {"active": len(actives), "open": sum(1 for c in actives if not c.full and not c.exhausted),
-                  "best": max([max([c.rate or 0] + [r for _, r in c.platform_rates]) for c in actives] or [0])}
-    return {"quick": quick, "hero_camps": live[:3], "pot": pot, "hero_stats": hero_stats,
+    return {"quick": quick, "hero_camps": live[:3], "pot": pot,
             "summary": summary, "learn_url": learn_url, "learn": learn, "steps": steps, "show_steps": show_steps,
             "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
             "rank": rank, "masked": mask_name}
