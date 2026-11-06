@@ -1439,7 +1439,9 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .hm-covers:hover .hm-cv{transform:translateY(-4px)}
 .hm-covers.n3:hover .hm-cv:nth-child(2),.hm-covers.n2:hover .hm-cv:nth-child(2){transform:translateY(-16px)}
 @media (max-width:640px){.hm-hero.welcome.has-covers{padding-right:26px}.hm-covers{display:none}}
-.hm-hero.light{background:var(--card);border:1px solid var(--line)}
+.hm-hero.light{background:linear-gradient(135deg,#0e0e0e,#26282d);color:#fff}
+.hm-hero.light .btn{background:#fff;color:var(--ink)}
+.hm-hero.light .btn:hover{background:#ececee}
 .hm-hero h1,.hm-hero h2{font:700 clamp(22px,2.6vw,30px)/1.15 var(--display);letter-spacing:-.02em;margin:6px 0}
 .hm-hero p{margin:0;font-size:14px;opacity:.78;max-width:400px}
 .hm-hero .btn{align-self:flex-start;position:relative;z-index:1}
