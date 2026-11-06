@@ -1937,7 +1937,7 @@ def test_home_dashboard_steps_week_clips_and_ranking():
         A.rename_beginner_course()
         assert A.Course.query.one().title == "Guía para principiantes"
     page = a.get("/").get_data(as_text=True)
-    assert "en 3 pasos" in page and "Mira la guía para principiantes" in page and "Guía para principiantes" in page
+    assert "en 3 pasos" in page and "Mira la guía para principiantes" in page and "Ir a formación" in page
     post(admin, "/admin/destacado", act="whatsapp", whatsapp_url="")
     assert "Próximamente" in a.get("/").get_data(as_text=True)
     b = client_for("b@test.com", tiktok="bea")

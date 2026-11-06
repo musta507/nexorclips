@@ -2605,30 +2605,16 @@ def home_data(u):
     # formación: guía para principiantes → siguiente curso → lo que funciona
     guide = beginner_course()
     gp = course_progress(guide, u.id) if guide else None
-    is_new = (datetime.utcnow() - (u.created_at or datetime.utcnow())).days < BEGINNER_DAYS
-    learn = None
-    if guide and gp["total"] and not gp["finished"] and is_new:
-        learn = {"eyebrow": "Formación", "title": guide.title, "text": "Lo básico para que tus clips se aprueben y sumen vistas.",
-                 "btn": "Empezar" if not gp["done"] else "Continuar", "url": url_for("courses", destacar=guide.id)}
+    # banner de formación: un botón a Formación (marca el curso que tiene a medias, o la guía si aún no la ha hecho)
+    learn_url = url_for("courses")
+    if guide and gp["total"] and not gp["finished"]:
+        learn_url = url_for("courses", destacar=guide.id)
     else:
         for c in Course.query.filter_by(published=True).order_by(Course.position, Course.id).all():
             pr = course_progress(c, u.id)
-            if pr["total"] and not pr["finished"]:
-                learn = {"eyebrow": "Sigue aprendiendo", "title": c.title, "text": f"Llevas {pr['done']} de {pr['total']} lecciones.",
-                         "btn": "Continuar", "url": url_for("courses", destacar=c.id)}
+            if pr["total"] and pr["done"] and not pr["finished"]:
+                learn_url = url_for("courses", destacar=c.id)
                 break
-    if not learn:
-        mine = next((m.campaign for m in CampaignMember.query.filter_by(user_id=u.id, status="aceptada")
-                     if m.campaign and m.campaign.status == "activa"), None)
-        win = None
-        if mine:
-            win = next((c for sec in campaign_channels(mine) for c in sec.channels if c.kind == "winners"), None)
-        if mine and win:
-            learn = {"eyebrow": "Ideas", "title": "Mira lo que funciona", "text": "Los clips con más vistas de tus campañas, para coger ideas.",
-                     "btn": "Ver clips ganadores", "url": url_for("campaign", cid=mine.id, canal=win.id)}
-        else:                                     # aún sin campaña: que aprenda primero
-            learn = {"eyebrow": "Formación", "title": "Aprende a clipear", "text": "Vídeos cortos para que tus clips se aprueben y sumen vistas.",
-                     "btn": "Ver formación", "url": url_for("courses")}
     # paso a paso
     wa = get_setting("whatsapp_general", "")
     steps = [{"title": "Únete al grupo de WhatsApp", "text": "Avisos, plazas nuevas y comunidad de clippers.",
@@ -2666,7 +2652,7 @@ def home_data(u):
         summary = (f"{open_n} {'campaña activa' if open_n == 1 else 'campañas activas'} con plazas libres. "
                    "Elige una y empieza a ganar.")
     return {"quick": quick, "hero_camps": live[:3],
-            "summary": summary, "learn": learn, "steps": steps, "show_steps": show_steps,
+            "summary": summary, "learn_url": learn_url, "steps": steps, "show_steps": show_steps,
             "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
             "rank": rank, "masked": mask_name}
 
