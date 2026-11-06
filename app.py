@@ -3183,7 +3183,7 @@ def onboarding():
                 flash("Elige tu país.", "error")
                 return redirect(url_for("onboarding", paso=2))
             u.country = c
-            u.languages = ",".join(x for x in request.form.getlist("languages") if x in LANGUAGES)[:60]
+            u.languages = "es"                       # todos publican en español: ya no se pregunta
         else:
             username = (request.form.get("whop_username") or "").strip().lstrip("@")
             if username and whop_enabled() and WHOP_USERNAME_RE.match(username):

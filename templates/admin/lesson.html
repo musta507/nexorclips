@@ -8,7 +8,7 @@
   {% if ls.video_guid %}<p class="small">Estado: <b data-video-status>{{ {'subiendo': 'Subiendo', 'procesando': 'Procesando (tarda unos minutos)', 'listo': 'Listo', 'error': 'Error al procesar'}.get(ls.video_status, ls.video_status) }}</b></p>{% endif %}
   {% if bunny %}
   <div class="upload-box" data-bunny-upload data-prepare="{{ url_for('admin_lesson_video', lid=ls.id) }}" data-status="{{ url_for('admin_lesson_video_status', lid=ls.id) }}" data-csrf="{{ csrf_token() }}" data-title="{{ ls.title }}">
-    <input type="file" accept="video/*" aria-label="Vídeo de la lección" data-file>
+    <div class="file-pick inline"><label class="btn soft sm file-btn">Elegir vídeo<input type="file" accept="video/*" aria-label="Vídeo de la lección" data-file></label><span class="small muted" data-file-name>Ningún vídeo elegido</span></div>
     <button type="button" class="btn accent sm" data-start>Subir vídeo</button>
     <div class="dbar" hidden data-bar><span style="width:0%"></span></div>
     <p class="small muted" data-msg>{% if ls.video_guid %}Si subes otro, sustituye al actual.{% else %}Sube el vídeo desde tu ordenador. Puedes cerrar la página cuando llegue al 100 %.{% endif %}</p>
@@ -26,7 +26,7 @@
   <div class="field"><label for="body">Texto de la lección</label><textarea id="body" name="body" rows="8">{{ ls.body }}</textarea></div>
   <div class="field"><label for="file">Archivo para descargar (máx. 8 MB)</label>
     {% if ls.file_name %}<p class="small">Actual: <b>{{ ls.file_name }}</b></p>{% endif %}
-    <input id="file" type="file" name="file"></div>
+    <div class="file-pick inline"><label class="btn soft sm file-btn">{{ "Cambiar archivo" if ls.file_name else "Elegir archivo" }}<input id="file" type="file" name="file"></label><span class="small muted" data-file-name>{{ "Ninguno nuevo" if ls.file_name else "Ningún archivo elegido" }}</span></div></div>
   <label class="check"><input type="checkbox" name="published" {% if ls.published %}checked{% endif %}> Visible para los clippers</label>
   <div class="inline" style="flex-wrap:wrap"><button class="btn accent">Guardar</button><a class="btn soft" href="{{ url_for('lesson', lid=ls.id) }}">Ver como clipper</a></div>
 </form>

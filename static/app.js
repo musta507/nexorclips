@@ -1029,6 +1029,19 @@ document.addEventListener("click", function (e) {
   if (e.target.closest("[data-print]")) window.print();
 });
 
+// Selectores de archivo: enseñar el nombre del archivo elegido y, en la foto de perfil, la vista previa
+document.addEventListener("change", function (e) {
+  var inp = e.target;
+  if (!inp || inp.type !== "file") return;
+  var pick = inp.closest(".file-pick"), f = inp.files && inp.files[0];
+  var name = pick && pick.querySelector("[data-file-name]");
+  if (name && f) name.textContent = f.name;
+  if (inp.hasAttribute("data-photo-input") && f) {
+    var prev = document.querySelector("[data-photo-prev]");
+    if (prev) { prev.innerHTML = ""; var img = document.createElement("img"); img.alt = ""; img.src = URL.createObjectURL(f); prev.appendChild(img); }
+  }
+});
+
 // Portada de la campaña: vista previa al elegir la imagen
 document.addEventListener("change", function (e) {
   var inp = e.target.closest("[data-cover-input]");

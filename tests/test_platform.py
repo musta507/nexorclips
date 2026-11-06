@@ -1440,7 +1440,7 @@ def test_onboarding_three_steps():
     post(a, "/bienvenida?paso=3")
     with A.app.app_context():
         u = A.User.query.filter_by(email="a@test.com").one()
-        assert (u.name, u.country, u.languages) == ("Ana García", "MX", "es,en")
+        assert (u.name, u.country, u.languages) == ("Ana García", "MX", "es")
         assert u.onboarded_at and "anag" in u.handles("tiktok")
     home = a.get("/").get_data(as_text=True)
     assert "Primeros pasos" not in home and "Agrega tu cuenta" not in home

@@ -1078,6 +1078,13 @@ select[multiple]{min-height:120px}
 .cover-prev svg{width:24px;height:24px}
 .file-btn{position:relative;overflow:hidden;align-self:flex-start;cursor:pointer}
 .file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.file-btn:focus-within{outline:2px solid var(--ink);outline-offset:2px}
+.file-pick{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.file-pick.inline{flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px}
+.file-pick [data-file-name]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+/* por si queda algún selector de archivos sin envolver: que al menos tenga el botón de la web */
+input[type=file]::file-selector-button{font:600 13px var(--font);border:0;border-radius:99px;background:var(--soft);color:var(--ink);padding:8px 14px;margin-right:10px;cursor:pointer}
+input[type=file]{font-size:13px;color:var(--muted)}
 .item-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .item-list li{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;background:var(--soft);border-radius:12px;padding:9px 12px}
 .item-list p{margin:0;font-size:14px}
@@ -1627,3 +1634,4 @@ body.has-tabs>.site-footer{flex:none}
 .acc-del button{background:none;border:0;padding:2px 4px;cursor:pointer;font:inherit;font-size:12.5px;color:var(--muted);text-decoration:underline}
 .acc-del button:hover{color:var(--red-ink)}
 .hl .acc-del{margin-left:6px}
+.upload-box [data-start]{align-self:flex-start}
