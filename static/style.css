@@ -1607,11 +1607,18 @@ body.has-tabs>.site-footer{flex:none}
 .wa-mini-ico svg{width:14px;height:14px}
 .wa-mini span:not(.wa-mini-ico){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wa-mini b{color:#128c4b;font-weight:600;white-space:nowrap}
+.hm-learn-pr{display:flex;align-items:center;gap:10px;margin-top:12px;max-width:320px}
+.hm-learn-pr .cx-bar{background:rgba(255,255,255,.15)}
+.hm-learn-pr small{font-size:12px;opacity:.75;white-space:nowrap}
+.hm-learn-pr .cx-bar span{background:#fff}
 
 /* =============================================================== banners del inicio (estilo tarjeta con portadas) */
 .hm-hero{box-shadow:0 1px 2px rgba(16,24,40,.04),0 12px 32px rgba(16,24,40,.06)}
 .hm-ht{position:relative;z-index:2}
 .hm-cta{position:relative;z-index:2;box-shadow:0 8px 20px rgba(14,14,14,.18)}
+.hm-pill{display:inline-flex;align-items:center;gap:6px;font:600 12.5px var(--font);border-radius:99px;padding:6px 12px;background:var(--soft);color:var(--ink);margin-bottom:6px}
+.hm-pill svg{width:14px;height:14px}
+.hm-pill.dark{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff}
 .hm-hero.welcome{background:linear-gradient(135deg,#fff 0%,#f6f7f9 60%,#eef0f3 100%);border:1px solid var(--line)}
 .hm-hero.welcome.has-covers{padding-right:236px}
 .hm-hero.welcome h1,.hm-hero.light h2{font-size:clamp(22px,2.2vw,28px)}
@@ -1636,8 +1643,13 @@ body.has-tabs>.site-footer{flex:none}
 .hm-hero.light .hm-cta{background:#fff;color:var(--ink);box-shadow:0 8px 20px rgba(0,0,0,.35)}
 .hm-hero.light .hm-cta:hover{background:#ececee}
 .hm-hero.light .hm-acc{background:linear-gradient(90deg,#fff,#9da0a8);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hm-learn{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.hm-learn span{display:inline-flex;align-items:center;gap:6px;font:600 12.5px var(--font);background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:99px;padding:6px 12px}
+.hm-learn svg{width:13px;height:13px}
 @media (max-width:1180px){.hm-hero.light{padding-right:26px}.hm-lessons{display:none}}
 @media (max-width:640px){.hm-hero.welcome.has-covers{padding-right:26px}.hm-covers,.hm-swoosh{display:none}}
+.hm-learn.light span{background:var(--card);border-color:var(--line);color:var(--ink-2)}
+.hm-learn.light svg{color:var(--muted)}
 .hm-hero.welcome .hm-ht{max-width:420px}
 .hm-hero.welcome .hm-covers{right:28px}
 .hm-lessons{position:absolute;right:22px;top:50%;width:136px;height:150px;transform:translateY(-38%);z-index:2}
@@ -1650,20 +1662,3 @@ body.has-tabs>.site-footer{flex:none}
 .hm-lessons.n1 .hm-ls{top:38px;transform:none}
 .hm-lessons:hover .hm-ls:nth-child(1){transform:rotate(-8deg) translate(-14px,-4px)}
 .hm-lessons:hover .hm-ls:nth-child(3){transform:rotate(7deg) translate(-2px,4px)}
-/* banners compactos */
-.hm-hero.welcome,.hm-hero.light{min-height:0;padding-top:22px;padding-bottom:22px;gap:14px}
-.hm-hero.welcome h1,.hm-hero.light h2{font-size:clamp(20px,1.9vw,24px);margin:4px 0}
-.hm-hero.welcome.has-covers{padding-right:200px}
-.hm-covers{width:170px;height:112px;right:22px}
-.hm-cv{width:56px;height:92px;top:12px;border-width:2px;border-radius:12px}
-.hm-cv:nth-child(2){left:56px;top:2px}.hm-cv:nth-child(3){left:112px}
-.hm-covers.n1 .hm-cv{left:56px}
-.hm-covers.n2 .hm-cv:nth-child(1){left:28px}.hm-covers.n2 .hm-cv:nth-child(2){left:86px;top:12px}
-.hm-cv-play{width:22px;height:22px}.hm-cv-play::after{left:9px;top:6px;border-left-width:7px;border-top-width:5px;border-bottom-width:5px}
-.hm-cv-tag{font-size:11px;padding:3px 6px;bottom:7px}
-.hm-hero.light{padding-right:160px}
-.hm-lessons{width:118px;height:108px;right:22px;transform:translateY(-50%)}
-.hm-ls{height:62px;border-radius:11px}
-.hm-ls:nth-child(2){top:26px}.hm-ls:nth-child(3){top:52px}
-.hm-lessons.n1 .hm-ls{top:24px}
-.hm-swoosh{width:300px;height:300px;border-width:40px;right:-70px;top:-90px}
