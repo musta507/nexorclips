@@ -93,7 +93,7 @@
           <td data-label="Clipper"><div class="hm-who">{{ av(s.user) }}<b>{{ "Tú" if s.user_id == current_user.id else masked(s.user.name) }}</b></div></td>
           <td data-label="Campaña" class="muted"><span class="hm-camp">{{ s.campaign.artist }}</span></td>
           <td data-label="Vistas" class="r tnum">{{ s.views|short }}</td>
-          <td data-label="Ganado" class="r tnum money-txt"><b>{{ s.earned|money }}</b></td>
+          <td data-label="Ganado" class="r tnum"><b>{{ s.earned|earn }}</b></td>
         </tr>
         {% endfor %}
         </tbody>

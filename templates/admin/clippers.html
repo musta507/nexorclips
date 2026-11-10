@@ -33,7 +33,7 @@
         <td data-label="Cuentas" class="small">{% for p in PLATFORMS %}{% for h in u.handles(p) %}<div class="hl">{{ icon(p) }} @{{ h }}</div>{% endfor %}{% endfor %}{% if not u.has_any_handle %}<span class="muted">Sin cuentas</span>{% endif %}</td>
         <td data-label="Cobra por" class="small">{% if u.payout_ready %}{{ u.payout_label }}{% else %}<span class="muted">Sin cuenta</span>{% endif %}</td>
         <td data-label="Clips" class="r tnum">{{ n }}</td>
-        <td data-label="Ganado" class="r tnum">{{ m.earned|money }}</td>
+        <td data-label="Ganado" class="r tnum">{{ m.earned|earn }}</td>
         <td data-label="Pagado" class="r tnum">{{ m.paid|money }}</td>
         <td data-label="Disponible" class="r tnum"><b>{{ m.available|money }}</b>{% if m.debt %}<div class="small" style="color:var(--red)">Debe {{ m.debt|money }}</div>{% endif %}</td>
         <td data-label="" class="r">

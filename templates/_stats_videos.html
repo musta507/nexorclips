@@ -94,7 +94,7 @@
     <td data-label="Enviado" class="small muted">{{ (s.stats_at or s.created_at)|date }}</td>
     <td data-label="Campaña">{{ s.campaign.song }}<div class="small"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver clip</a></div></td>
     <td data-label="Vistas" class="r tnum">{{ s.views|num }}</td>
-    <td data-label="Estado del clip"><span class="status {{ 'pendiente' if stg in ('contando', 'revisar', 'estadisticas') else s.status }}">{{ STAGE_LABELS[stg] }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
+    <td data-label="Estado del clip"><span class="status {{ stg }}">{{ STAGE_LABELS[stg] }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>

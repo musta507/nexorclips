@@ -1,29 +1,38 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon, av %}
+{% import "admin/_ui.html" as ui %}
 {% block title %}Actividad · Admin{% endblock %}
 {% block content %}
-<div>
-  
-  <h1 style="margin-top:8px">Registro de actividad</h1>
-  <p class="muted" style="margin-top:6px">Cada aprobación, rechazo, corrección de vistas, pago y bloqueo queda apuntado aquí con la fecha y quién lo hizo. Se muestran los 300 últimos.</p>
-</div>
-<div class="table-card">
-  {% if logs %}
-  <div class="table-scroll"><table class="rt">
-    <thead><tr><th>Fecha (UTC)</th><th>Quién</th><th>Acción</th><th>Detalle</th><th></th></tr></thead>
-    <tbody>
-    {% for l in logs %}
-    <tr>
-      <td data-label="Fecha (UTC)" class="small muted tnum">{{ l.created_at|datetime }}</td>
-      <td data-label="Quién" class="small">{{ l.admin.name if l.admin else "Sistema" }}</td>
-      <td data-label="Acción"><span class="chip">{{ l.action|replace("_", " ")|capitalize }}</span></td>
-      <td data-label="Detalle" class="small">{{ l.detail }}</td>
-      <td class="r"><form method="post" action="{{ url_for('admin_activity_delete', lid=l.id) }}" data-confirm="¿Borrar este registro de la actividad?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft" aria-label="Borrar registro">Borrar</button></form></td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
-  {% else %}
-  <div class="empty"><h3>Todavía no hay actividad</h3><p class="muted">Las acciones del panel de admin aparecerán aquí.</p></div>
-  {% endif %}
-</div>
+{% call ui.head("Registro de actividad", "Cada aprobación, rechazo, corrección de vistas, pago y bloqueo queda apuntado aquí con la hora y quién lo hizo. Se muestran los 300 últimos.") %}{% endcall %}
+<turbo-frame id="act-list" target="_top" data-turbo-action="advance">
+<section class="mc-list">
+  <nav class="seg" aria-label="Tipo de acción">
+    <a class="{% if not grupo %}on{% endif %}" href="{{ url_for('admin_activity') }}" data-turbo-frame="act-list">Todo <span class="seg-n">{{ total }}</span></a>
+    {% for k, g in groups.items() %}<a class="{% if grupo == k %}on{% endif %}" href="{{ url_for('admin_activity', grupo=k) }}" data-turbo-frame="act-list">{{ g[0] }} <span class="seg-n">{{ counts[k] }}</span></a>{% endfor %}
+  </nav>
+  <div class="mc-tools">
+    <label class="cr-q mc-q">{{ icon("search") }}<input type="search" placeholder="Buscar por persona, acción o detalle" aria-label="Buscar en la actividad" data-live-search="#act-rows"></label>
+  </div>
+  <div class="table-card">
+    {% if logs %}
+    <div class="table-scroll"><table class="rt mc-table act-table">
+      <thead><tr><th>Quién</th><th>Acción</th><th>Detalle</th><th>Cuándo</th><th></th></tr></thead>
+      <tbody id="act-rows">
+      {% for l in logs %}{% set who = l.admin.name if l.admin else "Sistema" %}{% set act = l.action|replace("_", " ")|capitalize %}
+      <tr data-search="{{ who }} {{ act }} {{ l.detail }}">
+        <td data-label="Quién"><span class="act-who">{% if l.admin %}{{ av(l.admin) }}{% else %}<span class="avatar sm act-sys" aria-hidden="true">⚙</span>{% endif %}<b>{{ who }}</b></span></td>
+        <td data-label="Acción"><span class="act-tag g-{{ audit_group(l.action) }}">{{ act }}</span></td>
+        <td data-label="Detalle" class="small act-detail" title="{{ l.detail }}">{{ l.detail or "—" }}</td>
+        <td data-label="Cuándo" class="small muted nowrap"><time datetime="{{ l.created_at|iso }}" data-local title="{{ l.created_at|datetime }} UTC">{{ l.created_at|ago }}</time></td>
+        <td class="r mc-acts"><form method="post" action="{{ url_for('admin_activity_delete', lid=l.id) }}" data-confirm="¿Borrar este registro de la actividad?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="mc-btn" aria-label="Borrar registro" title="Borrar registro">{{ icon("trash") }}</button></form></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+    <div class="empty"><h3>No hay actividad aquí</h3><p class="muted">Las acciones del panel aparecerán aquí.</p></div>
+    {% endif %}
+  </div>
+</section>
+</turbo-frame>
 {% endblock %}

@@ -63,16 +63,17 @@
 
 <section>
   <div class="section-head"><h2>Últimos pagos hechos</h2></div>
+  {% if history|length > 8 %}<div class="mc-tools"><label class="cr-q mc-q">{{ icon("search") }}<input type="search" placeholder="Buscar por clipper, correo o método" aria-label="Buscar pago" data-live-search="#pay-hist"></label></div>{% endif %}
   <div class="table-card">
   {% if history %}
     <div class="table-scroll"><table class="rt">
       <thead><tr><th>Clipper</th><th>Método</th><th>Pagado</th><th class="r">Monto</th></tr></thead>
-      <tbody>
+      <tbody id="pay-hist">
       {% for p in history %}
-      <tr>
+      <tr data-search="{{ p.user.name }} {{ p.user.email }} {{ p.method }}">
         <td data-label="Clipper">{{ av(p.user) }} <a class="link" href="{{ url_for('admin_clipper', uid=p.user_id) }}"><b>{{ p.user.name }}</b></a><div class="small muted">{{ p.user.email }}</div></td>
         <td data-label="Método">{{ p.method }}{% if p.ext_id and is_tech() %}<div class="small muted selectable">{{ p.ext_id }}</div>{% endif %}</td>
-        <td data-label="Pagado" class="small muted">{{ p.paid_at|datetime }}</td>
+        <td data-label="Pagado" class="small muted"><time datetime="{{ p.paid_at|iso }}" data-local data-local-show>{{ p.paid_at|datetime }}</time></td>
         <td data-label="Monto" class="r tnum"><b>{{ p.amount|money }}</b></td>
       </tr>
       {% endfor %}

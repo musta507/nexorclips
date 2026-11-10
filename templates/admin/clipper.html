@@ -43,7 +43,7 @@
 {% if user.is_banned and user.ban_reason %}<div class="flash error">Bloqueado: {{ user.ban_reason }}</div>{% endif %}
 
 <div class="kpis">
-  <div class="kpi"><span>Ganado en total</span><b class="tnum">{{ m.earned|money }}</b></div>
+  <div class="kpi"><span>Ganado en total</span><b class="tnum">{{ m.earned|earn }}</b></div>
   <div class="kpi"><span>En campañas abiertas</span><b class="tnum">{{ m.live|money }}</b></div>
   <div class="kpi"><span>Disponible para retirar</span><b class="tnum">{{ m.available|money }}</b></div>
   <div class="kpi"><span>Pagado</span><b class="tnum">{{ m.paid|money }}</b></div>
@@ -68,7 +68,7 @@
       <div class="facts" style="grid-template-columns:repeat(3,auto);gap:18px">
         <div class="fact"><b class="tnum">{{ c.clips }}</b><span>clips{% if c.pending %} (+{{ c.pending }} por revisar){% endif %}</span></div>
         <div class="fact"><b class="tnum">{{ c.views|short }}</b><span>vistas</span></div>
-        <div class="fact"><b class="tnum">{{ c.earned|money }}</b><span>ganado</span></div>
+        <div class="fact"><b class="tnum">{{ c.earned|earn }}</b><span>ganado</span></div>
       </div>
     </div>
     <div class="inline small" style="flex-wrap:wrap;gap:8px;margin-top:10px">
@@ -108,7 +108,7 @@
         <td data-label="Clip"><a class="link inline" href="{{ s.url }}" target="_blank" rel="noopener">{{ icon(s.platform) }} {% if s.author %}@{{ s.author }}{% else %}Ver clip{% endif %}</a>{% include "admin/_flags.html" %}</td>
         <td data-label="Vistas" class="r tnum">{{ s.views|num }}</td>
         <td data-label="Estado"><span class="status {{ s.status }}">{{ s.status|capitalize }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
-        <td data-label="Gana" class="r tnum">{% if s.status == 'aprobado' %}{{ s.earned|money }}{% else %}—{% endif %}</td>
+        <td data-label="Gana" class="r tnum">{{ (s.earned if s.status == 'aprobado' else 0)|earn }}</td>
         <td data-label="">{% if s.status == 'pendiente' %}{% include "admin/_review_buttons.html" %}{% endif %}</td>
       </tr>
       {% endfor %}

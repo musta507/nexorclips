@@ -10,7 +10,7 @@
 <nav class="seg" aria-label="Periodo">
   {% for k, v in periods.items() %}<a class="{% if period == k %}on{% endif %}" href="{{ url_for('ranking_page', p=k) }}">{{ v[0] }}</a>{% endfor %}
 </nav>
-{% if me %}<div class="card tight rank-me">Vas <b>#{{ me.pos }}</b> con <b class="tnum">{{ me.views|short }}</b> vistas y <b class="tnum money-txt">{{ me.earned|money }}</b> ganados.</div>{% endif %}
+{% if me %}<div class="card tight rank-me">Vas <b>#{{ me.pos }}</b> con <b class="tnum">{{ me.views|short }}</b> vistas y <b class="tnum">{{ me.earned|earn }}</b> ganados.</div>{% endif %}
 <div class="table-card">
   {% if rows %}
   <ol class="rank">

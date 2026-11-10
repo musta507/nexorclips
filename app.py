@@ -2329,6 +2329,20 @@ def money(v, decimals=2):
     return f"{_es(v, decimals)} {CURRENCY}"
 
 
+@app.template_filter("earn")
+def earn(v, decimals=2):
+    """Dinero ganado: verde si hay algo, gris si es 0. Igual en toda la web."""
+    from markupsafe import Markup
+    cls = "m-earn" if float(v or 0) > 0 else "m-zero"
+    return Markup('<span class="{}">{}</span>').format(cls, money(v, decimals))
+
+
+@app.template_filter("iso")
+def iso_f(dt):
+    """Fecha en UTC para que el navegador la pase a la hora del país de quien mira."""
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ") if dt else ""
+
+
 @app.template_filter("amount")
 def amount(v):
     return _es(v, 2)
@@ -5770,11 +5784,35 @@ def admin_payouts_csv():
                     headers={"Content-Disposition": "attachment; filename=retiros.csv"})
 
 
+AUDIT_GROUPS = {  # grupo: (nombre, prefijos de la acción)
+    "clips": ("Clips", ("clip_", "apelacion_", "vistas_", "estadisticas_")),
+    "dinero": ("Dinero", ("retiro_",)),
+    "clippers": ("Clippers y mods", ("clipper_", "cuenta_", "solicitud_", "mod_")),
+    "campanas": ("Campañas", ("campaña_", "campana_")),
+    "contenido": ("Contenido y avisos", ("curso_", "creador_", "publicacion_", "destacado_", "aviso", "whatsapp_")),
+    "sistema": ("Sistema", ("demo_", "mi_demo_", "copia_")),
+}
+
+
+def audit_group(action):
+    for k, (_n, pref) in AUDIT_GROUPS.items():
+        if action.startswith(pref):
+            return k
+    return "sistema"
+
+
 @app.route("/admin/actividad")
 @admin_required
 def admin_activity():
     logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(300).all()
-    return render_template("admin/activity.html", logs=logs)
+    grupo = request.args.get("grupo", "")
+    counts = {k: 0 for k in AUDIT_GROUPS}
+    for l in logs:
+        counts[audit_group(l.action)] += 1
+    if grupo in AUDIT_GROUPS:
+        logs = [l for l in logs if audit_group(l.action) == grupo]
+    return render_template("admin/activity.html", logs=logs, grupo=grupo, counts=counts, groups=AUDIT_GROUPS,
+                           total=sum(counts.values()), audit_group=audit_group)
 
 
 @app.route("/admin/actividad/<int:lid>/borrar", methods=["POST"])

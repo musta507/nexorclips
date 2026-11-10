@@ -60,7 +60,7 @@
         <td data-label="Clips aprobados" class="r tnum"><a class="link" href="{{ url_for('my_clips', tab='aprobado', campana=r.camp.id) }}">{{ r.clips }}</a></td>
         <td data-label="Vistas" class="r tnum">{{ r.views|num }}</td>
         <td data-label="Estado">{% if r.camp.status == 'finalizada' %}<span class="status aprobado">Disponible</span><div class="small muted">Campaña terminada</div>{% else %}<span class="status pendiente">En curso</span><div class="small muted">Se libera al terminar la campaña</div>{% endif %}</td>
-        <td data-label="Ganado" class="r tnum"><b>{{ r.amount|money }}</b></td>
+        <td data-label="Ganado" class="r tnum"><b>{{ r.amount|earn }}</b></td>
       </tr>
       {% endfor %}
       </tbody>

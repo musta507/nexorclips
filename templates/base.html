@@ -11,7 +11,7 @@
   <a class="skip" href="#contenido">Saltar al contenido</a>
   <header class="topbar">
     <div class="wrap">
-      <a class="home-link" href="{{ url_for('admin_home') if admin_page else url_for('index') }}" aria-label="Inicio">{{ logo() }}{% if admin_page %}<span class="admin-tag adm-badge">{{ "Admin" if (current_user.admin_role or "owner") == "owner" else ADMIN_ROLES[current_user.admin_role] }}</span>{% endif %}</a>
+      <a class="home-link" href="{{ url_for('admin_home') if admin_page else url_for('index') }}" aria-label="Inicio">{{ logo() }}<span class="beta-tag" title="La web está en pruebas: puede haber cambios">BETA</span>{% if admin_page %}<span class="admin-tag adm-badge">{{ "Admin" if (current_user.admin_role or "owner") == "owner" else ADMIN_ROLES[current_user.admin_role] }}</span>{% endif %}</a>
       {% if admin_page %}
       <a class="adm-view" href="{{ url_for('index') }}">{{ icon("out") }} Ver la web como clipper</a>
       {% else %}
@@ -93,7 +93,7 @@
     </aside>
     <main class="adm-main" id="contenido">
     {% with msgs = get_flashed_messages(with_categories=true) %}
-      {% if msgs %}<div class="flashes">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}</div>{% endif %}
+      {% if msgs %}<div class="toasts" aria-live="polite">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}" data-toast>{{ m }}<button type="button" class="toast-x" aria-label="Cerrar aviso" data-toast-x>×</button></div>{% endfor %}</div>{% endif %}
     {% endwith %}
     <div class="page">{{ self.content() }}</div>
     </main>
@@ -101,7 +101,7 @@
   {% else %}
   <main class="wrap" id="contenido">
     {% with msgs = get_flashed_messages(with_categories=true) %}
-      {% if msgs %}<div class="flashes">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="status">{{ m }}</div>{% endfor %}</div>{% endif %}
+      {% if msgs %}<div class="toasts" aria-live="polite">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}" data-toast>{{ m }}<button type="button" class="toast-x" aria-label="Cerrar aviso" data-toast-x>×</button></div>{% endfor %}</div>{% endif %}
     {% endwith %}
     <div class="page">{% block content %}{% endblock %}</div>
   </main>

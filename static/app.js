@@ -160,6 +160,48 @@ function pagina() {
   destacado();
   canalVisible();
   comprobarBio();
+  avisosToast();
+  horasLocales();
+  buscadoresVivos();
+}
+
+// =============================================================== avisos flotantes (toast): se van solos, el de error dura más
+function avisosToast() {
+  document.querySelectorAll("[data-toast]").forEach(function (t, i) {
+    if (t.dataset.ready) return;
+    t.dataset.ready = "1";
+    var vida = t.classList.contains("error") ? 9000 : 5000, quedan = vida, desde = Date.now(), timer = null;
+    function cierra() {
+      clearTimeout(timer);
+      t.classList.add("out");
+      setTimeout(function () { var box = t.parentNode; t.remove(); if (box && !box.children.length) box.remove(); }, 220);
+    }
+    function arranca() { desde = Date.now(); timer = setTimeout(cierra, quedan); }
+    t.style.animationDelay = (i * 60) + "ms";
+    t.addEventListener("mouseenter", function () { clearTimeout(timer); quedan -= Date.now() - desde; });
+    t.addEventListener("mouseleave", arranca);
+    var x = t.querySelector("[data-toast-x]");
+    if (x) x.addEventListener("click", cierra);
+    arranca();
+    limpiar.push(tuyo(t, function () { clearTimeout(timer); }));
+  });
+}
+
+// =============================================================== horas en la zona del que mira (el servidor las da en UTC)
+var FMT_FECHA = null;
+function horasLocales() {
+  try {
+    FMT_FECHA = FMT_FECHA || new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch (err) { return; }
+  document.querySelectorAll("time[data-local]").forEach(function (el) {
+    if (el.dataset.ready) return;
+    el.dataset.ready = "1";
+    var d = new Date(el.getAttribute("datetime"));
+    if (isNaN(d)) return;
+    var full = FMT_FECHA.format(d).replace(",", "");
+    if (el.hasAttribute("data-local-show")) el.textContent = full;   // si no, deja el «hace 2 h» y pone la fecha local al pasar el ratón
+    el.title = full + " (tu hora)";
+  });
 }
 
 // =============================================================== código en la bio: el resultado aparece solo, sin recargar a mano

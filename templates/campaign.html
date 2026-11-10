@@ -179,7 +179,7 @@
       <div class="clip">
         <span class="pi">{{ icon(s.platform) }}</span>
         <div class="meta"><a href="{{ s.url }}" target="_blank" rel="noopener">{{ PLATFORMS[s.platform] }}</a><span class="small muted">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</span></div>
-        <div><div class="views tnum">{{ s.views|short }}{% if s.status == "aprobado" %} · {{ s.earned|money }}{% endif %}</div>{% set stg = clip_stage(s) %}<span class="status {{ 'pendiente' if stg in ('contando', 'revisar') else s.status }}">{{ STAGE_LABELS[stg] }}</span></div>
+        <div><div class="views tnum">{{ s.views|short }}{% if s.status == "aprobado" %} · {{ s.earned|earn }}{% endif %}</div>{% set stg = clip_stage(s) %}<span class="status {{ stg }}">{{ STAGE_LABELS[stg] }}</span></div>
       </div>
       {% endfor %}
     </div>

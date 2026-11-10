@@ -113,9 +113,9 @@
       <tr>
         <td data-label="ID" class="mc-id tnum">#{{ s.id }}</td>
         <td data-label="Clip"><div class="mc-clip"><span class="mc-pico p-{{ s.platform }}">{{ icon(s.platform) }}</span><div><b>{{ s.campaign.song }}</b><small>{% if s.author %}@{{ s.author }} · {% endif %}{{ s.campaign.artist }} · {{ s.created_at|ago }}{% if s.source == 'auto' %} · detectado solo{% endif %}</small></div></div></td>
-        <td data-label="Estado"><span class="mc-st st-{{ stg }}">{{ STAGE_LABELS[stg] }}</span></td>
+        <td data-label="Estado"><span class="status {{ stg }}">{{ STAGE_LABELS[stg] }}</span></td>
         <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b></td>
-        <td data-label="Ganado" class="r tnum{{ ' money-txt' if s.status == 'aprobado' and s.earned }}">{{ (s.earned if s.status == 'aprobado' else 0)|money }}</td>
+        <td data-label="Ganado" class="r tnum">{{ (s.earned if s.status == 'aprobado' else 0)|earn }}</td>
         <td data-label="Actualizado" class="small muted">{{ (s.views_updated_at or s.created_at)|ago }}</td>
         <td data-label="Avisos" class="small">
           {% if stg == 'contando' and mv %}<span class="mc-av wait">⏳ Faltan {{ [mv - (s.views or 0), 0]|max|num }}</span>
