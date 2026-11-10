@@ -165,6 +165,8 @@ function pagina() {
 // =============================================================== código en la bio: el resultado aparece solo, sin recargar a mano
 function comprobarBio() {
   document.querySelectorAll("[data-bio-poll]").forEach(function (box) {
+    if (box.dataset.ready) return;
+    box.dataset.ready = "1";
     var url = box.getAttribute("data-bio-poll"), tries = 0;
     var t = setInterval(function () {
       tries++;
@@ -176,7 +178,7 @@ function comprobarBio() {
           if (window.Turbo) Turbo.visit(location.href, { action: "replace" }); else location.reload();
         }).catch(function () {});
     }, 4000);
-    limpiar.push(function () { clearInterval(t); });
+    limpiar.push(tuyo(box, function () { clearInterval(t); }));
   });
 }
 
@@ -394,18 +396,19 @@ function graficas() {
         if (es.some(function (e) { return e.isIntersecting; })) { io.disconnect(); requestAnimationFrame(function () { requestAnimationFrame(entrada); }); }
       }, { threshold: 0.25 });
       io.observe(plot);
-      limpiar.push(function () { io.disconnect(); });
+      limpiar.push(tuyo(box, function () { io.disconnect(); }));
     } else { entrada(); }
     var redraw = function () { draw(false); };
     window.addEventListener("resize", redraw);
-    limpiar.push(function () { window.removeEventListener("resize", redraw); });
+    limpiar.push(tuyo(box, function () { window.removeEventListener("resize", redraw); }));
   });
 }
 
 // Chat de soporte
 function iniciarChat() {
   var chat = document.querySelector("[data-chat]");
-  if (!chat) return;
+  if (!chat || chat.dataset.ready) return;
+  chat.dataset.ready = "1";
   var log = chat.querySelector(".chat-log");
   var form = chat.querySelector("[data-chat-form]");
   var box = form.querySelector("textarea");
@@ -481,7 +484,7 @@ function iniciarChat() {
   var timer = setInterval(poll, 8000);
   var onVisible = function () { if (!document.hidden) poll(); };
   document.addEventListener("visibilitychange", onVisible);
-  limpiar.push(function () { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); });
+  limpiar.push(tuyo(chat, function () { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); }));
 }
 
 // Pastilla negra que se desliza: en «Más nuevas / Más presupuesto / Mejor pago» y en las pestañas de Ganancias. En los menús que cambian de página, se guarda dónde estaba la pastilla
@@ -546,12 +549,32 @@ function montarPastilla(box, sel, name) {
 }
 
 // =============================================================== cuándo se ejecuta
+// Algo que se limpia solo cuando desaparece su parte de la página (al cambiar un marco) o al salir de la página
+function tuyo(el, fn) { fn.el = el; return fn; }
 function salirDePagina() {
   limpiar.forEach(function (f) { try { f(); } catch (e) {} });
   limpiar = [];
 }
 if (window.Turbo) {
   document.addEventListener("turbo:load", pagina);              // también en la primera carga
+  // Marcos: una pestaña o un filtro cambia solo su parte de la página. Lo de fuera (la gráfica, la cabecera) no se toca.
+  document.addEventListener("turbo:before-frame-render", function (e) {
+    var fr = e.target;
+    limpiar = limpiar.filter(function (f) {
+      if (f.el && fr.contains(f.el)) { try { f(); } catch (err) {} return false; }
+      return true;
+    });
+  });
+  // Si la respuesta no trae el marco (p. ej. una redirección a otra página), se abre la página entera
+  document.addEventListener("turbo:frame-missing", function (e) {
+    e.preventDefault();
+    e.detail.visit(e.detail.response);
+  });
+  document.addEventListener("turbo:frame-load", function (e) {
+    pagina();                                                    // solo arranca lo nuevo: lo de fuera ya está listo
+    var fr = e.target;
+    fr.classList.remove("fr-in"); void fr.offsetWidth; fr.classList.add("fr-in");
+  });
   document.addEventListener("turbo:before-render", salirDePagina);
   // Animación de entrada: solo el contenido (la barra de arriba no se mueve) y solo al navegar
   // Si solo cambia una pestaña o un filtro de la misma página (misma dirección, distinto «?…»),
@@ -717,7 +740,8 @@ document.addEventListener("change", function (e) {
 // =============================================================== asistente de campaña (5 pasos) con vista previa
 function asistente() {
   var wz = document.querySelector("[data-wizard]");
-  if (!wz) return;
+  if (!wz || wz.dataset.ready) return;
+  wz.dataset.ready = "1";
   var steps = Array.prototype.slice.call(wz.querySelectorAll(".wz-step"));
   var pills = Array.prototype.slice.call(wz.querySelectorAll("[data-wz-go]"));
   var back = wz.querySelector("[data-wz-back]"), next = wz.querySelector("[data-wz-next]"), save = wz.querySelector("[data-wz-save]");
@@ -778,7 +802,8 @@ function asistente() {
 // =============================================================== avisos en este dispositivo (Web Push)
 function avisosPush() {
   var box = document.querySelector("[data-push]");
-  if (!box) return;
+  if (!box || box.dataset.ready) return;
+  box.dataset.ready = "1";
   var on = box.querySelector("[data-push-on]"), off = box.querySelector("[data-push-off]"), state = box.querySelector("[data-push-state]");
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     on.hidden = true; state.textContent = "Este navegador no permite avisos. En iPhone: añade la web a la pantalla de inicio y ábrela desde ahí.";
@@ -949,6 +974,7 @@ document.addEventListener("error", function (e) {
 function destacarCurso() {
   var card = document.querySelector("[data-highlight]");
   if (!card) return;
+  card.removeAttribute("data-highlight");
   var r = card.getBoundingClientRect();
   if (r.top < 0 || r.bottom > window.innerHeight) card.scrollIntoView({ block: "center", behavior: "smooth" });
   setTimeout(function () { card.classList.add("ring"); }, 150);
@@ -966,7 +992,8 @@ function progresoLeccion() {
   listaLecciones();
   // Lección sin vídeo (texto o archivo): cuenta como vista tras 10 s con la página abierta
   var auto = document.querySelector("[data-auto-done]");
-  if (auto) {
+  if (auto && !auto.dataset.ready) {
+    auto.dataset.ready = "1";
     var waited = 0, ti = setInterval(function () {
       if (document.visibilityState === "visible") waited++;
       if (waited < 10) return;
@@ -978,7 +1005,8 @@ function progresoLeccion() {
     limpiar.push(function () { clearInterval(ti); });
   }
   var box = document.querySelector("[data-lesson-player]");
-  if (!box) return;
+  if (!box || box.dataset.ready) return;
+  box.dataset.ready = "1";
   // Vídeo: se apuntan solo los tramos que se reproducen de verdad (si se salta hacia delante, ese hueco no cuenta).
   // El servidor suma los tramos y la marca como vista al llegar al 90 % del vídeo.
   var frame = box.querySelector("iframe"), url = box.getAttribute("data-url"), csrf = box.getAttribute("data-csrf");
@@ -1208,7 +1236,8 @@ document.addEventListener("turbo:before-cache", function () {
 // Destacado de inicio: enseña solo los campos de la opción elegida
 function destacado() {
   var radios = document.querySelectorAll("[data-feat-mode]");
-  if (!radios.length) return;
+  if (!radios.length || radios[0].dataset.ready) return;
+  radios[0].dataset.ready = "1";
   function show() {
     var m = (document.querySelector("[data-feat-mode]:checked") || {}).value;
     document.querySelectorAll("[data-feat]").forEach(function (b) { b.hidden = b.getAttribute("data-feat") !== m; });

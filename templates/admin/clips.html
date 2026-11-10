@@ -147,4 +147,5 @@
   <a class="btn sm cr-recharge" href="{{ url_for('admin_campaign', cid=camp.id) }}#presupuesto">{{ icon("cash") }} Recargar</a>
   {% endif %}
 </div>{% endif %}
+{% if in_camp %}</turbo-frame>{% endif %}
 {% endblock %}

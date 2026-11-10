@@ -87,16 +87,17 @@
   {% endif %}
 </section>
 
+<turbo-frame id="mc-list" target="_top" data-turbo-action="advance">
 <section class="mc-list">
   <nav class="seg" aria-label="Estado de los clips">
     {% for t, label in [("todos", "Todos"), ("contando", "Contando vistas"), ("estadisticas", "Verificar vistas"), ("revisar", "En revisión"), ("aprobado", "Aprobados"), ("rechazado", "Rechazados")] %}
-    {% if t != 'estadisticas' or show_stats %}<a class="{% if tab == t %}on{% endif %}{% if t == 'estadisticas' and counts[t] %} seg-alert{% endif %}" href="{{ url_for('my_clips', tab=t, campana=fc or None, red=fp or None, dias=qs.dias) }}">{{ label }} <span class="seg-n">{{ counts[t] }}</span></a>{% endif %}
+    {% if t != 'estadisticas' or show_stats %}<a class="{% if tab == t %}on{% endif %}{% if t == 'estadisticas' and counts[t] %} seg-alert{% endif %}" href="{{ url_for('my_clips', tab=t, campana=fc or None, red=fp or None, dias=qs.dias) }}" data-turbo-frame="mc-list">{{ label }} <span class="seg-n">{{ counts[t] }}</span></a>{% endif %}
     {% endfor %}
   </nav>
   {% if tab == 'estadisticas' %}
   {% include "_stats_videos.html" %}
   {% else %}
-  <form method="get" class="mc-tools" data-autosubmit>
+  <form method="get" class="mc-tools" data-autosubmit data-turbo-frame="mc-list">
     <input type="hidden" name="tab" value="{{ tab }}">{% if fc %}<input type="hidden" name="campana" value="{{ fc }}">{% endif %}{% if fp %}<input type="hidden" name="red" value="{{ fp }}">{% endif %}{% if dias != 30 %}<input type="hidden" name="dias" value="{{ dias }}">{% endif %}
     <label class="cr-q mc-q">{{ icon("search") }}<input type="search" name="q" value="{{ q }}" placeholder="Buscar por campaña, cuenta, enlace o #ID" aria-label="Buscar clip"></label>
     <select name="orden" aria-label="Ordenar">{% for k, label in [("recientes", "Más recientes"), ("vistas", "Más vistas"), ("ganado", "Más ganado")] %}<option value="{{ k }}"{% if orden == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
@@ -154,4 +155,5 @@
   </div>
   {% endif %}
 </section>
+</turbo-frame>
 {% endblock %}

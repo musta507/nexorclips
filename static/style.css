@@ -1758,3 +1758,10 @@ body.has-tabs>.site-footer{flex:none}
   .rt td.small:not(.wrap){white-space:nowrap}
 }
 .cn-pend a{border-radius:7px!important;border:1px solid #fcc9c5}
+
+/* Marcos de Turbo: solo cambia la parte de abajo, con un fundido suave */
+turbo-frame { display: block; }
+turbo-frame[busy] { opacity: .55; transition: opacity .15s .1s; pointer-events: none; }
+.fr-in { animation: frIn .18s ease-out; }
+@keyframes frIn { from { opacity: .4; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .fr-in { animation: none; } turbo-frame[busy] { transition: none; } }
