@@ -81,10 +81,24 @@
           <div class="field"><label for="rules">Reglas de la campaña</label>
             <textarea id="rules" name="rules" rows="7" placeholder="Qué publicar, hashtags y menciones obligatorias, lo que está prohibido…">{{ camp.rules_text }}</textarea>
             <span class="hint">Se ven en la página de la campaña tal cual las escribas.</span></div>
-          <div class="field"><label for="materials">Materiales de la campaña (uno por línea)</label>
-            <textarea id="materials" name="materials" rows="4" placeholder="Instagram | https://instagram.com/…&#10;Drive con los vídeos | https://drive.google.com/…">{% for n, u, k in camp.material_list %}{{ n }} | {{ u }}
-{% endfor %}</textarea>
-            <span class="hint">«Nombre | enlace». Si pones solo el enlace, el nombre y el icono se ponen solos.</span></div>
+          <div class="field"><span class="label">Recursos de la campaña</span>
+            <div class="res-edit" data-res-edit>
+              {% set rows = camp.resources if camp.resources else [] %}
+              {% for r in rows + [{"icon": "link", "name": "", "url": "", "desc": ""}] %}
+              <div class="res-erow"{% if loop.last %} data-res-tpl{% if rows %} hidden{% endif %}{% endif %}>
+                <details class="res-pick"><summary class="res-ico ri-{{ r.icon }}" aria-label="Elegir icono" data-res-ico>{{ icon(r.icon) }}</summary>
+                  <div class="res-lib" role="listbox" aria-label="Iconos">{% for k, label in RESOURCE_ICONS.items() %}<button type="button" class="res-ico ri-{{ k }}" data-res-set="{{ k }}" title="{{ label }}" aria-label="{{ label }}">{{ icon(k) }}</button>{% endfor %}</div></details>
+                <input type="hidden" name="mat_icon" value="{{ r.icon }}">
+                <div class="res-fields">
+                  <div class="inline"><input name="mat_name" value="{{ r.name }}" maxlength="80" placeholder="Nombre (ej.: Vídeos en bruto)" aria-label="Nombre del recurso"><input name="mat_url" value="{{ r.url }}" placeholder="https://…" aria-label="Enlace del recurso"></div>
+                  <input name="mat_desc" value="{{ r.desc }}" maxlength="200" placeholder="Descripción corta (opcional): qué hay y cómo usarlo" aria-label="Descripción del recurso">
+                </div>
+                <button type="button" class="mc-btn" data-res-del aria-label="Quitar recurso" title="Quitar recurso">{{ icon("trash") }}</button>
+              </div>
+              {% endfor %}
+              <button type="button" class="btn soft sm" data-res-add>{{ icon("plus") }} Añadir recurso</button>
+            </div>
+            <span class="hint">Hasta 12. Pulsa el icono para elegir otro. Los que no tengan enlace no se guardan.</span></div>
           <input type="hidden" name="stats_form" value="1">
           <div class="field"><label for="stats_note">Prueba de estadísticas: qué países se piden (opcional)</label>
             <input id="stats_note" name="stats_note" maxlength="300" value="{{ camp.stats_note or '' }}" placeholder="Ej.: mínimo 60 % de España y LATAM">

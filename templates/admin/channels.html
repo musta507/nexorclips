@@ -14,17 +14,20 @@
           <form method="post" class="inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seccion_nombre"><input type="hidden" name="section" value="{{ sec.id }}"><input name="name" value="{{ sec.title }}" maxlength="80" aria-label="Nombre de la sección"><button class="btn sm soft">Guardar</button></form>
           <div class="inline" style="gap:6px">
             {% for act, label in [("seccion_subir", "↑"), ("seccion_bajar", "↓")] %}<form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="{{ act }}"><input type="hidden" name="section" value="{{ sec.id }}"><button class="btn sm soft">{{ label }}</button></form>{% endfor %}
-            <form method="post" data-confirm="¿Borrar la sección «{{ sec.title }}» con todos sus canales y publicaciones?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seccion_borrar"><input type="hidden" name="section" value="{{ sec.id }}"><button class="btn sm red">Borrar</button></form>
+            <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seccion_borrar"><input type="hidden" name="section" value="{{ sec.id }}"><button class="btn sm red">Borrar</button></form>
           </div>
-          <form method="post" class="inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="canal_nuevo"><input type="hidden" name="section" value="{{ sec.id }}"><input name="emoji" placeholder="😀" maxlength="8" style="width:52px" aria-label="Emoji"><input name="name" placeholder="Canal nuevo" maxlength="60" required aria-label="Nombre del canal"><button class="btn sm">+</button></form>
+          <form method="post" class="form-stack hub-newch"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="canal_nuevo"><input type="hidden" name="section" value="{{ sec.id }}">
+            <div class="inline"><input name="emoji" placeholder="😀" maxlength="8" style="width:52px" aria-label="Emoji"><input name="name" placeholder="Canal nuevo" maxlength="60" required aria-label="Nombre del canal"></div>
+            <div class="inline"><select name="kind" aria-label="Tipo de canal" data-native>{% for k, label in channel_kinds.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select><button class="btn sm">Crear</button></div></form>
         </div>
       </details>{% endif %}
-      {% for c in sec.channels %}
+      {% for c in sec.live %}
       <a class="hub-ch{% if chan and c.id == chan.id %} on{% endif %}" href="{{ url_for('admin_campaign_channels', cid=camp.id, canal=c.id) }}"><span class="hub-emo">{{ c.emoji or "#" }}</span>{{ c.name }}{% if c.kind == 'posts' %}<span class="hub-count">{{ c.posts|length }}</span>{% endif %}</a>
       {% endfor %}
     </div>
     {% endfor %}
-    {% if not acting_as_mod() %}<form method="post" class="inline hub-newsec"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seccion_nueva"><input name="name" placeholder="Sección nueva" maxlength="80" required aria-label="Nombre de la sección"><button class="btn sm soft">+</button></form>
+    {% if not acting_as_mod() %}{% if n_deleted %}<form method="post" class="hub-restore" data-confirm="¿Volver a poner todas las secciones y canales borrados ({{ n_deleted }})?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="restaurar_todo"><button class="btn sm soft">↺ Restaurar todas las secciones ({{ n_deleted }})</button></form>{% endif %}
+    <form method="post" class="inline hub-newsec"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seccion_nueva"><input name="name" placeholder="Sección nueva" maxlength="80" required aria-label="Nombre de la sección"><button class="btn sm soft">+</button></form>
     <div class="hub-discord form-stack">
       <b class="small">Grupo de WhatsApp de la campaña</b>
       <form method="post" class="inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="whatsapp"><input name="whatsapp_url" value="{{ camp.whatsapp_url or '' }}" placeholder="https://chat.whatsapp.com/…" aria-label="Enlace del grupo de WhatsApp"><button class="btn sm soft">Guardar</button></form>
@@ -38,12 +41,15 @@
       <form method="post" class="inline" style="flex:1;flex-wrap:wrap"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="canal_editar"><input type="hidden" name="channel" value="{{ chan.id }}">
         <input name="emoji" value="{{ chan.emoji }}" maxlength="8" style="width:56px" aria-label="Emoji"><input name="name" value="{{ chan.name }}" maxlength="60" style="flex:1;min-width:160px" aria-label="Nombre del canal"><button class="btn sm soft">Guardar</button></form>
       {% for act, label in [("canal_subir", "↑"), ("canal_bajar", "↓")] %}<form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="{{ act }}"><input type="hidden" name="channel" value="{{ chan.id }}"><button class="btn sm soft">{{ label }}</button></form>{% endfor %}
-      <form method="post" data-confirm="¿Borrar el canal «{{ chan.name }}» y sus publicaciones?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="canal_borrar"><input type="hidden" name="channel" value="{{ chan.id }}"><button class="btn sm red">Borrar canal</button></form>
+      <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="canal_borrar"><input type="hidden" name="channel" value="{{ chan.id }}"><button class="btn sm red">Borrar canal</button></form>
     </div>{% endif %}
     {% if chan.kind == 'rules' %}<p class="small muted hub-note">Este canal enseña arriba las <b>reglas de la campaña</b> (se cambian en Ajustes). Puedes añadir publicaciones debajo.</p>
     {% elif chan.kind == 'resources' %}<p class="small muted hub-note">Este canal enseña arriba los <b>materiales de la campaña</b> (se cambian en Ajustes). Puedes añadir publicaciones debajo.</p>
-    {% elif chan.kind == 'winners' %}<p class="small muted hub-note">Este canal es automático: enseña los clips aprobados con más vistas de la campaña.</p>{% endif %}
-    {% if chan.kind != 'winners' %}
+    {% elif chan.kind == 'winners' %}<p class="small muted hub-note">Este canal es automático: enseña los vídeos con más vistas de la campaña, con filtros por red y fecha.</p>
+    {% elif chan.kind == 'top' %}<p class="small muted hub-note">Este canal es automático: enseña las cuentas de la campaña con más vistas, por red, con su foto de perfil.</p>
+    {% elif chan.kind == 'calls' %}<p class="small muted hub-note">Las horas se escriben en <b>hora de España</b>. Cada clipper las ve también en la hora de su país. 30 min antes de empezar se avisa solo a todos.</p>
+    {% include "admin/_calls.html" %}{% endif %}
+    {% if chan.kind not in ('winners', 'top', 'calls') %}
     <form method="post" enctype="multipart/form-data" class="card hub-compose form-stack">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="publicar"><input type="hidden" name="canal" value="{{ chan.id }}">
       <textarea name="body" rows="3" maxlength="8000" placeholder="¿Qué quieres contar en {{ chan.emoji }} {{ chan.name }}? Los enlaces se pueden pulsar." aria-label="Publicación"></textarea>

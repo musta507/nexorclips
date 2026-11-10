@@ -207,7 +207,10 @@ function avisosToast() {
   document.querySelectorAll("[data-toast]").forEach(function (t, i) {
     if (t.dataset.ready) return;
     t.dataset.ready = "1";
-    var vida = t.classList.contains("error") ? 9000 : 5000, quedan = vida, desde = Date.now(), timer = null;
+    var vida = parseInt(t.getAttribute("data-toast-life") || "0", 10) || (t.classList.contains("error") ? 9000 : 5000);
+    var quedan = vida, desde = Date.now(), timer = null;
+    var bar = t.querySelector(".toast-bar");
+    if (bar) bar.style.animationDuration = vida + "ms";
     function cierra() {
       clearTimeout(timer);
       t.classList.add("out");
@@ -215,8 +218,8 @@ function avisosToast() {
     }
     function arranca() { desde = Date.now(); timer = setTimeout(cierra, quedan); }
     t.style.animationDelay = (i * 60) + "ms";
-    t.addEventListener("mouseenter", function () { clearTimeout(timer); quedan -= Date.now() - desde; });
-    t.addEventListener("mouseleave", arranca);
+    t.addEventListener("mouseenter", function () { clearTimeout(timer); quedan -= Date.now() - desde; if (bar) bar.style.animationPlayState = "paused"; });
+    t.addEventListener("mouseleave", function () { if (bar) bar.style.animationPlayState = "running"; arranca(); });
     var x = t.querySelector("[data-toast-x]");
     if (x) x.addEventListener("click", cierra);
     arranca();
@@ -240,6 +243,13 @@ function horasLocales() {
       var zona = el.parentNode && el.parentNode.querySelector("[data-local-zone]");
       var tz = ""; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (err) {}
       if (zona) zona.textContent = /Madrid|Ceuta/.test(tz) ? "(hora de España)" : "(tu hora)";
+      return;
+    }
+    if (el.hasAttribute("data-local-full")) {             // «jueves 13 nov · 12:00»
+      try {
+        var dia = d.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "short" }).replace(",", "").replace(".", "");
+        el.textContent = dia + " · " + d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+      } catch (err) {}
       return;
     }
     var full = FMT_FECHA.format(d).replace(",", "");
@@ -1376,3 +1386,34 @@ function buscadoresVivos() {
 }
 document.addEventListener("turbo:load", buscadoresVivos);
 document.addEventListener("DOMContentLoaded", buscadoresVivos);
+
+// Editor de recursos de una campaña: elegir icono, añadir y quitar filas
+document.addEventListener("click", function (e) {
+  var set = e.target.closest("[data-res-set]");
+  if (set) {
+    var row = set.closest(".res-erow"), k = set.getAttribute("data-res-set");
+    row.querySelector('input[name="mat_icon"]').value = k;
+    var ico = row.querySelector("[data-res-ico]");
+    ico.className = "res-ico ri-" + k; ico.innerHTML = set.innerHTML;
+    set.closest("details").removeAttribute("open");
+    return;
+  }
+  var add = e.target.closest("[data-res-add]");
+  if (add) {
+    var box = add.closest("[data-res-edit]"), tpl = box.querySelector("[data-res-tpl]");
+    if (box.querySelectorAll(".res-erow:not([hidden])").length >= 12) return;
+    if (tpl.hidden) { tpl.hidden = false; tpl.querySelector('input[name="mat_name"]').focus(); return; }
+    var copy = tpl.cloneNode(true);
+    copy.removeAttribute("data-res-tpl");
+    copy.querySelectorAll("input:not([type=hidden])").forEach(function (i) { i.value = ""; });
+    box.insertBefore(copy, add);
+    copy.querySelector('input[name="mat_name"]').focus();
+    return;
+  }
+  var del = e.target.closest("[data-res-del]");
+  if (del) {
+    var r = del.closest(".res-erow");
+    r.querySelectorAll("input:not([type=hidden])").forEach(function (i) { i.value = ""; });
+    if (r.hasAttribute("data-res-tpl")) r.hidden = true; else r.remove();
+  }
+});

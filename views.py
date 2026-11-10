@@ -182,6 +182,11 @@ THUMB_KEYS = {            # portada del vídeo (enlace de la red, puede caducar:
     "instagram": ["displayUrl", "thumbnailUrl", "images.0"],
     "youtube": ["thumbnailUrl", "thumbnail"],
 }
+AVATAR_KEYS = {           # foto de perfil de la cuenta
+    "tiktok": ["authorMeta.avatar", "author.avatarThumb", "authorMeta.originalAvatarUrl"],
+    "instagram": ["ownerProfilePicUrl", "owner.profilePicUrl", "profilePicUrl"],
+    "youtube": ["channelAvatarUrl", "channelThumbnail", "authorThumbnail"],
+}
 CAPTION_KEYS = {          # texto del vídeo
     "tiktok": ["text", "desc"],
     "instagram": ["caption"],
@@ -239,10 +244,12 @@ def parse_item(platform, item):
     if isinstance(thumb, list):
         thumb = thumb[0] if thumb else None
     caption = _first(item, CAPTION_KEYS.get(platform, []))
+    avatar = _first(item, AVATAR_KEYS.get(platform, []))
     return {"views": views, "likes": likes, "comments": comments, "shares": shares, "author": author,
             "posted_at": posted, "video_url": video if isinstance(video, str) and video.startswith("https://") else "",
             "thumb": thumb if isinstance(thumb, str) and thumb.startswith("https://") else "",
-            "caption": " ".join(caption.split())[:300] if isinstance(caption, str) else ""}
+            "caption": " ".join(caption.split())[:300] if isinstance(caption, str) else "",
+            "avatar": avatar if isinstance(avatar, str) and avatar.startswith("https://") else ""}
 
 
 def fetch_items(platform, urls):

@@ -4,13 +4,60 @@
 {% if chan.kind == 'rules' and camp.rules_text %}
 <article class="card post pinned-sys"><header class="post-head"><span class="avatar sm team"><span class="logo-mark"></span></span><div><b>Reglas de la campaña</b><span class="small muted">Léelas antes de publicar</span></div></header>
   <div class="post-body">{{ camp.rules_text|linkify }}</div></article>
-{% elif chan.kind == 'resources' and camp.material_list %}
-<article class="card post pinned-sys"><header class="post-head"><span class="avatar sm team"><span class="logo-mark"></span></span><div><b>Materiales de la campaña</b><span class="small muted">Úsalos para tus clips</span></div></header>
-  <div class="mats">{% for name, url, kind in camp.material_list %}<a class="mat-row" href="{{ url }}" target="_blank" rel="noopener"><span class="mat-ico">{{ icon(kind if kind in ("tiktok", "instagram", "youtube", "facebook") else ("folder" if kind == "drive" else "link")) }}</span><span class="mat-name">{{ name }}</span><span class="mat-out">{{ icon("out") }}</span></a>{% endfor %}</div></article>
+{% elif chan.kind == 'resources' and camp.resources %}
+<div class="res-grid">{% for r in camp.resources %}<a class="card res-card" href="{{ r.url }}" target="_blank" rel="noopener">
+  <span class="res-ico ri-{{ r.icon }}">{{ icon(r.icon) }}</span>
+  <span class="res-txt"><b>{{ r.name }}</b>{% if r.desc %}<span class="small muted">{{ r.desc }}</span>{% else %}<span class="small muted">{{ r.url.split('://')[-1].split('/')[0].replace('www.', '') }}</span>{% endif %}</span>
+  <span class="res-out">{{ icon("out") }}</span></a>{% endfor %}</div>
 {% elif chan.kind == 'winners' %}
-<article class="card post"><header class="post-head"><span class="avatar sm team"><span class="logo-mark"></span></span><div><b>Los clips con más vistas</b><span class="small muted">Se actualiza solo · míralos para ver qué funciona</span></div></header>
-  {% if winners %}<div class="clip-list">{% for s in winners %}<a class="clip" href="{{ s.url }}" target="_blank" rel="noopener"><span class="pi">{{ icon(s.platform) }}</span><div class="meta"><b>{{ s.author and '@' ~ s.author or PLATFORMS[s.platform] }}</b><span class="small muted">{{ s.created_at|ago }}</span></div><div class="views tnum">{{ s.views|short }} vistas</div></a>{% endfor %}</div>
-  {% else %}<p class="muted small" style="padding:0 18px 16px">Aún no hay clips aprobados en esta campaña.</p>{% endif %}</article>
+<turbo-frame id="viral" target="_top" data-turbo-action="advance">
+<div class="vr-bar">
+  <nav class="seg" aria-label="Red">{% for k, label in [("", "Todas")] + viral.nets|map('pair_platform')|list %}<a class="{% if viral.red == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, canal=chan.id, hub=hubq, red=k or None, periodo=viral.periodo if viral.periodo != '30' else None) }}" data-turbo-frame="viral">{% if k %}{{ icon(k) }} {% endif %}{{ label }}</a>{% endfor %}</nav>
+  <nav class="seg" aria-label="Periodo">{% for k, v in viral.periods.items() %}<a class="{% if viral.periodo == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, canal=chan.id, hub=hubq, red=viral.red or None, periodo=k if k != '30' else None) }}" data-turbo-frame="viral">{{ v[0] }}</a>{% endfor %}</nav>
+</div>
+{% if viral.clips %}
+<div class="vr-grid">{% for s in viral.clips %}{% set th = clip_thumb(s) %}{% set _t, lqip = cover_meta(s.campaign) %}
+  <a class="vr-card" href="{{ s.url }}" target="_blank" rel="noopener" title="{{ s.caption or 'Ver el vídeo' }}">
+    <span class="vr-cov"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if not th and cover_src(camp) %}<img src="{{ cover_src(camp, 360) }}" alt="" loading="lazy" class="ccov-camp">{% endif %}{% if th %}<img src="{{ th }}" alt="" loading="lazy" referrerpolicy="no-referrer" data-hide-broken>{% endif %}
+      <span class="vr-rank">#{{ loop.index }}</span><span class="vr-pl">{{ icon(s.platform) }}</span>
+      <span class="vr-views">{{ icon("eye") }} {{ s.views|short }}</span></span>
+    <span class="vr-meta"><b>{% if s.author %}@{{ s.author }}{% else %}{{ PLATFORMS[s.platform] }}{% endif %}</b><small class="muted">{{ (s.posted_at or s.created_at)|ago }}{% if s.likes %} · ♥ {{ s.likes|short }}{% endif %}</small>{% if s.caption %}<small class="vr-cap">{{ s.caption }}</small>{% endif %}</span>
+  </a>{% endfor %}</div>
+{% else %}<div class="table-card"><div class="empty"><h3>Aún no hay vídeos aquí</h3><p class="muted">Prueba con otra red o con un periodo más largo.</p></div></div>{% endif %}
+</turbo-frame>
+{% elif chan.kind == 'top' %}
+<turbo-frame id="topacc" target="_top" data-turbo-action="advance">
+{% if top.nets|length > 1 %}<nav class="seg vr-bar" aria-label="Red">{% for k, label in [("", "Todas")] + top.nets|map('pair_platform')|list %}<a class="{% if top.red == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, canal=chan.id, hub=hubq, red=k or None) }}" data-turbo-frame="topacc">{% if k %}{{ icon(k) }} {% endif %}{{ label }}</a>{% endfor %}</nav>{% endif %}
+{% if top.rows %}
+<div class="card ta-list">{% for r in top.rows %}
+  <a class="ta-row" href="{{ profile_url(r.platform, r.handle) }}" target="_blank" rel="noopener">
+    <span class="ta-pos p{{ loop.index }}">{{ loop.index }}</span>
+    <span class="ta-av">{% if r.acc and r.acc.avatar_url %}<img src="{{ r.acc.avatar_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" data-hide-broken>{% endif %}<span class="ta-ini">{{ r.handle[:1]|upper }}</span><span class="ta-pl">{{ icon(r.platform) }}</span></span>
+    <span class="ta-who"><b>@{{ r.handle }}</b><small class="muted">{{ r.clips }} clip{{ 's' if r.clips != 1 }} · mejor vídeo {{ r.best|short }}</small></span>
+    <span class="ta-views tnum"><b>{{ r.views|short }}</b><small class="muted">vistas</small></span>
+  </a>{% endfor %}</div>
+{% else %}<div class="table-card"><div class="empty"><h3>Aún no hay cuentas con vistas</h3><p class="muted">Cuando los clips empiecen a sumar, aquí verás las cuentas que mejor lo hacen.</p></div></div>{% endif %}
+</turbo-frame>
+{% elif chan.kind == 'calls' %}
+{% if calls_next %}{% for c in calls_next %}{% set live = c.starts_at <= now_utc %}
+<article class="card call-card{% if live %} live{% endif %}">
+  <div class="call-when"><span class="call-day">{{ when_madrid(c.starts_at).split(' · ')[0] }}</span><b class="call-hour">{{ when_madrid(c.starts_at, 'time') }}</b><small>hora de España</small></div>
+  <div class="call-body">
+    {% if live %}<span class="call-live">● En directo</span>{% endif %}
+    <h3>{{ c.title }}</h3>
+    <p class="small muted">En tu país: <time datetime="{{ c.starts_at|iso }}" data-local data-local-show data-local-full>{{ when_madrid(c.starts_at) }}</time> · {{ c.minutes }} min</p>
+    {% if c.notes %}<p class="small">{{ c.notes }}</p>{% endif %}
+    <p class="small muted">🔔 Te avisamos 30 min antes por la campanita (y en el móvil si tienes los avisos activados).</p>
+  </div>
+  {% if c.link %}<a class="btn {{ 'accent' if live else 'soft' }} sm call-join" href="{{ c.link }}" target="_blank" rel="noopener">{{ "Entrar ahora" if live else "Enlace de la llamada" }}</a>{% endif %}
+</article>
+{% endfor %}{% else %}<div class="table-card"><div class="empty"><h3>No hay llamadas programadas</h3><p class="muted">Cuando el equipo programe una, la verás aquí y te avisaremos 30 min antes.</p></div></div>{% endif %}
+{% if calls_past %}
+<h3 class="call-h">Grabaciones</h3>
+<div class="card call-past">{% for c in calls_past %}
+  <div class="call-prow"><span class="call-pico">{{ icon("play") }}</span><div><b>{{ c.title }}</b><small class="muted">{{ when_madrid(c.starts_at).split(' · ')[0] }}</small></div>
+    {% if c.recording_url %}<a class="btn soft sm push" href="{{ c.recording_url }}" target="_blank" rel="noopener">Ver grabación</a>{% else %}<span class="small muted push">Sin grabación todavía</span>{% endif %}</div>
+{% endfor %}</div>{% endif %}
 {% endif %}
 {% for p in posts %}
 <article class="card post" id="p{{ p.id }}">

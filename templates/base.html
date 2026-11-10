@@ -93,7 +93,8 @@
     </aside>
     <main class="adm-main" id="contenido">
     {% with msgs = get_flashed_messages(with_categories=true) %}
-      {% if msgs %}<div class="toasts" aria-live="polite">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}" data-toast>{{ m }}<button type="button" class="toast-x" aria-label="Cerrar aviso" data-toast-x>×</button></div>{% endfor %}</div>{% endif %}
+      {% set undo = pop_undo() %}{% if msgs or undo %}<div class="toasts" aria-live="polite">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}" data-toast>{{ m }}<button type="button" class="toast-x" aria-label="Cerrar aviso" data-toast-x>×</button></div>{% endfor %}
+      {% if undo %}<div class="flash info undo" role="status" data-toast data-toast-life="10000">{{ undo.label }}<form method="post" action="{{ url_for('admin_campaign_channels', cid=undo.cid) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="deshacer"><input type="hidden" name="what" value="{{ undo.what }}"><input type="hidden" name="id" value="{{ undo.id }}"><button class="toast-undo">Deshacer</button></form><button type="button" class="toast-x" aria-label="Cerrar aviso" data-toast-x>×</button><span class="toast-bar" aria-hidden="true"></span></div>{% endif %}</div>{% endif %}
     {% endwith %}
     <div class="page">{{ self.content() }}</div>
     </main>
@@ -101,7 +102,8 @@
   {% else %}
   <main class="wrap" id="contenido">
     {% with msgs = get_flashed_messages(with_categories=true) %}
-      {% if msgs %}<div class="toasts" aria-live="polite">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}" data-toast>{{ m }}<button type="button" class="toast-x" aria-label="Cerrar aviso" data-toast-x>×</button></div>{% endfor %}</div>{% endif %}
+      {% set undo = pop_undo() %}{% if msgs or undo %}<div class="toasts" aria-live="polite">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}" data-toast>{{ m }}<button type="button" class="toast-x" aria-label="Cerrar aviso" data-toast-x>×</button></div>{% endfor %}
+      {% if undo %}<div class="flash info undo" role="status" data-toast data-toast-life="10000">{{ undo.label }}<form method="post" action="{{ url_for('admin_campaign_channels', cid=undo.cid) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="deshacer"><input type="hidden" name="what" value="{{ undo.what }}"><input type="hidden" name="id" value="{{ undo.id }}"><button class="toast-undo">Deshacer</button></form><button type="button" class="toast-x" aria-label="Cerrar aviso" data-toast-x>×</button><span class="toast-bar" aria-hidden="true"></span></div>{% endif %}</div>{% endif %}
     {% endwith %}
     <div class="page">{% block content %}{% endblock %}</div>
   </main>

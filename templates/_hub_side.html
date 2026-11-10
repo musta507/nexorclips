@@ -6,10 +6,10 @@
   </a>
   <a class="hub-ch{% if not chan %} on{% endif %}" href="{{ url_for('campaign', cid=camp.id, hub=hubq) }}"><span class="hub-emo">{{ icon("home") }}</span>Resumen</a>
   {% for sec in sections %}
-  {% if sec.channels %}
+  {% if sec.live %}
   <div class="hub-sec">
     <span class="hub-sec-title">{{ sec.title }}</span>
-    {% for c in sec.channels %}
+    {% for c in sec.live %}
     <a class="hub-ch{% if chan and c.id == chan.id %} on{% endif %}" href="{{ url_for('campaign', cid=camp.id, canal=c.id, hub=hubq) }}"><span class="hub-emo">{{ c.emoji or "#" }}</span>{{ c.name }}</a>
     {% endfor %}
   </div>

@@ -401,13 +401,22 @@ class Campaign(db.Model):
     @property
     def material_list(self):
         """[(nombre, enlace, tipo)] — tipo sirve para el icono: tiktok, instagram, youtube, drive o link."""
+        return [(r["name"], r["url"], r["kind"]) for r in self.resources]
+
+    @property
+    def resources(self):
+        """Recursos de la campaña: [{icon, name, url, desc, kind}]. Cada línea: «icono | Nombre | enlace | descripción»
+        (el icono y la descripción son opcionales; las campañas antiguas tenían «Nombre | enlace»)."""
         out = []
         lines = (self.materials or "").splitlines() or ([self.sound_url] if self.sound_url else [])
         for line in lines:
-            name, _, url = line.rpartition("|") if "|" in line else ("", "", line)
-            name, url = name.strip(), url.strip()
-            if not url.startswith(("https://", "http://")):
+            parts = [p.strip() for p in line.split("|")]
+            ui = next((i for i, p in enumerate(parts) if p.startswith(("https://", "http://"))), None)
+            if ui is None:
                 continue
+            url, before, desc = parts[ui], parts[:ui], " | ".join(parts[ui + 1:]).strip()
+            ico = before[0] if len(before) >= 2 and before[0] in RESOURCE_ICONS else ""
+            name = (before[1] if ico else " | ".join(before)).strip() if before else ""
             host = urlparse(url).netloc.lower()
             kind = ("tiktok" if "tiktok." in host else "instagram" if "instagram." in host
                     else "youtube" if ("youtube." in host or "youtu.be" in host)
@@ -416,7 +425,9 @@ class Campaign(db.Model):
             if not name:
                 name = {"tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube", "facebook": "Facebook",
                         "drive": "Google Drive"}.get(kind) or host.removeprefix("www.") or "Enlace"
-            out.append((name[:80], url, kind))
+            if not ico:
+                ico = kind if kind in RESOURCE_ICONS else "folder" if kind == "drive" else "link"
+            out.append({"icon": ico, "name": name[:80], "url": url, "desc": desc[:200], "kind": kind})
         return out[:12]
 
     @property
@@ -627,6 +638,7 @@ class CampaignAccount(db.Model):
     my_demo = db.Column(db.Boolean, default=False)          # demo personal del admin (se quita aparte)
     last_post_at = db.Column(db.DateTime, nullable=True)       # último vídeo que vimos en su perfil
     last_scan_at = db.Column(db.DateTime, nullable=True)       # última vez que miramos su perfil
+    avatar_url = db.Column(db.String(1000), default="")        # foto de perfil que da Apify (se renueva)
     user = db.relationship("User")
     campaign = db.relationship("Campaign")
 
@@ -735,8 +747,13 @@ class ChannelSection(db.Model):
     campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
     title = db.Column(db.String(80), nullable=False)
     position = db.Column(db.Integer, default=0)
+    deleted_at = db.Column(db.DateTime, nullable=True)      # borrada (se puede deshacer o restaurar)
     channels = db.relationship("Channel", backref="section", lazy=True, order_by="Channel.position",
                                cascade="all, delete-orphan")
+
+    @property
+    def live(self):
+        return [c for c in self.channels if not c.deleted_at]
 
 
 class Channel(db.Model):
@@ -749,8 +766,29 @@ class Channel(db.Model):
     emoji = db.Column(db.String(8), default="")
     kind = db.Column(db.String(12), default="posts")
     position = db.Column(db.Integer, default=0)
+    deleted_at = db.Column(db.DateTime, nullable=True)      # borrado (se puede deshacer o restaurar)
     posts = db.relationship("Post", backref="channel", lazy=True, order_by="Post.created_at.desc()",
                             cascade="all, delete-orphan")
+
+
+class Call(db.Model):
+    """Llamada de una campaña (directo con el equipo). La hora se guarda en UTC y se enseña en España y en la hora de cada uno."""
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
+    title = db.Column(db.String(120), nullable=False)
+    notes = db.Column(db.String(600), default="")
+    starts_at = db.Column(db.DateTime, nullable=False, index=True)
+    minutes = db.Column(db.Integer, default=60)
+    link = db.Column(db.String(500), default="")             # Zoom / Meet / Discord…
+    recording_url = db.Column(db.String(500), default="")    # grabación, cuando la haya
+    reminded = db.Column(db.Boolean, default=False)          # ya se avisó 30 min antes
+    author_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    campaign = db.relationship("Campaign")
+
+    @property
+    def ends_at(self):
+        return self.starts_at + timedelta(minutes=self.minutes or 60)
 
 
 class Post(db.Model):
@@ -869,15 +907,46 @@ def mod_home(cid, user=None):
 
 
 MOD_ENDPOINTS = set(ENDPOINT_PERM)
-MOD_CHANNEL_ACTS = {"publicar", "post_editar", "post_borrar", "post_fijar"}
+MOD_CHANNEL_ACTS = {"publicar", "post_editar", "post_borrar", "post_fijar", "llamada_nueva", "llamada_editar", "llamada_borrar"}
 
+
+RESOURCE_ICONS = {   # biblioteca de iconos para los recursos de una campaña
+    "folder": "Carpeta", "film": "Vídeos", "music": "Sonido", "doc": "Guía", "bulb": "Ideas", "cap": "Curso",
+    "play": "Ejemplos", "trend": "Tendencias", "stack": "Plantillas", "link": "Enlace",
+    "tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube",
+}
 
 DEFAULT_CHANNELS = [
     ("Empieza aquí", [("📜", "Normas", "rules")]),
-    ("Comunidad", [("📣", "Anuncios", "posts")]),
-    ("Contenido y herramientas", [("🏆", "Cuentas TOP", "posts"), ("💡", "Ideas virales", "posts"),
-                                  ("📁", "Recursos", "resources"), ("🎬", "Clips ganadores", "winners")]),
+    ("Comunidad", [("📣", "Anuncios", "posts"), ("📞", "Llamadas", "calls")]),
+    ("Contenido y herramientas", [("🏆", "Cuentas TOP", "top"), ("💡", "Ideas virales", "posts"),
+                                  ("📁", "Recursos", "resources"), ("🔥", "Vídeos virales", "winners")]),
 ]
+CHANNEL_KINDS = {"posts": "Publicaciones", "calls": "Llamadas", "top": "Cuentas TOP (automático)",
+                 "winners": "Vídeos virales (automático)"}   # los que se pueden crear a mano (normas y recursos ya vienen)
+
+
+def upgrade_channels(camp, sections):
+    """Campañas creadas antes: «Cuentas TOP» pasa a ser automático, «Clips ganadores» a «Vídeos virales» y se añade «Llamadas»."""
+    changed = False
+    chans = [c for s in sections for c in s.channels]
+    for c in chans:
+        if c.kind == "posts" and c.name == "Cuentas TOP" and not c.posts:
+            c.kind, changed = "top", True
+        if c.kind == "winners" and c.name == "Clips ganadores":
+            c.name, c.emoji, changed = "Vídeos virales", "🔥", True
+    if not any(c.kind == "calls" for c in chans) and not get_setting(f"calls_ch_{camp.id}", ""):
+        sec = next((s for s in sections if s.title == "Comunidad" and not s.deleted_at), None) or next(
+            (s for s in sections if not s.deleted_at), None)
+        if sec:
+            db.session.add(Channel(campaign_id=camp.id, section_id=sec.id, name="Llamadas", emoji="📞", kind="calls",
+                                   position=len(sec.channels)))
+            changed = True
+        db.session.merge(Setting(key=f"calls_ch_{camp.id}", value="1"))   # solo una vez: si lo borran, no vuelve
+        changed = True
+    if changed:
+        db.session.commit()
+    return changed
 
 
 def ensure_channels(camp):
@@ -916,10 +985,15 @@ def ensure_channels(camp):
     db.session.commit()
 
 
-def campaign_channels(camp):
+def campaign_channels(camp, deleted=False):
+    """Secciones de la campaña (sin las borradas). Con deleted=True, todas (para restaurar)."""
     ensure_channels(camp)
-    return (ChannelSection.query.filter_by(campaign_id=camp.id).order_by(ChannelSection.position, ChannelSection.id)
-            .options(selectinload(ChannelSection.channels)).all())
+    q = lambda: (ChannelSection.query.filter_by(campaign_id=camp.id).order_by(ChannelSection.position, ChannelSection.id)  # noqa: E731
+                 .options(selectinload(ChannelSection.channels)).all())
+    secs = q()
+    if upgrade_channels(camp, secs):
+        secs = q()
+    return secs if deleted else [s for s in secs if not s.deleted_at]
 
 
 def is_campaign_member(user, camp):
@@ -1930,6 +2004,8 @@ def discover_clips(now=None):
                 posted = it.get("posted_at")
                 if posted and (not acc.last_post_at or posted > acc.last_post_at):
                     acc.last_post_at = posted
+                if it.get("avatar"):
+                    acc.avatar_url = it["avatar"][:1000]
                 since = (acc.decided_at or acc.created_at or now) - timedelta(hours=1)
                 if not posted or posted < since:
                     continue                                  # solo cuentan los vídeos publicados después de entrar
@@ -1975,6 +2051,48 @@ def inactivity_reminders(now=None):
                     f"Quedan {money(st['remaining'], 0)} por repartir en {camp.song}. Sube un clip para no quedarte fuera.",
                     f"/campana/{camp.id}", camp_id=camp.id)
         n += 1
+    db.session.commit()
+    return n
+
+
+def parse_madrid(d, t):
+    """«2026-11-13» + «19:00» en hora de España → UTC (con el cambio de hora). None si no es válida."""
+    try:
+        local = datetime.strptime(f"{d.strip()} {t.strip()}", "%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo(APP_TZ))
+    except ValueError:
+        return None
+    return local.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+MESES_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+
+
+def when_madrid(dt, fmt="full"):
+    """Fecha UTC → «jueves 13 nov · 19:00» en hora de España."""
+    if not dt:
+        return ""
+    l_ = dt.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ))
+    if fmt == "date":
+        return l_.strftime("%Y-%m-%d")
+    if fmt == "time":
+        return l_.strftime("%H:%M")
+    return f"{DIAS[l_.weekday()]} {l_.day} {MESES_ES[l_.month - 1]} · {l_.strftime('%H:%M')}"
+
+
+def call_reminders(now=None):
+    """30 min antes de cada llamada: aviso a los clippers de la campaña (campanita y móvil). Una sola vez por llamada."""
+    now = now or datetime.utcnow()
+    n = 0
+    for call in Call.query.filter(Call.reminded.is_(False), Call.starts_at > now,
+                                  Call.starts_at <= now + timedelta(minutes=35)).all():
+        call.reminded = True
+        ch = Channel.query.filter_by(campaign_id=call.campaign_id, kind="calls", deleted_at=None).first()
+        for m in CampaignMember.query.filter_by(campaign_id=call.campaign_id, status="aceptada").all():
+            notify_user(m.user_id, "llamada", f"📞 La llamada empieza en 30 min",
+                        f"{call.title} · {call.campaign.song}. Entra desde el canal de llamadas.",
+                        f"/campana/{call.campaign_id}" + (f"?canal={ch.id}" if ch else ""), camp_id=call.campaign_id)
+            n += 1
     db.session.commit()
     return n
 
@@ -2049,6 +2167,7 @@ def _auto_refresh_loop():
     while True:
         try:
             with app.app_context():
+                call_reminders()
                 fresh = False
                 if _refresh_due():
                     set_setting("last_refresh_at", datetime.utcnow().isoformat())
@@ -2325,7 +2444,7 @@ def inject_globals():
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year, "now_utc": datetime.utcnow(),
             "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "REFRESH_AT": REFRESH_AT, "next_scan_utc": next_scan_utc, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
             "REJECT_REASONS": REJECT_REASONS, "COUNTRIES": COUNTRIES, "LANGUAGES": LANGUAGES, "CAMPAIGN_KINDS": CAMPAIGN_KINDS,
-            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "clip_thumb": clip_thumb, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
+            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "clip_thumb": clip_thumb, "pop_undo": pop_undo, "when_madrid": when_madrid, "RESOURCE_ICONS": RESOURCE_ICONS, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
             "mod_campaigns": mod_campaigns, "acting_as_mod": acting_as_mod,
             "STATS_HOURS": STATS_HOURS, "bunny_ready": bunny_ready, "reached_min": reached_min,
             "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
@@ -2376,6 +2495,11 @@ def earn(v, decimals=2):
     from markupsafe import Markup
     cls = "m-earn" if float(v or 0) > 0 else "m-zero"
     return Markup('<span class="{}">{}</span>').format(cls, money(v, decimals))
+
+
+@app.template_filter("pair_platform")
+def pair_platform(p):
+    return (p, PLATFORMS.get(p, p))
 
 
 @app.template_filter("iso")
@@ -2903,7 +3027,7 @@ def campaign(cid):
     staff_view = current_user.is_admin and request.args.get("hub") == "1"   # el equipo ve la campaña como un clipper de fuera…
     hub = real_member or staff_view                                         # …salvo que pida ver el hub
     sections, chan, posts, liked = [], None, [], set()
-    support = None
+    support, extra = None, {}
     if real_member and not current_user.is_admin:
         sup_q = CampMessage.query.filter_by(campaign_id=cid, user_id=current_user.id)
         support = {"unread": sup_q.filter_by(from_staff=True, read_by_user=False).count(), "open": request.args.get("soporte") == "1",
@@ -2918,10 +3042,19 @@ def campaign(cid):
         sections = campaign_channels(camp)
         chid = request.args.get("canal", type=int)
         if chid:
-            chan = next((c for sec in sections for c in sec.channels if c.id == chid), None)
+            chan = next((c for sec in sections for c in sec.live if c.id == chid), None)
             if not chan:
                 return redirect(url_for("campaign", cid=cid))
-            if chan.kind in ("posts", "rules", "resources"):
+            if chan.kind == "top":
+                extra["top"] = top_accounts(camp, request.args.get("red", ""))
+            elif chan.kind == "winners":
+                extra["viral"] = viral_clips(camp, request.args.get("red", ""), request.args.get("periodo", "30"))
+            elif chan.kind == "calls":
+                calls_ = Call.query.filter_by(campaign_id=cid).order_by(Call.starts_at).all()
+                now_ = datetime.utcnow()
+                extra["calls_next"] = [c for c in calls_ if c.ends_at >= now_]
+                extra["calls_past"] = [c for c in reversed(calls_) if c.ends_at < now_][:20]
+            if chan.kind in ("posts", "rules", "resources", "calls"):
                 posts = (Post.query.filter_by(channel_id=chan.id).options(selectinload(Post.likes), selectinload(Post.comments))
                          .order_by(Post.pinned.desc(), Post.created_at.desc()).limit(50).all())
                 liked = {lk.post_id for lk in PostLike.query.filter(PostLike.user_id == current_user.id,
@@ -2932,7 +3065,44 @@ def campaign(cid):
                            mod_ids=campaign_mod_ids(cid) if hub else set(), i_mod=hub and is_mod(current_user, cid),
                            mod_del=hub and mod_can(current_user, cid, "comentarios"),
                            hubq=1 if staff_view else None, staff_view=staff_view, support=support,
-                           mod_ids_all=campaign_mod_ids(cid) if support and support["open"] else set())
+                           mod_ids_all=campaign_mod_ids(cid) if support and support["open"] else set(), **extra)
+
+
+def top_accounts(camp, red=""):
+    """Cuentas de la campaña con más vistas (sin contar clips rechazados), por red. Con su foto de perfil."""
+    accs = {(a.platform, a.handle.lower()): a for a in CampaignAccount.query.filter_by(campaign_id=camp.id, status="aceptada")}
+    agg = {}
+    for s in camp.submissions:
+        if s.status == "rechazado" or not s.author:
+            continue
+        k = (s.platform, s.author.lower())
+        r = agg.setdefault(k, {"platform": s.platform, "handle": s.author, "views": 0, "clips": 0, "best": 0,
+                               "acc": accs.get(k), "user": s.user})
+        r["views"] += s.views or 0
+        r["clips"] += 1
+        r["best"] = max(r["best"], s.views or 0)
+    rows = sorted(agg.values(), key=lambda r: -r["views"])
+    nets = [p for p in camp.platform_list if any(r["platform"] == p for r in rows)]
+    if red in nets:
+        rows = [r for r in rows if r["platform"] == red]
+    return {"rows": rows[:15], "nets": nets, "red": red if red in nets else ""}
+
+
+VIRAL_PERIODS = {"7": ("7 días", 7), "30": ("30 días", 30), "todo": ("Siempre", 0)}
+
+
+def viral_clips(camp, red="", periodo="30"):
+    """Los vídeos con más vistas de la campaña, para ver qué funciona. Filtros: red y periodo."""
+    periodo = periodo if periodo in VIRAL_PERIODS else "30"
+    days = VIRAL_PERIODS[periodo][1]
+    since = datetime.utcnow() - timedelta(days=days) if days else None
+    subs = [s for s in camp.submissions if s.status != "rechazado" and (s.views or 0) > 0
+            and (not since or (s.posted_at or s.created_at) >= since)]
+    nets = [p for p in camp.platform_list if any(s.platform == p for s in camp.submissions)]
+    if red in nets:
+        subs = [s for s in subs if s.platform == red]
+    subs.sort(key=lambda s: -(s.views or 0))
+    return {"clips": subs[:24], "nets": nets, "red": red if red in nets else "", "periodo": periodo, "periods": VIRAL_PERIODS}
 
 
 def _member_post(cid, pid):
@@ -4634,13 +4804,24 @@ def process_cover(file):
 def _campaign_from_form(camp):
     camp.song = request.form.get("song", "").strip()[:200]
     camp.artist = request.form.get("artist", "").strip()[:200]
+    mat_text = request.form.get("materials", "")
+    if "mat_url" in request.form:                      # editor de recursos: icono, nombre, enlace y descripción
+        lines = []
+        for ico, name, url, desc in zip(request.form.getlist("mat_icon"), request.form.getlist("mat_name"),
+                                        request.form.getlist("mat_url"), request.form.getlist("mat_desc")):
+            clean = lambda t: " ".join((t or "").replace("|", "/").split())  # noqa: E731
+            url = clean(url)
+            if not url.startswith(("https://", "http://")):
+                continue
+            ico = ico if ico in RESOURCE_ICONS else "link"
+            lines.append(f"{ico} | {clean(name)[:80]} | {url[:400]} | {clean(desc)[:200]}".rstrip(" |"))
+        mat_text = "\n".join(lines[:12])
     if "cover_url" in request.form:                    # (antes se podía pegar un enlace; ahora solo se sube la imagen)
         cover_url = request.form.get("cover_url", "").strip()[:500]
         camp.cover_url = cover_url if cover_url.startswith("https://") else ""
     mats = []
-    for line in request.form.get("materials", "").splitlines()[:12]:
-        url = line.rpartition("|")[2].strip() if "|" in line else line.strip()
-        if url.startswith(("https://", "http://")) and len(line) <= 600:
+    for line in mat_text.splitlines()[:12]:
+        if any(p.strip().startswith(("https://", "http://")) for p in line.split("|")) and len(line) <= 800:
             mats.append(line.strip())
     camp.materials = "\n".join(mats)
     camp.sound_url = ""          # el enlace antiguo pasa a la lista de materiales
@@ -4974,7 +5155,7 @@ def admin_campaign_channels(cid):
     """Canales de la campaña: secciones, canales, publicaciones y el grupo de WhatsApp."""
     camp = db.session.get(Campaign, cid) or abort(404)
     sections = campaign_channels(camp)
-    chans = {c.id: c for sec in sections for c in sec.channels}
+    chans = {c.id: c for sec in sections for c in sec.live}
     secs = {sec.id: sec for sec in sections}
     chid = request.args.get("canal", type=int) or request.form.get("canal", type=int)
     if request.method == "POST":
@@ -4993,17 +5174,41 @@ def admin_campaign_channels(cid):
             flash("Grupo de WhatsApp guardado." if url else "Grupo de WhatsApp quitado.", "ok")
         elif act == "seccion_nueva" and name:
             db.session.add(ChannelSection(campaign_id=cid, title=name[:80], position=len(sections)))
+        elif act == "deshacer":                       # vuelve lo que se acaba de borrar
+            kind_, oid = request.form.get("what", ""), request.form.get("id", type=int) or 0
+            obj = db.session.get(ChannelSection if kind_ == "seccion" else Channel, oid)
+            if not obj or obj.campaign_id != cid:
+                abort(404)
+            obj.deleted_at = None
+            db.session.commit()
+            flash(f"«{obj.title if kind_ == 'seccion' else obj.name}» ha vuelto.", "ok")
+            return back(oid if kind_ == "canal" else None)
+        elif act == "restaurar_todo":                 # todo lo borrado de esta campaña vuelve a su sitio
+            n = 0
+            for s in campaign_channels(camp, deleted=True):
+                for c in s.channels:
+                    if c.deleted_at:
+                        c.deleted_at, n = None, n + 1
+                if s.deleted_at:
+                    s.deleted_at, n = None, n + 1
+            audit("canales_restaurados", f"«{camp.song}» · {n}")
+            flash("Se han restaurado todas las secciones y canales borrados." if n else "No había nada borrado.", "ok")
         elif act.startswith("seccion_"):
             sec = secs.get(request.form.get("section", type=int)) or abort(404)
             if act == "seccion_nombre" and name:
                 sec.title = name[:80]
             elif act == "seccion_borrar":
-                db.session.delete(sec)
+                sec.deleted_at = datetime.utcnow()
+                db.session.commit()
+                session["undo"] = {"cid": cid, "what": "seccion", "id": sec.id, "label": f"Sección «{sec.title}» borrada"}
+                return back()
             elif act in ("seccion_subir", "seccion_bajar"):
                 _move(ChannelSection, sec, sections, "subir" if act == "seccion_subir" else "bajar")
         elif act == "canal_nuevo" and name:
             sec = secs.get(request.form.get("section", type=int)) or abort(404)
-            ch = Channel(campaign_id=cid, section_id=sec.id, name=name, emoji=emoji or "#", position=len(sec.channels))
+            kind_ = request.form.get("kind", "posts")
+            ch = Channel(campaign_id=cid, section_id=sec.id, name=name, emoji=emoji or "#", position=len(sec.channels),
+                         kind=kind_ if kind_ in CHANNEL_KINDS else "posts")
             db.session.add(ch)
             db.session.commit()
             return back(ch.id)
@@ -5012,11 +5217,49 @@ def admin_campaign_channels(cid):
             if act == "canal_editar" and name:
                 ch.name, ch.emoji = name, emoji or ch.emoji
             elif act == "canal_borrar":
-                db.session.delete(ch)
+                ch.deleted_at = datetime.utcnow()
                 db.session.commit()
+                session["undo"] = {"cid": cid, "what": "canal", "id": ch.id, "label": f"Canal «{ch.name}» borrado"}
                 return redirect(url_for("admin_campaign_channels", cid=cid))
             elif act in ("canal_subir", "canal_bajar"):
-                _move(Channel, ch, ch.section.channels, "subir" if act == "canal_subir" else "bajar")
+                _move(Channel, ch, ch.section.live, "subir" if act == "canal_subir" else "bajar")
+        elif act in ("llamada_nueva", "llamada_editar", "llamada_borrar"):
+            ch = chans.get(chid) or abort(404)
+            call = None
+            if act != "llamada_nueva":
+                call = db.session.get(Call, request.form.get("call", type=int) or 0)
+                if not call or call.campaign_id != cid:
+                    abort(404)
+            if act == "llamada_borrar":
+                db.session.delete(call)
+                flash("Llamada borrada.", "ok")
+            else:
+                title = " ".join((request.form.get("title") or "").split())[:120]
+                when = parse_madrid(request.form.get("date", ""), request.form.get("time", ""))
+                link = (request.form.get("link") or "").strip()[:500]
+                rec = (request.form.get("recording_url") or "").strip()[:500]
+                bad = [u for u in (link, rec) if u and not u.startswith("https://")]
+                if not title or not when or bad:
+                    flash("Pon un título, el día y la hora. Los enlaces tienen que empezar por https://.", "error")
+                    return back()
+                if call is None:
+                    call = Call(campaign_id=cid, author_id=current_user.id, title=title, starts_at=when)
+                    db.session.add(call)
+                elif call.starts_at != when:
+                    call.reminded = False                 # si cambia la hora, se vuelve a avisar
+                call.title, call.starts_at = title, when
+                call.minutes = max(15, min(request.form.get("minutes", type=int) or 60, 300))
+                call.notes = (request.form.get("notes") or "").strip()[:600]
+                call.link, call.recording_url = link, rec
+                n = 0
+                if act == "llamada_nueva" and request.form.get("notify"):
+                    for m in CampaignMember.query.filter_by(campaign_id=cid, status="aceptada").all():
+                        notify_user(m.user_id, "llamada", f"📞 Nueva llamada en {camp.song}",
+                                    f"{title} · {when_madrid(when)} (hora de España). Te avisamos 30 min antes.",
+                                    url_for("campaign", cid=cid, canal=ch.id))
+                        n += 1
+                audit("llamada_guardada", f"«{camp.song}» · {title}")
+                flash("Llamada guardada." + (f" Avisados {n} clippers." if n else ""), "ok")
         elif act == "publicar":
             ch = chans.get(chid) or abort(404)
             body = (request.form.get("body") or "").strip()[:8000]
@@ -5059,8 +5302,12 @@ def admin_campaign_channels(cid):
     chan = chans.get(chid) or (next(iter(chans.values()), None))
     posts = (Post.query.filter_by(channel_id=chan.id).options(selectinload(Post.likes), selectinload(Post.comments))
              .order_by(Post.pinned.desc(), Post.created_at.desc()).limit(100).all()) if chan else []
+    calls = (Call.query.filter_by(campaign_id=cid).order_by(Call.starts_at.desc()).all()
+             if chan and chan.kind == "calls" else [])
+    n_deleted = sum(1 for s in campaign_channels(camp, deleted=True) for x in [s, *s.channels] if x.deleted_at)
     return render_template("admin/channels.html", camp=camp, sections=sections, chan=chan, posts=posts, mod_ids=campaign_mod_ids(cid),
-                           pend=pending_by_campaign().get(cid, {}), sec="canales")
+                           pend=pending_by_campaign().get(cid, {}), sec="canales", calls=calls, n_deleted=n_deleted,
+                           channel_kinds=CHANNEL_KINDS)
 
 
 @app.route("/admin/campana/<int:cid>/contenido", methods=["POST"])
@@ -5905,6 +6152,7 @@ NOTIFY_EVENTS = {
     "plazas": "Cuando se abren plazas en una campaña que esperas",
     "retiro": "Cuando te llega un retiro",
     "anuncio": "Anuncios de tus campañas",
+    "llamada": "Llamadas de tus campañas (y 30 min antes de empezar)",
     "mensaje": "Mensajes y avisos del equipo",
 }
 WHATSAPP_ENABLED = False          # WhatsApp en pausa hasta hablarlo con el cliente (el código se queda listo)
@@ -6045,6 +6293,11 @@ def lesson_thumb(lesson):
         vid = viewcounter.video_id(u)
         return f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg" if vid else ""
     return ""
+
+
+def pop_undo():
+    """«Deshacer» del último borrado (canales): solo se enseña una vez, en el aviso flotante."""
+    return session.pop("undo", None) if has_request_context() else None
 
 
 def clip_thumb(s):
@@ -6578,7 +6831,7 @@ def admin_vapid_keys():
 
 
 BELL_ICONS = {"clip_nuevo": "film", "inactividad": "clock", "mod": "users", "estadisticas": "film", "clip_aprobado": "ok", "clip_rechazado": "x", "campana_nueva": "flag", "plazas": "users", "retiro": "cash",
-              "mensaje": "chat", "anuncio": "megaphone", "destacado": "megaphone"}
+              "mensaje": "chat", "anuncio": "megaphone", "destacado": "megaphone", "llamada": "bell"}
 
 
 def _bell_img(camp):

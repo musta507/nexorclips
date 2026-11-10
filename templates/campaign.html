@@ -53,13 +53,20 @@
       <p class="box-body muted">Esta vez no has entrado en esta campaña.</p>
     {% else %}
       <div class="box-head st-ok">{{ icon("ok") }} Solicitud aprobada</div>
-      <p class="box-body muted">{% if accepted %}Ya puedes enviar clips para esta campaña.{% else %}Añade la cuenta con la que vas a publicar (puede ser una nueva solo para esta campaña) y verifícala con el código en su bio.{% endif %}</p>
+      <p class="box-body muted">{% if accepted %}Ya puedes publicar clips para esta campaña.{% else %}Añade la cuenta con la que vas a publicar (puede ser una nueva solo para esta campaña) y verifícala con el código en su bio.{% endif %}</p>
       {% if accounts %}
       <ul class="acc-rows">
         {% for a in accounts %}
         <li class="acc-row">
-          <div class="acc-top">{{ icon(a.platform) }} <b>@{{ a.handle }}</b><span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }}">{{ join_statuses[a.status] }}</span>
-            <form method="post" action="{{ url_for('remove_account', cid=camp.id, aid=a.id) }}" class="acc-del" data-confirm="¿Quitar @{{ a.handle }} de esta campaña? Ya no se buscarán clips nuevos en esa cuenta. Los clips ya aprobados no se tocan."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link small muted" aria-label="Quitar @{{ a.handle }} de la campaña">Quitar</button></form></div>
+          <div class="acc-top"><span class="acc-pl p-{{ a.platform }}">{{ icon(a.platform) }}</span><a class="acc-h" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener">@{{ a.handle }}</a>
+            <span class="status {{ 'aprobado' if a.status == 'aceptada' else ('rechazado' if a.status == 'rechazada' else 'pendiente') }} push">{{ join_statuses[a.status] }}</span>
+            <form method="post" action="{{ url_for('remove_account', cid=camp.id, aid=a.id) }}" class="acc-del" data-confirm="¿Quitar @{{ a.handle }} de esta campaña? Ya no se buscarán clips nuevos en esa cuenta. Los clips ya aprobados no se tocan."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="mc-btn" aria-label="Quitar @{{ a.handle }} de la campaña" title="Quitar de la campaña">{{ icon("trash") }}</button></form></div>
+          {% if a.status == 'aceptada' %}{% set age_h = ((now_utc - (a.decided_at or a.created_at)).total_seconds() / 3600)|int %}{% if age_h < 72 %}{% set day = age_h // 24 + 1 %}
+          <div class="warm" role="status">
+            <span class="warm-ico" aria-hidden="true">🔥</span>
+            <div class="warm-txt"><b>Calentando la cuenta · día {{ day }} de 3</b><span class="small">Los primeros 3 días usa la cuenta como un usuario normal: mira vídeos del tema, da likes y comenta. Así TikTok, Instagram y YouTube la tratan bien cuando empieces a publicar.</span>
+              <span class="warm-bar" aria-hidden="true"><span style="width:{{ [((age_h / 72) * 100)|round|int, 4]|max }}%"></span></span></div>
+          </div>{% endif %}{% endif %}
           {% if a.status == 'pendiente' %}
           {% set checking = a.bio_status == 'Comprobando…' and a.bio_checked_at and (now_utc - a.bio_checked_at).total_seconds() < 300 %}
           <div class="bio-box"{% if checking %} data-bio-poll="{{ url_for('bio_state', cid=camp.id, aid=a.id) }}"{% endif %}>
@@ -80,12 +87,8 @@
         {% endfor %}
       </ul>
       {% endif %}
-      {% if accepted %}
-      <form method="post" class="box-body clip-send">
-        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-        <input id="clip-url" name="url" placeholder="Pega aquí el enlace de tu clip" required aria-label="Enlace de tu clip">
-        <button class="btn accent">Enviar clip {{ icon("arrow") }}</button>
-      </form>
+      {% if accepted %}{% set nxt = next_scan_utc() %}
+      <div class="box-body auto-note"><span class="auto-ico" aria-hidden="true">{{ icon("pulse") }}</span><p class="small"><b>Tus clips se suben solos.</b> Publica en tu cuenta verificada y cada día{% if nxt %} a las <time datetime="{{ nxt|iso }}" data-local data-local-hm>{{ REFRESH_AT }}</time> <span data-local-zone>(hora de España)</span>{% endif %} los añadimos a <a class="link" href="{{ url_for('my_clips') }}">Mis clips</a> con sus vistas.</p></div>
       {% endif %}
       <div class="box-foot">
         <span class="small muted">{{ accounts|length }} {{ "cuenta" if accounts|length == 1 else "cuentas" }} en tu solicitud</span>
@@ -137,26 +140,26 @@
     <ul class="box-body idea-list">{% for i in camp.idea_list %}<li>{{ i }}</li>{% endfor %}</ul>
   </section>
   {% else %}
-  {# ---------- pago de cada red #}
-  <div class="pay-grid">
-    {% for p, r, lo, hi in camp.pay_rows %}
-    <section class="card box">
-      <div class="box-head">{{ icon(p) }} {{ PLATFORMS[p] }}</div>
-      <div class="pay-cells">
-        <div><span>Por cada 1.000 vistas</span><b class="tnum">{{ r|rate_k }}</b></div>
-        <div><span>Pago mínimo</span><b class="tnum">{% if lo %}{{ lo|money }}{% else %}Sin mínimo{% endif %}</b></div>
-        <div><span>Pago máximo</span><b class="tnum">{% if hi %}{{ hi|money }}{% else %}Sin máximo{% endif %}</b></div>
+  {# ---------- pago por cada 1.000 vistas, por red #}
+  <section class="card box pay-box">
+    <div class="box-head">{{ icon("cash") }} Pago por cada 1.000 vistas</div>
+    <div class="pay-rows">
+      {% for p, r, lo, hi in camp.pay_rows %}
+      <div class="pay-row">
+        <span class="pay-net"><span class="acc-pl p-{{ p }}">{{ icon(p) }}</span>{{ PLATFORMS[p] }}</span>
+        <span class="pay-rate"><b class="tnum">{{ r|rate_k }}</b><small class="muted">/ 1.000 vistas</small></span>
+        <span class="pay-lim small muted">Por clip: {% if lo %}mín. {{ lo|money }}{% else %}sin mínimo{% endif %} · {% if hi %}máx. {{ hi|money }}{% else %}sin máximo{% endif %}</span>
       </div>
-    </section>
-    {% endfor %}
-  </div>
+      {% endfor %}
+    </div>
+  </section>
 
   {% if not hub and camp.rules_text %}
   <section class="card box rules-peek">
     <div class="box-head">{{ icon("doc") }} Normas de la campaña</div>
     <details class="box-body"><summary class="rules-clip">{{ camp.rules_text|truncate(320, True, "…") }}{% if camp.rules_text|length > 320 %} <span class="link small">Leer todas</span>{% endif %}</summary>
       {% if camp.rules_text|length > 320 %}<div class="rules">{{ camp.rules_text }}</div>{% endif %}</details>
-    <p class="box-foot small muted">Cuando te acepten tendrás acceso a todo: recursos, ideas virales, cuentas TOP, clips ganadores y la comunidad.</p>
+    <p class="box-foot small muted">Cuando te acepten tendrás acceso a todo: recursos, ideas virales, cuentas TOP, vídeos virales, llamadas y la comunidad.</p>
   </section>
   {% endif %}
   {# ---------- presupuesto y materiales #}

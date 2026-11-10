@@ -550,11 +550,11 @@ def test_join_campaign_and_admin_accepts(monkeypatch):
     admin = client_for("admin@test.com")
     a = client_for("a@test.com", verify=False)
     page = a.get(f"/campana/{cid}").get_data(as_text=True)
-    assert "Solicitar entrar" in page and "Enlace de tu clip" not in page and 'name="handle"' not in page
+    assert "Solicitar entrar" in page and "Tus clips se suben solos" not in page and 'name="handle"' not in page
     assert "Aún no estás en ninguna campaña" in a.get("/enviar").get_data(as_text=True)
     # 1) pide entrar: sin cuenta
     html = post(a, f"/campana/{cid}/unirme").get_data(as_text=True)
-    assert "Solicitud enviada" in html and "Enlace de tu clip" not in html
+    assert "Solicitud enviada" in html and "Tus clips se suben solos" not in html
     with A.app.app_context():
         mb = A.CampaignMember.query.one()
         assert mb.status == "pendiente" and not A.CampaignAccount.query.first()
@@ -570,7 +570,7 @@ def test_join_campaign_and_admin_accepts(monkeypatch):
     post(admin, f"/admin/solicitud/{mid}/aceptar")
     assert "Te hemos aceptado" in a.get("/soporte").get_data(as_text=True)
     page = a.get(f"/campana/{cid}").get_data(as_text=True)
-    assert "Solicitud aprobada" in page and 'name="handle"' in page and "Enlace de tu clip" not in page
+    assert "Solicitud aprobada" in page and 'name="handle"' in page and "Tus clips se suben solos" not in page
     # 3) añade su cuenta y la verifica con la bio (automático)
     post(a, f"/campana/{cid}/cuentas", platform="tiktok", handle="@Ana")
     with A.app.app_context():
@@ -590,7 +590,7 @@ def test_join_campaign_and_admin_accepts(monkeypatch):
         assert get(A.CampaignAccount, aid).status == "aceptada"
     with A.app.app_context():
         assert A.Message.query.filter_by(user_id=get(A.CampaignAccount, aid).user_id).count() == 1   # solo el aviso de aceptado
-    assert "Enlace de tu clip" in a.get(f"/campana/{cid}").get_data(as_text=True)
+    assert "Tus clips se suben solos" in a.get(f"/campana/{cid}").get_data(as_text=True)
     assert "Clip enviado" in post(a, f"/campana/{cid}", url=tt("ana", 2)).get_data(as_text=True)
     assert "no es una de tus cuentas aceptadas" in post(a, f"/campana/{cid}", url=tt("otra", 3)).get_data(as_text=True)
     with A.app.app_context():
@@ -1016,7 +1016,7 @@ def test_min_max_per_platform():
         assert A.raw_earning(i, c) == 1500.0
         assert c.min_views_for("tiktok") == 10_000
     page = client_for("v@test.com").get(f"/campana/{cid}").get_data(as_text=True)
-    assert "10,00 $" in page and "100,00 $" in page and "Sin máximo" in page and "hasta" not in page
+    assert "10,00 $" in page and "100,00 $" in page and "sin máximo" in page and "hasta" not in page
     home = client_for("v@test.com").get("/campanas").get_data(as_text=True)
     assert "Mín. hasta 10,00 $" in home and "Sin máximo por clip" in home
     # un mínimo mayor que el máximo no se puede guardar
@@ -2304,3 +2304,46 @@ def test_daily_scan_at_3_madrid(monkeypatch):
         # invierno: 03:00 Madrid = 02:00 UTC; verano: 01:00 UTC
         assert A.next_scan_utc(datetime(2026, 11, 6, 12, 0)) == datetime(2026, 11, 7, 2, 0)
         assert A.next_scan_utc(datetime(2026, 7, 6, 0, 30)) == datetime(2026, 7, 6, 1, 0)
+
+
+def test_channels_undo_restore_calls_and_auto_channels():
+    from datetime import datetime, timedelta
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    _auto_accept()
+    admin.get(f"/admin/campana/{cid}/canales")
+    with A.app.app_context():
+        chans = {c.name: c for c in A.Channel.query.filter_by(campaign_id=cid)}
+        assert chans["Cuentas TOP"].kind == "top" and chans["Llamadas"].kind == "calls" and chans["Vídeos virales"].kind == "winners"
+        ids = {k: v.id for k, v in chans.items()}
+        sec = A.ChannelSection.query.filter_by(campaign_id=cid, title="Comunidad").one().id
+    # borrar un canal: desaparece, sale «Deshacer» y vuelve
+    page = post(admin, f"/admin/campana/{cid}/canales", act="canal_borrar", channel=str(ids["Anuncios"])).get_data(as_text=True)
+    assert "Deshacer" in page and "Canal «Anuncios» borrado" in page
+    assert ">Anuncios<" not in a.get(f"/campana/{cid}").get_data(as_text=True)
+    post(admin, f"/admin/campana/{cid}/canales", act="deshacer", what="canal", id=str(ids["Anuncios"]))
+    with A.app.app_context():
+        assert get(A.Channel, ids["Anuncios"]).deleted_at is None
+    # borrar una sección y restaurar todo
+    post(admin, f"/admin/campana/{cid}/canales", act="seccion_borrar", section=str(sec))
+    assert "Restaurar todas las secciones" in admin.get(f"/admin/campana/{cid}/canales").get_data(as_text=True)
+    post(admin, f"/admin/campana/{cid}/canales", act="restaurar_todo")
+    with A.app.app_context():
+        assert get(A.ChannelSection, sec).deleted_at is None
+    # llamada: hora de España → UTC, aviso 30 min antes una sola vez
+    ch = ids["Llamadas"]
+    post(admin, f"/admin/campana/{cid}/canales?canal={ch}", act="llamada_nueva", canal=str(ch), title="Directo de dudas",
+         date="2026-11-13", time="19:00", minutes="60", link="https://meet.google.com/abc")
+    with A.app.app_context():
+        call = A.Call.query.one()
+        assert call.starts_at == datetime(2026, 11, 13, 18, 0)          # invierno: España = UTC+1
+        call.starts_at = datetime.utcnow() + timedelta(minutes=28)
+        A.db.session.commit()
+        assert A.call_reminders() >= 1 and A.call_reminders() == 0
+        ana = A.User.query.filter_by(email="a@test.com").one()
+        assert A.Notice.query.filter_by(user_id=ana.id, kind="llamada").count() == 1
+    page = a.get(f"/campana/{cid}?canal={ch}").get_data(as_text=True)
+    assert "Directo de dudas" in page and "hora de España" in page and "meet.google.com/abc" in page
+    for name in ("Cuentas TOP", "Vídeos virales"):
+        assert a.get(f"/campana/{cid}?canal={ids[name]}").status_code == 200

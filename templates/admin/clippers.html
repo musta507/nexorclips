@@ -30,7 +30,8 @@
           <div class="small muted">{{ u.email }} · desde {{ u.created_at|date }}</div>
           {% if u.is_banned and u.ban_reason %}<div class="small" style="color:var(--red)">{{ u.ban_reason }}</div>{% endif %}</div></div></td>
         <td data-label="Última vez" class="small nowrap" title="{{ u.last_seen_at|date if u.last_seen_at else '' }}"><span class="seen-dot {{ u.last_seen_at|seen_level }}"></span> {{ u.last_seen_at|seen }}</td>
-        <td data-label="Cuentas" class="small">{% for p in PLATFORMS %}{% for h in u.handles(p) %}<div class="hl">{{ icon(p) }} @{{ h }}</div>{% endfor %}{% endfor %}{% if not u.has_any_handle %}<span class="muted">Sin cuentas</span>{% endif %}</td>
+        <td data-label="Cuentas" class="small">{% set hs = [] %}{% for p in PLATFORMS %}{% for h in u.handles(p) %}{% set _ = hs.append((p, h)) %}{% endfor %}{% endfor %}
+          {% if hs %}<span class="acc-chips" title="{% for p, h in hs %}{{ PLATFORMS[p] }}: @{{ h }}{{ '\n' if not loop.last }}{% endfor %}">{% for p, h in hs[:3] %}<span class="acc-chip p-{{ p }}">{{ icon(p) }}</span>{% endfor %}{% if hs|length > 3 %}<span class="acc-more">+{{ hs|length - 3 }}</span>{% endif %}<span class="acc-first">@{{ hs[0][1] }}</span></span>{% else %}<span class="muted">Sin cuentas</span>{% endif %}</td>
         <td data-label="Cobra por" class="small">{% if u.payout_ready %}{{ u.payout_label }}{% else %}<span class="muted">Sin cuenta</span>{% endif %}</td>
         <td data-label="Clips" class="r tnum">{{ n }}</td>
         <td data-label="Ganado" class="r tnum">{{ m.earned|earn }}</td>
