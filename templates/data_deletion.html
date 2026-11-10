@@ -1,0 +1,18 @@
+{% extends "_plain.html" %}
+{% block title %}Borrar tus datos · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<article class="legal-doc">
+  <h1>Cómo borrar tus datos</h1>
+  {% if code %}<p class="flash ok">Hemos recibido tu petición. Tus datos de esa cuenta se han borrado. Código de confirmación: <b>{{ code }}</b></p>{% endif %}
+  <p>Si conectaste tu cuenta de TikTok, Instagram o YouTube a {{ APP_NAME }}, guardamos el permiso de acceso (cifrado), las cifras de tus vídeos (vistas, me gusta, comentarios y compartidos) y, si la red lo permite, datos agregados de tu audiencia (países, edades y sexo, en porcentajes). Nunca vemos tu contraseña ni datos de personas concretas.</p>
+  <h2>Borrar solo la conexión</h2>
+  <ol>
+    <li>Entra en {{ APP_NAME }} y abre <b>Ajustes → Redes conectadas</b>.</li>
+    <li>Pulsa <b>Desconectar</b> en la cuenta. Se borran al momento el permiso y los datos de audiencia.</li>
+  </ol>
+  <p>También puedes quitar el permiso desde la propia red (TikTok: Ajustes → Seguridad → Apps; Instagram: Configuración → Apps y sitios web; Google: myaccount.google.com/permissions). Cuando lo haces, la red nos avisa y borramos esos datos.</p>
+  <h2>Borrar toda tu cuenta</h2>
+  <p>Escríbenos desde el chat de soporte de la web{% if SUPPORT_EMAIL %} o a <a class="link" href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a>{% endif %} pidiendo que borremos tu cuenta. La borramos con todos tus datos en un máximo de 30 días.</p>
+  <p class="muted small">Más detalles en la <a class="link" href="{{ url_for('privacy') }}">política de privacidad</a>.</p>
+</article>
+{% endblock %}

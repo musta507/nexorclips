@@ -26,6 +26,34 @@
   </div>
 </div>
 
+<div class="card tight form-stack api-card" id="apis">
+  <h3>APIs oficiales (TikTok, Instagram, YouTube)</h3>
+  <p class="small muted">Cuando un clipper conecta su cuenta, sus vídeos y vistas se leen de la red (gratis) y se guarda su audiencia (país, edad, sexo). Las cuentas sin conectar se siguen leyendo con Apify.</p>
+  <form method="post" action="{{ url_for('admin_api_mode') }}" class="inline" style="flex-wrap:wrap;gap:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <select name="mode" aria-label="Modo de las APIs" data-native>{% for k, label in api_info.modes.items() %}<option value="{{ k }}"{% if api_info.mode == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <button class="btn sm">Guardar</button></form>
+  <div class="api-grid">
+    {% for p in api_info.apis %}
+    <div class="api-net">
+      <div class="api-net-h"><span class="acc-pl p-{{ p.key }}">{{ icon(p.key) }}</span><b>{{ p.label }}</b>{% if p.ok %}<span class="status aprobado push">Claves puestas</span>{% else %}<span class="status pausada push">Faltan claves</span>{% endif %}</div>
+      <span class="small">{{ p.n }} {{ "cuenta conectada" if p.n == 1 else "cuentas conectadas" }}{% if p.bad %} · <b style="color:var(--red-ink)">{{ p.bad }} por reconectar</b>{% endif %}</span>
+      <span class="small muted">Variables en Railway: {% for e in p.env %}<code>{{ e }}</code>{{ ", " if not loop.last }}{% endfor %}</span>
+      <span class="small muted">Permisos que se piden: {{ p.scopes|join(", ") }}</span>
+      <span class="small muted">URL de vuelta (regístrala en la app de la red):</span><code class="selectable api-url">{{ p.redirect }}</code>
+    </div>
+    {% endfor %}
+  </div>
+  <details><summary class="small link">Enlaces que piden las redes al revisar la app</summary>
+    <div class="api-links small">
+      <span>Política de privacidad</span><code class="selectable">{{ api_info.privacy }}</code>
+      <span>Términos</span><code class="selectable">{{ api_info.terms }}</code>
+      <span>Instrucciones para borrar datos</span><code class="selectable">{{ api_info.deletion }}</code>
+      <span>Meta: URL de solicitud de eliminación de datos</span><code class="selectable">{{ api_info.meta_deletion }}</code>
+    </div>
+    <p class="small muted">Opcional: <code>TOKEN_KEY</code> en Railway para cifrar los permisos con una clave propia (si no, se usa la clave secreta de la web; si la cambias, habrá que reconectar las cuentas).</p>
+  </details>
+</div>
+
 {% if creators_on %}<div class="card tight form-stack" id="app-whop">
   <h3 class="whop-h"><span class="whop-ico" aria-hidden="true"></span>Probar app de Whop (pagos desde el Whop del creador)</h3>
   {% if not has_app_key %}

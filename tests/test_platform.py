@@ -2429,3 +2429,63 @@ def test_distribution_plan_auto_detect_and_hidden_from_clippers(monkeypatch):
         tok = get(A.Campaign, did).report_token
     rep = a.get(f"/informe/{tok}").get_data(as_text=True) if tok else ""
     assert "Plan de distribución" in rep
+
+
+def test_official_api_connect_verify_read_and_delete(monkeypatch):
+    import base64, hashlib, hmac, json as _j
+    from datetime import datetime, timedelta
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", verify=False)
+    post(a, f"/campana/{cid}/unirme")
+    with A.app.app_context():
+        m = A.CampaignMember.query.one(); m.status = "aceptada"
+        uid = m.user_id
+        A.db.session.add(A.CampaignAccount(user_id=uid, campaign_id=cid, platform="tiktok", handle="ana", status="pendiente"))
+        A.set_setting("api_mode", "on")
+        A.db.session.commit()
+    monkeypatch.setattr(A.official, "TIKTOK_CLIENT_KEY", "k"); monkeypatch.setattr(A.official, "TIKTOK_CLIENT_SECRET", "s")
+    monkeypatch.setattr(A.official, "INSTAGRAM_APP_SECRET", "igsecret")
+    assert "Conectar @ana con TikTok" in a.get(f"/campana/{cid}").get_data(as_text=True)
+    r = a.get("/conectar/tiktok")
+    assert r.status_code == 302 and "tiktok.com/v2/auth/authorize" in r.headers["Location"]
+    with a.session_transaction() as s:
+        state = s["api_state"]["s"]
+    monkeypatch.setattr(A.official, "exchange_code", lambda p, c, ru: {"access": "AT-secreto", "refresh": "RT", "expires_in": 86400})
+    monkeypatch.setattr(A.official, "profile", lambda p, t: {"id": "oid1", "handle": "ana", "avatar": "https://x/a.jpg"})
+    a.get(f"/conectar/tiktok/vuelta?code=c&state={state}")
+    with A.app.app_context():
+        tok = A.ApiToken.query.one()
+        assert tok.handle == "ana" and "AT-secreto" not in tok.access_enc and A.dec(tok.access_enc) == "AT-secreto"
+        acc = A.CampaignAccount.query.filter_by(handle="ana").one()
+        assert acc.status == "aceptada" and acc.bio_verified
+        acc.decided_at = datetime.utcnow() - timedelta(days=1)
+        A.db.session.commit()
+    vid = {"url": "https://www.tiktok.com/@ana/video/7300000000000000009", "vid": "7300000000000000009", "author": "ana",
+           "views": 1234, "likes": 10, "comments": 1, "shares": 0, "posted_at": datetime.utcnow() - timedelta(hours=2),
+           "caption": "hola", "thumb": "https://x/t.jpg", "avatar": ""}
+    monkeypatch.setattr(A.official, "videos", lambda p, t, h, limit=30: [vid])
+    def no_apify(*a_, **k):
+        raise AssertionError("no debería llamar a Apify")
+    monkeypatch.setattr(A.viewcounter, "fetch_profile_videos", no_apify)
+    with A.app.app_context():
+        A.discover_clips()
+        s = A.Submission.query.one()
+        assert s.views == 1234 and s.caption == "hola" and s.id in A._api_fresh
+        A.db.session.add(A.AudienceStat(platform="tiktok", handle="ana", submission_id=s.id,
+                                        data=_j.dumps({"country": {"ES": 70, "MX": 30}, "gender": {"female": 60, "male": 40}})))
+        A.db.session.commit()
+        aud = A.audience_for([s])
+        assert aud["country"]["ES"] == 70 and aud["clips"] == 1
+    # Meta pide borrar los datos de una cuenta de Instagram
+    with A.app.app_context():
+        A.db.session.add(A.ApiToken(user_id=uid, platform="instagram", ext_id="ig9", handle="ana.ig"))
+        A.db.session.commit()
+    payload = base64.urlsafe_b64encode(_j.dumps({"user_id": "ig9"}).encode()).decode().rstrip("=")
+    sig = base64.urlsafe_b64encode(hmac.new(b"igsecret", payload.encode(), hashlib.sha256).digest()).decode().rstrip("=")
+    r = a.post("/meta/borrar-datos", data={"signed_request": f"{sig}.{payload}"})
+    assert r.status_code == 200 and r.get_json()["confirmation_code"]
+    assert a.post("/meta/borrar-datos", data={"signed_request": f"malo.{payload}"}).status_code == 400
+    with A.app.app_context():
+        assert not A.ApiToken.query.filter_by(platform="instagram").first()
+    assert "Cómo borrar tus datos" in a.get("/eliminar-datos").get_data(as_text=True)

@@ -74,8 +74,13 @@
           </div>{% endif %}{% endif %}
           {% if a.status == 'pendiente' %}
           {% set checking = a.bio_status == 'Comprobando…' and a.bio_checked_at and (now_utc - a.bio_checked_at).total_seconds() < 300 %}
+          {% if api_ready(a.platform) %}
+          <div class="api-verify"><a class="btn accent" href="{{ url_for('api_connect', platform=a.platform, next=url_for('campaign', cid=camp.id)) }}" data-turbo="false">{{ icon(a.platform) }} Conectar @{{ a.handle }} con {{ OFFICIAL.LABELS[a.platform] }}</a>
+            <span class="small muted">Se verifica al momento, sin poner nada en la bio.{% if api_mode() == 'required' %} Es obligatorio para esta red.{% endif %}</span></div>
+          {% endif %}
+          {% if not (api_ready(a.platform) and api_mode() == 'required') %}
           <div class="bio-box"{% if checking %} data-bio-poll="{{ url_for('bio_state', cid=camp.id, aid=a.id) }}"{% endif %}>
-            <p class="small">Pon este código en la bio de @{{ a.handle }} en {{ PLATFORMS[a.platform] }} y pulsa comprobar:</p>
+            <p class="small">{% if api_ready(a.platform) %}O, si prefieres, pon{% else %}Pon{% endif %} este código en la bio de @{{ a.handle }} en {{ PLATFORMS[a.platform] }} y pulsa comprobar:</p>
             <div class="bio-code-row"><div class="bio-code selectable" id="bio-code-{{ a.id }}">{{ current_user.bio_code() }}</div><button type="button" class="btn soft sm bio-copy" data-copy="bio-code-{{ a.id }}">Copiar código</button></div>
             {% if checking %}<p class="small muted bio-checking" role="status"><span class="bio-spin" aria-hidden="true"></span> Comprobando tu bio… El resultado aparece aquí solo en menos de un minuto.</p>
             {% elif a.bio_status == 'Comprobando…' %}<p class="small bio-warn">La comprobación ha tardado demasiado. Pulsa «Volver a comprobar».</p>
@@ -87,6 +92,7 @@
             </form>
             {% endif %}
           </div>
+          {% endif %}
           {% endif %}
         </li>
         {% endfor %}

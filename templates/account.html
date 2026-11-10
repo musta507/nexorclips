@@ -10,6 +10,7 @@
   <nav class="set-nav card tight" aria-label="Secciones de ajustes">
     <a href="#perfil" class="on">{{ icon("users") }} Perfil</a>
     <a href="#cobro">{{ icon("wallet") }} Cobros</a>
+    {% if api_mode() != 'off' %}<a href="#redes">{{ icon("link") }} Redes conectadas</a>{% endif %}
     <a href="#notificaciones">{{ icon("bell") }} Notificaciones</a>
     <a href="#cuenta">{{ icon("gear") }} Cuenta</a>
   </nav>
@@ -82,6 +83,19 @@
   </div>
 
     </section>
+
+    {% if api_mode() != 'off' %}
+    <section id="redes" class="card set-sec">
+      <header><h2>Redes conectadas</h2><p class="small muted">Conecta tus cuentas con la API oficial de cada red: se verifican al momento (sin código en la bio) y tus vistas se cuentan directamente de la red. Solo podemos leer, nunca publicar.</p></header>
+      {% if tokens %}<div class="set-rows">{% for t in tokens %}
+        <div class="set-row api-row"><span class="api-acc"><span class="acc-pl p-{{ t.platform }}">{{ icon(t.platform) }}</span><b>@{{ t.handle }}</b>{% if t.status != 'ok' %}<span class="status rechazado">Hay que volver a conectarla</span>{% else %}<span class="status aprobado">Conectada</span>{% endif %}</span>
+          <span class="inline" style="gap:6px">{% if t.status != 'ok' and api_ready(t.platform) %}<a class="btn sm accent" href="{{ url_for('api_connect', platform=t.platform) }}" data-turbo="false">Reconectar</a>{% endif %}
+          <form method="post" action="{{ url_for('api_disconnect', tid=t.id) }}" data-confirm="¿Desconectar @{{ t.handle }}?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Desconectar</button></form></span></div>
+      {% endfor %}</div>{% endif %}
+      <div class="api-btns">{% for p in ("tiktok", "instagram", "youtube") %}{% if api_ready(p) %}<a class="btn soft api-btn" href="{{ url_for('api_connect', platform=p) }}" data-turbo="false">{{ icon(p) }} Conectar {{ OFFICIAL.LABELS[p] }}</a>{% endif %}{% endfor %}</div>
+      <p class="small muted">Instagram tiene que ser una cuenta profesional (de creador o empresa). <a class="link" href="{{ url_for('data_deletion_page') }}">Cómo borrar tus datos</a>.</p>
+    </section>
+    {% endif %}
 
     <section id="notificaciones" class="card set-sec">
       <header><h2>Notificaciones</h2><p class="small muted">Todos los avisos te llegan a la campanita de arriba. Aquí eliges cuáles quieres también en tu móvil u ordenador.</p></header>

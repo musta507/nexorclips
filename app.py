@@ -30,6 +30,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import push as webpush
 import views as viewcounter
+import official
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("clipprofit")
@@ -771,6 +772,36 @@ class Channel(db.Model):
     deleted_at = db.Column(db.DateTime, nullable=True)      # borrado (se puede deshacer o restaurar)
     posts = db.relationship("Post", backref="channel", lazy=True, order_by="Post.created_at.desc()",
                             cascade="all, delete-orphan")
+
+
+class ApiToken(db.Model):
+    """Cuenta de TikTok / Instagram / YouTube conectada con la API oficial. Los tokens se guardan cifrados."""
+    __table_args__ = (db.UniqueConstraint("platform", "ext_id", name="uq_api_token"),)
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    platform = db.Column(db.String(20), nullable=False)
+    ext_id = db.Column(db.String(120), nullable=False)        # id de la cuenta en la red
+    handle = db.Column(db.String(100), default="", index=True)
+    avatar_url = db.Column(db.String(1000), default="")
+    access_enc = db.Column(db.Text, default="")
+    refresh_enc = db.Column(db.Text, default="")
+    expires_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), default="ok")           # ok · caducado
+    error = db.Column(db.String(300), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_read_at = db.Column(db.DateTime, nullable=True)
+    audience_at = db.Column(db.DateTime, nullable=True)
+    user = db.relationship("User")
+
+
+class AudienceStat(db.Model):
+    """Audiencia (país, edad y sexo, en %) de una cuenta o de un clip, según lo que deja cada red."""
+    id = db.Column(db.Integer, primary_key=True)
+    platform = db.Column(db.String(20), nullable=False)
+    handle = db.Column(db.String(100), default="", index=True)
+    submission_id = db.Column(db.Integer, db.ForeignKey("submission.id"), nullable=True, index=True)
+    data = db.Column(db.Text, default="{}")                   # {"country": {...}, "age": {...}, "gender": {...}}
+    taken_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Invite(db.Model):
@@ -1806,7 +1837,7 @@ def refresh_views():
                 or (not s.campaign.exhausted and not earn_window_closed(s, now0)))]
         read, errors = 0, []
         for platform in PLATFORMS:
-            group = [s for s in subs if s.platform == platform]
+            group = [s for s in subs if s.platform == platform and s.id not in _api_fresh]   # lo leído por la API, no a Apify
             for i in range(0, len(group), 50):
                 chunk = group[i:i + 50]
                 try:
@@ -1990,10 +2021,155 @@ APP_TZ = os.environ.get("APP_TZ", "Europe/Madrid")
 REMIND_HOUR = int(os.environ.get("REMIND_HOUR", "3"))       # hora (de España) del aviso «no has publicado en 24 h»
 
 
+# ---------------------------------------------------------------- APIs oficiales (TikTok, Instagram, YouTube)
+API_MODES = {"off": "Apagadas (todo con Apify)", "on": "Opcional: quien conecta su cuenta se lee con la API",
+             "required": "Obligatoria: para verificar una cuenta hay que conectarla"}
+
+
+def api_mode():
+    m = get_setting("api_mode", "off")
+    return m if m in API_MODES else "off"
+
+
+def api_ready(platform):
+    """¿Se puede conectar esta red? (claves puestas en Railway y las APIs encendidas)."""
+    return api_mode() != "off" and official.configured(platform)
+
+
+def _fernet():
+    from cryptography.fernet import Fernet
+    import hashlib
+    key = os.environ.get("TOKEN_KEY") or app.secret_key or "dev"
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(str(key).encode()).digest()))
+
+
+def enc(text_):
+    return _fernet().encrypt(text_.encode()).decode() if text_ else ""
+
+
+def dec(text_):
+    from cryptography.fernet import InvalidToken
+    if not text_:
+        return ""
+    try:
+        return _fernet().decrypt(text_.encode()).decode()
+    except InvalidToken:
+        return ""
+
+
+def api_token_for(platform, handle):
+    """Token que funciona para esa cuenta (o None)."""
+    h = viewcounter.clean_handle(handle)
+    return (ApiToken.query.filter(ApiToken.platform == platform, db.func.lower(ApiToken.handle) == h,
+                                  ApiToken.status == "ok").first() if h else None)
+
+
+def api_access(tok):
+    """El token de acceso, renovado si está a punto de caducar."""
+    if tok.expires_at and tok.expires_at - datetime.utcnow() < timedelta(days=1 if tok.platform == "instagram" else 0, minutes=10):
+        r = official.refresh_token(tok.platform, dec(tok.refresh_enc), dec(tok.access_enc))
+        tok.access_enc = enc(r["access"])
+        if r.get("refresh"):
+            tok.refresh_enc = enc(r["refresh"])
+        tok.expires_at = datetime.utcnow() + timedelta(seconds=int(r.get("expires_in") or 3600))
+        db.session.commit()
+    return dec(tok.access_enc)
+
+
+def api_failed(tok, e):
+    tok.error = str(e)[:300]
+    if getattr(e, "expired", False) and tok.status == "ok":
+        tok.status = "caducado"
+        notify_user(tok.user_id, "mensaje", f"Vuelve a conectar tu {official.LABELS[tok.platform]}",
+                    f"El permiso de @{tok.handle} ha caducado. Mientras tanto seguimos contando tus vistas, pero conéctala otra vez.",
+                    "/cuenta#redes")
+    db.session.commit()
+
+
+def api_redirect(platform):
+    return (BASE_URL or request.host_url.rstrip("/")) + url_for("api_callback", platform=platform)
+
+
+def save_audience(tok, now=None):
+    """Una vez al día por cuenta conectada: audiencia de la cuenta y de sus clips recientes (lo que deje cada red)."""
+    now = now or datetime.utcnow()
+    if tok.audience_at and now - tok.audience_at < timedelta(hours=20):
+        return 0
+    subs = (Submission.query.filter(Submission.platform == tok.platform, db.func.lower(Submission.author) == tok.handle.lower(),
+                                    Submission.created_at >= now - timedelta(days=30), Submission.status != "rechazado").all())
+    keys = {s.video_key.split(":", 1)[1]: s for s in subs}
+    data = official.audience(tok.platform, api_access(tok), list(keys))
+    n = 0
+    if data.get("account"):
+        AudienceStat.query.filter_by(platform=tok.platform, handle=tok.handle, submission_id=None).delete()
+        db.session.add(AudienceStat(platform=tok.platform, handle=tok.handle, data=json.dumps(data["account"]), taken_at=now))
+        n += 1
+    for vid, d in (data.get("videos") or {}).items():
+        s = keys.get(vid)
+        if s and d:
+            AudienceStat.query.filter_by(submission_id=s.id).delete()
+            db.session.add(AudienceStat(platform=tok.platform, handle=tok.handle, submission_id=s.id, data=json.dumps(d), taken_at=now))
+            n += 1
+    tok.audience_at = now
+    db.session.commit()
+    return n
+
+
+def read_audiences():
+    """Después de la lectura diaria: la audiencia de todas las cuentas conectadas."""
+    if api_mode() == "off":
+        return 0
+    n = 0
+    for tok in ApiToken.query.filter_by(status="ok").all():
+        try:
+            n += save_audience(tok)
+        except official.ApiError as e:
+            api_failed(tok, e)
+        except Exception:  # noqa: BLE001
+            log.exception("Fallo leyendo la audiencia de @%s", tok.handle)
+            db.session.rollback()
+    return n
+
+
+def audience_for(subs):
+    """Audiencia media (en %) de unos clips, pesada por sus vistas. Usa la del clip y, si no hay, la de su cuenta."""
+    if not subs:
+        return {}
+    ids = [s.id for s in subs]
+    per_sub = {r.submission_id: json.loads(r.data or "{}") for r in AudienceStat.query.filter(AudienceStat.submission_id.in_(ids))}
+    handles = {(s.platform, (s.author or "").lower()) for s in subs}
+    per_acc = {(r.platform, r.handle.lower()): json.loads(r.data or "{}") for r in
+               AudienceStat.query.filter(AudienceStat.submission_id.is_(None)).all() if (r.platform, r.handle.lower()) in handles}
+    acc = {"country": {}, "age": {}, "gender": {}}
+    weight = {"country": 0, "age": 0, "gender": 0}
+    sources = 0
+    for s in subs:
+        d = per_sub.get(s.id) or per_acc.get((s.platform, (s.author or "").lower()))
+        if not d:
+            continue
+        sources += 1
+        w = max(s.views or 0, 1)
+        for k in acc:
+            if d.get(k):
+                weight[k] += w
+                for key, pct in d[k].items():
+                    acc[k][key] = acc[k].get(key, 0) + pct * w
+    out = {k: dict(sorted(((key, round(v / weight[k], 1)) for key, v in acc[k].items()), key=lambda kv: -kv[1])[:8])
+           for k in acc if weight[k]}
+    if out:
+        out["clips"] = sources
+    return out
+
+
+_api_fresh = set()      # clips cuyas cifras ya leyó la API oficial en esta pasada (refresh_views no los manda a Apify)
+
+
 def discover_clips(now=None):
     """Mira el perfil de cada cuenta aceptada en una campaña activa y añade solos los vídeos nuevos.
-    Cada cuenta es de una sola campaña, así que todo lo que publica después de entrar es un clip de esa campaña."""
+    Cada cuenta es de una sola campaña, así que todo lo que publica después de entrar es un clip de esa campaña.
+    Si la cuenta está conectada con la API oficial, se lee de ahí (gratis y con más datos); si no, con Apify."""
     now = now or datetime.utcnow()
+    _api_fresh.clear()
     accs = (CampaignAccount.query.join(Campaign)
             .filter(CampaignAccount.status == "aceptada", Campaign.status.in_(("activa", DIST_STATUS)),
                     CampaignAccount.platform.in_(AUTO_PLATFORMS)).all())
@@ -2002,7 +2178,21 @@ def discover_clips(now=None):
     added, errors = 0, []
     by_platform = {}
     for a in accs:
-        by_platform.setdefault(a.platform, []).append(a)
+        if api_mode() != "off":
+            tok = api_token_for(a.platform, a.handle)
+            if tok:
+                try:
+                    items = official.videos(a.platform, api_access(tok), a.handle)
+                    tok.last_read_at, tok.error = now, ""
+                    a.last_scan_at = now
+                    added += _ingest(a.platform, [a], items, now, update_existing=True)
+                    continue
+                except official.ApiError as e:
+                    api_failed(tok, e)
+                    errors.append(f"API {PLATFORMS[a.platform]} @{a.handle}: {e}")
+                except Exception as e:  # noqa: BLE001
+                    log.warning("API oficial de %s falló para @%s: %s", a.platform, a.handle, e)
+        by_platform.setdefault(a.platform, []).append(a)       # sin API (o falló): Apify, como siempre
     for platform, group in by_platform.items():
         for i in range(0, len(group), SCAN_CHUNK):
             chunk = group[i:i + SCAN_CHUNK]
@@ -2012,48 +2202,62 @@ def discover_clips(now=None):
                 errors.append(f"{PLATFORMS[platform]}: {e}")
                 log.warning("No se pudieron leer perfiles de %s: %s", platform, e)
                 continue
-            by_handle = {viewcounter.clean_handle(a.handle): a for a in chunk}
             for a in chunk:
                 a.last_scan_at = now
-            for it in items:
-                acc = by_handle.get(viewcounter.clean_handle(it.get("author") or ""))
-                if not acc and len(chunk) == 1:
-                    acc = chunk[0]
-                if not acc:
-                    continue
-                posted = it.get("posted_at")
-                if posted and (not acc.last_post_at or posted > acc.last_post_at):
-                    acc.last_post_at = posted
-                if it.get("avatar"):
-                    acc.avatar_url = it["avatar"][:1000]
-                since = (acc.decided_at or acc.created_at or now) - timedelta(hours=1)
-                if not posted or posted < since:
-                    continue                                  # solo cuentan los vídeos publicados después de entrar
-                key = f"{platform}:{it['vid']}"
-                if Submission.query.filter_by(video_key=key).first() or IgnoredClip.query.filter_by(video_key=key).first():
-                    continue                                  # ya está, o el clipper lo borró a propósito
-                camp = acc.campaign
-                dist = camp.status == DIST_STATUS
-                sub = Submission(user_id=acc.user_id, campaign_id=camp.id, url=viewcounter.normalize_url(it["url"], resolve=False),
-                                 platform=platform, video_key=key, author=acc.handle, source="auto", posted_at=posted,
-                                 review_since=None if (dist or camp.min_for(platform)) else now)
-                if dist:                                  # plan de distribución: sin revisión ni dinero, solo estadísticas
-                    sub.status, sub.reviewed_at, sub.earned = "aprobado", now, 0
-                db.session.add(sub)
-                db.session.flush()
-                if it.get("views") is not None:
-                    apply_reading(sub, it, now)
-                if dist:
-                    added += 1
-                    continue
-                notify_user(acc.user_id, "clip_nuevo", f"Clip detectado en {camp.song}",
-                            f"Hemos añadido solo tu nuevo vídeo de @{acc.handle}. Ya está contando vistas.",
-                            "/mis-clips", camp_id=camp.id)
-                added += 1
-            db.session.commit()
+            added += _ingest(platform, chunk, items, now)
+    db.session.commit()
     if added:
         log.info("Clips detectados solos: %s", added)
     return added, errors
+
+
+def _ingest(platform, chunk, items, now, update_existing=False):
+    """Añade los vídeos nuevos de esas cuentas. Con la API, además actualiza las cifras de los clips que ya estaban."""
+    added = 0
+    by_handle = {viewcounter.clean_handle(a.handle): a for a in chunk}
+    for it in items:
+        acc = by_handle.get(viewcounter.clean_handle(it.get("author") or ""))
+        if not acc and len(chunk) == 1:
+            acc = chunk[0]
+        if not acc:
+            continue
+        posted = it.get("posted_at")
+        if posted and (not acc.last_post_at or posted > acc.last_post_at):
+            acc.last_post_at = posted
+        if it.get("avatar"):
+            acc.avatar_url = it["avatar"][:1000]
+        key = f"{platform}:{it['vid']}"
+        old = Submission.query.filter_by(video_key=key).first()
+        if old:
+            if update_existing and it.get("views") is not None and old.status != "rechazado":
+                apply_reading(old, it, now)                   # la API ya trae las vistas: no hace falta Apify
+                _api_fresh.add(old.id)
+            continue
+        since = (acc.decided_at or acc.created_at or now) - timedelta(hours=1)
+        if not posted or posted < since:
+            continue                                          # solo cuentan los vídeos publicados después de entrar
+        if IgnoredClip.query.filter_by(video_key=key).first():
+            continue                                          # el clipper lo borró a propósito
+        camp = acc.campaign
+        dist = camp.status == DIST_STATUS
+        sub = Submission(user_id=acc.user_id, campaign_id=camp.id, url=viewcounter.normalize_url(it["url"], resolve=False),
+                         platform=platform, video_key=key, author=acc.handle, source="auto", posted_at=posted,
+                         review_since=None if (dist or camp.min_for(platform)) else now)
+        if dist:                                          # plan de distribución: sin revisión ni dinero, solo estadísticas
+            sub.status, sub.reviewed_at, sub.earned = "aprobado", now, 0
+        db.session.add(sub)
+        db.session.flush()
+        if it.get("views") is not None:
+            apply_reading(sub, it, now)
+            if update_existing:
+                _api_fresh.add(sub.id)
+        added += 1
+        if not dist:
+            notify_user(acc.user_id, "clip_nuevo", f"Clip detectado en {camp.song}",
+                        f"Hemos añadido solo tu nuevo vídeo de @{acc.handle}. Ya está contando vistas.",
+                        "/mis-clips", camp_id=camp.id)
+    db.session.commit()
+    return added
 
 
 def inactivity_reminders(now=None):
@@ -2199,6 +2403,7 @@ def _auto_refresh_loop():
                     set_setting("last_refresh_at", datetime.utcnow().isoformat())
                     set_setting("refresh_day", _local().strftime("%Y-%m-%d"))
                     refresh_views()                       # primero busca los clips nuevos en los perfiles, luego las vistas
+                    read_audiences()                      # audiencia de las cuentas conectadas con la API oficial
                     check_creator_balances()
                     fresh = True
                 due, day = reminders_due()
@@ -2224,6 +2429,9 @@ def csrf_token():
     return session["_csrf"]
 
 
+CSRF_EXEMPT = {"meta_data_deletion"}     # la llama Meta (firmada con la clave de la app), no un navegador
+
+
 @app.before_request
 def _start_timer():
     g._t0 = time.perf_counter()
@@ -2235,7 +2443,7 @@ ONLINE_FOR = 300      # si entró hace menos de esto, sale «En línea»
 
 @app.before_request
 def before():
-    if request.method == "POST":
+    if request.method == "POST" and request.endpoint not in CSRF_EXEMPT:
         sent, expected = request.form.get("_csrf", ""), session.get("_csrf", "")
         if not sent or not expected or not secrets.compare_digest(sent, expected):
             abort(400, description="csrf")
@@ -2470,7 +2678,7 @@ def inject_globals():
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year, "now_utc": datetime.utcnow(),
             "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "REFRESH_AT": REFRESH_AT, "next_scan_utc": next_scan_utc, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
             "REJECT_REASONS": REJECT_REASONS, "COUNTRIES": COUNTRIES, "LANGUAGES": LANGUAGES, "CAMPAIGN_KINDS": CAMPAIGN_KINDS,
-            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "clip_thumb": clip_thumb, "pop_undo": pop_undo, "BASE_URL": BASE_URL, "my_available": my_available, "when_madrid": when_madrid, "RESOURCE_ICONS": RESOURCE_ICONS, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
+            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "clip_thumb": clip_thumb, "pop_undo": pop_undo, "api_ready": api_ready, "api_mode": api_mode, "OFFICIAL": official, "BASE_URL": BASE_URL, "my_available": my_available, "when_madrid": when_madrid, "RESOURCE_ICONS": RESOURCE_ICONS, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
             "mod_campaigns": mod_campaigns, "acting_as_mod": acting_as_mod,
             "STATS_HOURS": STATS_HOURS, "bunny_ready": bunny_ready, "reached_min": reached_min,
             "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
@@ -2808,7 +3016,7 @@ def report(token):
     best = [(s, viewcounter.embed_url(s.platform, s.url)) for s in approved[:3] if (s.views or 0) > 0]
     resp = Response(render_template("report.html", camp=camp, st=st, top=approved[:20], by_platform=by_platform, best=best,
                                     creators=len({s.user_id for s in approved}), an=campaign_analytics(camp),
-                                    dist=camp.status == DIST_STATUS))
+                                    dist=camp.status == DIST_STATUS, aud=audience_for(approved)))
     resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     return resp
 
@@ -3376,6 +3584,9 @@ def verify_bio(cid, aid):
     if acc.bio_verified:
         flash("Esa cuenta ya está verificada.", "ok")
         return redirect(url_for("campaign", cid=cid))
+    if api_mode() == "required" and api_ready(acc.platform):
+        flash(f"Para verificar esta cuenta, conéctala con {official.LABELS.get(acc.platform, acc.platform)}.", "info")
+        return redirect(url_for("campaign", cid=cid))
     if acc.bio_checked_at and (datetime.utcnow() - acc.bio_checked_at).total_seconds() < BIO_WAIT and acc.bio_status == "Comprobando…":
         flash("Ya lo estamos comprobando. Recarga la página en un momento.", "info")
         return redirect(url_for("campaign", cid=cid))
@@ -3862,6 +4073,7 @@ def account():
             flash("Cuentas guardadas.", "ok")
         return redirect(request.args.get("next") and safe_next(request.args.get("next")) or url_for("account"))
     return render_template("account.html", events=NOTIFY_EVENTS, channels=NOTIFY_CHANNELS, wants=wants,
+                           tokens=ApiToken.query.filter_by(user_id=current_user.id).order_by(ApiToken.platform).all(),
                            devices=PushSub.query.filter_by(user_id=current_user.id).count(),
                            push_ready=push_ready(), vapid=VAPID_PUBLIC_KEY)
 
@@ -4351,6 +4563,7 @@ def admin_dist(did):
             sids = [s.id for s in camp.submissions]
             if sids:
                 ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(sids)).delete(synchronize_session=False)
+                AudienceStat.query.filter(AudienceStat.submission_id.in_(sids)).delete(synchronize_session=False)
             Submission.query.filter_by(campaign_id=did).delete(synchronize_session=False)
             CampaignAccount.query.filter_by(campaign_id=did).delete(synchronize_session=False)
             Notice.query.filter_by(campaign_id=did).delete(synchronize_session=False)
@@ -4369,7 +4582,116 @@ def admin_dist(did):
     report_url = (BASE_URL or request.host_url.rstrip("/")) + url_for("report", token=camp.report_token)
     clips = sorted(camp.submissions, key=lambda s: s.posted_at or s.created_at, reverse=True)[:60]
     return render_template("admin/dist.html", camp=camp, sm=dist_summary(camp), an=campaign_analytics(camp), clips=clips,
+                           aud=audience_for(list(camp.submissions)),
                            report_url=report_url, dist=True)
+
+
+@app.route("/conectar/<platform>")
+@login_required
+def api_connect(platform):
+    """Conectar una cuenta con la API oficial: manda a la red a pedir permiso."""
+    if platform not in official.SCOPES or not api_ready(platform):
+        flash("La conexión con esa red aún no está disponible.", "info")
+        return redirect(url_for("account", _anchor="redes"))
+    state = secrets.token_urlsafe(16)
+    session["api_state"] = {"s": state, "p": platform, "next": safe_next(request.args.get("next", "")) or ""}
+    return redirect(official.auth_url(platform, state, api_redirect(platform)))
+
+
+@app.route("/conectar/<platform>/vuelta")
+@login_required
+def api_callback(platform):
+    """Vuelta de la red: guardamos el permiso (cifrado) y, si es una cuenta de campaña, queda verificada."""
+    st = session.pop("api_state", None) or {}
+    back = st.get("next") or url_for("account", _anchor="redes")
+    if platform not in official.SCOPES or st.get("p") != platform or not secrets.compare_digest(st.get("s", ""), request.args.get("state", "")):
+        flash("La conexión ha caducado. Vuelve a intentarlo.", "error")
+        return redirect(back)
+    if request.args.get("error") or not request.args.get("code"):
+        flash("No se ha conectado la cuenta: no se dio permiso.", "info")
+        return redirect(back)
+    try:
+        tk = official.exchange_code(platform, request.args["code"], api_redirect(platform))
+        prof = official.profile(platform, tk["access"])
+    except official.ApiError as e:
+        log.warning("Fallo conectando %s: %s", platform, e)
+        flash(f"No hemos podido conectar tu {official.LABELS[platform]}. Inténtalo de nuevo en un rato.", "error")
+        return redirect(back)
+    ext_id, handle = str(prof.get("id") or tk.get("open_id") or ""), viewcounter.clean_handle(prof.get("handle") or "")
+    if not ext_id:
+        flash("La red no nos ha dicho qué cuenta es. Inténtalo de nuevo.", "error")
+        return redirect(back)
+    tok = ApiToken.query.filter_by(platform=platform, ext_id=ext_id).first()
+    if tok and tok.user_id != current_user.id:
+        flash(f"La cuenta @{handle} ya está conectada por otro clipper. Si es tuya, escríbenos.", "error")
+        return redirect(back)
+    if not tok:
+        tok = ApiToken(user_id=current_user.id, platform=platform, ext_id=ext_id)
+        db.session.add(tok)
+    tok.handle, tok.avatar_url = handle, (prof.get("avatar") or "")[:1000]
+    tok.access_enc, tok.status, tok.error = enc(tk["access"]), "ok", ""
+    if tk.get("refresh"):
+        tok.refresh_enc = enc(tk["refresh"])
+    tok.expires_at = datetime.utcnow() + timedelta(seconds=int(tk.get("expires_in") or 3600))
+    n = 0
+    for acc_ in CampaignAccount.query.filter_by(user_id=current_user.id, platform=platform).all():
+        if viewcounter.clean_handle(acc_.handle) == handle:          # la cuenta es suya: verificada sin código en la bio
+            acc_.bio_verified, acc_.bio_status = True, "Verificada (conectada)"
+            if tok.avatar_url:
+                acc_.avatar_url = tok.avatar_url
+            if acc_.status == "pendiente":
+                acc_.status, acc_.decided_at = "aceptada", datetime.utcnow()
+                n += 1
+    audit("cuenta_conectada", f"{official.LABELS[platform]} @{handle}")
+    db.session.commit()
+    flash(f"{official.LABELS[platform]} conectado: @{handle}." + (" Cuenta verificada en tu campaña." if n else ""), "ok")
+    return redirect(back)
+
+
+@app.route("/desconectar/<int:tid>", methods=["POST"])
+@login_required
+def api_disconnect(tid):
+    tok = db.session.get(ApiToken, tid)
+    if not tok or (tok.user_id != current_user.id and not current_user.is_admin):
+        abort(404)
+    AudienceStat.query.filter_by(platform=tok.platform, handle=tok.handle, submission_id=None).delete()
+    audit("cuenta_desconectada", f"{official.LABELS[tok.platform]} @{tok.handle}")
+    db.session.delete(tok)
+    db.session.commit()
+    flash("Cuenta desconectada. Sus datos de audiencia se han borrado; seguimos contando sus vistas como antes.", "ok")
+    return redirect(url_for("account", _anchor="redes"))
+
+
+@app.route("/eliminar-datos")
+def data_deletion_page():
+    """Página pública que piden Meta, TikTok y Google: cómo borrar tus datos."""
+    return render_template("data_deletion.html", code=request.args.get("codigo", ""))
+
+
+@app.route("/meta/borrar-datos", methods=["POST"])
+def meta_data_deletion():
+    """Petición de Meta para borrar los datos de una cuenta de Instagram (signed_request firmado con la clave de la app)."""
+    import hashlib
+    import hmac
+    raw = request.form.get("signed_request", "")
+    try:
+        sig_b64, payload_b64 = raw.split(".", 1)
+        pad = lambda s: s + "=" * (-len(s) % 4)  # noqa: E731
+        sig = base64.urlsafe_b64decode(pad(sig_b64))
+        payload = json.loads(base64.urlsafe_b64decode(pad(payload_b64)))
+        good = hmac.new(official.INSTAGRAM_APP_SECRET.encode(), payload_b64.encode(), hashlib.sha256).digest()
+        if not official.INSTAGRAM_APP_SECRET or not hmac.compare_digest(sig, good):
+            abort(400)
+    except (ValueError, TypeError):
+        abort(400)
+    uid = str(payload.get("user_id", ""))
+    code = secrets.token_hex(8)
+    for tok in ApiToken.query.filter_by(platform="instagram", ext_id=uid).all():
+        AudienceStat.query.filter_by(platform="instagram", handle=tok.handle).delete()
+        db.session.delete(tok)
+    audit("datos_borrados_meta", f"instagram {uid} · {code}")
+    db.session.commit()
+    return {"url": (BASE_URL or request.host_url.rstrip("/")) + url_for("data_deletion_page", codigo=code), "confirmation_code": code}
 
 
 @app.route("/invitacion/<token>")
@@ -4724,11 +5046,34 @@ def admin_payouts():
 def admin_settings(app_test=None):
     whop = {"key": bool(WHOP_API_KEY), "company": whop_company_id() if WHOP_API_KEY else "",
             "error": _whop_company.get("error", ""), "from_env": bool(WHOP_COMPANY_ID)}
+    base = BASE_URL or request.host_url.rstrip("/")
+    apis = [{"key": p, "label": official.LABELS[p], "ok": official.configured(p), "env": official.ENV_NEEDED[p],
+             "scopes": official.SCOPES[p], "redirect": base + url_for("api_callback", platform=p),
+             "n": ApiToken.query.filter_by(platform=p, status="ok").count(),
+             "bad": ApiToken.query.filter_by(platform=p).filter(ApiToken.status != "ok").count()} for p in ("tiktok", "instagram", "youtube")]
+    api_info = {"mode": api_mode(), "modes": API_MODES, "apis": apis, "deletion": base + url_for("data_deletion_page"),
+                "meta_deletion": base + url_for("meta_data_deletion"), "privacy": base + url_for("privacy"), "terms": base + url_for("terms")}
     return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"), allow_wipe=ALLOW_WIPE,
+                           api_info=api_info,
                            alerts=tech_alerts(), creators_on=CREATORS_ENABLED, tech_set=bool(TECH_EMAILS),
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
                            my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count())
+
+
+@app.route("/admin/ajustes/apis", methods=["POST"])
+@admin_required
+def admin_api_mode():
+    if not is_tech():
+        abort(403)
+    mode = request.form.get("mode", "off")
+    if mode not in API_MODES:
+        abort(400)
+    set_setting("api_mode", mode)
+    audit("apis_oficiales", mode)
+    db.session.commit()
+    flash(f"APIs oficiales: {API_MODES[mode]}.", "ok")
+    return redirect(url_for("admin_settings", _anchor="apis"))
 
 
 DEMO_NAMES = ["Lucía Fernández", "Mateo Rodríguez", "Valentina Gómez", "Hugo Martín", "Camila Torres", "Leo Sánchez",
@@ -5792,7 +6137,8 @@ def admin_campaign(cid):
         owed = creator_owed(camp.creator_id)
         if bal is not None and bal + CENT < owed:
             shortfall = {"balance": bal, "owed": owed, "missing": cents(owed - bal)}
-    return render_template("admin/campaign.html", camp=camp, st=st, report_url=report_url, can=can,
+    aud = audience_for([s for s in camp.submissions if s.status == "aprobado"]) if can["estadisticas"] else {}
+    return render_template("admin/campaign.html", camp=camp, st=st, report_url=report_url, can=can, aud=aud,
                            an=campaign_analytics(camp) if can["estadisticas"] else None, shortfall=shortfall, pend=pending_by_campaign().get(cid, {}), sec="resumen")
 
 
@@ -6286,7 +6632,7 @@ def admin_wipe():
         admin_ids.append(current_user.id)
     keep_campaigns = request.form.get("mode") == "keep_campaigns"
     models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, CampaignLead,
-              Notice, PushSub, LessonProgress, PostComment, PostLike, Post, Channel, ChannelSection, CampaignMod, CampMessage, IgnoredClip, Invite, Call,
+              Notice, PushSub, LessonProgress, PostComment, PostLike, Post, Channel, ChannelSection, CampaignMod, CampMessage, IgnoredClip, Invite, Call, AudienceStat, ApiToken,
               Campaign, Creator,
               AuditLog, Setting)
     for model in models:
@@ -6372,8 +6718,9 @@ def delete_user_account(user):
     sub_ids = [s.id for s in subs]
     if sub_ids:
         ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(sub_ids)).delete(synchronize_session=False)
+        AudienceStat.query.filter(AudienceStat.submission_id.in_(sub_ids)).delete(synchronize_session=False)
     for model in (Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, Notice, PushSub, LessonProgress,
-                  PostComment, PostLike, CampaignMod, CampMessage, IgnoredClip):
+                  PostComment, PostLike, CampaignMod, CampMessage, IgnoredClip, ApiToken):
         model.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     CampMessage.query.filter_by(sender_id=user.id).update({"sender_id": None}, synchronize_session=False)
     Post.query.filter_by(author_id=user.id).update({"author_id": None}, synchronize_session=False)

@@ -1,0 +1,15 @@
+{# Audiencia (país, edad y sexo) de las cuentas conectadas con la API oficial. Necesita `aud` = audience_for(clips). #}
+{% if aud %}
+<section class="card aud">
+  <div class="aud-h"><h3>Audiencia</h3><span class="small muted">De {{ aud.clips }} {{ "clip" if aud.clips == 1 else "clips" }} con datos de la red (cuentas conectadas)</span></div>
+  <div class="aud-grid">
+    {% for key, title in [("country", "Países"), ("age", "Edad"), ("gender", "Sexo")] if aud.get(key) %}
+    <div class="aud-col"><span class="small muted">{{ title }}</span>
+      {% for k, v in aud[key].items() %}
+      <div class="aud-bar"><span class="aud-fill" style="width:{{ [v, 100]|min }}%"></span><span class="aud-k">{% if key == 'country' %}{{ COUNTRIES.get(k, k) }}{% elif key == 'gender' %}{{ {"male": "Hombres", "female": "Mujeres", "M": "Hombres", "F": "Mujeres"}.get(k, "Otros") }}{% else %}{{ k }}{% endif %}</span><b class="tnum">{{ "%.1f"|format(v)|replace(".", ",") }} %</b></div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
