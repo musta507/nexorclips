@@ -1,15 +1,20 @@
-{# Audiencia (país, edad y sexo) de las cuentas conectadas con la API oficial. Necesita `aud` = audience_for(clips). #}
-{% if aud %}
+{# Audiencia (país, edad y sexo). Necesita `aud` = audience_for(clips). Sin datos, explica cuándo saldrá. #}
 <section class="card aud">
-  <div class="aud-h"><h3>Audiencia</h3><span class="small muted">De {{ aud.clips }} {{ "clip" if aud.clips == 1 else "clips" }} con datos de la red (cuentas conectadas)</span></div>
+  <div class="aud-h"><h3>Audiencia</h3>{% if aud %}<span class="small muted">Media de {{ aud.clips }} {{ "clip" if aud.clips == 1 else "clips" }}, según sus vistas</span>{% endif %}</div>
+  {% if aud %}
   <div class="aud-grid">
-    {% for key, title in [("country", "Países"), ("age", "Edad"), ("gender", "Sexo")] if aud.get(key) %}
+    {% for key, title in [("country", "Ubicación"), ("age", "Edad"), ("gender", "Sexo")] %}
     <div class="aud-col"><span class="small muted">{{ title }}</span>
-      {% for k, v in aud[key].items() %}
-      <div class="aud-bar"><span class="aud-fill" style="width:{{ [v, 100]|min }}%"></span><span class="aud-k">{% if key == 'country' %}{{ COUNTRIES.get(k, k) }}{% elif key == 'gender' %}{{ {"male": "Hombres", "female": "Mujeres", "M": "Hombres", "F": "Mujeres"}.get(k, "Otros") }}{% else %}{{ k }}{% endif %}</span><b class="tnum">{{ "%.1f"|format(v)|replace(".", ",") }} %</b></div>
-      {% endfor %}
+      {% for k, v in ((aud.get(key) or {})|dictsort if key == 'age' else (aud.get(key) or {}).items()) %}
+      <div class="aud-bar"><span class="aud-fill" style="width:{{ [v, 100]|min }}%"></span><span class="aud-k">{% if key == 'country' %}{{ COUNTRIES.get(k, k) if k != 'US' else 'Estados Unidos' }}{% elif key == 'gender' %}{{ {"male": "Hombres", "female": "Mujeres", "M": "Hombres", "F": "Mujeres"}.get(k, "Otros") }}{% else %}{{ k.replace("65-", "65+") }} años{% endif %}</span><b class="tnum">{{ "%.1f"|format(v)|replace(".", ",") }} %</b></div>
+      {% else %}<p class="small muted">Esta red no da este dato.</p>{% endfor %}
     </div>
     {% endfor %}
   </div>
+  {% else %}
+  <div class="aud-empty">
+    <div class="aud-ghost" aria-hidden="true">{% for t_ in ["Ubicación", "Edad", "Sexo"] %}<div class="aud-col"><span class="small muted">{{ t_ }}</span><div class="aud-bar g" style="--w:72%"></div><div class="aud-bar g" style="--w:45%"></div><div class="aud-bar g" style="--w:24%"></div></div>{% endfor %}</div>
+    <p class="small muted">Aquí verás <b>de qué países, qué edad y qué sexo</b> es quien ve los clips. Aparece cuando las cuentas se conectan con su red (Ajustes → Redes conectadas).</p>
+  </div>
+  {% endif %}
 </section>
-{% endif %}

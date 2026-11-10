@@ -3706,7 +3706,8 @@ def my_clips():
     show_stats = bool(counts.get("estadisticas") or stats_sent or bunny_ready())
     if tab == "estadisticas" and not show_stats:
         return redirect(url_for("my_clips"))
-    return render_template("submit.html", camps=camps, subs=subs, selected=request.args.get("c", type=int),
+    aud = audience_for([s for s in scoped if s.status != "rechazado"])
+    return render_template("submit.html", camps=camps, subs=subs, selected=request.args.get("c", type=int), aud=aud,
                            tab=tab, counts=counts, stats=clipper_stats(allsubs), my_camps=my_camps, fc=fc, fp=fp,
                            stats_sent=stats_sent, show_stats=show_stats, now=datetime.utcnow(), an=an, dias=dias,
                            q=q, orden=orden, ranges=CLIP_RANGES)
@@ -5240,9 +5241,27 @@ def load_demo(days=30, seed=7):
     for u, _, _ in users:
         for ls in lessons[:r.randint(0, len(lessons))]:
             db.session.add(LessonProgress(user_id=u.id, lesson_id=ls.id, completed_at=now - timedelta(days=r.randint(0, days))))
+    demo_audience([s_ for s_, *_x in plan], r)
     db.session.commit()
     total = len(plan)
     return f"Demo cargada: {len(users)} clippers y {total} clips de los últimos {days} días."
+
+
+DEMO_COUNTRY_MIX = [("ES", 42), ("MX", 18), ("AR", 10), ("CO", 8), ("CL", 6), ("US", 5), ("PE", 4), ("VE", 3)]
+DEMO_AGES = [("13-17", 14), ("18-24", 38), ("25-34", 28), ("35-44", 12), ("45-54", 5), ("55-64", 2), ("65-", 1)]
+
+
+def demo_audience(subs, r):
+    """Audiencia inventada para los clips de la demo (así se ve cómo queda el apartado con datos)."""
+    def mix(base, spread):
+        vals = [(k, max(0.5, w * r.uniform(1 - spread, 1 + spread))) for k, w in base]
+        tot = sum(v for _k, v in vals)
+        return {k: round(v * 100 / tot, 1) for k, v in sorted(vals, key=lambda kv: -kv[1])}
+    for s_ in subs:
+        fem = r.uniform(38, 64)
+        db.session.add(AudienceStat(platform=s_.platform, handle=s_.author or "", submission_id=s_.id,
+                                    data=json.dumps({"country": mix(DEMO_COUNTRY_MIX, .45), "age": mix(DEMO_AGES, .35),
+                                                     "gender": {"female": round(fem, 1), "male": round(100 - fem, 1)}})))
 
 
 def remove_demo():
@@ -5332,6 +5351,7 @@ def load_my_demo(user, days=21, seed=11):
     for i, (kind, title, body) in enumerate(MY_DEMO_NOTICES):
         db.session.add(Notice(user_id=user.id, kind=kind, title=title, body=body, url="/mis-clips", read=i > 1,
                               created_at=now - timedelta(hours=3 + i * 9), my_demo=True))
+    demo_audience([s_ for s_, _ in plan], r)
     db.session.commit()
     return f"Tu demo como clipper está cargada: {len(plan)} clips en {len({s_.campaign_id for s_, _ in plan})} campañas."
 
@@ -5346,6 +5366,7 @@ def remove_my_demo(user):
     ids = [s_.id for s_ in subs]
     if ids:
         ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(ids)).delete(synchronize_session=False)
+        AudienceStat.query.filter(AudienceStat.submission_id.in_(ids)).delete(synchronize_session=False)
         Submission.query.filter(Submission.id.in_(ids)).delete(synchronize_session=False)
     for model in (CampaignAccount, CampaignMember, Notice):
         model.query.filter_by(user_id=user.id, my_demo=True).delete(synchronize_session=False)

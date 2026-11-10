@@ -2229,3 +2229,10 @@ b>.m-earn,b>.m-zero{font-size:inherit!important;line-height:inherit}
 .aud-fill{position:absolute;left:0;top:0;bottom:0;background:#dff3e8}
 .aud-k,.aud-bar b{position:relative}
 @media (max-width:800px){.aud-grid{grid-template-columns:1fr}}
+.aud-empty{position:relative}
+.aud-ghost{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;opacity:.55;filter:blur(.3px)}
+.aud-bar.g{height:34px;padding:0;background:var(--soft)}
+.aud-bar.g::before{content:"";position:absolute;inset:0;width:var(--w);background:#ececef}
+.aud-empty p{margin:12px 0 0}
+.mc .aud{margin-top:0}
+@media (max-width:800px){.aud-ghost{grid-template-columns:1fr}}
