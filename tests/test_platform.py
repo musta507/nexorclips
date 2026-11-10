@@ -2489,3 +2489,26 @@ def test_official_api_connect_verify_read_and_delete(monkeypatch):
     with A.app.app_context():
         assert not A.ApiToken.query.filter_by(platform="instagram").first()
     assert "Cómo borrar tus datos" in a.get("/eliminar-datos").get_data(as_text=True)
+
+
+def test_api_refresh_by_ids_and_solo_mode(monkeypatch):
+    from datetime import datetime, timedelta
+    cid = make_campaign()
+    a = client_for("a@test.com", tiktok="ana")
+    with A.app.app_context():
+        uid = A.User.query.filter_by(email="a@test.com").one().id
+        A.db.session.add(A.ApiToken(user_id=uid, platform="tiktok", ext_id="o1", handle="ana", access_enc=A.enc("AT"),
+                                    expires_at=datetime.utcnow() + timedelta(days=1)))
+        old = A.Submission(user_id=uid, campaign_id=cid, url="https://www.tiktok.com/@ana/video/7300000000000000111",
+                           platform="tiktok", video_key="tiktok:7300000000000000111", author="ana", views=10)
+        other = A.Submission(user_id=uid, campaign_id=cid, url="https://www.tiktok.com/@luis/video/7300000000000000222",
+                             platform="tiktok", video_key="tiktok:7300000000000000222", author="luis", views=5)
+        A.db.session.add_all([old, other])
+        A.set_setting("api_mode", "on")
+        A.db.session.commit()
+        monkeypatch.setattr(A.official, "stats_by_ids", lambda p, t, ids, h="": {"7300000000000000111": {"views": 999, "likes": 9}})
+        rest = A.api_refresh("tiktok", [old, other])
+        assert rest == [other] and old.views == 999
+        A.set_setting("api_mode", "solo")
+        A.db.session.commit()
+        assert A.api_required()

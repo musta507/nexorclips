@@ -318,3 +318,60 @@ def _ig_audience(access):
             if exc.expired:
                 raise
     return out
+
+
+# ---------------------------------------------------------------- 5) cifras de vídeos concretos (los que ya no salen entre los últimos)
+def stats_by_ids(platform, access, ids, handle=""):
+    """Vistas y demás de vídeos concretos por su id. Devuelve {id: {views, likes, comments, shares, thumb, caption}}."""
+    ids = [str(i) for i in ids if i]
+    out = {}
+    if not ids:
+        return out
+    if platform == "youtube":
+        for i in range(0, len(ids), 50):
+            d = _check(requests.get("https://www.googleapis.com/youtube/v3/videos",
+                                    params={"part": "snippet,statistics", "id": ",".join(ids[i:i + 50])},
+                                    headers={"Authorization": f"Bearer {access}"}, timeout=TIMEOUT), "YouTube")
+            for v in d.get("items") or []:
+                st, sn = v.get("statistics") or {}, v.get("snippet") or {}
+                out[v["id"]] = {"views": _int(st.get("viewCount")), "likes": _int(st.get("likeCount")),
+                                "comments": _int(st.get("commentCount")), "shares": None, "author": handle,
+                                "thumb": ((sn.get("thumbnails") or {}).get("medium") or {}).get("url", ""), "caption": sn.get("title", "")[:300]}
+    elif platform == "tiktok":
+        for i in range(0, len(ids), 20):
+            d = _check(requests.post("https://open.tiktokapis.com/v2/video/query/",
+                                     params={"fields": "id,video_description,cover_image_url,view_count,like_count,comment_count,share_count"},
+                                     json={"filters": {"video_ids": ids[i:i + 20]}},
+                                     headers={"Authorization": f"Bearer {access}", "Content-Type": "application/json"},
+                                     timeout=TIMEOUT), "TikTok")
+            for v in (d.get("data") or {}).get("videos") or []:
+                out[str(v.get("id"))] = {"views": _int(v.get("view_count")), "likes": _int(v.get("like_count")),
+                                         "comments": _int(v.get("comment_count")), "shares": _int(v.get("share_count")),
+                                         "author": handle, "thumb": v.get("cover_image_url", ""),
+                                         "caption": (v.get("video_description") or "")[:300]}
+    elif platform == "instagram":
+        # Instagram identifica los reels por su código del enlace; se buscan en la lista de la cuenta (hasta 200)
+        want, url = set(ids), f"{IG_GRAPH}/me/media"
+        params = {"fields": "id,permalink,thumbnail_url,media_url,like_count,comments_count,caption", "limit": 50, "access_token": access}
+        for _page in range(4):
+            d = _check(requests.get(url, params=params, timeout=TIMEOUT), "Instagram")
+            for m in d.get("data") or []:
+                code = (m.get("permalink") or "").rstrip("/").split("/")[-1]
+                if code in want:
+                    views = shares = None
+                    try:
+                        ins = _check(requests.get(f"{IG_GRAPH}/{m['id']}/insights", params={"metric": "views,shares",
+                                                  "access_token": access}, timeout=TIMEOUT), "Instagram")
+                        vals = {x.get("name"): (x.get("values") or [{}])[0].get("value") for x in ins.get("data") or []}
+                        views, shares = _int(vals.get("views")), _int(vals.get("shares"))
+                    except ApiError as exc:
+                        if exc.expired:
+                            raise
+                    out[code] = {"views": views, "likes": _int(m.get("like_count")), "comments": _int(m.get("comments_count")),
+                                 "shares": shares, "author": handle, "thumb": m.get("thumbnail_url", ""),
+                                 "caption": (m.get("caption") or "")[:300], "video_url": m.get("media_url", "")}
+            nxt = (d.get("paging") or {}).get("next")
+            if not nxt or want <= set(out):
+                break
+            url, params = nxt, None
+    return out

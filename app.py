@@ -1838,6 +1838,9 @@ def refresh_views():
         read, errors = 0, []
         for platform in PLATFORMS:
             group = [s for s in subs if s.platform == platform and s.id not in _api_fresh]   # lo leído por la API, no a Apify
+            group = api_refresh(platform, group)          # clips de cuentas conectadas: por la API; el resto, a Apify
+            if api_mode() == "solo":
+                group = []                                # modo «solo APIs»: no se gasta nada en Apify
             for i in range(0, len(group), 50):
                 chunk = group[i:i + 50]
                 try:
@@ -1956,6 +1959,9 @@ def copy_review_videos(limit=30):
             .order_by(Submission.review_since).limit(limit).all())
     todo = [s_ for s_ in todo if not is_fake(s_)]
     tiktok = [s_ for s_ in todo if s_.platform == "tiktok" and not s_.media_url]
+    if tiktok and api_mode() == "solo":           # sin Apify no hay enlace de descarga de TikTok: se revisan con el vídeo de la red
+        todo = [s_ for s_ in todo if s_ not in tiktok]
+        tiktok = []
     if tiktok:
         try:
             links = viewcounter.fetch_download_urls("tiktok", [s_.url for s_ in tiktok])
@@ -2023,7 +2029,8 @@ REMIND_HOUR = int(os.environ.get("REMIND_HOUR", "3"))       # hora (de España) 
 
 # ---------------------------------------------------------------- APIs oficiales (TikTok, Instagram, YouTube)
 API_MODES = {"off": "Apagadas (todo con Apify)", "on": "Opcional: quien conecta su cuenta se lee con la API",
-             "required": "Obligatoria: para verificar una cuenta hay que conectarla"}
+             "required": "Obligatoria: para verificar una cuenta hay que conectarla (Apify de respaldo)",
+             "solo": "Solo APIs: sin Apify (las cuentas sin conectar no se leen)"}
 
 
 def api_mode():
@@ -2034,6 +2041,10 @@ def api_mode():
 def api_ready(platform):
     """¿Se puede conectar esta red? (claves puestas en Railway y las APIs encendidas)."""
     return api_mode() != "off" and official.configured(platform)
+
+
+def api_required():
+    return api_mode() in ("required", "solo")
 
 
 def _fernet():
@@ -2088,6 +2099,37 @@ def api_failed(tok, e):
 
 def api_redirect(platform):
     return (BASE_URL or request.host_url.rstrip("/")) + url_for("api_callback", platform=platform)
+
+
+def api_refresh(platform, subs):
+    """Lee por la API oficial las cifras de los clips de cuentas conectadas. Devuelve los que quedan para Apify."""
+    if api_mode() == "off" or not subs:
+        return subs
+    by_tok, rest = {}, []
+    for s in subs:
+        tok = api_token_for(platform, s.author or "")
+        if tok:
+            by_tok.setdefault(tok.id, (tok, []))[1].append(s)
+        else:
+            rest.append(s)
+    now = datetime.utcnow()
+    for tok, group in by_tok.values():
+        try:
+            found = official.stats_by_ids(platform, api_access(tok), [s.video_key.split(":", 1)[1] for s in group], tok.handle)
+        except official.ApiError as e:
+            api_failed(tok, e)
+            rest.extend(group)
+            continue
+        for s in group:
+            info = found.get(s.video_key.split(":", 1)[1])
+            if info and info.get("views") is not None:
+                apply_reading(s, info, now)
+                _api_fresh.add(s.id)
+            else:
+                rest.append(s)                        # no lo encuentra la API (¿borrado?): que lo mire Apify
+        tok.last_read_at = now
+        db.session.commit()
+    return rest
 
 
 def save_audience(tok, now=None):
@@ -2192,7 +2234,8 @@ def discover_clips(now=None):
                     errors.append(f"API {PLATFORMS[a.platform]} @{a.handle}: {e}")
                 except Exception as e:  # noqa: BLE001
                     log.warning("API oficial de %s falló para @%s: %s", a.platform, a.handle, e)
-        by_platform.setdefault(a.platform, []).append(a)       # sin API (o falló): Apify, como siempre
+        if api_mode() != "solo":
+            by_platform.setdefault(a.platform, []).append(a)   # sin API (o falló): Apify, como siempre
     for platform, group in by_platform.items():
         for i in range(0, len(group), SCAN_CHUNK):
             chunk = group[i:i + SCAN_CHUNK]
@@ -3584,7 +3627,7 @@ def verify_bio(cid, aid):
     if acc.bio_verified:
         flash("Esa cuenta ya está verificada.", "ok")
         return redirect(url_for("campaign", cid=cid))
-    if api_mode() == "required" and api_ready(acc.platform):
+    if api_required() and api_ready(acc.platform):
         flash(f"Para verificar esta cuenta, conéctala con {official.LABELS.get(acc.platform, acc.platform)}.", "info")
         return redirect(url_for("campaign", cid=cid))
     if acc.bio_checked_at and (datetime.utcnow() - acc.bio_checked_at).total_seconds() < BIO_WAIT and acc.bio_status == "Comprobando…":
