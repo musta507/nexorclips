@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_clip.html" import clip_cover, clip_title with context %}
 {% from "_icons.html" import icon, budget %}
 {% block title %}{{ camp.song }} - {{ camp.artist }} · {{ APP_NAME }}{% endblock %}
 {% block content %}
@@ -123,7 +124,7 @@
     <div class="box-body clip-list">
       {% for s in winners %}
       <a class="clip" href="{{ s.url }}" target="_blank" rel="noopener">
-        <span class="pi">{{ icon(s.platform) }}</span>
+        {{ clip_cover(s) }}
         <div class="meta"><b>{{ s.author and '@' ~ s.author or PLATFORMS[s.platform] }}</b><span class="small muted">{{ s.created_at|ago }}</span></div>
         <div class="views tnum">{{ s.views|short }} vistas</div>
       </a>
@@ -177,8 +178,8 @@
     <div class="box-body clip-list">
       {% for s in mine %}
       <div class="clip">
-        <span class="pi">{{ icon(s.platform) }}</span>
-        <div class="meta"><a href="{{ s.url }}" target="_blank" rel="noopener">{{ PLATFORMS[s.platform] }}</a><span class="small muted">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</span></div>
+        {{ clip_cover(s) }}
+        <div class="meta"><a href="{{ s.url }}" target="_blank" rel="noopener" class="clip-t" title="{{ clip_title(s) }}">{{ s.caption or PLATFORMS[s.platform] }}</a><span class="small muted">{% if s.views_error %}{{ s.views_error }}{% else %}{{ s|checked }}{% endif %}</span></div>
         <div><div class="views tnum">{{ s.views|short }}{% if s.status == "aprobado" %} · {{ s.earned|earn }}{% endif %}</div>{% set stg = clip_stage(s) %}<span class="status {{ stg }}">{{ STAGE_LABELS[stg] }}</span></div>
       </div>
       {% endfor %}

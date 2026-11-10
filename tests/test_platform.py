@@ -551,7 +551,7 @@ def test_join_campaign_and_admin_accepts(monkeypatch):
     a = client_for("a@test.com", verify=False)
     page = a.get(f"/campana/{cid}").get_data(as_text=True)
     assert "Solicitar entrar" in page and "Enlace de tu clip" not in page and 'name="handle"' not in page
-    assert "Aún no estás aceptado" in a.get("/enviar").get_data(as_text=True)
+    assert "Aún no estás en ninguna campaña" in a.get("/enviar").get_data(as_text=True)
     # 1) pide entrar: sin cuenta
     html = post(a, f"/campana/{cid}/unirme").get_data(as_text=True)
     assert "Solicitud enviada" in html and "Enlace de tu clip" not in html
@@ -1065,6 +1065,7 @@ def test_auto_refresh_every_6_hours(monkeypatch):
     from datetime import datetime, timedelta
     monkeypatch.setattr(A.viewcounter, "APIFY_TOKEN", "x")
     monkeypatch.setattr(A, "REFRESH_HOURS", 6)
+    monkeypatch.setattr(A, "REFRESH_AT", "")
     with A.app.app_context():
         A.set_setting("last_refresh_at", "")
         assert A._refresh_due()                     # nunca se ha hecho
@@ -2043,10 +2044,13 @@ def test_discover_clips_from_profiles_and_daily_reminder(monkeypatch):
         assert A.inactivity_reminders() == 0
         uid = A.User.query.filter_by(email="a@test.com").one().id
         assert A.Notice.query.filter_by(user_id=uid, kind="inactividad").count() == 1
-        # 1:00 en Madrid
-        due, _ = A.reminders_due(datetime(2026, 11, 6, 0, 30))   # 00:30 UTC = 01:30 Madrid (invierno)
+        # 3:00 en Madrid, justo después de la lectura diaria
+        A.set_setting("reminders_sent", "")
+        assert not A.reminders_due(datetime(2026, 11, 6, 1, 30))[0]   # 01:30 UTC = 02:30 Madrid (invierno)
+        due, day = A.reminders_due(datetime(2026, 11, 6, 2, 10))      # 03:10 Madrid
         assert due
-        assert not A.reminders_due(datetime(2026, 11, 6, 9, 0))[0]
+        A.set_setting("reminders_sent", day)
+        assert not A.reminders_due(datetime(2026, 11, 6, 9, 0))[0]   # ya mandado hoy
     assert "detectado solo" in a.get("/mis-clips").get_data(as_text=True)
 
 
@@ -2285,3 +2289,18 @@ def test_my_demo_is_separate_from_platform_demo(monkeypatch):
         assert abs(get(A.Campaign, cid).spent - spent_before) < 0.01          # el presupuesto vuelve a como estaba
         assert A.User.query.filter(A.User.email.like(f"%{A.DEMO_DOMAIN}")).count() == platform_demo   # la otra demo sigue
         assert A.Submission.query.filter_by(user_id=A.User.query.filter_by(email="a@test.com").first().id).count() == 1
+
+
+def test_daily_scan_at_3_madrid(monkeypatch):
+    from datetime import datetime
+    monkeypatch.setattr(A.viewcounter, "APIFY_TOKEN", "x")
+    monkeypatch.setattr(A, "REFRESH_AT", "03:00")
+    with A.app.app_context():
+        A.set_setting("refresh_day", "")
+        assert not A._refresh_due(datetime(2026, 11, 6, 1, 0))     # 02:00 Madrid
+        assert A._refresh_due(datetime(2026, 11, 6, 2, 5))         # 03:05 Madrid
+        A.set_setting("refresh_day", "2026-11-06")
+        assert not A._refresh_due(datetime(2026, 11, 6, 15, 0))    # ya se hizo hoy
+        # invierno: 03:00 Madrid = 02:00 UTC; verano: 01:00 UTC
+        assert A.next_scan_utc(datetime(2026, 11, 6, 12, 0)) == datetime(2026, 11, 7, 2, 0)
+        assert A.next_scan_utc(datetime(2026, 7, 6, 0, 30)) == datetime(2026, 7, 6, 1, 0)

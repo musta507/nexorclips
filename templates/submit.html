@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_clip.html" import clip_cover, clip_title with context %}
 {% block title %}Mis clips · {{ APP_NAME }}{% endblock %}
 {% block content %}
 <div class="section-head" style="margin:0">
@@ -7,33 +8,19 @@
   <p class="muted">Publica en tus cuentas de campaña y tus clips aparecen aquí solos. Sigue cómo va cada uno.</p>
 </div>
 
-<details class="card add-clip"{% if not camps %} open{% endif %}>
-  <summary class="add-clip-sum"><span>{{ icon("plus") }} <b>¿Un clip no aparece?</b> <span class="muted small">Añádelo a mano pegando su enlace</span></span><span class="small muted">Los vídeos nuevos de tus cuentas se añaden solos cada pocas horas</span></summary>
-  <div class="add-clip-body">
-  {% if camps %}
-  <form method="post" class="form-grid send-form" style="align-items:end;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) auto">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <div class="field">
-      <label for="campaign">Campaña</label>
-      <select id="campaign" name="campaign_id" required>
-        <option value="">Elige una campaña</option>
-        {% for c in camps %}<option value="{{ c.id }}" {% if selected == c.id %}selected{% endif %}>{{ c.song }} - {{ c.artist }} · {% if c.rates_vary %}hasta {% endif %}{{ c.rate|rate_k }}/1.000</option>{% endfor %}
-      </select>
-    </div>
-    <div class="field">
-      <label for="url">Enlace del vídeo</label>
-      <input id="url" name="url" placeholder="TikTok, Instagram Reels o YouTube Shorts" required>
-    </div>
-    <button class="btn accent">Enviar {{ icon("arrow") }}</button>
-  </form>
-  {% else %}
-  <div class="form-stack" style="align-items:flex-start">
-    <p>Aún no estás aceptado en ninguna campaña. Entra en una, pulsa <b>Solicitar entrar</b> y, cuando te acepten, añade y verifica la cuenta con la que vas a publicar.</p>
-    <a class="btn accent" href="{{ url_for('index') }}">Ver campañas</a>
+{% set nxt = next_scan_utc() %}
+<div class="card auto-scan">
+  <span class="auto-ico" aria-hidden="true">{{ icon("pulse") }}</span>
+  <div>
+    <b>Detección automática de clips</b>
+    {% if camps %}
+    <p class="small muted">Cada día{% if nxt %} a las <time datetime="{{ nxt|iso }}" data-local data-local-hm>{{ REFRESH_AT }}</time> <span data-local-zone>(hora de España)</span>{% endif %} miramos tus cuentas de campaña: los vídeos nuevos aparecen aquí solos y se actualizan sus vistas. ¿Falta alguno después de esa hora? <a class="link" href="{{ url_for('support') }}">Escríbenos</a>.</p>
+    {% else %}
+    <p class="small muted">Aún no estás en ninguna campaña. Entra en una, pulsa <b>Solicitar entrar</b> y, cuando te acepten, añade y verifica tu cuenta: tus clips aparecerán aquí solos.</p>
+    {% endif %}
   </div>
-  {% endif %}
-  </div>
-</details>
+  {% if not camps %}<a class="btn sm accent" href="{{ url_for('campaigns_page') }}">Ver campañas</a>{% endif %}
+</div>
 
 {% set qs = {'campana': fc or None, 'red': fp or None, 'dias': dias if dias != 30 else None} %}
 <section class="mc" data-chart data-chart-smooth data-metric="views">
@@ -105,45 +92,53 @@
   <div class="table-card">
     {% if subs %}
     <div class="table-scroll"><table class="rt mc-table">
-      <thead><tr><th>ID</th><th>Clip</th><th>Estado</th><th class="r">Vistas</th><th class="r">Ganado</th><th>Actualizado</th><th>Avisos</th><th></th></tr></thead>
+      <thead><tr><th>Clip</th><th>Estado</th><th class="r">Vistas</th><th class="r">Ganado</th><th>Avisos</th><th>Actualizado</th><th></th></tr></thead>
       <tbody>
       {% for s in subs %}
       {% set stg = clip_stage(s) %}{% set mv = s.campaign.min_views_for(s.platform) %}
-      {% set can_del = clip_deletable(s) %}{% set more = s.reject_reason or (s.status == 'rechazado' and not s.appeal_status and s.reject_code != 'caducado') or s.appeal_status or stg == 'estadisticas' or can_del %}
+      {% set can_del = clip_deletable(s) %}{% set can_appeal = s.status == 'rechazado' and not s.appeal_status and s.reject_code != 'caducado' %}
+      {% set more = s.reject_reason or can_appeal or s.appeal_status or stg == 'estadisticas' %}
       <tr>
-        <td data-label="ID" class="mc-id tnum">#{{ s.id }}</td>
-        <td data-label="Clip"><div class="mc-clip"><span class="mc-pico p-{{ s.platform }}">{{ icon(s.platform) }}</span><div><b>{{ s.campaign.song }}</b><small>{% if s.author %}@{{ s.author }} · {% endif %}{{ s.campaign.artist }} · {{ s.created_at|ago }}{% if s.source == 'auto' %} · detectado solo{% endif %}</small></div></div></td>
+        <td data-label="Clip"><div class="mc-clip">{{ clip_cover(s) }}<div class="mc-ct"><b title="{{ clip_title(s) }}">{{ clip_title(s) }}</b><small>#{{ s.id }} · {% if s.caption %}{{ s.campaign.song }} · {% endif %}{% if s.author %}@{{ s.author }} · {% endif %}{{ (s.posted_at or s.created_at)|ago }}{% if s.source == 'auto' %} · detectado solo{% endif %}</small></div></div></td>
         <td data-label="Estado"><span class="status {{ stg }}">{{ STAGE_LABELS[stg] }}</span></td>
         <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b></td>
         <td data-label="Ganado" class="r tnum">{{ (s.earned if s.status == 'aprobado' else 0)|earn }}</td>
-        <td data-label="Actualizado" class="small muted">{{ (s.views_updated_at or s.created_at)|ago }}</td>
         <td data-label="Avisos" class="small">
           {% if stg == 'contando' and mv %}<span class="mc-av wait">⏳ Faltan {{ [mv - (s.views or 0), 0]|max|num }}</span>
           {% elif stg == 'estadisticas' %}<a class="mc-av warn" href="{{ url_for('my_clips', tab='estadisticas') }}#st{{ s.id }}">● Sube la verificación</a>
           {% elif stg == 'revisar' %}<span class="mc-av muted">● En revisión</span>
           {% elif s.status == 'aprobado' %}<span class="mc-av ok">● {{ "Cobrando" if s.campaign.status != 'finalizada' else "Listo para retirar" }}</span>
-          {% elif s.status == 'rechazado' %}<span class="mc-av bad">● {{ s.reject_reason|truncate(28, True, '…') if s.reject_reason else "Rechazado" }}</span>
+          {% elif s.status == 'rechazado' %}<span class="mc-av bad" title="{{ s.reject_reason }}">● {{ s.reject_reason|truncate(28, True, '…') if s.reject_reason else "Rechazado" }}</span>
           {% else %}<span class="muted">—</span>{% endif %}
         </td>
+        <td data-label="Actualizado" class="small muted nowrap">{{ (s.views_updated_at or s.created_at)|ago }}</td>
         <td class="r mc-acts">
-          <a class="mc-btn" href="{{ s.url }}" target="_blank" rel="noopener" aria-label="Abrir el clip" title="Abrir el clip">{{ icon("ext") }}</a>
-          {% if more %}<button type="button" class="mc-btn" data-row-toggle="mr{{ s.id }}" aria-expanded="false" aria-controls="mr{{ s.id }}" aria-label="Más detalles" title="Más detalles"><span class="mc-chev"></span></button>{% endif %}
+          {% if can_appeal %}<button type="button" class="btn sm soft mc-appeal-btn" data-row-toggle="mr{{ s.id }}" data-focus="#ap{{ s.id }}" aria-expanded="false" aria-controls="mr{{ s.id }}">Apelar</button>{% endif %}
+          <details class="rowmenu">
+            <summary class="mc-btn" aria-label="Más opciones" title="Más opciones">⋯</summary>
+            <div class="rowmenu-list" role="menu">
+              <a role="menuitem" href="{{ s.url }}" target="_blank" rel="noopener">{{ icon("ext") }} Abrir el clip</a>
+              {% if more %}<button type="button" role="menuitem" data-row-toggle="mr{{ s.id }}" aria-controls="mr{{ s.id }}">{{ icon("doc") }} Ver detalles</button>{% endif %}
+              <button type="button" role="menuitem" data-copy-text="{{ s.url }}">{{ icon("link") }} Copiar enlace</button>
+              {% if can_del %}<form method="post" action="{{ url_for('delete_clip', sid=s.id) }}" data-confirm="¿Eliminar este clip de Mis clips? Dejará de contar vistas y no volverá a aparecer solo."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button role="menuitem" class="danger">{{ icon("trash") }} Eliminar clip</button></form>{% endif %}
+            </div>
+          </details>
         </td>
       </tr>
       {% if more %}
-      <tr class="mc-more" id="mr{{ s.id }}" hidden><td colspan="8">
+      <tr class="mc-more" id="mr{{ s.id }}" hidden><td colspan="7">
         {% if s.reject_reason %}<p class="small"><b>Motivo:</b> {{ s.reject_reason }}</p>{% endif %}
         {% if stg == 'estadisticas' %}<p class="small">Este clip ha llegado al mínimo: sube la grabación de sus estadísticas para que lo revisen. <a class="link" href="{{ url_for('my_clips', tab='estadisticas') }}#st{{ s.id }}">Verificar vistas →</a></p>{% endif %}
-        {% if s.status == 'rechazado' and not s.appeal_status and s.reject_code != 'caducado' %}
+        {% if can_appeal %}
         <form method="post" action="{{ url_for('appeal_clip', sid=s.id) }}" class="form-stack mc-appeal">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <textarea name="text" rows="3" minlength="10" maxlength="1000" required placeholder="¿Por qué crees que cumple las reglas? Solo puedes apelar una vez."></textarea>
+          <label class="small" for="ap{{ s.id }}"><b>Apelar el rechazo</b> · solo puedes hacerlo una vez</label>
+          <textarea id="ap{{ s.id }}" name="text" rows="3" minlength="10" maxlength="1000" required placeholder="¿Por qué crees que cumple las reglas?"></textarea>
           <button class="btn sm">Enviar apelación</button>
         </form>
         {% elif s.appeal_status == 'pendiente' %}<p class="small muted">Apelación en revisión.</p>
         {% elif s.appeal_status == 'rechazada' %}<p class="small muted">Apelación rechazada.</p>
         {% elif s.appeal_status == 'aceptada' %}<p class="small muted">Apelación aceptada.</p>{% endif %}
-        {% if can_del %}<form method="post" action="{{ url_for('delete_clip', sid=s.id) }}" class="mc-del" data-confirm="¿Eliminar este clip de Mis clips? Dejará de contar vistas y no volverá a aparecer solo."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link small">Eliminar clip</button></form>{% endif %}
       </td></tr>
       {% endif %}
       {% endfor %}

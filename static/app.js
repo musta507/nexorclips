@@ -34,6 +34,13 @@ document.addEventListener("turbo:submit-end", function (e) {
 
 // Copiar enlaces
 document.addEventListener("click", function (e) {
+  var lit = e.target.closest("[data-copy-text]");
+  if (lit) {
+    var dd = lit.closest("details"); if (dd) dd.removeAttribute("open");
+    var ok = function () { toast("Enlace copiado", "ok"); };
+    if (navigator.clipboard) navigator.clipboard.writeText(lit.getAttribute("data-copy-text")).then(ok, function () {});
+    return;
+  }
   var btn = e.target.closest("[data-copy]");
   if (!btn) return;
   var target = document.getElementById(btn.getAttribute("data-copy"));
@@ -46,8 +53,26 @@ document.addEventListener("click", function (e) {
 
 // Cerrar el menú de usuario al hacer clic fuera
 document.addEventListener("click", function (e) {
-  document.querySelectorAll("details.user-menu[open], details.bell-menu[open]").forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute("open"); });
+  document.querySelectorAll("details.user-menu[open], details.bell-menu[open], details.rowmenu[open]").forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute("open"); });
 });
+
+// Menú «⋯» de cada fila: se coloca encima de todo (las tablas recortan lo que sobresale) y hacia arriba si no cabe
+document.addEventListener("toggle", function (e) {
+  var d = e.target;
+  if (!d.classList || !d.classList.contains("rowmenu")) return;
+  var list = d.querySelector(".rowmenu-list");
+  if (!list) return;
+  if (!d.open) { list.removeAttribute("style"); return; }
+  var r = d.querySelector("summary").getBoundingClientRect();
+  list.style.position = "fixed";
+  list.style.right = Math.max(window.innerWidth - r.right, 8) + "px";
+  var h = list.offsetHeight;
+  if (r.bottom + 6 + h > window.innerHeight - 8 && r.top - 6 - h > 8) list.style.top = (r.top - 6 - h) + "px";
+  else list.style.top = (r.bottom + 6) + "px";
+}, true);
+window.addEventListener("scroll", function () {
+  document.querySelectorAll("details.rowmenu[open]").forEach(function (d) { d.removeAttribute("open"); });
+}, { passive: true, capture: true });
 
 // Ordenar campañas (Más nuevas / Más presupuesto / Mejor pago), con las tarjetas moviéndose suave
 document.addEventListener("click", function (e) {
@@ -165,6 +190,18 @@ function pagina() {
   buscadoresVivos();
 }
 
+// Aviso flotante creado desde aquí (p. ej. «Enlace copiado»)
+function toast(msg, cat) {
+  var box = document.querySelector(".toasts");
+  if (!box) { box = document.createElement("div"); box.className = "toasts"; box.setAttribute("aria-live", "polite"); document.body.appendChild(box); }
+  var t = document.createElement("div");
+  t.className = "flash " + (cat || "info"); t.setAttribute("role", "status"); t.setAttribute("data-toast", "");
+  t.textContent = msg;
+  var x = document.createElement("button"); x.type = "button"; x.className = "toast-x"; x.setAttribute("aria-label", "Cerrar aviso"); x.setAttribute("data-toast-x", ""); x.textContent = "×";
+  t.appendChild(x); box.appendChild(t);
+  avisosToast();
+}
+
 // =============================================================== avisos flotantes (toast): se van solos, el de error dura más
 function avisosToast() {
   document.querySelectorAll("[data-toast]").forEach(function (t, i) {
@@ -198,6 +235,13 @@ function horasLocales() {
     el.dataset.ready = "1";
     var d = new Date(el.getAttribute("datetime"));
     if (isNaN(d)) return;
+    if (el.hasAttribute("data-local-hm")) {             // solo la hora: 03:00 en España, 21:00 en México…
+      el.textContent = d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+      var zona = el.parentNode && el.parentNode.querySelector("[data-local-zone]");
+      var tz = ""; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (err) {}
+      if (zona) zona.textContent = /Madrid|Ceuta/.test(tz) ? "(hora de España)" : "(tu hora)";
+      return;
+    }
     var full = FMT_FECHA.format(d).replace(",", "");
     if (el.hasAttribute("data-local-show")) el.textContent = full;   // si no, deja el «hace 2 h» y pone la fecha local al pasar el ratón
     el.title = full + " (tu hora)";
@@ -1156,7 +1200,10 @@ document.addEventListener("click", function (e) {
   var row = document.getElementById(b.getAttribute("data-row-toggle"));
   if (!row) return;
   row.hidden = !row.hidden;
-  b.setAttribute("aria-expanded", row.hidden ? "false" : "true");
+  document.querySelectorAll('[data-row-toggle="' + row.id + '"]').forEach(function (x) { x.setAttribute("aria-expanded", row.hidden ? "false" : "true"); });
+  var dd = b.closest("details"); if (dd) dd.removeAttribute("open");
+  var f = !row.hidden && b.getAttribute("data-focus");
+  if (f) { var el = row.querySelector(f); if (el) el.focus(); }
 });
 
 // «Otro país»: aparece un campo para escribirlo

@@ -177,6 +177,16 @@ VIDEO_URL_KEYS = {        # enlace para descargar el vídeo (para guardar una co
     "tiktok": ["mediaUrls", "videoMeta.downloadAddr"],
     "instagram": ["videoUrl", "video_url"],
 }
+THUMB_KEYS = {            # portada del vídeo (enlace de la red, puede caducar: se renueva en cada lectura)
+    "tiktok": ["videoMeta.coverUrl", "videoMeta.originalCoverUrl", "covers.default", "cover"],
+    "instagram": ["displayUrl", "thumbnailUrl", "images.0"],
+    "youtube": ["thumbnailUrl", "thumbnail"],
+}
+CAPTION_KEYS = {          # texto del vídeo
+    "tiktok": ["text", "desc"],
+    "instagram": ["caption"],
+    "youtube": ["title", "text"],
+}
 DATE_KEYS = {
     "tiktok": ["createTimeISO", "createTime", "create_time"],
     "instagram": ["timestamp", "takenAtTimestamp", "taken_at_timestamp"],
@@ -225,8 +235,14 @@ def parse_item(platform, item):
     video = _first(item, VIDEO_URL_KEYS.get(platform, []))
     if isinstance(video, list):
         video = video[0] if video else None
+    thumb = _first(item, THUMB_KEYS.get(platform, []))
+    if isinstance(thumb, list):
+        thumb = thumb[0] if thumb else None
+    caption = _first(item, CAPTION_KEYS.get(platform, []))
     return {"views": views, "likes": likes, "comments": comments, "shares": shares, "author": author,
-            "posted_at": posted, "video_url": video if isinstance(video, str) and video.startswith("https://") else ""}
+            "posted_at": posted, "video_url": video if isinstance(video, str) and video.startswith("https://") else "",
+            "thumb": thumb if isinstance(thumb, str) and thumb.startswith("https://") else "",
+            "caption": " ".join(caption.split())[:300] if isinstance(caption, str) else ""}
 
 
 def fetch_items(platform, urls):

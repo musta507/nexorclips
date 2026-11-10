@@ -48,7 +48,7 @@
           <div class="cr-actions">
             {% if nxt %}<a class="btn sm soft cr-next" href="#clip-{{ nxt.id }}" data-next>Revisar el siguiente</a>{% endif %}
             {% if tab in ('aprobados', 'rechazados') %}
-              <span class="cr-wait">{% if s.status == 'aprobado' %}Aprobado · {{ s.earned|money }}{% else %}Rechazado: {{ s.reject_reason or "—" }}{% endif %}</span>
+              <span class="cr-wait">{% if s.status == 'aprobado' %}Aprobado · {{ s.earned|earn }}{% else %}Rechazado: {{ s.reject_reason or "—" }}{% endif %}</span>
             {% elif tab != 'contando' %}
               {% set d, hh = (h // 24)|int, (h % 24)|int %}
               {% if h >= sla %}<span class="cr-late">{{ icon("clock") }} {% if d %}{{ d }}d {% endif %}{{ hh }}h atrasado</span>
@@ -83,6 +83,7 @@
             </details>
           </div>
         </header>
+        {% if s.caption %}<p class="small cr-cap" title="Texto del vídeo">{{ s.caption }}</p>{% endif %}
 
         {% if tab == 'apelaciones' %}
         <div class="cr-appeal"><span class="small"><b>Se rechazó por:</b> {{ s.reject_reason or "—" }}</span><span class="small"><b>El clipper dice:</b> {{ s.appeal_text }}</span></div>

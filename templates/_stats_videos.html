@@ -1,3 +1,4 @@
+{% from "_clip.html" import clip_cover, clip_title with context %}
 {# Mis clips → Estadísticas: los clips que llegaron al mínimo y piden la grabación de sus estadísticas #}
 <div class="stats-help card tight">
   <div class="stats-help-top">
@@ -41,7 +42,7 @@
   {% set pct_left = [[(left / STATS_HOURS * 100)|round|int, 0]|max, 100]|min %}
   <article class="card vv-card" id="st{{ s.id }}">
     <header class="vv-head">
-      <span class="vv-plat {{ s.platform }}">{{ icon(s.platform) }}</span>
+      {{ clip_cover(s, "lg") }}
       <div class="vv-meta">
         <span class="vv-eb">El clip que tienes que grabar</span>
         <b>{% if s.author %}@{{ s.author }}{% else %}Tu clip{% endif %} en {{ PLATFORMS[s.platform] }}</b>
@@ -87,14 +88,14 @@
 {% if stats_sent %}
 <h3 class="stats-h">Enviados</h3>
 <div class="table-card"><div class="table-scroll"><table class="rt">
-  <thead><tr><th>Enviado</th><th>Campaña</th><th class="r">Vistas</th><th>Estado del clip</th></tr></thead>
+  <thead><tr><th>Clip</th><th class="r">Vistas</th><th>Estado del clip</th><th>Enviado</th></tr></thead>
   <tbody>
   {% for s in stats_sent %}{% set stg = clip_stage(s) %}
   <tr>
-    <td data-label="Enviado" class="small muted">{{ (s.stats_at or s.created_at)|date }}</td>
-    <td data-label="Campaña">{{ s.campaign.song }}<div class="small"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener">Ver clip</a></div></td>
-    <td data-label="Vistas" class="r tnum">{{ s.views|num }}</td>
+    <td data-label="Clip"><div class="mc-clip">{{ clip_cover(s) }}<div class="mc-ct"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener"><b title="{{ clip_title(s) }}">{{ clip_title(s) }}</b></a><small>#{{ s.id }} · {{ s.campaign.song }}{% if s.author %} · @{{ s.author }}{% endif %}</small></div></div></td>
+    <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b></td>
     <td data-label="Estado del clip"><span class="status {{ stg }}">{{ STAGE_LABELS[stg] }}</span>{% if s.reject_reason %}<div class="small muted">{{ s.reject_reason }}</div>{% endif %}</td>
+    <td data-label="Enviado" class="small muted">{{ (s.stats_at or s.created_at)|date }}</td>
   </tr>
   {% endfor %}
   </tbody>

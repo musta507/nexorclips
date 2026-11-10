@@ -512,6 +512,8 @@ class Submission(db.Model):
     video_status = db.Column(db.String(20), default="")      # "" · subiendo · listo · error · borrado
     video_tries = db.Column(db.Integer, default=0)
     media_url = db.Column(db.String(1000), default="")       # enlace de descarga que da Apify (caduca)
+    thumb_url = db.Column(db.String(1000), default="")       # portada que da Apify (se renueva en cada lectura)
+    caption = db.Column(db.String(300), default="")          # texto del vídeo
     views_updated_at = db.Column(db.DateTime, nullable=True)
     checked_at = db.Column(db.DateTime, nullable=True)
     views_error = db.Column(db.String(255), default="")
@@ -1662,6 +1664,10 @@ def apply_reading(sub, info, now):
     posted = info.get("posted_at") if isinstance(info, dict) else None
     if isinstance(info, dict) and info.get("video_url"):
         sub.media_url = str(info["video_url"])[:1000]
+    if isinstance(info, dict) and info.get("thumb"):
+        sub.thumb_url = str(info["thumb"])[:1000]
+    if isinstance(info, dict) and info.get("caption") and not sub.caption:
+        sub.caption = str(info["caption"])[:300]
     sub.checked_at = now
     sub.views_error = ""
     if posted and not sub.posted_at:
@@ -1888,7 +1894,7 @@ def refresh_in_background():
 AUTO_PLATFORMS = ("tiktok", "instagram", "youtube")
 SCAN_CHUNK = 20                         # cuentas por llamada a Apify
 APP_TZ = os.environ.get("APP_TZ", "Europe/Madrid")
-REMIND_HOUR = int(os.environ.get("REMIND_HOUR", "1"))       # hora (de España) del aviso «hoy no has publicado»
+REMIND_HOUR = int(os.environ.get("REMIND_HOUR", "3"))       # hora (de España) del aviso «no has publicado en 24 h»
 
 
 def discover_clips(now=None):
@@ -1965,7 +1971,7 @@ def inactivity_reminders(now=None):
         if a.last_post_at and a.last_post_at > now - timedelta(hours=24):
             continue
         st = campaign_stats(camp)
-        notify_user(a.user_id, "inactividad", f"@{a.handle} no ha subido ningún clip hoy",
+        notify_user(a.user_id, "inactividad", f"@{a.handle} no ha subido ningún clip en 24 h",
                     f"Quedan {money(st['remaining'], 0)} por repartir en {camp.song}. Sube un clip para no quedarte fuera.",
                     f"/campana/{camp.id}", camp_id=camp.id)
         n += 1
@@ -1973,18 +1979,49 @@ def inactivity_reminders(now=None):
     return n
 
 
+def _local(now=None):
+    return (now or datetime.utcnow()).replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ))
+
+
 def reminders_due(now=None):
-    """¿Es la hora del aviso diario (1:00 en España) y aún no se ha mandado hoy?"""
-    local = (now or datetime.utcnow()).replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ))
-    return local.hour == REMIND_HOUR and get_setting("reminders_sent", "") != local.strftime("%Y-%m-%d"), local.strftime("%Y-%m-%d")
+    """¿Ya pasó la hora del aviso diario (justo después de la lectura de las 3:00 en España) y aún no se ha mandado hoy?"""
+    local = _local(now)
+    return local.hour >= REMIND_HOUR and get_setting("reminders_sent", "") != local.strftime("%Y-%m-%d"), local.strftime("%Y-%m-%d")
 
 
-REFRESH_HOURS = parse_float(os.environ.get("REFRESH_HOURS"), 6) or 0   # cada cuántas horas se cuentan las vistas solas (0 = nunca)
+REFRESH_HOURS = parse_float(os.environ.get("REFRESH_HOURS"), 6) or 0   # solo si REFRESH_AT está vacío: cada cuántas horas
+REFRESH_AT = (os.environ.get("REFRESH_AT", "03:00") or "").strip()      # hora fija (España) de la lectura diaria: clips nuevos + vistas
+
+
+def _refresh_minute():
+    try:
+        h, m = REFRESH_AT.split(":")
+        return int(h) * 60 + int(m)
+    except ValueError:
+        return 180
+
+
+def next_scan_utc(now=None):
+    """La próxima lectura diaria, en UTC (la web la enseña en la hora de cada clipper). Tiene en cuenta el cambio de hora."""
+    if not REFRESH_AT:
+        return None
+    local = _local(now)
+    mins = _refresh_minute()
+    day = local.date() if local.hour * 60 + local.minute < mins else local.date() + timedelta(days=1)
+    target = datetime(day.year, day.month, day.day, mins // 60, mins % 60, tzinfo=ZoneInfo(APP_TZ))
+    return target.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _refresh_due(now=None):
-    """¿Toca contar vistas? Sí si nunca se ha hecho o hace más de REFRESH_HOURS horas."""
-    if REFRESH_HOURS <= 0 or not viewcounter.APIFY_TOKEN:
+    """¿Toca leer los perfiles y las vistas? Una vez al día a la hora fija (REFRESH_AT, en España),
+    o cada REFRESH_HOURS horas si REFRESH_AT está vacío."""
+    if not viewcounter.APIFY_TOKEN:
+        return False
+    if REFRESH_AT:
+        local = _local(now)
+        return (local.hour * 60 + local.minute >= _refresh_minute()
+                and get_setting("refresh_day", "") != local.strftime("%Y-%m-%d"))
+    if REFRESH_HOURS <= 0:
         return False
     now = now or datetime.utcnow()
     try:
@@ -2007,27 +2044,31 @@ def check_creator_balances():
 
 
 def _auto_refresh_loop():
-    """Reloj interno: cada 10 minutos mira si toca contar vistas (cada REFRESH_HOURS horas)."""
+    """Reloj interno: cada 10 minutos mira si toca la lectura diaria (o la de cada REFRESH_HOURS horas)."""
     time.sleep(90)                          # deja arrancar la web primero
     while True:
         try:
             with app.app_context():
+                fresh = False
                 if _refresh_due():
                     set_setting("last_refresh_at", datetime.utcnow().isoformat())
-                    refresh_views()
+                    set_setting("refresh_day", _local().strftime("%Y-%m-%d"))
+                    refresh_views()                       # primero busca los clips nuevos en los perfiles, luego las vistas
                     check_creator_balances()
+                    fresh = True
                 due, day = reminders_due()
-                if due:                                   # 1:00 en España: última mirada a los perfiles y aviso a quien no publicó
+                if due:                                   # justo después de la lectura: aviso a quien no publicó en 24 h
                     set_setting("reminders_sent", day)
                     db.session.commit()
-                    discover_clips()
+                    if not fresh and not REFRESH_AT:
+                        discover_clips()
                     inactivity_reminders()
         except Exception:  # noqa: BLE001
             log.exception("Fallo en la actualización automática de vistas")
         time.sleep(600)
 
 
-if PRODUCTION and REFRESH_HOURS > 0 and not os.environ.get("PYTEST_CURRENT_TEST"):
+if PRODUCTION and (REFRESH_AT or REFRESH_HOURS > 0) and not os.environ.get("PYTEST_CURRENT_TEST"):
     threading.Thread(target=_auto_refresh_loop, daemon=True, name="auto-refresh").start()
 
 
@@ -2282,9 +2323,9 @@ def inject_globals():
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year, "now_utc": datetime.utcnow(),
-            "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
+            "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "REFRESH_AT": REFRESH_AT, "next_scan_utc": next_scan_utc, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
             "REJECT_REASONS": REJECT_REASONS, "COUNTRIES": COUNTRIES, "LANGUAGES": LANGUAGES, "CAMPAIGN_KINDS": CAMPAIGN_KINDS,
-            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
+            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "clip_thumb": clip_thumb, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
             "mod_campaigns": mod_campaigns, "acting_as_mod": acting_as_mod,
             "STATS_HOURS": STATS_HOURS, "bunny_ready": bunny_ready, "reached_min": reached_min,
             "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
@@ -4512,7 +4553,8 @@ def tech_alerts():
             out.append(("aviso", "No se puede leer el saldo de Whop", err))
     last = get_setting("last_refresh_at", "")
     try:
-        if REFRESH_HOURS and last and datetime.utcnow() - datetime.fromisoformat(last) > timedelta(hours=REFRESH_HOURS * 2 + 1):
+        late = 26 if REFRESH_AT else (REFRESH_HOURS * 2 + 1 if REFRESH_HOURS else 0)
+        if late and last and datetime.utcnow() - datetime.fromisoformat(last) > timedelta(hours=late):
             out.append(("aviso", "Las vistas llevan tiempo sin actualizarse", f"Última lectura: {get_setting('last_refresh', '—')}"))
     except ValueError:
         pass
@@ -6003,6 +6045,17 @@ def lesson_thumb(lesson):
         vid = viewcounter.video_id(u)
         return f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg" if vid else ""
     return ""
+
+
+def clip_thumb(s):
+    """Portada de un clip: la copia en Bunny, la de YouTube o la que dio Apify. Vacío = se pinta la portada de la campaña."""
+    if s.video_guid and BUNNY_CDN_HOST and s.video_status == "listo":
+        return f"https://{BUNNY_CDN_HOST}/{s.video_guid}/thumbnail.jpg"
+    if s.platform == "youtube":
+        vid = (s.video_key or "").split(":", 1)[-1]
+        if vid:
+            return f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg"
+    return s.thumb_url or ""
 
 
 def dur_label(secs):

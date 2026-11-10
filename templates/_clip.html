@@ -1,0 +1,12 @@
+{% from "_icons.html" import icon %}
+{# Portada de un clip: la del vídeo; si no hay o caducó, la de la campaña. Con el icono de la red en la esquina. #}
+{% macro clip_cover(s, cls="") -%}
+{%- set th = clip_thumb(s) %}{% set _t, lqip = cover_meta(s.campaign) -%}
+<span class="ccov {{ cls }}"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>
+  {%- if not th and cover_src(s.campaign) %}<img src="{{ cover_src(s.campaign, 160) }}" alt="" loading="lazy" class="ccov-camp">{% endif -%}
+  {%- if th %}<img src="{{ th }}" alt="" loading="lazy" referrerpolicy="no-referrer" data-hide-broken>{% endif -%}
+  <span class="ccov-pl p-{{ s.platform }}" aria-hidden="true">{{ icon(s.platform) }}</span>
+</span>
+{%- endmacro %}
+{# Título de un clip: su texto si lo tenemos; si no, la campaña #}
+{% macro clip_title(s) -%}{{ s.caption if s.caption else s.campaign.song }}{%- endmacro %}

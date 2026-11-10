@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_clip.html" import clip_cover with context %}
 {% from "_icons.html" import icon, av %}
 {% block content %}
 <div class="hm-heroes">
@@ -85,13 +86,13 @@
     <div class="table-card">
       {% if week_clips %}
       <div class="table-scroll"><table class="rt hm-week">
-        <thead><tr><th>#</th><th>Clipper</th><th>Campaña</th><th class="r">Vistas</th><th class="r">Ganado</th></tr></thead>
+        <thead><tr><th>#</th><th>Clipper</th><th>Clip</th><th class="r">Vistas</th><th class="r">Ganado</th></tr></thead>
         <tbody>
         {% for s in week_clips %}
         <tr{% if s.user_id == current_user.id %} class="me"{% endif %}>
           <td data-label="#"><span class="hm-pos p{{ loop.index }}">{{ loop.index }}</span></td>
           <td data-label="Clipper"><div class="hm-who">{{ av(s.user) }}<b>{{ "Tú" if s.user_id == current_user.id else masked(s.user.name) }}</b></div></td>
-          <td data-label="Campaña" class="muted"><span class="hm-camp">{{ s.campaign.artist }}</span></td>
+          <td data-label="Clip" class="muted"><a class="hm-clip" href="{{ s.url }}" target="_blank" rel="noopener" title="Ver el clip">{{ clip_cover(s) }}<span class="hm-camp">{{ s.campaign.artist }}</span></a></td>
           <td data-label="Vistas" class="r tnum">{{ s.views|short }}</td>
           <td data-label="Ganado" class="r tnum"><b>{{ s.earned|earn }}</b></td>
         </tr>
