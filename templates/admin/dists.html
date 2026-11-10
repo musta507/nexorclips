@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "admin/_ui.html" as ui %}
+{% from "_icons.html" import icon %}
+{% block title %}Distribución · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Plan de distribución", "Cuentas de clientes que lleva la agencia y publican a diario. Sus vídeos se detectan solos y ves sus estadísticas como en una campaña.") %}{% endcall %}
+<details class="card tight mods-add"{% if not plans %} open{% endif %}>
+  <summary class="mods-add-sum">{{ icon("plus") }} <b>Nuevo plan</b></summary>
+  <form method="post" class="form-stack" style="margin-top:14px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      <div class="field"><label for="client">Cliente</label><input id="client" name="client" maxlength="200" required placeholder="Nombre del creador o la marca"></div>
+      <div class="field"><label for="name">Nombre del plan</label><input id="name" name="name" maxlength="200" placeholder="Plan de distribución"></div>
+    </div>
+    <div class="field"><label for="accounts">Cuentas (una por línea)</label>
+      <textarea id="accounts" name="accounts" rows="6" placeholder="tiktok @cuenta1&#10;instagram @cuenta2&#10;https://www.youtube.com/@cuenta3"></textarea>
+      <span class="hint">Red y @cuenta, o el enlace del perfil. TikTok, Instagram y YouTube. Puedes añadir más luego.</span></div>
+    <button class="btn accent" style="align-self:flex-start">Crear plan</button>
+  </form>
+</details>
+{% if plans %}
+<div class="ds-grid">
+  {% for p, sm in plans %}
+  <a class="card ds-card" href="{{ url_for('admin_dist', did=p.id) }}">
+    <div class="ds-top"><span class="ds-ico">{{ icon("stack") }}</span><div><b>{{ p.artist }}</b><small class="muted">{{ p.song }}</small></div></div>
+    <div class="ds-nums">
+      <div><b class="tnum">{{ sm.n_accounts }}</b><small>cuentas</small></div>
+      <div><b class="tnum">{{ sm.recent_clips }}</b><small>vídeos · 30 d</small></div>
+      <div><b class="tnum">{{ sm.recent_views|short }}</b><small>vistas · 30 d</small></div>
+    </div>
+    <span class="small {{ 'muted' if sm.posting == sm.n_accounts else 'ds-warn' }}">{{ sm.posting }} de {{ sm.n_accounts }} cuentas han publicado este mes</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

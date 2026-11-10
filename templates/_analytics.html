@@ -3,11 +3,16 @@
 <section class="an" aria-label="Estadísticas de la campaña">
   <div class="an-kpis">
     <div class="an-kpi k-views"><span class="an-ico">{{ icon("eye") }}</span><div><b class="tnum">{{ an.totals.views|short }}</b><span>Visualizaciones</span></div></div>
+    {% if dist %}
+    <div class="an-kpi k-spent"><span class="an-ico">{{ icon("users") }}</span><div><b class="tnum">{{ an.by_platform|length }}</b><span>Redes</span></div></div>
+    <div class="an-kpi k-cpm"><span class="an-ico">{{ icon("pulse") }}</span><div><b class="tnum">{{ "%.1f"|format(an.engagement)|replace(".", ",") }} %</b><span>Engagement</span></div></div>
+    {% else %}
     <div class="an-kpi k-spent"><span class="an-ico">{{ icon("cash") }}</span><div><b class="tnum">{{ an.spent|money(0) }}</b><span>Gasto de {{ camp.budget|money(0) }}</span></div></div>
     <div class="an-kpi k-cpm"><span class="an-ico">{{ icon("pulse") }}</span>
       <div><b class="tnum">{{ an.ecpm|money }}</b><span>eCPM</span></div>
       <div class="an-split"><b class="tnum">{{ an.cpm|money }}</b><span>CPM</span></div>
     </div>
+    {% endif %}
     <div class="an-kpi k-posts"><span class="an-ico">{{ icon("film") }}</span><div><b class="tnum">{{ an.posts|num }}</b><span>Publicaciones</span></div></div>
   </div>
 

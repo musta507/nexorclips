@@ -926,6 +926,8 @@ MOD_ENDPOINTS = set(ENDPOINT_PERM)
 MOD_CHANNEL_ACTS = {"publicar", "post_editar", "post_borrar", "post_fijar", "llamada_nueva", "llamada_editar", "llamada_borrar"}
 
 
+DIST_STATUS = "distribucion"     # plan de distribución: cuentas del cliente que lleva la agencia (no es una campaña de clippers)
+
 RESOURCE_ICONS = {   # biblioteca de iconos para los recursos de una campaña
     "folder": "Carpeta", "film": "Vídeos", "music": "Sonido", "doc": "Guía", "bulb": "Ideas", "cap": "Curso",
     "play": "Ejemplos", "trend": "Tendencias", "stack": "Plantillas", "link": "Enlace",
@@ -1794,13 +1796,14 @@ def refresh_views():
             db.session.rollback()
             log.exception("Fallo buscando clips nuevos en los perfiles")
         q = (Submission.query.join(Campaign)
-             .filter(Campaign.status == "activa", Submission.status != "rechazado"))
+             .filter(Campaign.status.in_(("activa", DIST_STATUS)), Submission.status != "rechazado"))
         if REFRESH_DAYS > 0:
             q = q.filter(Submission.created_at >= datetime.utcnow() - timedelta(days=REFRESH_DAYS))
         subs = q.order_by(Submission.created_at).all()
         apply_schedule()
         now0 = datetime.utcnow()
-        subs = [s for s in subs if not s.campaign.exhausted and not earn_window_closed(s, now0) and not is_fake(s)]
+        subs = [s for s in subs if not is_fake(s) and (s.campaign.status == DIST_STATUS
+                or (not s.campaign.exhausted and not earn_window_closed(s, now0)))]
         read, errors = 0, []
         for platform in PLATFORMS:
             group = [s for s in subs if s.platform == platform]
@@ -1992,9 +1995,10 @@ def discover_clips(now=None):
     Cada cuenta es de una sola campaña, así que todo lo que publica después de entrar es un clip de esa campaña."""
     now = now or datetime.utcnow()
     accs = (CampaignAccount.query.join(Campaign)
-            .filter(CampaignAccount.status == "aceptada", Campaign.status == "activa",
+            .filter(CampaignAccount.status == "aceptada", Campaign.status.in_(("activa", DIST_STATUS)),
                     CampaignAccount.platform.in_(AUTO_PLATFORMS)).all())
-    accs = [a for a in accs if not a.campaign.exhausted and a.platform in a.campaign.platform_list and not is_fake(a)]
+    accs = [a for a in accs if not is_fake(a) and (a.campaign.status == DIST_STATUS
+            or (not a.campaign.exhausted and a.platform in a.campaign.platform_list))]
     added, errors = 0, []
     by_platform = {}
     for a in accs:
@@ -2029,13 +2033,19 @@ def discover_clips(now=None):
                 if Submission.query.filter_by(video_key=key).first() or IgnoredClip.query.filter_by(video_key=key).first():
                     continue                                  # ya está, o el clipper lo borró a propósito
                 camp = acc.campaign
+                dist = camp.status == DIST_STATUS
                 sub = Submission(user_id=acc.user_id, campaign_id=camp.id, url=viewcounter.normalize_url(it["url"], resolve=False),
                                  platform=platform, video_key=key, author=acc.handle, source="auto", posted_at=posted,
-                                 review_since=None if camp.min_for(platform) else now)
+                                 review_since=None if (dist or camp.min_for(platform)) else now)
+                if dist:                                  # plan de distribución: sin revisión ni dinero, solo estadísticas
+                    sub.status, sub.reviewed_at, sub.earned = "aprobado", now, 0
                 db.session.add(sub)
                 db.session.flush()
                 if it.get("views") is not None:
                     apply_reading(sub, it, now)
+                if dist:
+                    added += 1
+                    continue
                 notify_user(acc.user_id, "clip_nuevo", f"Clip detectado en {camp.song}",
                             f"Hemos añadido solo tu nuevo vídeo de @{acc.handle}. Ya está contando vistas.",
                             "/mis-clips", camp_id=camp.id)
@@ -2797,7 +2807,8 @@ def report(token):
         by_platform[s.platform]["views"] += s.views or 0
     best = [(s, viewcounter.embed_url(s.platform, s.url)) for s in approved[:3] if (s.views or 0) > 0]
     resp = Response(render_template("report.html", camp=camp, st=st, top=approved[:20], by_platform=by_platform, best=best,
-                                    creators=len({s.user_id for s in approved}), an=campaign_analytics(camp)))
+                                    creators=len({s.user_id for s in approved}), an=campaign_analytics(camp),
+                                    dist=camp.status == DIST_STATUS))
     resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     return resp
 
@@ -3054,6 +3065,10 @@ def submit_clip(camp, raw_url):
 @login_required
 def campaign(cid):
     camp = db.session.get(Campaign, cid) or abort(404)
+    if camp.status == DIST_STATUS:
+        if current_user.is_admin:
+            return redirect(url_for("admin_dist", did=cid))
+        abort(404)
     if camp.status == "pausada" and not current_user.is_admin:
         abort(404)
     if request.method == "POST":
@@ -3993,7 +4008,7 @@ def admin_kpis(camps):
 @app.route("/admin")
 @admin_required
 def admin_home():
-    camps = Campaign.query.options(selectinload(Campaign.submissions)).order_by(Campaign.created_at.desc()).all()
+    camps = Campaign.query.filter(Campaign.status != DIST_STATUS).options(selectinload(Campaign.submissions)).order_by(Campaign.created_at.desc()).all()
     cards = [(c, campaign_stats(c)) for c in camps]
     since = datetime.utcnow() - timedelta(days=31)
     clips_day = daily_series([(s.created_at, 1) for s in Submission.query.filter(Submission.created_at >= since)
@@ -4081,7 +4096,7 @@ def admin_analytics(days=30):
 @app.route("/admin/campanas")
 @admin_required
 def admin_campaigns():
-    camps = Campaign.query.options(selectinload(Campaign.submissions)).order_by(Campaign.created_at.desc()).all()
+    camps = Campaign.query.filter(Campaign.status != DIST_STATUS).options(selectinload(Campaign.submissions)).order_by(Campaign.created_at.desc()).all()
     filt = request.args.get("estado", "")
     if filt in ("activa", "pausada", "finalizada"):
         camps = [c for c in camps if c.status == filt]
@@ -4231,9 +4246,130 @@ def admin_mods():
         m["recent"] = AuditLog.query.filter_by(admin_id=uid).order_by(AuditLog.created_at.desc()).limit(6).all()
         m["last"] = m["recent"][0].created_at if m["recent"] else None
         m["total"] = sum(m["activity"].values())
-    camps = Campaign.query.filter(Campaign.status != "finalizada").order_by(Campaign.created_at.desc()).all()
+    camps = Campaign.query.filter(Campaign.status.notin_(("finalizada", DIST_STATUS))).order_by(Campaign.created_at.desc()).all()
     return render_template("admin/mods.html", mods=sorted(mods.values(), key=lambda m: m["user"].name.lower()),
                            camps=camps, perms=MOD_PERMS, defaults=MOD_DEFAULT, risky=MOD_RISKY)
+
+
+DIST_PLATFORMS = ("tiktok", "instagram", "youtube")
+
+
+def parse_dist_accounts(text_):
+    """«tiktok @cuenta» o un enlace de perfil por línea → [(red, cuenta)]."""
+    out = []
+    for line in (text_ or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        low = line.lower()
+        plat = next((p for p in DIST_PLATFORMS if p in low or (p == "youtube" and "youtu" in low)), None)
+        handle = line.rstrip("/").split("/")[-1] if "/" in line else line.split()[-1]
+        handle = viewcounter.clean_handle(handle)
+        if plat and handle and handle not in DIST_PLATFORMS and (plat, handle) not in out:
+            out.append((plat, handle))
+    return out[:40]
+
+
+def dist_add_accounts(camp, pairs):
+    n = 0
+    for p, h in pairs:
+        if CampaignAccount.query.filter_by(campaign_id=camp.id, platform=p, handle=h).first():
+            continue
+        db.session.add(CampaignAccount(user_id=current_user.id, campaign_id=camp.id, platform=p, handle=h, status="aceptada",
+                                       bio_verified=True, bio_status="Cuenta del cliente", decided_at=datetime.utcnow()))
+        n += 1
+    return n
+
+
+def dist_summary(camp, days=30):
+    since = datetime.utcnow() - timedelta(days=days)
+    subs = list(camp.submissions)
+    recent = [s for s in subs if (s.posted_at or s.created_at) >= since]
+    accs = CampaignAccount.query.filter_by(campaign_id=camp.id).order_by(CampaignAccount.platform, CampaignAccount.handle).all()
+    per = {}
+    for s in subs:
+        r = per.setdefault((s.platform, (s.author or "").lower()), {"views": 0, "clips": 0, "recent": 0, "best": 0})
+        r["views"] += s.views or 0
+        r["clips"] += 1
+        r["best"] = max(r["best"], s.views or 0)
+        if s in recent:
+            r["recent"] += 1
+    rows = [{"a": a_, **per.get((a_.platform, a_.handle.lower()), {"views": 0, "clips": 0, "recent": 0, "best": 0})} for a_ in accs]
+    return {"accounts": rows, "views": sum(s.views or 0 for s in subs), "clips": len(subs),
+            "recent_views": sum(s.views or 0 for s in recent), "recent_clips": len(recent),
+            "posting": sum(1 for r in rows if r["recent"]), "n_accounts": len(accs)}
+
+
+@app.route("/admin/distribucion", methods=["GET", "POST"])
+@admin_required
+def admin_dists():
+    """Planes de distribución: cuentas de un cliente que lleva la agencia. Se detectan solos sus vídeos y se ven sus estadísticas."""
+    if request.method == "POST":
+        client = " ".join((request.form.get("client") or "").split())[:200]
+        name = " ".join((request.form.get("name") or "").split())[:200] or "Plan de distribución"
+        pairs = parse_dist_accounts(request.form.get("accounts", ""))
+        if not client:
+            flash("Escribe el nombre del cliente.", "error")
+            return redirect(url_for("admin_dists"))
+        camp = Campaign(song=name, artist=client, status=DIST_STATUS, budget=0, rate=0, kind="clipping",
+                        platforms=",".join(DIST_PLATFORMS), report_token=secrets.token_urlsafe(18))
+        db.session.add(camp)
+        db.session.flush()
+        n = dist_add_accounts(camp, pairs)
+        audit("distribucion_creada", f"«{name}» · {client} · {n} cuentas")
+        db.session.commit()
+        flash(f"Plan creado con {n} {'cuenta' if n == 1 else 'cuentas'}. Sus vídeos se leerán solos en la próxima lectura diaria.", "ok")
+        return redirect(url_for("admin_dist", did=camp.id))
+    plans = (Campaign.query.filter_by(status=DIST_STATUS).options(selectinload(Campaign.submissions))
+             .order_by(Campaign.created_at.desc()).all())
+    return render_template("admin/dists.html", plans=[(p, dist_summary(p)) for p in plans])
+
+
+@app.route("/admin/distribucion/<int:did>", methods=["GET", "POST"])
+@admin_required
+def admin_dist(did):
+    camp = db.session.get(Campaign, did)
+    if not camp or camp.status != DIST_STATUS:
+        abort(404)
+    if request.method == "POST":
+        act = request.form.get("act", "")
+        if act == "cuentas":
+            n = dist_add_accounts(camp, parse_dist_accounts(request.form.get("accounts", "")))
+            flash(f"{n} {'cuenta añadida' if n == 1 else 'cuentas añadidas'}." if n else "No había cuentas nuevas (revisa el formato).",
+                  "ok" if n else "error")
+        elif act == "quitar":
+            acc = db.session.get(CampaignAccount, request.form.get("aid", type=int) or 0)
+            if not acc or acc.campaign_id != did:
+                abort(404)
+            db.session.delete(acc)
+            flash(f"@{acc.handle} quitada del plan. Sus vídeos ya contados se quedan.", "ok")
+        elif act == "nombre":
+            camp.song = " ".join((request.form.get("name") or "").split())[:200] or camp.song
+            camp.artist = " ".join((request.form.get("client") or "").split())[:200] or camp.artist
+            flash("Guardado.", "ok")
+        elif act == "borrar":
+            sids = [s.id for s in camp.submissions]
+            if sids:
+                ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(sids)).delete(synchronize_session=False)
+            Submission.query.filter_by(campaign_id=did).delete(synchronize_session=False)
+            CampaignAccount.query.filter_by(campaign_id=did).delete(synchronize_session=False)
+            Notice.query.filter_by(campaign_id=did).delete(synchronize_session=False)
+            audit("distribucion_borrada", f"«{camp.song}» · {camp.artist}")
+            db.session.delete(camp)
+            db.session.commit()
+            flash("Plan borrado.", "ok")
+            return redirect(url_for("admin_dists"))
+        else:
+            abort(400)
+        db.session.commit()
+        return redirect(url_for("admin_dist", did=did))
+    if not camp.report_token:
+        camp.report_token = secrets.token_urlsafe(18)
+        db.session.commit()
+    report_url = (BASE_URL or request.host_url.rstrip("/")) + url_for("report", token=camp.report_token)
+    clips = sorted(camp.submissions, key=lambda s: s.posted_at or s.created_at, reverse=True)[:60]
+    return render_template("admin/dist.html", camp=camp, sm=dist_summary(camp), an=campaign_analytics(camp), clips=clips,
+                           report_url=report_url, dist=True)
 
 
 @app.route("/invitacion/<token>")
@@ -4557,7 +4693,7 @@ def clips_page(camp_id=None):
     per = 12
     total = len(rows)
     shown = rows[: page * per]
-    camps = Campaign.query.order_by(Campaign.created_at.desc()).all() if not acting_as_mod() else []
+    camps = Campaign.query.filter(Campaign.status != DIST_STATUS).order_by(Campaign.created_at.desc()).all() if not acting_as_mod() else []
     camp = db.session.get(Campaign, cid) if cid else None
     return render_template("admin/clips.html", rows=shown, total=total, more=total > len(shown), page=page, tab=tab, f=f,
                            q=request.args.get("q", ""), camps=camps, cid=cid, camp=camp, counts=counts,
@@ -5263,7 +5399,7 @@ def admin_featured():
         db.session.commit()
         flash("Inicio actualizado.", "ok")
         return redirect(url_for("admin_featured"))
-    camps = Campaign.query.filter(Campaign.status != "finalizada").order_by(Campaign.created_at.desc()).all()
+    camps = Campaign.query.filter(Campaign.status.notin_(("finalizada", DIST_STATUS))).order_by(Campaign.created_at.desc()).all()
     return render_template("admin/featured.html", hf=hf, camps=camps, wa_general=get_setting("whatsapp_general", ""))
 
 
@@ -7019,7 +7155,7 @@ def render_for(text_, user):
 def admin_notify():
     """Avisos a clippers: se eligen de una lista con filtros (mejores, peores, inactivos…), se ve cómo quedará
     y llegan como mensaje a su chat de soporte (y a la campanita / móvil)."""
-    camps = Campaign.query.order_by(Campaign.created_at.desc()).all()
+    camps = Campaign.query.filter(Campaign.status != DIST_STATUS).order_by(Campaign.created_at.desc()).all()
     if request.method == "POST":
         ids = [int(x) for x in request.form.getlist("uids") if x.isdigit()][:5000]
         body = (request.form.get("body") or "").strip()[:1000]

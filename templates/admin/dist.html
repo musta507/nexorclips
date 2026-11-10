@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_clip.html" import clip_cover, clip_title with context %}
+{% block title %}{{ camp.artist }} · Distribución{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin_dists') }}">← Distribución</a>
+<div class="cn-head">
+  <span class="ds-ico lg">{{ icon("stack") }}</span>
+  <div class="cn-title"><h1>{{ camp.artist }}</h1><span class="small muted">{{ camp.song }} · {{ sm.n_accounts }} cuentas · desde {{ camp.created_at|date }}</span></div>
+  <div class="push inline" style="gap:8px">
+    <input class="selectable ds-link" id="rep-link" value="{{ report_url }}" readonly aria-label="Enlace del informe para el cliente">
+    <button type="button" class="btn soft sm" data-copy="rep-link">Copiar informe</button>
+    <a class="btn soft sm" href="{{ report_url }}" target="_blank" rel="noopener">{{ icon("ext") }} Ver</a>
+  </div>
+</div>
+
+<div class="ov-kpis ds-kpis">
+  <div class="ov-k"><span>Vistas totales</span><b class="tnum">{{ sm.views|short }}</b><small class="muted">{{ sm.clips }} vídeos</small></div>
+  <div class="ov-k"><span>Últimos 30 días</span><b class="tnum">{{ sm.recent_views|short }}</b><small class="muted">{{ sm.recent_clips }} vídeos</small></div>
+  <div class="ov-k{% if sm.posting < sm.n_accounts %} warn{% endif %}"><span>Cuentas activas</span><b class="tnum">{{ sm.posting }} / {{ sm.n_accounts }}</b><small class="muted">publicaron este mes</small></div>
+  <div class="ov-k"><span>Media por vídeo</span><b class="tnum">{{ ((sm.views / sm.clips) if sm.clips else 0)|int|short }}</b><small class="muted">vistas</small></div>
+</div>
+
+<section class="card ds-accs">
+  <div class="ov-h"><h3>Cuentas</h3></div>
+  {% for r in sm.accounts %}{% set a = r.a %}
+  <div class="ds-arow">
+    <span class="ta-av">{% if a.avatar_url %}<img src="{{ a.avatar_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" data-hide-broken>{% endif %}<span class="ta-ini">{{ a.handle[:1]|upper }}</span><span class="ta-pl">{{ icon(a.platform) }}</span></span>
+    <a class="ds-h" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener"><b>@{{ a.handle }}</b><small class="muted">{{ PLATFORMS[a.platform] }}{% if a.last_post_at %} · último vídeo {{ a.last_post_at|ago }}{% elif a.last_scan_at %} · sin vídeos nuevos{% else %} · aún sin leer{% endif %}</small></a>
+    <span class="cl-n tnum"><b>{{ r.clips }}</b><small>vídeos</small></span>
+    <span class="cl-n tnum"><b>{{ r.views|short }}</b><small>vistas</small></span>
+    <span class="cl-n tnum"><b>{{ r.best|short }}</b><small>mejor vídeo</small></span>
+    <form method="post" data-confirm="¿Quitar @{{ a.handle }} del plan?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="quitar"><input type="hidden" name="aid" value="{{ a.id }}"><button class="mc-btn" aria-label="Quitar cuenta" title="Quitar cuenta">{{ icon("trash") }}</button></form>
+  </div>
+  {% else %}<p class="small muted">Aún no hay cuentas. Añádelas abajo.</p>{% endfor %}
+  <details class="ds-add"><summary class="small link">{{ icon("plus") }} Añadir cuentas</summary>
+    <form method="post" class="form-stack" style="margin-top:10px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="cuentas">
+      <textarea name="accounts" rows="3" placeholder="tiktok @cuenta&#10;instagram @otra" aria-label="Cuentas"></textarea><button class="btn sm" style="align-self:flex-start">Añadir</button></form>
+  </details>
+</section>
+
+{% include "_analytics.html" %}
+
+<section>
+  <div class="section-head"><h2>Últimos vídeos</h2><p class="muted">Se añaden solos cada día a las {{ REFRESH_AT or "03:00" }} (hora de España).</p></div>
+  <div class="table-card">
+    {% if clips %}
+    <div class="table-scroll"><table class="rt mc-table">
+      <thead><tr><th>Vídeo</th><th class="r">Vistas</th><th class="r">Me gusta</th><th class="r">Comentarios</th><th>Publicado</th></tr></thead>
+      <tbody>{% for s in clips %}
+        <tr><td data-label="Vídeo"><div class="mc-clip">{{ clip_cover(s) }}<div class="mc-ct"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener"><b title="{{ clip_title(s) }}">{{ s.caption or ('@' ~ s.author) }}</b></a><small>@{{ s.author }} · {{ PLATFORMS[s.platform] }}</small></div></div></td>
+          <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b></td>
+          <td data-label="Me gusta" class="r tnum">{{ (s.likes or 0)|short }}</td>
+          <td data-label="Comentarios" class="r tnum">{{ (s.comments or 0)|short }}</td>
+          <td data-label="Publicado" class="small muted">{{ (s.posted_at or s.created_at)|ago }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<div class="empty"><h3>Aún no hay vídeos</h3><p class="muted">Aparecerán tras la próxima lectura diaria.</p></div>{% endif %}
+  </div>
+</section>
+
+<details class="card tight ds-set"><summary class="small link">Ajustes del plan</summary>
+  <form method="post" class="form-grid" style="margin-top:10px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="nombre">
+    <div class="field"><label for="d-client">Cliente</label><input id="d-client" name="client" value="{{ camp.artist }}"></div>
+    <div class="field"><label for="d-name">Nombre del plan</label><input id="d-name" name="name" value="{{ camp.song }}"></div>
+    <button class="btn sm" style="align-self:end">Guardar</button></form>
+  <form method="post" data-confirm="¿Borrar el plan de {{ camp.artist }}? Se borran sus cuentas y sus estadísticas." style="margin-top:12px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="borrar"><button class="btn sm red">Borrar plan</button></form>
+</details>
+{% endblock %}

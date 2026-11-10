@@ -2395,3 +2395,37 @@ def test_auto_featured_new_and_reopened():
         assert [(c.song, why) for c, _s, why in A.auto_featured(cards)] == [("Vieja", "plazas"), ("Nueva", "nueva")]
     page = client_for("a@test.com").get("/campanas").get_data(as_text=True)
     assert "data-carousel" in page and "Plazas abiertas" in page
+
+
+def test_distribution_plan_auto_detect_and_hidden_from_clippers(monkeypatch):
+    from datetime import datetime, timedelta
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/distribucion", client="Marca X", name="Plan diario",
+         accounts="tiktok @marca.uno\nhttps://www.instagram.com/marca.dos/\nnada")
+    with A.app.app_context():
+        camp = A.Campaign.query.filter_by(status=A.DIST_STATUS).one()
+        did = camp.id
+        accs = A.CampaignAccount.query.filter_by(campaign_id=did).all()
+        assert sorted((a.platform, a.handle) for a in accs) == [("instagram", "marca.dos"), ("tiktok", "marca.uno")]
+        for a in accs:
+            a.decided_at = datetime.utcnow() - timedelta(days=2)
+        A.db.session.commit()
+    monkeypatch.setattr(A, "AUTO_PLATFORMS", ("tiktok", "instagram", "youtube"))
+    vid = {"url": "https://www.tiktok.com/@marca.uno/video/7300000000000000001", "vid": "7300000000000000001",
+           "author": "marca.uno", "views": 5000, "likes": 100, "posted_at": datetime.utcnow() - timedelta(hours=3)}
+    monkeypatch.setattr(A.viewcounter, "fetch_profile_videos", lambda p, hs, per=12: [vid] if p == "tiktok" else [])
+    with A.app.app_context():
+        A.discover_clips()
+        s = A.Submission.query.filter_by(campaign_id=did).one()
+        assert s.status == "aprobado" and float(s.earned or 0) == 0 and s.views == 5000
+    page = admin.get(f"/admin/distribucion/{did}").get_data(as_text=True)
+    assert "@marca.uno" in page and "Marca X" in page
+    assert "Marca X" in admin.get("/admin/distribucion").get_data(as_text=True)
+    assert "Plan diario" not in admin.get("/admin/campanas").get_data(as_text=True)
+    a = client_for("a@test.com")
+    assert a.get(f"/campana/{did}").status_code == 404
+    assert "Plan diario" not in a.get("/campanas").get_data(as_text=True)
+    with A.app.app_context():
+        tok = get(A.Campaign, did).report_token
+    rep = a.get(f"/informe/{tok}").get_data(as_text=True) if tok else ""
+    assert "Plan de distribución" in rep
