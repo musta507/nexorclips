@@ -802,6 +802,7 @@ class AudienceStat(db.Model):
     submission_id = db.Column(db.Integer, db.ForeignKey("submission.id"), nullable=True, index=True)
     data = db.Column(db.Text, default="{}")                   # {"country": {...}, "age": {...}, "gender": {...}}
     taken_at = db.Column(db.DateTime, default=datetime.utcnow)
+    demo = db.Column(db.Boolean, default=False)
 
 
 class Invite(db.Model):
@@ -831,6 +832,7 @@ class Call(db.Model):
     reminded = db.Column(db.Boolean, default=False)          # ya se avisó 30 min antes
     author_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    demo = db.Column(db.Boolean, default=False)
     campaign = db.relationship("Campaign")
 
     @property
@@ -848,6 +850,7 @@ class Post(db.Model):
     pinned = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     edited_at = db.Column(db.DateTime, nullable=True)
+    demo = db.Column(db.Boolean, default=False)              # de los datos de demostración (se quita con ellos)
     author = db.relationship("User")
     likes = db.relationship("PostLike", backref="post", lazy=True, cascade="all, delete-orphan")
     comments = db.relationship("PostComment", backref="post", lazy=True, order_by="PostComment.created_at",
@@ -5284,7 +5287,13 @@ def load_demo(days=30, seed=7):
     for u, _, _ in users:
         for ls in lessons[:r.randint(0, len(lessons))]:
             db.session.add(LessonProgress(user_id=u.id, lesson_id=ls.id, completed_at=now - timedelta(days=r.randint(0, days))))
-    demo_audience([s_ for s_, *_x in plan], r)
+    db.session.flush()
+    all_ids = [c.id for c in Campaign.query.filter(Campaign.status.in_(("activa", "pausada", DIST_STATUS)))]
+    real = (Submission.query.filter(Submission.campaign_id.in_(all_ids or [0]), Submission.status != "rechazado")
+            .filter(~Submission.id.in_(db.session.query(AudienceStat.submission_id).filter(AudienceStat.submission_id.isnot(None))))
+            .all())
+    demo_audience(real, r)                 # audiencia de demostración para todos los clips de las campañas (también los reales)
+    load_demo_hub(camps, [u for u, _h, _s in users], r, now)
     db.session.commit()
     total = len(plan)
     return f"Demo cargada: {len(users)} clippers y {total} clips de los últimos {days} días."
@@ -5302,12 +5311,91 @@ def demo_audience(subs, r):
         return {k: round(v * 100 / tot, 1) for k, v in sorted(vals, key=lambda kv: -kv[1])}
     for s_ in subs:
         fem = r.uniform(38, 64)
-        db.session.add(AudienceStat(platform=s_.platform, handle=s_.author or "", submission_id=s_.id,
+        AudienceStat.query.filter_by(submission_id=s_.id, demo=True).delete()
+        db.session.add(AudienceStat(platform=s_.platform, handle=s_.author or "", submission_id=s_.id, demo=True,
                                     data=json.dumps({"country": mix(DEMO_COUNTRY_MIX, .45), "age": mix(DEMO_AGES, .35),
                                                      "gender": {"female": round(fem, 1), "male": round(100 - fem, 1)}})))
 
 
+DEMO_POSTS = {
+    "Anuncios": [("📌 ¡Bienvenidos a la campaña! Leed las normas antes de publicar y usad el sonido oficial en TikTok. "
+                  "Cualquier duda, por el canal de soporte.", True),
+                 ("🚀 Hemos subido el pago por 1.000 vistas en Instagram esta semana. ¡A por ello!", False),
+                 ("⏰ Recordatorio: los clips se detectan solos cada día a las 03:00. No hace falta subirlos a mano.", False)],
+    "Ideas virales": [("💡 Empezad con la frase más fuerte en los primeros 2 segundos: el gancho es lo que más retiene.", True),
+                      ("🔥 Los clips de 15-25 s con subtítulos grandes están funcionando el doble que los largos.", False),
+                      ("🎯 Probad el formato «reacción + momento clave»: los 3 vídeos más vistos de la semana lo usan.", False)],
+}
+DEMO_COMMENTS = ["¡Genial, gracias!", "¿Vale también para YouTube Shorts?", "Lo pruebo hoy mismo 🔥", "Top, esto funciona",
+                 "¿Cuántos clips al día recomendáis?", "Gracias por el aviso 🙌"]
+DEMO_RULES = ("1. Publica solo en las cuentas verificadas de la campaña.\n2. Usa el sonido oficial y menciona al creador.\n"
+              "3. Nada de contenido resubido de otros clippers ni vistas compradas.\n4. Mínimo 10 segundos, formato vertical.\n"
+              "5. Los hashtags obligatorios van en la descripción.")
+DEMO_MATS = ("folder | Vídeos en bruto | https://drive.google.com/drive/folders/demo | Todo el material sin editar para recortar\n"
+             "music | Sonido oficial | https://www.tiktok.com/music/demo | Úsalo en todos los clips de TikTok\n"
+             "doc | Guía de estilo | https://docs.google.com/document/d/demo | Subtítulos, colores y tipografía\n"
+             "play | Ejemplos que funcionan | https://www.tiktok.com/@demo | Los clips con más vistas de la campaña")
+
+
+def load_demo_hub(camps, users, r, now):
+    """Contenido de demostración en el hub de cada campaña: publicaciones con me gusta y comentarios, llamadas,
+    recursos y normas (solo donde estaban vacíos). Se quita con remove_demo()."""
+    restore = json.loads(get_setting("demo_hub_restore", "") or "{}")
+    for c in camps:
+        sections = campaign_channels(c)
+        if not c.materials:
+            restore.setdefault(str(c.id), {})["materials"] = ""
+            c.materials = DEMO_MATS
+        if not (c.rules or "").strip() and not c.rules_text:
+            restore.setdefault(str(c.id), {})["rules"] = ""
+            c.rules = DEMO_RULES
+        for ch in [x for s in sections for x in s.live]:
+            if ch.kind == "calls":
+                madrid = ZoneInfo(APP_TZ)
+                nxt = (datetime.now(madrid) + timedelta(days=2)).replace(hour=19, minute=0, second=0, microsecond=0)
+                db.session.add(Call(campaign_id=c.id, title="Directo: cómo llegar al mínimo de vistas", demo=True,
+                                    starts_at=nxt.astimezone(timezone.utc).replace(tzinfo=None), minutes=60,
+                                    link="https://meet.google.com/demo-llamada", notes="Repasamos los clips que mejor funcionan y resolvemos dudas."))
+                db.session.add(Call(campaign_id=c.id, title="Bienvenida a la campaña", demo=True, minutes=45,
+                                    starts_at=now - timedelta(days=r.randint(4, 9), hours=2),
+                                    recording_url="https://www.youtube.com/watch?v=demo"))
+            elif ch.kind in ("posts", "rules", "resources"):
+                texts = DEMO_POSTS.get(ch.name) or ([("👋 Pasad por aquí para estar al día de todo lo de " + c.song + ".", False)]
+                                                    if ch.kind == "posts" else [])
+                for k, (body, pin) in enumerate(texts):
+                    p_ = Post(channel_id=ch.id, author_id=None, body=body, pinned=pin, demo=True,
+                              created_at=now - timedelta(days=k * 3 + r.randint(0, 2), hours=r.randint(0, 20)))
+                    db.session.add(p_)
+                    db.session.flush()
+                    for u in r.sample(users, k=min(len(users), r.randint(3, 12))):
+                        db.session.add(PostLike(post_id=p_.id, user_id=u.id))
+                    for u in r.sample(users, k=min(len(users), r.randint(0, 3))):
+                        db.session.add(PostComment(post_id=p_.id, user_id=u.id, body=r.choice(DEMO_COMMENTS),
+                                                   created_at=p_.created_at + timedelta(hours=r.randint(1, 30))))
+    for acc in CampaignAccount.query.join(User, User.id == CampaignAccount.user_id).filter(User.email.like(f"%{DEMO_DOMAIN}")):
+        if not acc.avatar_url and acc.user.avatar_url:
+            acc.avatar_url = acc.user.avatar_url      # foto en «Cuentas TOP»
+    set_setting("demo_hub_restore", json.dumps(restore))
+
+
+def remove_demo_hub():
+    pids = [p.id for p in Post.query.filter_by(demo=True)]
+    if pids:
+        PostLike.query.filter(PostLike.post_id.in_(pids)).delete(synchronize_session=False)
+        PostComment.query.filter(PostComment.post_id.in_(pids)).delete(synchronize_session=False)
+        Post.query.filter(Post.id.in_(pids)).delete(synchronize_session=False)
+    Call.query.filter_by(demo=True).delete(synchronize_session=False)
+    AudienceStat.query.filter_by(demo=True).delete(synchronize_session=False)
+    for cid, vals in json.loads(get_setting("demo_hub_restore", "") or "{}").items():
+        c = db.session.get(Campaign, int(cid))
+        if c:
+            for k, v in vals.items():
+                setattr(c, k, v)
+    set_setting("demo_hub_restore", "")
+
+
 def remove_demo():
+    remove_demo_hub()
     demo = User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).all()
     for u in demo:
         delete_user_account(u)

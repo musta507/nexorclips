@@ -1685,10 +1685,19 @@ def test_demo_data_loads_and_removes_cleanly():
         assert c.status == "activa" and 0 < c.spent <= 5000 * .56
         assert A.ViewSnapshot.query.count() > 50 and A.Submission.query.filter_by(status="aprobado").count() > 5
     assert "Ranking" in admin.get("/ranking").get_data(as_text=True)
-    assert admin.get("/admin").status_code == 200 and admin.get(f"/admin/campana/{cid}").status_code == 200
+    assert admin.get("/admin").status_code == 200
+    page = admin.get(f"/admin/campana/{cid}").get_data(as_text=True)
+    assert "Ubicación" in page and "España" in page
+    with A.app.app_context():
+        assert A.Post.query.filter_by(demo=True).count() >= 4 and A.Call.query.filter_by(demo=True).count() == 2
+        assert A.AudienceStat.query.filter_by(demo=True).count() > 5 and get(A.Campaign, cid).materials
+        ch = A.Channel.query.filter_by(campaign_id=cid, name="Anuncios").one().id
+    assert "¡Bienvenidos a la campaña!" in admin.get(f"/campana/{cid}?canal={ch}&hub=1").get_data(as_text=True)
     post(admin, "/admin/ajustes/demo", accion="quitar")
     with A.app.app_context():
         assert A.Submission.query.count() == 0 and A.User.query.count() == 1
+        assert not A.Post.query.filter_by(demo=True).count() and not A.Call.query.count() and not A.AudienceStat.query.count()
+        assert not get(A.Campaign, cid).materials
         assert get(A.Campaign, cid).spent == 0
 
 
