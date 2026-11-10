@@ -2444,7 +2444,7 @@ def inject_globals():
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year, "now_utc": datetime.utcnow(),
             "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "REFRESH_AT": REFRESH_AT, "next_scan_utc": next_scan_utc, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
             "REJECT_REASONS": REJECT_REASONS, "COUNTRIES": COUNTRIES, "LANGUAGES": LANGUAGES, "CAMPAIGN_KINDS": CAMPAIGN_KINDS,
-            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "clip_thumb": clip_thumb, "pop_undo": pop_undo, "when_madrid": when_madrid, "RESOURCE_ICONS": RESOURCE_ICONS, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
+            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "clip_thumb": clip_thumb, "pop_undo": pop_undo, "my_available": my_available, "when_madrid": when_madrid, "RESOURCE_ICONS": RESOURCE_ICONS, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
             "mod_campaigns": mod_campaigns, "acting_as_mod": acting_as_mod,
             "STATS_HOURS": STATS_HOURS, "bunny_ready": bunny_ready, "reached_min": reached_min,
             "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
@@ -2920,12 +2920,15 @@ def home_data(u):
                   "url": url_for("campaigns_page")})
     show_steps = not all(st["done"] or st.get("soon") for st in steps)
     # ranking de la semana: mi puesto y cuánto falta para el de arriba
-    full = ranking("semana", 1000)
-    me = next((r for r in full if r["user"].id == u.id), None)
-    above = full[me["pos"] - 2] if me and me["pos"] > 1 else None
-    rank = {"top": full[:5], "me": me, "total": len(full), "above": above,
-            "pct": (round(me["pos"] / len(full) * 100) if me else None),
-            "bar": (min(100, round(me["views"] / above["views"] * 100)) if me and above and above["views"] else 100)}
+    ranks = {}
+    for per in RANK_PERIODS:                     # semana, mes y siempre: se cambia de pestaña sin recargar
+        full = ranking(per, 1000)
+        me = next((r for r in full if r["user"].id == u.id), None)
+        above = full[me["pos"] - 2] if me and me["pos"] > 1 else None
+        ranks[per] = {"top": full[:5], "me": me, "total": len(full), "above": above, "label": RANK_PERIODS[per][0],
+                      "pct": (round(me["pos"] / len(full) * 100) if me else None),
+                      "bar": (min(100, round(me["earned"] / above["earned"] * 100)) if me and above and above["earned"] else 100)}
+    rank = ranks["semana"]
     # tu resumen rápido
     week_ago = datetime.utcnow() - timedelta(days=7)
     money_ = user_money(u)
@@ -2946,7 +2949,7 @@ def home_data(u):
     return {"quick": quick, "hero_camps": live[:3], "pot": pot, "hero_stats": hero_stats,
             "summary": summary, "learn_url": learn_url, "learn": learn, "steps": steps, "show_steps": show_steps,
             "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
-            "rank": rank, "masked": mask_name}
+            "rank": rank, "ranks": ranks, "masked": mask_name}
 
 
 @app.route("/grupo-whatsapp")
@@ -3482,7 +3485,8 @@ def ranking(period="semana", limit=50):
          .filter(Submission.status == "aprobado", User.is_banned.is_(False), User.is_admin.is_(False)))
     if days:
         q = q.filter(Submission.created_at >= datetime.utcnow() - timedelta(days=days))
-    rows = q.group_by(Submission.user_id).order_by(db.func.sum(Submission.views).desc()).limit(limit).all()
+    rows = (q.group_by(Submission.user_id)                 # por dinero ganado; a igualdad, por vistas
+            .order_by(db.func.sum(Submission.earned).desc(), db.func.sum(Submission.views).desc()).limit(limit).all())
     users = {u.id: u for u in User.query.filter(User.id.in_([r[0] for r in rows])).all()} if rows else {}
     return [{"pos": i + 1, "user": users[r[0]], "name": mask_name(users[r[0]].name), "views": int(r[1] or 0),
              "earned": cents(r[2]), "clips": r[3]} for i, r in enumerate(rows) if r[0] in users]
@@ -3718,8 +3722,34 @@ def withdraw():
 @app.route("/cuenta", methods=["GET", "POST"])
 @login_required
 def account():
+    """Ajustes del clipper: perfil, cobros, notificaciones y cuenta, en una sola página con índice a la izquierda."""
     if request.method == "POST":
         section = request.form.get("section")
+        if section == "perfil":
+            u = current_user
+            name = (request.form.get("name") or "").strip()[:120]
+            if len(name) < 2:
+                flash("Escribe tu nombre.", "error")
+                return redirect(url_for("account", _anchor="perfil"))
+            file = request.files.get("photo")
+            if file and file.filename:
+                data = process_avatar(file)
+                if not data:
+                    flash("La foto tiene que ser una imagen (JPG, PNG o WEBP).", "error")
+                    return redirect(url_for("account", _anchor="perfil"))
+                u.avatar_data, u.avatar_ver = data, (u.avatar_ver or 0) + 1
+                u.avatar_url = url_for("avatar", uid=u.id, v=u.avatar_ver)
+            c = request.form.get("country", "")
+            other = " ".join((request.form.get("country_other") or "").split())[:60]
+            if c in COUNTRIES:
+                if c == "OT" and len(other) < 2:
+                    flash("Escribe en qué país vives.", "error")
+                    return redirect(url_for("account", _anchor="perfil"))
+                u.country, u.country_other = c, (other if c == "OT" else "")
+            u.name = name
+            db.session.commit()
+            flash("Perfil guardado.", "ok")
+            return redirect(url_for("account", _anchor="perfil"))
         if section == "cobro_usar":
             method = request.form.get("payout_method", "")
             if method == WHOP_METHOD and current_user.whop_user_id and whop_enabled():
@@ -3773,7 +3803,9 @@ def account():
             db.session.commit()
             flash("Cuentas guardadas.", "ok")
         return redirect(request.args.get("next") and safe_next(request.args.get("next")) or url_for("account"))
-    return render_template("account.html")
+    return render_template("account.html", events=NOTIFY_EVENTS, channels=NOTIFY_CHANNELS, wants=wants,
+                           devices=PushSub.query.filter_by(user_id=current_user.id).count(),
+                           push_ready=push_ready(), vapid=VAPID_PUBLIC_KEY)
 
 
 # ---------------------------------------------------------------- panel de admin
@@ -6295,6 +6327,13 @@ def lesson_thumb(lesson):
     return ""
 
 
+def my_available():
+    """Saldo que el clipper puede retirar ya (para el menú de perfil). Una vez por petición."""
+    if not current_user.is_authenticated or current_user.is_admin:
+        return 0
+    return _per_request("my_available", lambda: user_money(current_user)["available"])
+
+
 def pop_undo():
     """«Deshacer» del último borrado (canales): solo se enseña una vez, en el aviso flotante."""
     return session.pop("undo", None) if has_request_context() else None
@@ -6746,11 +6785,11 @@ def notification_settings():
                 return redirect(url_for("notification_settings"))
             u.whatsapp = wa
         db.session.commit()
+        if wants_json():
+            return {"ok": True}
         flash("Avisos guardados.", "ok")
-        return redirect(url_for("notification_settings"))
-    return render_template("notifications.html", events=NOTIFY_EVENTS, channels=NOTIFY_CHANNELS, wants=wants,
-                           devices=PushSub.query.filter_by(user_id=u.id).count(),
-                           push_ready=push_ready(), whatsapp_ready=whatsapp_ready(), vapid=VAPID_PUBLIC_KEY)
+        return redirect(url_for("account", _anchor="notificaciones"))
+    return redirect(url_for("account", _anchor="notificaciones"))
 
 
 @app.route("/push/suscribir", methods=["POST"])
@@ -6921,10 +6960,31 @@ def notices():
     return d
 
 
+AGENT_ROLES = {"owner": "Responsable", "reviewer": "Revisor", "support": "Soporte"}
+
+
+def agent_info(u):
+    """Quién responde en el chat de soporte (lo ve el clipper): nombre, foto y puesto."""
+    if not u:
+        return {"name": f"Equipo {APP_NAME}", "role": "Soporte", "avatar": "", "initial": APP_NAME[:1]}
+    return {"name": (u.name or "").split()[0] or f"Equipo {APP_NAME}", "role": AGENT_ROLES.get(u.admin_role or "owner", "Soporte"),
+            "avatar": u.avatar_url or "", "initial": u.initial}
+
+
+def support_team():
+    """Los que contestan el soporte (para la cabecera del chat): primero soporte, luego el resto."""
+    order = {"support": 0, "owner": 1, "reviewer": 2}
+    admins = [u for u in User.query.filter_by(is_admin=True).all() if (u.admin_role or "owner") in ("support", "owner")]
+    return [agent_info(u) for u in sorted(admins, key=lambda u: order.get(u.admin_role or "owner", 9))[:3]]
+
+
 def message_json(m, viewer_is_admin):
     mine = m.from_admin == viewer_is_admin
     who = f"Equipo {APP_NAME}" if m.from_admin else m.user.name
-    return {"id": m.id, "body": m.body, "mine": mine,
+    agent = agent_info(m.sender) if m.from_admin and not viewer_is_admin else None
+    if agent:
+        who = f"{agent['name']} · {agent['role']}"
+    return {"id": m.id, "body": m.body, "mine": mine, "agent": agent,
             "image": url_for("chat_image", mid=m.id) if m.image_mime else "", "who": who if not mine else "Tú",
             "from_admin": m.from_admin, "ago": ago(m.created_at), "at": m.created_at.strftime("%d/%m/%Y %H:%M")}
 
@@ -7008,7 +7068,12 @@ def support():
     msgs = conversation(current_user.id)
     mark_read(current_user.id, by_admin=False)
     prefill = ""
-    return render_template("support.html", msgs=msgs, prefill=prefill)
+    return render_template("support.html", msgs=msgs, prefill=prefill, team=support_team(), agent_info=agent_info,
+                           suggestions=SUPPORT_SUGGESTIONS)
+
+
+SUPPORT_SUGGESTIONS = ["¿Cuándo puedo retirar mi dinero?", "¿Por qué han rechazado mi clip?", "No me aparece un clip que he subido",
+                       "¿Cómo verifico mi cuenta con el código?", "Tengo un problema con Whop"]
 
 
 @app.route("/chat/foto/<int:mid>")

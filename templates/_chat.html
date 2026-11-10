@@ -2,16 +2,18 @@
 <div class="chat" data-chat data-poll="{{ poll_url }}" data-after="{{ msgs[-1].id if msgs else 0 }}">
   <div class="chat-log" id="chat-log" aria-live="polite">
     {% for m in msgs %}
-      {% set mine = (m.from_admin == viewer_admin) %}
-      <div class="msg {{ 'mine' if mine else 'theirs' }}" data-id="{{ m.id }}">
+      {% set mine = (m.from_admin == viewer_admin) %}{% set ag = agent_info(m.sender) if (agent_info is defined and m.from_admin and not viewer_admin) else none %}
+      <div class="msg {{ 'mine' if mine else 'theirs' }}{{ ' agent' if ag }}" data-id="{{ m.id }}">
+        {% if ag %}<span class="avatar msg-av" aria-hidden="true">{% if ag.avatar %}<img src="{{ ag.avatar }}" alt="" referrerpolicy="no-referrer">{% else %}{{ ag.initial }}{% endif %}</span>{% endif %}
         {% if m.image_mime %}<a class="chat-photo" href="{{ url_for('chat_image', mid=m.id) }}" target="_blank" rel="noopener"><img src="{{ url_for('chat_image', mid=m.id) }}" alt="Foto" loading="lazy"></a>{% endif %}
         {% if m.body %}<div class="bubble">{{ m.body }}</div>{% endif %}
-        <div class="meta">{% if not mine %}{{ ("Equipo " ~ APP_NAME) if m.from_admin else m.user.name }} · {% endif %}{% if viewer_admin and mine and m.sender %}{{ m.sender.name }} · {% endif %}<span title="{{ m.created_at|datetime }} UTC">{{ m.created_at|ago }}</span></div>
+        <div class="meta">{% if ag %}<b>{{ ag.name }}</b> · {{ ag.role }} · {% elif not mine %}{{ ("Equipo " ~ APP_NAME) if m.from_admin else m.user.name }} · {% endif %}{% if viewer_admin and mine and m.sender %}{{ m.sender.name }} · {% endif %}<span title="{{ m.created_at|datetime }} UTC">{{ m.created_at|ago }}</span></div>
       </div>
     {% else %}
       <div class="chat-empty" id="chat-empty">{{ empty_text }}</div>
     {% endfor %}
   </div>
+  {% if suggestions is defined and suggestions %}<div class="chat-sugg" data-chat-sugg{% if msgs|length > 2 %} hidden{% endif %}>{% for q in suggestions %}<button type="button" class="chip-q" data-sugg="{{ q }}">{{ q }}</button>{% endfor %}</div>{% endif %}
   <form class="chat-form" method="post" action="{{ post_url }}" enctype="multipart/form-data" data-chat-form>
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <label class="sr-only" for="chat-body">Mensaje</label>

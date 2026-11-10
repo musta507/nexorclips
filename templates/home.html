@@ -105,29 +105,35 @@
     </div>
   </section>
   <section>
-    <h2 class="hm-h">🏆 Ranking de la semana <a class="link small push" href="{{ url_for('ranking_page') }}">Ver completo →</a></h2>
-    <div class="card hm-rank">
+    <h2 class="hm-h">🏆 Ranking de clippers <a class="link small push" href="{{ url_for('ranking_page') }}">Ver más →</a></h2>
+    <div class="card hm-rank" data-tabs>
+      <nav class="seg hm-rtabs" aria-label="Periodo del ranking">{% for k, r in ranks.items() %}<a href="{{ url_for('ranking_page', p=k) }}" class="{% if loop.first %}on{% endif %}" data-tab="rk-{{ k }}">{{ {"semana": "Semana", "mes": "Mes", "global": "Siempre"}[k] }}</a>{% endfor %}</nav>
+      {% for k, rank in ranks.items() %}
+      <div class="hm-rpanel" id="rk-{{ k }}"{% if not loop.first %} hidden{% endif %}>
       <div class="hm-me">
         <span class="small muted">Tu puesto</span>
         {% if rank.me %}
         <div class="hm-me-pos"><b>#{{ rank.me.pos }}</b>{% if rank.pct is not none and rank.total > 1 %}<span class="hm-top">top {{ [rank.pct, 1]|max }} %</span>{% endif %}</div>
         <div class="hm-bar"><span style="width:{{ rank.bar }}%"></span></div>
-        <span class="small muted">{% if rank.above %}Te faltan <b>{{ (rank.above.views - rank.me.views + 1)|num }} vistas</b> para el #{{ rank.above.pos }}{% else %}¡Vas primero esta semana!{% endif %}</span>
+        <span class="small muted">{% if rank.above %}Te faltan <b>{{ (rank.above.earned - rank.me.earned + 0.01)|money }}</b> para el #{{ rank.above.pos }}{% else %}¡Vas primero!{% endif %}</span>
         {% else %}
         <div class="hm-me-pos"><b>—</b></div>
-        <span class="small muted">Consigue un clip aprobado esta semana para entrar en el ranking.</span>
+        <span class="small muted">Consigue un clip aprobado para entrar en el ranking.</span>
         {% endif %}
       </div>
       {% if rank.top %}
       <ol class="hm-rl">
         {% for r in rank.top %}
-        <li{% if r.user.id == current_user.id %} class="me"{% endif %}>{{ av(r.user) }}<div><b>{{ "Tú" if r.user.id == current_user.id else r.name }}</b><small>{{ r.views|num }} vistas</small></div><span class="hm-rp p{{ r.pos }}">#{{ r.pos }}</span></li>
+        <li{% if r.user.id == current_user.id %} class="me"{% endif %}>{{ av(r.user) }}<div><b>{{ "Tú" if r.user.id == current_user.id else r.name }}</b><small>{{ r.views|short }} vistas · {{ r.clips }} clip{{ 's' if r.clips != 1 }}</small></div><span class="hm-rm tnum">{{ r.earned|earn(0) }}</span><span class="hm-rp p{{ r.pos }}">#{{ r.pos }}</span></li>
         {% endfor %}
         {% if rank.me and rank.me.pos > rank.top|length %}
-        <li class="me">{{ av(current_user) }}<div><b>Tú</b><small>{{ rank.me.views|num }} vistas</small></div><span class="hm-rp">#{{ rank.me.pos }}</span></li>
+        <li class="me">{{ av(current_user) }}<div><b>Tú</b><small>{{ rank.me.views|short }} vistas</small></div><span class="hm-rm tnum">{{ rank.me.earned|earn(0) }}</span><span class="hm-rp">#{{ rank.me.pos }}</span></li>
         {% endif %}
       </ol>
-      {% else %}<p class="small muted" style="margin:14px 0 0">Esta semana aún no hay clips aprobados. ¡Puedes ser el primero!</p>{% endif %}
+      {% if rank.total > 5 %}<a class="hm-more" href="{{ url_for('ranking_page', p=k) }}">Ver más ({{ rank.total }} clippers) →</a>{% endif %}
+      {% else %}<p class="small muted" style="margin:14px 0 0">Aún no hay clips aprobados en este periodo. ¡Puedes ser el primero!</p>{% endif %}
+      </div>
+      {% endfor %}
     </div>
   </section>
 </div>

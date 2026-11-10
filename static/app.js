@@ -121,8 +121,9 @@ document.addEventListener("click", function (e) {
     var count = document.getElementById("fab-count");
     var fab = document.getElementById("chat-fab");
     var dot = document.getElementById("avatar-dot");
-    if (count) { count.textContent = n; count.hidden = !n; }
-    if (fab) fab.classList.toggle("has-unread", !!n);
+    var staff = document.body.hasAttribute("data-staff");      // el equipo no ve sus mensajes del panel en el chat de clipper
+    if (count) { count.textContent = staff ? 0 : n; count.hidden = staff || !n; }
+    if (fab) fab.classList.toggle("has-unread", !staff && !!n);
     if (dot) dot.hidden = !n;
     var bell = document.getElementById("bell-n");
     if (bell && typeof d.bell === "number") { bell.textContent = d.bell > 99 ? "99+" : d.bell; bell.hidden = !d.bell; }
@@ -187,6 +188,7 @@ function pagina() {
   comprobarBio();
   avisosToast();
   horasLocales();
+  ajustes();
   buscadoresVivos();
 }
 
@@ -526,8 +528,14 @@ function iniciarChat() {
     var empty = document.getElementById("chat-empty");
     if (empty) empty.remove();
     var row = document.createElement("div");
-    row.className = "msg " + (m.mine ? "mine" : "theirs");
+    row.className = "msg " + (m.mine ? "mine" : "theirs") + (m.agent ? " agent" : "");
     row.setAttribute("data-id", m.id);
+    if (m.agent) {
+      var av = document.createElement("span"); av.className = "avatar msg-av"; av.setAttribute("aria-hidden", "true");
+      if (m.agent.avatar) { var ai = document.createElement("img"); ai.src = m.agent.avatar; ai.alt = ""; ai.referrerPolicy = "no-referrer"; av.appendChild(ai); }
+      else av.textContent = m.agent.initial;
+      row.appendChild(av);
+    }
     if (m.image) {
       var a = document.createElement("a");
       a.className = "chat-photo"; a.href = m.image; a.target = "_blank"; a.rel = "noopener";
@@ -1416,4 +1424,56 @@ document.addEventListener("click", function (e) {
     r.querySelectorAll("input:not([type=hidden])").forEach(function (i) { i.value = ""; });
     if (r.hasAttribute("data-res-tpl")) r.hidden = true; else r.remove();
   }
+});
+
+// =============================================================== Ajustes: índice que sigue al scroll y avisos que se guardan solos
+function ajustes() {
+  var box = document.querySelector("[data-set]");
+  if (!box || box.dataset.ready) return;
+  box.dataset.ready = "1";
+  var links = box.querySelectorAll(".set-nav a");
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (ents) {
+      ents.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        links.forEach(function (l) { l.classList.toggle("on", l.getAttribute("href") === "#" + en.target.id); });
+      });
+    }, { rootMargin: "-30% 0px -60% 0px" });
+    box.querySelectorAll(".set-sec").forEach(function (s) { io.observe(s); });
+    limpiar.push(tuyo(box, function () { io.disconnect(); }));
+  }
+  var f = box.querySelector("[data-autosave]");
+  if (f) {
+    var save = f.querySelector(".set-save"); if (save) save.hidden = true;
+    f.addEventListener("change", function () {
+      fetch(f.action, { method: "POST", body: new FormData(f), credentials: "same-origin", headers: { "X-Requested-With": "fetch", "Accept": "application/json" } })
+        .then(function (r) { if (!r.ok) throw 0; toast("Avisos guardados", "ok"); })
+        .catch(function () { if (save) save.hidden = false; toast("No se pudo guardar. Pulsa «Guardar avisos».", "error"); });
+    });
+  }
+}
+
+// Preguntas sugeridas del soporte: rellenan el mensaje
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-sugg]");
+  if (!b) return;
+  var ta = document.getElementById("chat-body");
+  if (!ta) return;
+  ta.value = b.getAttribute("data-sugg");
+  ta.focus();
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
+// Pestañas dentro de una tarjeta (ranking del inicio): cambian sin recargar
+document.addEventListener("click", function (e) {
+  var a = e.target.closest("[data-tabs] [data-tab]");
+  if (!a) return;
+  e.preventDefault();
+  var box = a.closest("[data-tabs]");
+  box.querySelectorAll("[data-tab]").forEach(function (x) {
+    var on = x === a;
+    x.classList.toggle("on", on);
+    var p = document.getElementById(x.getAttribute("data-tab"));
+    if (p) p.hidden = !on;
+  });
 });

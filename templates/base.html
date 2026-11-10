@@ -7,7 +7,7 @@
 </head>
 {% set ep = request.endpoint or "" %}
 {% set admin_page = ep.startswith("admin_") and current_user.is_authenticated and current_user.is_admin %}
-<body class="{{ 'admin-shell' if admin_page else 'has-tabs' }}" data-notices="{{ url_for('notices') }}" data-unread="{{ note.unread }}" data-on-chat="{{ 1 if (request.endpoint or '') in ['support', 'admin_chat', 'admin_inbox'] else 0 }}">
+<body class="{{ 'admin-shell' if admin_page else 'has-tabs' }}" data-notices="{{ url_for('notices') }}" data-unread="{{ note.unread }}" {% if current_user.is_authenticated and current_user.is_admin %}data-staff {% endif %}data-on-chat="{{ 1 if (request.endpoint or '') in ['support', 'admin_chat', 'admin_inbox'] else 0 }}">
   <a class="skip" href="#contenido">Saltar al contenido</a>
   <header class="topbar">
     <div class="wrap">
@@ -19,7 +19,7 @@
         <a class="tab {% if ep in ['index', 'ranking_page'] %}on{% endif %}" href="{{ url_for('index') }}" {% if ep in ['index', 'ranking_page'] %}aria-current="page"{% endif %}>{{ icon("home") }}Inicio</a>
         <a class="tab {% if ep in ['campaigns_page', 'campaign'] %}on{% endif %}" href="{{ url_for('campaigns_page') }}" {% if ep in ['campaigns_page', 'campaign'] %}aria-current="page"{% endif %}>{{ icon("flag") }}Campañas</a>
         <a class="tab {% if ep == 'my_clips' %}on{% endif %}" href="{{ url_for('my_clips') }}" {% if ep == 'my_clips' %}aria-current="page"{% endif %}>{{ icon("film") }}Mis clips</a>
-        <a class="tab {% if ep in ['earnings', 'account'] %}on{% endif %}" href="{{ url_for('earnings') }}" {% if ep in ['earnings', 'account'] %}aria-current="page"{% endif %}>{{ icon("wallet") }}Ganancias</a>
+        <a class="tab {% if ep == 'earnings' %}on{% endif %}" href="{{ url_for('earnings') }}" {% if ep == 'earnings' %}aria-current="page"{% endif %}>{{ icon("wallet") }}Ganancias</a>
         <a class="tab {% if ep in ['courses', 'course', 'lesson'] %}on{% endif %}" href="{{ url_for('courses') }}" {% if ep in ['courses', 'course', 'lesson'] %}aria-current="page"{% endif %}>{{ icon("cap") }}Formación</a>
       </nav>
       {% endif %}
@@ -48,21 +48,28 @@
         <summary class="avatar" aria-label="Tu cuenta{% if unread %} · {{ unread }} mensajes sin leer{% endif %}"><span class="dot" id="avatar-dot" aria-hidden="true"{% if not unread %} hidden{% endif %}></span>
           {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}
         </summary>
-        <div class="menu">
-          <div class="who"><b>{{ current_user.name }}</b><div class="small muted">{{ current_user.email }}</div></div>
-          <a href="{{ url_for('account') }}">Mi cuenta</a>
-          {% if not current_user.is_admin %}<a href="{{ url_for('onboarding') }}">Editar perfil</a>{% endif %}
-          {% for mc in mod_campaigns(current_user) %}<a href="{{ mod_home(mc.id) }}"><span class="mod-tag">MOD</span> {{ mc.song }}</a>{% endfor %}
-          <a href="{{ url_for('ranking_page') }}">Ranking</a>
-          <a href="{{ url_for('notification_settings') }}">Notificaciones</a>
-          {% if current_user.is_admin %}
-            <a href="{{ url_for('admin_home') }}">Panel de admin</a>
-            <a href="{{ url_for('admin_inbox') }}">Mensajes{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
-          {% else %}
-            <a href="{{ url_for('support') }}">Soporte{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
-          {% endif %}
-          <a href="{{ url_for('terms') }}">Términos</a>
-          <a href="{{ url_for('logout') }}" data-turbo="false">Cerrar sesión</a>
+        <div class="menu pm">
+          <a class="pm-who" href="{{ url_for('account') }}">
+            <span class="avatar">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}</span>
+            <span class="pm-id"><b>{{ current_user.name }}</b><small>{{ current_user.email }}</small></span>
+          </a>
+          {% if not current_user.is_admin %}<a class="pm-bal" href="{{ url_for('earnings') }}"><span>Saldo disponible</span><b class="tnum">{{ my_available()|earn }}</b></a>{% endif %}
+          <div class="pm-group">
+            <a href="{{ url_for('account') }}">{{ icon("gear") }} Ajustes</a>
+            <a href="{{ url_for('earnings') }}">{{ icon("wallet") }} Ganancias</a>
+            <a href="{{ url_for('ranking_page') }}">{{ icon("trophy") }} Ranking</a>
+            <a href="{{ url_for('account', _anchor='notificaciones') }}">{{ icon("bell") }} Notificaciones</a>
+            <a href="{{ url_for('support') }}">{{ icon("chat") }} Soporte{% if unread and not current_user.is_admin %} <span class="count">{{ unread }}</span>{% endif %}</a>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin_home') }}">{{ icon("grid") }} Panel de admin</a>
+            <a href="{{ url_for('admin_inbox') }}">{{ icon("inbox") }} Mensajes del panel{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
+            {% endif %}
+          </div>
+          {% set mcs = mod_campaigns(current_user) %}{% if mcs %}<div class="pm-group"><span class="pm-label">Moderas</span>{% for mc in mcs %}<a href="{{ mod_home(mc.id) }}"><span class="mod-tag">MOD</span> {{ mc.song }}</a>{% endfor %}</div>{% endif %}
+          <div class="pm-group">
+            <a href="{{ url_for('terms') }}">{{ icon("doc") }} Términos</a>
+            <a class="pm-out" href="{{ url_for('logout') }}" data-turbo="false">{{ icon("out") }} Cerrar sesión</a>
+          </div>
         </div>
       </details>
       </div>
@@ -110,9 +117,11 @@
   {% endif %}
   {% if not admin_page %}{% include "_footer.html" %}{% endif %}
   {% if ep not in ["support", "admin_chat", "admin_inbox"] and not admin_page %}
-  <a class="chat-fab{% if unread %} has-unread{% endif %}" id="chat-fab" href="{{ url_for('admin_inbox') if current_user.is_admin else url_for('support') }}"
-     aria-label="{{ 'Mensajes' if current_user.is_admin else 'Chat de soporte' }}{% if unread %} · {{ unread }} sin leer{% endif %}">
-    {{ icon("chat") }}<span>{{ "Mensajes" if current_user.is_admin else "Chat de soporte" }}</span><span class="count" id="fab-count"{% if not unread %} hidden{% endif %}>{{ unread }}</span>
+  {# En la web de clipper, el equipo ve el soporte igual que un clipper (sus mensajes del panel siguen en «Mensajes») #}
+  {% set fab_n = 0 if current_user.is_admin else unread %}
+  <a class="chat-fab{% if fab_n %} has-unread{% endif %}" id="chat-fab" href="{{ url_for('support') }}"
+     aria-label="Chat de soporte{% if fab_n %} · {{ fab_n }} sin leer{% endif %}">
+    {{ icon("chat") }}<span>Chat de soporte</span><span class="count" id="fab-count"{% if not fab_n %} hidden{% endif %}>{{ fab_n }}</span>
   </a>
   {% endif %}
 </body>

@@ -1,18 +1,45 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
-{% block title %}Mi cuenta · {{ APP_NAME }}{% endblock %}
+{% block title %}Ajustes · {{ APP_NAME }}{% endblock %}
 {% block content %}
 <div class="section-head" style="margin:0">
-  <h1>Mi cuenta</h1>
+  <h1>Ajustes</h1>
   <p class="muted">{{ current_user.email }} · en {{ APP_NAME }} desde {{ current_user.created_at|date }}</p>
 </div>
+<div class="set" data-set>
+  <nav class="set-nav card tight" aria-label="Secciones de ajustes">
+    <a href="#perfil" class="on">{{ icon("users") }} Perfil</a>
+    <a href="#cobro">{{ icon("wallet") }} Cobros</a>
+    <a href="#notificaciones">{{ icon("bell") }} Notificaciones</a>
+    <a href="#cuenta">{{ icon("gear") }} Cuenta</a>
+  </nav>
+  <div class="set-main">
+    <section id="perfil" class="card set-sec">
+      <header><h2>Perfil</h2><p class="small muted">Así te ven el equipo y los demás clippers.</p></header>
+      <form method="post" enctype="multipart/form-data" class="form-stack">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="section" value="perfil">
+        <div class="onb-photo">
+          <span class="avatar lg" data-photo-prev>{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}</span>
+          <div class="field file-pick"><span class="label">Foto de perfil</span>
+            <label class="btn soft sm file-btn">{{ "Cambiar foto" if current_user.avatar_url else "Subir foto" }}<input type="file" name="photo" accept="image/*" data-photo-input></label>
+            <span class="hint" data-file-name>JPG, PNG o WEBP.</span></div>
+        </div>
+        <div class="form-grid set-grid">
+          <div class="field"><label for="name">Nombre</label><input id="name" name="name" value="{{ current_user.name }}" required maxlength="120" autocomplete="name"></div>
+          <div class="field"><label for="country">País</label>
+            <select id="country" name="country" data-other-toggle="#country-other">
+              <option value="" disabled hidden{% if not current_user.country %} selected{% endif %}>Elige tu país</option>
+              {% for k, label in COUNTRIES.items() %}<option value="{{ k }}"{% if current_user.country == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select></div>
+        </div>
+        <div class="field" id="country-other"{% if current_user.country != 'OT' %} hidden{% endif %}><label for="country_other">¿En qué país vives?</label>
+          <input id="country_other" name="country_other" maxlength="60" value="{{ current_user.country_other or '' }}" placeholder="Escribe tu país"></div>
+        <button class="btn accent" style="align-self:flex-start">Guardar perfil</button>
+      </form>
+    </section>
 
-<section id="cobro" class="form-stack">
-  <div>
-    <h2>Cómo cobras</h2>
-    <p class="muted small" style="margin-top:4px">Los pagos se hacen por Whop: conecta tu usuario una vez y, cuando pulses «Retirar», el dinero llega al momento a tu saldo de Whop.</p>
-  </div>
-
+    <section id="cobro" class="card set-sec">
+      <header><h2>Cobros</h2><p class="small muted">Los pagos se hacen por Whop: conecta tu usuario una vez y, cuando pulses «Retirar», el dinero llega al momento a tu saldo de Whop.</p></header>
   {% set whop_on = whop_enabled() %}
   {% set whop_linked = current_user.whop_user_id and whop_on %}
   {% set active = current_user.payout_method if current_user.payout_ready else "" %}
@@ -54,5 +81,35 @@
     {% endif %}
   </div>
 
-</section>
+    </section>
+
+    <section id="notificaciones" class="card set-sec">
+      <header><h2>Notificaciones</h2><p class="small muted">Todos los avisos te llegan a la campanita de arriba. Aquí eliges cuáles quieres también en tu móvil u ordenador.</p></header>
+      {% if push_ready %}
+      <div class="push-box set-push" data-push data-key="{{ vapid }}" data-sub="{{ url_for('push_subscribe') }}" data-unsub="{{ url_for('push_unsubscribe') }}" data-csrf="{{ csrf_token() }}">
+        <div><b>Avisos en este dispositivo</b><p class="small muted" data-push-state>{{ devices }} dispositivo{{ 's' if devices != 1 }} con avisos activados.</p></div>
+        <button type="button" class="btn accent sm" data-push-on>Activar aquí</button>
+        <button type="button" class="btn soft sm" data-push-off hidden>Desactivar aquí</button>
+      </div>
+      {% else %}<p class="small muted set-note">Los avisos al móvil aún no están activados en la plataforma. Puedes dejar elegido lo que quieres y te llegará cuando se activen.</p>{% endif %}
+      <form method="post" action="{{ url_for('notification_settings') }}" class="set-toggles" data-autosave>
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        {% for e, label in events.items() %}{% for c, clabel in channels.items() %}
+        <label class="tg-row"><span>{{ label }}</span><input type="checkbox" class="tg" name="{{ e }}.{{ c }}" aria-label="{{ label }}"{% if wants(current_user, e, c) %} checked{% endif %}></label>
+        {% endfor %}{% endfor %}
+        <button class="btn accent sm set-save">Guardar avisos</button>
+      </form>
+    </section>
+
+    <section id="cuenta" class="card set-sec">
+      <header><h2>Cuenta</h2></header>
+      <div class="set-rows">
+        <div class="set-row"><span>Correo</span><b>{{ current_user.email }}</b></div>
+        <div class="set-row"><span>Miembro desde</span><b>{{ current_user.created_at|date }}</b></div>
+        <div class="set-row"><span>Documentos</span><span><a class="link" href="{{ url_for('terms') }}">Términos</a> · <a class="link" href="{{ url_for('privacy') }}">Privacidad</a></span></div>
+      </div>
+      <a class="btn soft" href="{{ url_for('logout') }}" data-turbo="false" style="align-self:flex-start">{{ icon("out") }} Cerrar sesión</a>
+    </section>
+  </div>
+</div>
 {% endblock %}
