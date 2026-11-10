@@ -29,7 +29,8 @@ def embed_url(platform, url):
     if not vid:
         return ""
     if platform == "tiktok":
-        return f"https://www.tiktok.com/embed/v2/{vid}"
+        return (f"https://www.tiktok.com/player/v1/{vid}?rel=0&music_info=0&description=0&controls=1&progress_bar=1"
+                "&play_button=1&volume_control=1&fullscreen_button=1&timestamp=0&loop=0&native_context_menu=0")
     if platform == "instagram":
         return f"https://www.instagram.com/reel/{vid}/embed/"
     if platform == "youtube":

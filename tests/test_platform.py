@@ -1319,7 +1319,7 @@ def test_clip_counts_views_until_minimum_then_goes_to_review(monkeypatch):
     assert "@ana" in admin.get("/admin/clips?tab=contando").get_data(as_text=True)
     _refresh_with(monkeypatch, {_vid(1): {"views": 6000}})
     page = admin.get("/admin/clips").get_data(as_text=True)
-    assert 'data-card' in page and "tiktok.com/embed/v2/" + _vid(1) in page and "Detección de bots" in page
+    assert 'data-card' in page and "tiktok.com/player/v1/" + _vid(1) in page and "Detección de bots" in page
 
 
 def test_video_posted_before_joining_is_flagged(monkeypatch):
@@ -1618,7 +1618,7 @@ def test_report_has_best_clips_and_print():
         sid, tok = s.id, get(A.Campaign, cid).report_token
     post(admin, f"/admin/envio/{sid}/aprobar")
     page = A.app.test_client().get(f"/informe/{tok}").get_data(as_text=True)
-    assert "Lo mejor de la campaña" in page and "data-print" in page and "tiktok.com/embed/v2/" in page
+    assert "Lo mejor de la campaña" in page and "data-print" in page and "tiktok.com/player/v1/" in page
 
 
 def test_campaign_hub_channels_for_members():
