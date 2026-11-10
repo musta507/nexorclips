@@ -23,6 +23,7 @@
   {% endif %}
   {% if i_mod %}
   <a class="hub-mod-btn" href="{{ mod_home(camp.id) }}"><span class="mod-tag">MOD</span> Panel de moderador</a>
+  {% if mod_campaigns(current_user)|length > 1 %}<a class="hub-mod-all small link" href="{{ url_for('modero') }}">Todas mis campañas (Modero) →</a>{% endif %}
   {% endif %}
   {% if camp.whatsapp_url %}
   <a class="hub-wa-btn" href="{{ camp.whatsapp_url }}" target="_blank" rel="noopener">

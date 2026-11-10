@@ -316,6 +316,8 @@ class Campaign(db.Model):
     status = db.Column(db.String(20), default="activa")     # activa / pausada / finalizada
     featured = db.Column(db.Boolean, default=False)
     full = db.Column(db.Boolean, default=False)              # plazas completas: no se aceptan solicitudes nuevas
+    spots_opened_at = db.Column(db.DateTime, nullable=True)  # última vez que se abrieron plazas (para el destacado automático)
+    apply_form_url = db.Column(db.String(500), default="")   # formulario de Google para apuntarse (opcional)
     category = db.Column(db.String(20), default="streamer")
     join_questions = db.Column(db.Text, default="")         # preguntas para unirse, una por línea
     kind = db.Column(db.String(20), default="clipping")      # siempre clipping
@@ -771,6 +773,20 @@ class Channel(db.Model):
                             cascade="all, delete-orphan")
 
 
+class Invite(db.Model):
+    """Enlace de invitación a una campaña: entra directo, aceptado. Sirve una sola vez."""
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=False, index=True)
+    token = db.Column(db.String(40), unique=True, nullable=False)
+    note = db.Column(db.String(120), default="")             # para quién es (lo ve solo el equipo)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    used_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    used_at = db.Column(db.DateTime, nullable=True)
+    campaign = db.relationship("Campaign")
+    user = db.relationship("User", foreign_keys=[used_by])
+
+
 class Call(db.Model):
     """Llamada de una campaña (directo con el equipo). La hora se guarda en UTC y se enseña en España y en la hora de cada uno."""
     id = db.Column(db.Integer, primary_key=True)
@@ -867,7 +883,7 @@ MOD_PERMS = {"revisar": "Revisar clips", "verificar": "Pedir otra verificación 
 MOD_DEFAULT = ("revisar", "verificar", "solicitudes", "canales", "comentarios", "soporte")
 MOD_RISKY = {"vistas": "cambia lo que se paga", "dinero": "toca el dinero de la campaña", "estado": "puede cerrar la campaña"}
 ENDPOINT_PERM = {"admin_campaign_review": "revisar", "admin_review": ("revisar", "verificar", "vistas"), "admin_review_bulk": "revisar",
-                 "admin_campaign_requests": "solicitudes", "admin_campaign_member": "solicitudes",
+                 "admin_campaign_requests": "solicitudes", "admin_invites": "solicitudes", "admin_campaign_member": "solicitudes",
                  "admin_campaign_account": "solicitudes", "admin_campaign_channels": ("canales", "gestionar_canales"),
                  "admin_campaign_support": "soporte", "admin_campaign": ("estadisticas", "informe"),
                  "admin_campaign_clippers": "clippers", "admin_campaign_csv": "csv", "admin_campaign_form": "editar",
@@ -2444,7 +2460,7 @@ def inject_globals():
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year, "now_utc": datetime.utcnow(),
             "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "REFRESH_AT": REFRESH_AT, "next_scan_utc": next_scan_utc, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
             "REJECT_REASONS": REJECT_REASONS, "COUNTRIES": COUNTRIES, "LANGUAGES": LANGUAGES, "CAMPAIGN_KINDS": CAMPAIGN_KINDS,
-            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "clip_thumb": clip_thumb, "pop_undo": pop_undo, "my_available": my_available, "when_madrid": when_madrid, "RESOURCE_ICONS": RESOURCE_ICONS, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
+            "clip_stage": clip_stage, "STAGE_LABELS": STAGE_LABELS, "stats_embed": stats_embed, "stats_due": stats_due, "staff_can": staff_can, "perm_ok": perm_ok, "clip_deletable": clip_deletable, "clip_thumb": clip_thumb, "pop_undo": pop_undo, "BASE_URL": BASE_URL, "my_available": my_available, "when_madrid": when_madrid, "RESOURCE_ICONS": RESOURCE_ICONS, "is_mod": is_mod, "mod_can": mod_can, "mod_home": mod_home,
             "mod_campaigns": mod_campaigns, "acting_as_mod": acting_as_mod,
             "STATS_HOURS": STATS_HOURS, "bunny_ready": bunny_ready, "reached_min": reached_min,
             "raw_earning_of": lambda s_: raw_earning(s_, s_.campaign),
@@ -2836,24 +2852,51 @@ def index():
     return render_template("home.html", **home_data(current_user))
 
 
+AUTO_FEATURE_DAYS = 10
+
+
+def auto_featured(cards, now=None):
+    """Destacado automático: las campañas nuevas y las que acaban de abrir plazas (de los últimos días), en carrusel.
+    [(campaña, stats, motivo)]. Si no hay ninguna, la más nueva."""
+    now = now or datetime.utcnow()
+    since = now - timedelta(days=AUTO_FEATURE_DAYS)
+    out = []
+    for c, st in cards:
+        if c.full or st.get("exhausted"):
+            continue
+        opened = c.spots_opened_at if c.spots_opened_at and c.spots_opened_at >= since else None
+        new = c.created_at and c.created_at >= since
+        if opened or new:
+            out.append((c, st, "plazas" if opened and (not new or opened > c.created_at + timedelta(hours=1)) else "nueva",
+                        max(d for d in (opened, c.created_at if new else None) if d)))
+    out.sort(key=lambda x: x[3], reverse=True)
+    if not out and cards:
+        c, st = next(((c, st) for c, st in cards if not c.full), cards[0])
+        out = [(c, st, "", c.created_at)]
+    return [(c, st, why) for c, st, why, _d in out[:5]]
+
+
 @app.route("/campanas")
 @login_required
 def campaigns_page():
     all_cards = [(c, campaign_stats(c)) for c in active_campaigns()]
     hf = home_feature()
+    slides = []
     if hf["mode"] == "campaign":
         featured = next((x for x in all_cards if x[0].id == hf["campaign_id"]), None)
+        slides = [(featured[0], featured[1], "")] if featured else []
     elif hf["mode"] in ("announce", "none"):
         featured = None
-    else:
-        featured = all_cards[0] if all_cards else None
+    else:                                          # automático ("auto" o sin elegir): carrusel de nuevas y con plazas recién abiertas
+        slides = auto_featured(all_cards)
+        featured = (slides[0][0], slides[0][1]) if slides else None
     cat = request.args.get("cat", "")
     cards = [x for x in all_cards if not cat or x[0].category == cat]
     counts = {k: sum(1 for c, _ in all_cards if c.category == k) for k in CATEGORIES}
     my_join = {m.campaign_id: m.status for m in CampaignMember.query.filter_by(user_id=current_user.id).all()}
     cards.sort(key=lambda x: bool(x[0].full and x[0].id not in my_join))   # plazas completas (si no estás dentro) al final
     apply_schedule()
-    return render_template("campaigns.html", cards=cards, featured=featured, cat=cat, counts=counts,
+    return render_template("campaigns.html", cards=cards, featured=featured, slides=slides, cat=cat, counts=counts,
                            total=len(all_cards), new_user=not current_user.submissions, my_join=my_join,
                            announce=hf if hf["mode"] == "announce" else None)
 
@@ -3986,8 +4029,53 @@ def admin_home():
     if not viewcounter.APIFY_TOKEN:
         alerts.append(("gear", "Falta APIFY_TOKEN: las vistas no se están contando", url_for("admin_settings")))
     live = [(c, st) for c, st in cards if c.status == "activa"]
-    return render_template("admin/overview.html", kpis=admin_kpis(camps), alerts=alerts, live=live[:6],
-                           clips_day=clips_day, paid_day=paid_day, users_day=users_day)
+    dias = request.args.get("dias", 30, type=int)
+    dias = dias if dias in (7, 30, 90) else 30
+    pend = pending_by_campaign()
+    todo = [(c, pend[c.id]) for c, _st in cards if c.id in pend and any(pend[c.id].get(k) for k in ("clips", "requests", "accounts", "support"))]
+    general = [al for al in alerts if not al[1].startswith("«") or "agotarse" in al[1]]
+    return render_template("admin/overview.html", kpis=admin_kpis(camps), alerts=alerts, live=live,
+                           clips_day=clips_day, paid_day=paid_day, users_day=users_day, an=admin_analytics(dias), dias=dias,
+                           todo=todo, general=general)
+
+
+ADMIN_METRICS = ("sent", "approved", "spent", "paid", "users")
+
+
+def admin_analytics(days=30):
+    """Gráfica del resumen: envíos, aprobados, dinero repartido, pagado y clippers nuevos, día a día (consultas ligeras)."""
+    today = datetime.utcnow().date()
+    start = today - timedelta(days=days - 1)
+    since = datetime.combine(start, datetime.min.time())
+    dates = [start + timedelta(days=i) for i in range(days)]
+    idx = {d: i for i, d in enumerate(dates)}
+    daily = {m: [0.0] * days for m in ADMIN_METRICS}
+
+    def add(metric, when, v=1):
+        i = idx.get(when.date()) if when else None
+        if i is not None:
+            daily[metric][i] += float(v or 0)
+    for (when,) in Submission.query.filter(Submission.created_at >= since).with_entities(Submission.created_at):
+        add("sent", when)
+    for when, earned in (Submission.query.filter(Submission.status == "aprobado", Submission.reviewed_at >= since)
+                         .with_entities(Submission.reviewed_at, Submission.earned)):
+        add("approved", when)
+        add("spent", when, earned)
+    for when, amount in (Payout.query.filter(Payout.status == "pagado", Payout.paid_at >= since)
+                         .with_entities(Payout.paid_at, Payout.amount)):
+        add("paid", when, amount)
+    for (when,) in User.query.filter(User.created_at >= since, User.is_admin.is_(False)).with_entities(User.created_at):
+        add("users", when)
+    cum = {}
+    for m in ADMIN_METRICS:
+        run, out = 0.0, []
+        for v in daily[m]:
+            run += v
+            out.append(round(run, 2))
+        cum[m] = out
+        daily[m] = [round(v, 2) for v in daily[m]]
+    totals = {m: cum[m][-1] if cum[m] else 0 for m in ADMIN_METRICS}
+    return {"totals": totals, "series": {"labels": [d.isoformat() for d in dates], "cumulative": cum, "daily": daily}}
 
 
 @app.route("/admin/campanas")
@@ -4019,8 +4107,10 @@ def requests_page(cid=None):
         accounts = (CampaignAccount.query.filter_by(campaign_id=cid, status="pendiente")
                     .options(joinedload(CampaignAccount.user)).order_by(CampaignAccount.created_at).all())
     joins = q.order_by(CampaignMember.created_at.desc() if estado != "pendiente" else CampaignMember.created_at).limit(300).all()
+    invites = (Invite.query.filter_by(campaign_id=cid).options(joinedload(Invite.user))
+               .order_by(Invite.used_at.isnot(None), Invite.created_at.desc()).limit(100).all() if cid else [])
     return render_template("admin/requests.html", joins=joins, estado=estado, camp=camp, accounts=accounts,
-                           pend=pending_by_campaign().get(cid, {}) if cid else {}, sec="solicitudes")
+                           pend=pending_by_campaign().get(cid, {}) if cid else {}, sec="solicitudes", invites=invites)
 
 
 @app.route("/admin/campana/<int:cid>/solicitudes")
@@ -4138,9 +4228,100 @@ def admin_mods():
                                                 CampMessage.created_at >= week).count(),
             "posts": Post.query.filter(Post.author_id == uid, Post.created_at >= week).count(),
         }
+        m["recent"] = AuditLog.query.filter_by(admin_id=uid).order_by(AuditLog.created_at.desc()).limit(6).all()
+        m["last"] = m["recent"][0].created_at if m["recent"] else None
+        m["total"] = sum(m["activity"].values())
     camps = Campaign.query.filter(Campaign.status != "finalizada").order_by(Campaign.created_at.desc()).all()
     return render_template("admin/mods.html", mods=sorted(mods.values(), key=lambda m: m["user"].name.lower()),
                            camps=camps, perms=MOD_PERMS, defaults=MOD_DEFAULT, risky=MOD_RISKY)
+
+
+@app.route("/invitacion/<token>")
+@login_required
+def use_invite(token):
+    """Enlace de invitación de un solo uso: entras directo en la campaña, ya aceptado."""
+    inv = Invite.query.filter_by(token=token).first()
+    if not inv or not inv.campaign or inv.campaign.status == "finalizada":
+        flash("Este enlace de invitación no existe o la campaña ya terminó.", "error")
+        return redirect(url_for("campaigns_page"))
+    camp = inv.campaign
+    if inv.used_by and inv.used_by != current_user.id:
+        flash("Este enlace de invitación ya se ha usado. Cada enlace sirve para una sola persona: pide uno nuevo al equipo.", "error")
+        return redirect(url_for("campaign", cid=camp.id))
+    if current_user.is_admin:
+        flash("Este enlace es para clippers. Como equipo ya puedes ver la campaña.", "info")
+        return redirect(url_for("campaign", cid=camp.id))
+    m = campaign_member(current_user.id, camp.id)
+    if m and m.status == "aceptada":
+        flash(f"Ya estás dentro de «{camp.song}».", "info")
+        return redirect(url_for("campaign", cid=camp.id))
+    if not inv.used_by:
+        inv.used_by, inv.used_at = current_user.id, datetime.utcnow()
+    if m:
+        m.status, m.decided_at = "aceptada", datetime.utcnow()
+    else:
+        db.session.add(CampaignMember(user_id=current_user.id, campaign_id=camp.id, status="aceptada", decided_at=datetime.utcnow()))
+    audit("invitacion_usada", f"«{camp.song}» · {current_user.email}")
+    db.session.commit()
+    flash(f"¡Bienvenido a «{camp.song}»! Ahora añade la cuenta con la que vas a publicar y verifícala.", "ok")
+    return redirect(url_for("campaign", cid=camp.id))
+
+
+@app.route("/admin/campana/<int:cid>/invitaciones", methods=["POST"])
+@staff_required(lambda kw: kw.get("cid"))
+def admin_invites(cid):
+    """Crear o borrar enlaces de invitación de un solo uso."""
+    camp = db.session.get(Campaign, cid) or abort(404)
+    act = request.form.get("act", "")
+    if act == "crear":
+        n = max(1, min(request.form.get("n", type=int) or 1, 50))
+        note = " ".join((request.form.get("note") or "").split())[:120]
+        for _ in range(n):
+            db.session.add(Invite(campaign_id=cid, token=secrets.token_urlsafe(12), note=note, created_by=current_user.id))
+        audit("invitaciones_creadas", f"«{camp.song}» · {n}")
+        flash(f"{n} {'enlace creado' if n == 1 else 'enlaces creados'}. Cada uno sirve para una sola persona.", "ok")
+    elif act == "borrar":
+        inv = db.session.get(Invite, request.form.get("id", type=int) or 0)
+        if not inv or inv.campaign_id != cid:
+            abort(404)
+        db.session.delete(inv)
+        flash("Enlace borrado: ya no sirve.", "ok")
+    else:
+        abort(400)
+    db.session.commit()
+    return redirect(url_for("admin_campaign_requests", cid=cid, _anchor="invitaciones"))
+
+
+@app.route("/modero")
+@login_required
+def modero():
+    """Panel «Modero»: todas las campañas que modera esta persona, con lo pendiente de cada una."""
+    rows = CampaignMod.query.filter_by(user_id=current_user.id).all()
+    if not rows:
+        abort(404)
+    pend = pending_by_campaign()
+    items = []
+    for r in rows:
+        if not r.campaign:
+            continue
+        ps = mod_perms(current_user, r.campaign_id)
+        pd = pend.get(r.campaign_id, {})
+        links = [(perm, label, ep, n) for perm, label, ep, n in (
+            ("revisar", "Revisar clips", "admin_campaign_review", pd.get("clips", 0)),
+            ("solicitudes", "Solicitudes", "admin_campaign_requests", pd.get("requests", 0) + pd.get("accounts", 0)),
+            ("soporte", "Soporte", "admin_campaign_support", pd.get("support", 0)),
+            ("canales", "Canales", "admin_campaign_channels", 0),
+            ("estadisticas", "Estadísticas", "admin_campaign", 0),
+            ("clippers", "Clippers", "admin_campaign_clippers", 0),
+            ("editar", "Ajustes", "admin_campaign_form", 0)) if perm in ps]
+        items.append({"camp": r.campaign, "links": links, "todo": sum(n for *_x, n in links)})
+    items.sort(key=lambda it: (-it["todo"], it["camp"].song.lower()))
+    week = datetime.utcnow() - timedelta(days=7)
+    acts = dict(db.session.query(AuditLog.action, db.func.count(AuditLog.id))
+                .filter(AuditLog.admin_id == current_user.id, AuditLog.created_at >= week).group_by(AuditLog.action).all())
+    mine = {"clips": acts.get("clip_aprobado", 0) + acts.get("clip_rechazado", 0),
+            "requests": acts.get("clipper_aceptado", 0) + acts.get("clipper_rechazado", 0)}
+    return render_template("modero.html", items=items, mine=mine)
 
 
 @app.route("/campana/<int:cid>/soporte", methods=["POST"])
@@ -4836,6 +5017,9 @@ def process_cover(file):
 def _campaign_from_form(camp):
     camp.song = request.form.get("song", "").strip()[:200]
     camp.artist = request.form.get("artist", "").strip()[:200]
+    if "apply_form_url" in request.form:
+        fu = (request.form.get("apply_form_url") or "").strip()[:500]
+        camp.apply_form_url = fu if fu.startswith("https://") else ""
     mat_text = request.form.get("materials", "")
     if "mat_url" in request.form:                      # editor de recursos: icono, nombre, enlace y descripción
         lines = []
@@ -4909,7 +5093,9 @@ def _campaign_from_form(camp):
     camp.status = status
     if not request.form.get("wizard"):                 # el formulario antiguo traía estas casillas
         camp.featured = bool(request.form.get("featured"))
-        camp.full = bool(request.form.get("full"))
+        was_full, camp.full = camp.full, bool(request.form.get("full"))
+        if was_full and not camp.full:
+            camp.spots_opened_at = datetime.utcnow()
     if request.form.get("wizard"):                     # opciones del asistente de campaña
         camp.kind, camp.category = "clipping", "streamer"
         camp.max_members = max(int(parse_float(request.form.get("max_members"), 0) or 0), 0)
@@ -5032,7 +5218,7 @@ def admin_featured():
         return redirect(url_for("admin_featured"))
     if request.method == "POST":
         mode = request.form.get("mode", "")
-        if mode not in ("campaign", "announce", "none", ""):
+        if mode not in ("auto", "campaign", "announce", "none", ""):
             abort(400)
         new = dict(hf, mode=mode)
         if mode == "campaign":
@@ -5133,6 +5319,7 @@ def admin_campaign_state(cid):
     elif accion == "plazas":
         camp.full = not camp.full
         if not camp.full:
+            camp.spots_opened_at = datetime.utcnow()
             n = notify_waitlist(camp, current_user.id)
             flash("Plazas abiertas." + (f" Hemos avisado a {n} {'clipper' if n == 1 else 'clippers'} que esperaban." if n else ""), "ok")
         else:
@@ -5963,11 +6150,11 @@ def admin_wipe():
         admin_ids.append(current_user.id)
     keep_campaigns = request.form.get("mode") == "keep_campaigns"
     models = (ViewSnapshot, Submission, Payout, CampaignAccount, CampaignMember, CampaignWaitlist, Message, CampaignLead,
-              Notice, PushSub, LessonProgress, PostComment, PostLike, Post, Channel, ChannelSection, CampaignMod, CampMessage, IgnoredClip,
+              Notice, PushSub, LessonProgress, PostComment, PostLike, Post, Channel, ChannelSection, CampaignMod, CampMessage, IgnoredClip, Invite, Call,
               Campaign, Creator,
               AuditLog, Setting)
     for model in models:
-        if keep_campaigns and model in (Campaign, Creator, Post, Channel, ChannelSection):
+        if keep_campaigns and model in (Campaign, Creator, Post, Channel, ChannelSection, Invite, Call):
             continue
         model.query.delete(synchronize_session=False)
     if keep_campaigns:      # las campañas se quedan como nuevas: sin nada repartido
@@ -6056,6 +6243,9 @@ def delete_user_account(user):
     Post.query.filter_by(author_id=user.id).update({"author_id": None}, synchronize_session=False)
     Message.query.filter_by(sender_id=user.id).update({"sender_id": None}, synchronize_session=False)
     AuditLog.query.filter_by(admin_id=user.id).update({"admin_id": None}, synchronize_session=False)
+    Invite.query.filter_by(used_by=user.id).update({"used_by": None}, synchronize_session=False)
+    Invite.query.filter_by(created_by=user.id).update({"created_by": None}, synchronize_session=False)
+    Call.query.filter_by(author_id=user.id).update({"author_id": None}, synchronize_session=False)
     db.session.delete(user)
 
 
@@ -6827,38 +7017,68 @@ def render_for(text_, user):
 @app.route("/admin/avisos", methods=["GET", "POST"])
 @admin_required
 def admin_notify():
-    """Enviar un aviso personalizado a todos, a los de una campaña o a un clipper."""
+    """Avisos a clippers: se eligen de una lista con filtros (mejores, peores, inactivos…), se ve cómo quedará
+    y llegan como mensaje a su chat de soporte (y a la campanita / móvil)."""
     camps = Campaign.query.order_by(Campaign.created_at.desc()).all()
     if request.method == "POST":
-        audience = request.form.get("audience", "todos")
-        if (request.form.get("one") or "").strip():
-            audience = "u:" + request.form.get("one", "")
+        ids = [int(x) for x in request.form.getlist("uids") if x.isdigit()][:5000]
         body = (request.form.get("body") or "").strip()[:1000]
-        title = (request.form.get("title") or "").strip()[:80] or "Aviso del equipo"
+        title = (request.form.get("title") or "").strip()[:80] or "Mensaje del equipo"
         if len(body) < 3:
             flash("Escribe el mensaje.", "error")
             return redirect(url_for("admin_notify"))
-        q = User.query.filter(User.is_admin.is_(False), User.is_banned.is_(False))
-        if audience.startswith("c:"):
-            cid_ = int(audience[2:] or 0) if audience[2:].isdigit() else 0
-            ids = [m.user_id for m in CampaignMember.query.filter_by(campaign_id=cid_, status="aceptada")]
-            q = q.filter(User.id.in_(ids or [0]))
-        elif audience.startswith("u:"):
-            q = q.filter(User.email == audience[2:].strip().lower())
-        users = q.all()
+        if not ids:
+            flash("Elige al menos un clipper de la lista.", "error")
+            return redirect(url_for("admin_notify"))
+        dest = request.form.get("go", "")
+        path = {"inicio": "/", "clips": "/mis-clips", "ganancias": "/ganancias", "soporte": "/soporte"}.get(dest, "")
+        if dest.startswith("c:") and dest[2:].isdigit():
+            path = f"/campana/{int(dest[2:])}"
+        users = User.query.filter(User.id.in_(ids), User.is_admin.is_(False), User.is_banned.is_(False)).all()
         for u in users:
             text_ = render_for(body, u)
-            if request.form.get("chat"):
-                db.session.add(Message(user_id=u.id, from_admin=True, sender_id=current_user.id, body=text_,
-                                       read_by_admin=True, read_by_user=False))
-            notify_user(u.id, "mensaje", render_for(title, u), text_, request.form.get("path", "")[:200] or "/",
-                        bell=not request.form.get("chat"))
-        audit("aviso_enviado", f"{audience} · {len(users)} clippers · {title}")
+            db.session.add(Message(user_id=u.id, from_admin=True, sender_id=current_user.id, body=text_,
+                                   read_by_admin=True, read_by_user=False))
+            notify_user(u.id, "mensaje", render_for(title, u), text_, path or "/soporte", bell=bool(path))
+        audit("aviso_enviado", f"{len(users)} clippers · {title}")
         db.session.commit()
-        flash(f"Aviso enviado a {len(users)} {'clipper' if len(users) == 1 else 'clippers'}.", "ok" if users else "error")
+        flash(f"Mensaje enviado a {len(users)} {'clipper' if len(users) == 1 else 'clippers'}.", "ok" if users else "error")
         return redirect(url_for("admin_notify"))
-    return render_template("admin/notify.html", camps=camps, push_ready=push_ready(), whatsapp_ready=whatsapp_ready(),
-                           devices=PushSub.query.count(), with_wa=User.query.filter(User.whatsapp != "").count())
+    return render_template("admin/notify.html", camps=camps, push_ready=push_ready(),
+                           devices=PushSub.query.count(), people=notify_people())
+
+
+def notify_people():
+    """Clippers para la lista de avisos, con lo justo para filtrarlos: vistas y dinero de 30 días, último clip y campañas."""
+    since = datetime.utcnow() - timedelta(days=30)
+    users = User.query.filter(User.is_admin.is_(False), User.is_banned.is_(False)).order_by(User.created_at.desc()).all()
+    stats = {uid: (int(v or 0), float(e or 0), n) for uid, v, e, n in (
+        db.session.query(Submission.user_id, db.func.sum(Submission.views),
+                         db.func.sum(db.case((Submission.status == "aprobado", Submission.earned), else_=0)),
+                         db.func.count(Submission.id))
+        .filter(Submission.created_at >= since).group_by(Submission.user_id))}
+    last = dict(db.session.query(Submission.user_id, db.func.max(Submission.created_at)).group_by(Submission.user_id).all())
+    camps = {}
+    for uid, cid in db.session.query(CampaignMember.user_id, CampaignMember.campaign_id).filter(CampaignMember.status == "aceptada"):
+        camps.setdefault(uid, []).append(cid)
+    now = datetime.utcnow()
+    out = []
+    for u in users:
+        v, e, n = stats.get(u.id, (0, 0.0, 0))
+        lc = last.get(u.id)
+        out.append({"u": u, "views": v, "earned": round(e, 2), "clips": n, "last": lc,
+                    "idle": (now - lc).days if lc else None, "camps": camps.get(u.id, []),
+                    "new": (now - (u.created_at or now)).days <= 14})
+    active = [p for p in out if p["camps"]]                    # los que están en alguna campaña
+    for p in sorted(active, key=lambda p: (-p["earned"], -p["views"]))[:max(5, len(active) // 5)]:
+        if p["earned"] > 0 or p["views"] > 0:
+            p["best"] = True
+    for p in sorted(active, key=lambda p: (p["views"], p["clips"]))[:max(5, len(active) // 5)]:
+        if not p.get("best"):
+            p["worst"] = True
+    for p in active:
+        p["inactive"] = p["idle"] is None or p["idle"] >= 7
+    return sorted(out, key=lambda p: (-p["earned"], -p["views"]))
 
 
 @app.route("/admin/ajustes/claves-avisos", methods=["POST"])

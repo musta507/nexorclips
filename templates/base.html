@@ -65,7 +65,7 @@
             <a href="{{ url_for('admin_inbox') }}">{{ icon("inbox") }} Mensajes del panel{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
             {% endif %}
           </div>
-          {% set mcs = mod_campaigns(current_user) %}{% if mcs %}<div class="pm-group"><span class="pm-label">Moderas</span>{% for mc in mcs %}<a href="{{ mod_home(mc.id) }}"><span class="mod-tag">MOD</span> {{ mc.song }}</a>{% endfor %}</div>{% endif %}
+          {% set mcs = mod_campaigns(current_user) %}{% if mcs %}<div class="pm-group"><a href="{{ url_for('modero') }}"><span class="mod-tag">MOD</span> Modero <small class="muted push">{{ mcs|length }} {{ "campaña" if mcs|length == 1 else "campañas" }}</small></a></div>{% endif %}
           <div class="pm-group">
             <a href="{{ url_for('terms') }}">{{ icon("doc") }} Términos</a>
             <a class="pm-out" href="{{ url_for('logout') }}" data-turbo="false">{{ icon("out") }} Cerrar sesión</a>

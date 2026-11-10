@@ -42,8 +42,13 @@
     {% elif not member %}
       <div class="box-head">{{ icon("plus") }} Únete a esta campaña</div>
       <div class="box-body st-row">
+        {% if camp.apply_form_url %}
+        <p class="muted">Para entrar, rellena el formulario del equipo. Si te eligen, te mandaremos un <b>enlace de invitación</b> para entrar directo.</p>
+        <a class="btn accent" href="{{ camp.apply_form_url }}" target="_blank" rel="noopener">Rellenar el formulario {{ icon("ext") }}</a>
+        {% else %}
         <p class="muted">Solicita entrar{% if camp.question_list %} respondiendo a unas preguntas del equipo{% endif %}. Cuando te acepten, añadirás la cuenta con la que vas a publicar.</p>
         <button type="button" class="btn accent" data-open="join-dialog">Solicitar entrar</button>
+        {% endif %}
       </div>
     {% elif member.status == 'pendiente' %}
       <div class="box-head st-wait">{{ icon("clock") }} Solicitud enviada</div>

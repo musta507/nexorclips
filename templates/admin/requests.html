@@ -5,6 +5,27 @@
 {% block content %}
 {% if camp %}{% include "admin/_camp_nav.html" %}{% else %}
 {% call ui.head("Solicitudes para entrar", "Clippers que quieren entrar en una campaña. Al aceptarlos, ellos añaden su cuenta y la verifican con el código en su bio.") %}{% endcall %}{% endif %}
+{% if camp %}
+<section class="card inv-box" id="invitaciones">
+  <div class="inv-head">
+    <div><h3>Enlaces de invitación</h3><p class="small muted">Cada enlace sirve para <b>una sola persona</b>: al abrirlo entra directo en la campaña, ya aceptada. Úsalos con quien apruebes por el formulario de Google{% if camp.apply_form_url %} (<a class="link" href="{{ camp.apply_form_url }}" target="_blank" rel="noopener">ver formulario</a>){% endif %}.</p></div>
+    <form method="post" action="{{ url_for('admin_invites', cid=camp.id) }}" class="inline inv-new"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="crear">
+      <input name="note" maxlength="120" placeholder="Para quién (opcional)" aria-label="Para quién"><input name="n" type="number" min="1" max="50" value="1" aria-label="Cuántos enlaces" style="width:70px"><button class="btn sm accent">{{ icon("plus") }} Crear</button></form>
+  </div>
+  {% if invites %}
+  <div class="inv-list">
+    {% for i in invites %}{% set link = (BASE_URL or request.host_url.rstrip('/')) ~ url_for('use_invite', token=i.token) %}
+    <div class="inv-row{% if i.used_by %} used{% endif %}">
+      <span class="inv-st">{% if i.used_by %}<span class="status aprobado">Usado</span>{% else %}<span class="status pendiente">Sin usar</span>{% endif %}</span>
+      <span class="inv-txt"><code class="selectable" id="inv-{{ i.id }}">{{ link }}</code><small class="muted">{% if i.note %}{{ i.note }} · {% endif %}{% if i.used_by %}lo usó {{ i.user.name if i.user else "alguien" }} {{ i.used_at|ago }}{% else %}creado {{ i.created_at|ago }}{% endif %}</small></span>
+      {% if not i.used_by %}<button type="button" class="btn soft sm" data-copy="inv-{{ i.id }}">Copiar</button>{% endif %}
+      <form method="post" action="{{ url_for('admin_invites', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="borrar"><input type="hidden" name="id" value="{{ i.id }}"><button class="mc-btn" aria-label="Borrar enlace" title="Borrar enlace">{{ icon("trash") }}</button></form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
 {% if camp and accounts %}
 <section class="card tight form-stack">
   <h3>Cuentas por verificar <span class="muted">{{ accounts|length }}</span></h3>

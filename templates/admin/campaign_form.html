@@ -81,6 +81,9 @@
           <div class="field"><label for="rules">Reglas de la campaña</label>
             <textarea id="rules" name="rules" rows="7" placeholder="Qué publicar, hashtags y menciones obligatorias, lo que está prohibido…">{{ camp.rules_text }}</textarea>
             <span class="hint">Se ven en la página de la campaña tal cual las escribas.</span></div>
+          <div class="field"><label for="apply_form_url">Formulario de Google para apuntarse (opcional)</label>
+            <input id="apply_form_url" name="apply_form_url" value="{{ camp.apply_form_url or '' }}" placeholder="https://forms.gle/…">
+            <span class="hint">Si lo pones, el botón «Solicitar entrar» abre este formulario. A los que elijas les mandas un enlace de invitación (pestaña Solicitudes).</span></div>
           <div class="field"><span class="label">Recursos de la campaña</span>
             <div class="res-edit" data-res-edit>
               {% set rows = camp.resources if camp.resources else [] %}

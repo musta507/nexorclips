@@ -47,7 +47,9 @@
       <div><b class="tnum">{{ m.activity.support }}</b><span>respuestas de soporte</span></div>
       <div><b class="tnum">{{ m.activity.posts }}</b><span>publicaciones</span></div>
     </div>
-    <span class="small muted">Últimos 7 días</span>
+    <span class="small muted">Últimos 7 días{% if m.last %} · última acción {{ m.last|ago }}{% else %} · aún sin actividad{% endif %}</span>
+    {% if m.recent %}<details class="mod-recent"><summary class="small link">Ver lo último que ha hecho</summary>
+      <ul>{% for l in m.recent %}<li><span class="act-tag">{{ l.action|replace("_", " ")|capitalize }}</span><span class="small">{{ l.detail|truncate(70, True, '…') }}</span><small class="muted">{{ l.created_at|ago }}</small></li>{% endfor %}</ul></details>{% endif %}
     <div class="mod-camps">
       {% for r in m.rows %}{% set ps = r.perm_set %}
       <details class="mod-camp">

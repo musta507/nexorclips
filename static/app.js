@@ -189,6 +189,8 @@ function pagina() {
   avisosToast();
   horasLocales();
   ajustes();
+  avisosPanel();
+  carruseles();
   buscadoresVivos();
 }
 
@@ -283,9 +285,9 @@ function comprobarBio() {
 // =============================================================== gráfica de estadísticas (informe y panel)
 var MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 var METRICA = { views: "Visualizaciones", likes: "Me gusta", comments: "Comentarios", shares: "Compartidos",
-                earned: "Ganado", sent: "Envíos", approved: "Aprobados" };
+                earned: "Ganado", sent: "Envíos", approved: "Aprobados", spent: "Repartido", paid: "Pagado", users: "Clippers nuevos" };
 function cifra(metric, v) {         // el dinero con decimales y su símbolo; el resto, número entero
-  if (metric === "earned") return (Math.round(v * 100) / 100).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " $";
+  if (metric === "earned" || metric === "spent" || metric === "paid") return (Math.round(v * 100) / 100).toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " $";
   return numES(v);
 }
 function curva(xs, ys) {            // línea suave que no se pasa de los puntos (monótona): sin bajar de 0 ni hacer picos falsos
@@ -332,7 +334,7 @@ function graficas() {
     var src = box.querySelector("[data-chart-data]"), plot = box.querySelector("[data-chart-plot]");
     if (!src || !plot) return;
     box.dataset.ready = "1";
-    var data = JSON.parse(src.textContent), state = { mode: "cumulative", metric: "views" };
+    var data = JSON.parse(src.textContent), state = { mode: box.getAttribute("data-chart-mode-start") || "cumulative", metric: box.getAttribute("data-chart-start") || "views" };
     var suave = box.hasAttribute("data-chart-smooth");        // Mis clips: también el diario va en línea suave
     var NS = "http://www.w3.org/2000/svg";
     function el(tag, attrs, parent) {
@@ -464,7 +466,7 @@ function graficas() {
       svg.addEventListener("mousemove", move); svg.addEventListener("touchmove", move, { passive: true });
       svg.addEventListener("mouseleave", leave); svg.addEventListener("touchend", leave);
       var tot = data.totals[state.metric] || 0;
-      box.querySelector("[data-chart-total]").textContent = suave && state.metric !== "earned" && tot >= 10000 ? corto(tot) : cifra(state.metric, tot);
+      box.querySelector("[data-chart-total]").textContent = suave && ["earned", "spent", "paid"].indexOf(state.metric) < 0 && tot >= 10000 ? corto(tot) : cifra(state.metric, tot);
       box.setAttribute("data-metric", state.metric);
       box.querySelector("[data-chart-label]").textContent = METRICA[state.metric];
       return play;
@@ -1477,3 +1479,98 @@ document.addEventListener("click", function (e) {
     if (p) p.hidden = !on;
   });
 });
+
+// =============================================================== Avisos del panel: elegir clippers con filtros y vista previa
+function avisosPanel() {
+  var f = document.querySelector("[data-notify]");
+  if (!f || f.dataset.ready) return;
+  f.dataset.ready = "1";
+  var rows = Array.prototype.slice.call(f.querySelectorAll(".nt-row")), filt = "todos";
+  var q = f.querySelector("[data-nt-q]"), camp = f.querySelector("[data-nt-camp]"), all = f.querySelector("[data-nt-all]");
+  function visibles() { return rows.filter(function (r) { return !r.hidden; }); }
+  function cuenta() {
+    var n = f.querySelectorAll('input[name="uids"]:checked').length;
+    f.querySelector("[data-nt-count]").textContent = n;
+    f.querySelector("[data-nt-count2]").textContent = n;
+    f.querySelector("[data-nt-send]").disabled = !n;
+    var v = visibles();
+    all.checked = v.length > 0 && v.every(function (r) { return r.querySelector("input").checked; });
+    var first = f.querySelector('input[name="uids"]:checked');
+    var name = first ? first.closest(".nt-row").getAttribute("data-first") : "";
+    f.querySelector("[data-nt-pname]").textContent = name || "el clipper";
+    previa(name);
+  }
+  function aplica() {
+    var t = quitarAcentos(q.value.trim()), c = camp.value, shown = 0;
+    rows.forEach(function (r) {
+      var ok = (filt === "todos" || (" " + r.getAttribute("data-tags") + " ").indexOf(" " + filt + " ") >= 0)
+        && (!c || r.getAttribute("data-camps").indexOf("," + c + ",") >= 0)
+        && (!t || quitarAcentos(r.getAttribute("data-name")).indexOf(t) >= 0);
+      r.hidden = !ok; if (ok) shown++;
+    });
+    f.querySelector("[data-nt-visible]").textContent = shown;
+    f.querySelector("[data-nt-none]").hidden = !!shown;
+    cuenta();
+  }
+  function previa(name) {
+    var nom = name || "Ana";
+    var b = f.querySelector("[data-nt-body]").value.trim().replace(/\{nombre\}/gi, nom) || "Escribe el mensaje…";
+    var t = f.querySelector("[data-nt-title]").value.trim().replace(/\{nombre\}/gi, nom) || "Mensaje del equipo";
+    f.querySelector("[data-nt-pbody]").textContent = b;
+    f.querySelector("[data-nt-pbody2]").textContent = b;
+    f.querySelector("[data-nt-ptitle]").textContent = t;
+  }
+  f.addEventListener("click", function (e) {
+    var a = e.target.closest("[data-nt-filter]");
+    if (!a) return;
+    e.preventDefault();
+    filt = a.getAttribute("data-nt-filter");
+    f.querySelectorAll("[data-nt-filter]").forEach(function (x) { x.classList.toggle("on", x === a); });
+    aplica();
+  });
+  q.addEventListener("input", aplica);
+  camp.addEventListener("change", aplica);
+  all.addEventListener("change", function () { visibles().forEach(function (r) { r.querySelector("input").checked = all.checked; }); cuenta(); });
+  f.addEventListener("change", function (e) { if (e.target.name === "uids") cuenta(); });
+  f.querySelector("[data-nt-body]").addEventListener("input", cuenta);
+  f.querySelector("[data-nt-title]").addEventListener("input", cuenta);
+  aplica();
+}
+
+// =============================================================== carrusel de campañas destacadas (pasa solo cada 6 s)
+function carruseles() {
+  document.querySelectorAll("[data-carousel]").forEach(function (box) {
+    if (box.dataset.ready) return;
+    box.dataset.ready = "1";
+    var track = box.querySelector("[data-car-track]"), dots = box.querySelectorAll("[data-car-dot]");
+    var n = track.children.length, cur = 0, timer = null;
+    if (n < 2) return;
+    function ir(i, suave) {
+      cur = (i + n) % n;
+      track.scrollTo({ left: track.children[cur].offsetLeft - track.offsetLeft, behavior: suave === false ? "auto" : "smooth" });
+      dots.forEach(function (d, k) { d.classList.toggle("on", k === cur); });
+    }
+    function play() {
+      clearInterval(timer);
+      if (!box.hasAttribute("data-autoplay") || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+      timer = setInterval(function () { if (!document.hidden) ir(cur + 1); }, 6000);
+    }
+    box.addEventListener("click", function (e) {
+      var d = e.target.closest("[data-car-dot]"), p = e.target.closest("[data-car-prev]"), nx = e.target.closest("[data-car-next]");
+      if (d) ir(+d.getAttribute("data-car-dot")); else if (p) ir(cur - 1); else if (nx) ir(cur + 1); else return;
+      e.preventDefault(); play();
+    });
+    var t;
+    track.addEventListener("scroll", function () {             // al deslizar con el dedo, los puntos siguen
+      clearTimeout(t);
+      t = setTimeout(function () {
+        var w = track.clientWidth || 1, i = Math.round(track.scrollLeft / w);
+        if (i !== cur) { cur = i; dots.forEach(function (d, k) { d.classList.toggle("on", k === cur); }); }
+      }, 80);
+    }, { passive: true });
+    box.addEventListener("mouseenter", function () { clearInterval(timer); });
+    box.addEventListener("mouseleave", play);
+    play();
+    limpiar.push(tuyo(box, function () { clearInterval(timer); }));
+  });
+}

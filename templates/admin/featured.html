@@ -7,8 +7,8 @@
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <div class="field"><span class="label">Qué mostrar</span>
     <div class="feat-modes">
-      {% for m, label, hint in [("campaign", "Una campaña", "La que elijas, en grande."), ("announce", "Un anuncio", "Un cambio en la plataforma o cualquier aviso."), ("none", "Nada", "El Inicio empieza directamente con las campañas.")] %}
-      <label class="wz-opt"><input type="radio" name="mode" value="{{ m }}" data-feat-mode {% if (hf.mode or 'campaign') == m %}checked{% endif %}><b>{{ label }}</b><span class="small muted">{{ hint }}</span></label>
+      {% for m, label, hint in [("auto", "Automático (recomendado)", "Carrusel con las campañas nuevas y las que acaban de abrir plazas."), ("campaign", "Una campaña", "La que elijas, en grande."), ("announce", "Un anuncio", "Un cambio en la plataforma o cualquier aviso."), ("none", "Nada", "El Inicio empieza directamente con las campañas.")] %}
+      <label class="wz-opt"><input type="radio" name="mode" value="{{ m }}" data-feat-mode {% if (hf.mode or 'auto') == m %}checked{% endif %}><b>{{ label }}</b><span class="small muted">{{ hint }}</span></label>
       {% endfor %}
     </div>
   </div>

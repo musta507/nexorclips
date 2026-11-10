@@ -1496,9 +1496,12 @@ def test_notifications_respect_preferences(monkeypatch):
         assert A.wants(u, "clip_aprobado", "push") and not A.wants(u, "clip_rechazado", "push")
     post(admin, f"/admin/envio/{sid}/aprobar")
     assert sent and sent[0][1] == "clip_aprobado"
-    post(admin, "/admin/avisos", audience="todos", title="Hola {nombre}", body="Hola {nombre}, hay campaña", chat="on")
+    page = admin.get("/admin/avisos").get_data(as_text=True)
+    assert "a@test.com" in page and "Vista previa" in page
+    post(admin, "/admin/avisos", uids=str(u.id), title="Hola {nombre}", body="Hola {nombre}, hay campaña", go="clips")
     with A.app.app_context():
-        assert "hay campaña" in A.Message.query.order_by(A.Message.id.desc()).first().body
+        m = A.Message.query.order_by(A.Message.id.desc()).first()
+        assert "hay campaña" in m.body and m.user_id == u.id and m.from_admin
 
 
 def test_push_subscribe_saves_device():
@@ -2347,3 +2350,48 @@ def test_channels_undo_restore_calls_and_auto_channels():
     assert "Directo de dudas" in page and "hora de España" in page and "meet.google.com/abc" in page
     for name in ("Cuentas TOP", "Vídeos virales"):
         assert a.get(f"/campana/{cid}?canal={ids[name]}").status_code == 200
+
+
+def test_invite_link_single_use_and_google_form():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    post(admin, f"/admin/campana/{cid}/editar", apply_form_url="https://forms.gle/abc")
+    with A.app.app_context():
+        get(A.Campaign, cid).apply_form_url = "https://forms.gle/abc"
+        A.db.session.commit()
+    b = client_for("b@test.com", verify=False)
+    page = b.get(f"/campana/{cid}").get_data(as_text=True)
+    assert "forms.gle/abc" in page and "Rellenar el formulario" in page
+    post(admin, f"/admin/campana/{cid}/invitaciones", act="crear", n="2", note="Ana")
+    with A.app.app_context():
+        toks = [i.token for i in A.Invite.query.filter_by(campaign_id=cid)]
+    assert len(toks) == 2
+    assert "Enlaces de invitación" in admin.get(f"/admin/campana/{cid}/solicitudes").get_data(as_text=True)
+    b.get(f"/invitacion/{toks[0]}")
+    with A.app.app_context():
+        ub = A.User.query.filter_by(email="b@test.com").one()
+        assert A.CampaignMember.query.filter_by(user_id=ub.id, campaign_id=cid).one().status == "aceptada"
+        assert A.Invite.query.filter_by(token=toks[0]).one().used_by == ub.id
+    c = client_for("c@test.com", verify=False)
+    assert "ya se ha usado" in c.get(f"/invitacion/{toks[0]}", follow_redirects=True).get_data(as_text=True)
+    with A.app.app_context():
+        uc = A.User.query.filter_by(email="c@test.com").one()
+        assert not A.CampaignMember.query.filter_by(user_id=uc.id, campaign_id=cid).first()
+
+
+def test_auto_featured_new_and_reopened():
+    from datetime import datetime, timedelta
+    old = make_campaign(song="Vieja")
+    new = make_campaign(song="Nueva")
+    with A.app.app_context():
+        get(A.Campaign, old).created_at = datetime.utcnow() - timedelta(days=40)
+        get(A.Campaign, new).created_at = datetime.utcnow() - timedelta(days=1)
+        A.db.session.commit()
+        cards = [(c, A.campaign_stats(c)) for c in A.active_campaigns()]
+        assert [(c.song, why) for c, _s, why in A.auto_featured(cards)] == [("Nueva", "nueva")]
+        get(A.Campaign, old).spots_opened_at = datetime.utcnow()
+        A.db.session.commit()
+        cards = [(c, A.campaign_stats(c)) for c in A.active_campaigns()]
+        assert [(c.song, why) for c, _s, why in A.auto_featured(cards)] == [("Vieja", "plazas"), ("Nueva", "nueva")]
+    page = client_for("a@test.com").get("/campanas").get_data(as_text=True)
+    assert "data-carousel" in page and "Plazas abiertas" in page

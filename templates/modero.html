@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Modero · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="section-head" style="margin:0">
+  <h1>Modero</h1>
+  <p class="muted">Las campañas que moderas y lo que tienes pendiente en cada una.</p>
+</div>
+<div class="ov-kpis md-kpis">
+  <div class="ov-k"><span>Campañas</span><b class="tnum">{{ items|length }}</b><small class="muted">que moderas</small></div>
+  <div class="ov-k{% if items|sum(attribute='todo') %} warn{% endif %}"><span>Pendiente</span><b class="tnum">{{ items|sum(attribute='todo') }}</b><small class="muted">entre todas</small></div>
+  <div class="ov-k"><span>Clips revisados</span><b class="tnum">{{ mine.clips }}</b><small class="muted">últimos 7 días</small></div>
+  <div class="ov-k"><span>Solicitudes</span><b class="tnum">{{ mine.requests }}</b><small class="muted">últimos 7 días</small></div>
+</div>
+<div class="md-grid">
+  {% for it in items %}{% set c = it.camp %}
+  <article class="card md-card">
+    <header>
+      {% set _t, lqip = cover_meta(c) %}<span class="dthumb"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="48" height="48" loading="lazy">{% endif %}</span>
+      <div><b>{{ c.song }}</b><span class="small muted">{{ c.artist }} · <span class="status {{ c.status }}">{{ c.status|capitalize }}</span></span></div>
+      {% if it.todo %}<span class="ov-n push">{{ it.todo }}</span>{% endif %}
+    </header>
+    <div class="md-links">
+      {% for perm, label, ep, n in it.links %}<a href="{{ url_for(ep, cid=c.id) }}" class="md-link{% if n %} hot{% endif %}"><span>{{ label }}</span>{% if n %}<b>{{ n }}</b>{% else %}{{ icon("arrow") }}{% endif %}</a>{% endfor %}
+    </div>
+    <a class="link small" href="{{ url_for('campaign', cid=c.id) }}">Ver la campaña como clipper →</a>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

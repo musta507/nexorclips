@@ -61,38 +61,25 @@
 
 <section>
   <div class="section-head"><h2>Campañas ({{ camps|length }})</h2></div>
+  <div class="card cl-camps">
   {% for c in camps %}
-  <div class="card camp-row">
-    <div class="toolbar" style="margin:0">
-      <div><a class="link" href="{{ url_for('admin_campaign', cid=c.camp.id) }}"><b>{{ c.camp.song }}</b></a> <span class="status {{ c.camp.status }}">{{ c.camp.status|capitalize }}</span>
-        <div class="small muted">{{ c.camp.artist }}</div></div>
-      <div class="facts" style="grid-template-columns:repeat(3,auto);gap:18px">
-        <div class="fact"><b class="tnum">{{ c.clips }}</b><span>clips{% if c.pending %} (+{{ c.pending }} por revisar){% endif %}</span></div>
-        <div class="fact"><b class="tnum">{{ c.views|short }}</b><span>vistas</span></div>
-        <div class="fact"><b class="tnum">{{ c.earned|earn }}</b><span>ganado</span></div>
-      </div>
-    </div>
-    <div class="inline small" style="flex-wrap:wrap;gap:8px;margin-top:10px">
-      {% if c.member %}<span class="status {{ 'aprobado' if c.member.status == 'aceptada' else ('rechazado' if c.member.status == 'rechazada' else 'pendiente') }}">Solicitud: {{ member_statuses[c.member.status] }}</span>
-      {% if c.member.status == 'pendiente' %}
-        <form method="post" action="{{ url_for('admin_campaign_member', mid=c.member.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
-        <form method="post" action="{{ url_for('admin_campaign_member', mid=c.member.id, accion='rechazar') }}" data-confirm="¿Rechazar a {{ user.name }} en «{{ c.camp.song }}»?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>
-      {% endif %}{% endif %}
-      {% for a in c.accounts %}
-      <span class="chip-acc">{{ icon(a.platform) }} <a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a>
-        <span class="status {{ 'aprobado' if a.status == 'aceptada' else 'pendiente' }}">{{ join_statuses[a.status] }}</span></span>
-      {% endfor %}
-      {% if c.member and c.member.status == 'aceptada' and not c.accounts %}<span class="muted">Aún no ha añadido su cuenta.</span>{% endif %}
-    </div>
-    {% if c.answers %}
-    <details class="answers"><summary>Respuestas al pedir entrar</summary>
-      {% for q, ans in c.answers %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}
-    </details>
-    {% endif %}
+  <div class="cl-crow">
+    <a class="cl-cn" href="{{ url_for('admin_campaign', cid=c.camp.id) }}">{% set _t, lqip = cover_meta(c.camp) %}<span class="dthumb sm"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c.camp) %}<img src="{{ cover_src(c.camp, 160) }}" alt="" width="36" height="36" loading="lazy">{% endif %}</span>
+      <span><b>{{ c.camp.song }}</b><small class="muted">{{ c.camp.artist }}{% if c.member %} · <span class="cl-ms {{ c.member.status }}">{{ member_statuses[c.member.status] }}</span>{% endif %}</small></span></a>
+    <span class="cl-accs">{% for a in c.accounts %}<a class="cl-acc{% if a.status != 'aceptada' %} pend{% endif %}" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow" title="@{{ a.handle }} · {{ join_statuses[a.status] }}">{{ icon(a.platform) }}</a>{% endfor %}{% if c.accounts %}<small class="muted">@{{ c.accounts[0].handle }}{% if c.accounts|length > 1 %} +{{ c.accounts|length - 1 }}{% endif %}</small>{% elif c.member and c.member.status == 'aceptada' %}<small class="muted">Sin cuenta aún</small>{% endif %}</span>
+    <span class="cl-n tnum"><b>{{ c.clips }}</b><small>clips{% if c.pending %} · {{ c.pending }} por revisar{% endif %}</small></span>
+    <span class="cl-n tnum"><b>{{ c.views|short }}</b><small>vistas</small></span>
+    <span class="cl-n tnum"><b>{{ c.earned|earn }}</b><small>ganado</small></span>
+    {% if c.member and c.member.status == 'pendiente' %}<span class="cl-act">
+      <form method="post" action="{{ url_for('admin_campaign_member', mid=c.member.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
+      <form method="post" action="{{ url_for('admin_campaign_member', mid=c.member.id, accion='rechazar') }}" data-confirm="¿Rechazar a {{ user.name }} en «{{ c.camp.song }}»?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form></span>{% endif %}
+    {% if c.answers %}<details class="answers cl-ans"><summary>Respuestas al pedir entrar</summary>
+      {% for q, ans in c.answers %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}</details>{% endif %}
   </div>
   {% else %}
-  <div class="card empty"><p class="muted">Aún no ha pedido entrar en ninguna campaña.</p></div>
+  <p class="muted cl-empty">Aún no ha pedido entrar en ninguna campaña.</p>
   {% endfor %}
+  </div>
 </section>
 
 <section>
