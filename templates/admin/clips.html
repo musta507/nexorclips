@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon, av %}
+{% from "_clip.html" import clip_cover with context %}
 {% block title %}Clips por revisar · Admin{% endblock %}
 {% block content %}
 {% set rev_ep = 'admin_campaign_review' if in_camp else 'admin_clips' %}
@@ -35,7 +36,29 @@
       <span class="small muted push">Atajos: ← → cambiar de clip · A aprobar · R rechazar</span>
     </div>
 
-    {% if rows %}
+    {% if rows and tab == 'contando' %}
+    <div class="table-card ct-list">
+      {% for s in rows %}
+      {% set low, rate = s.campaign.min_for(s.platform), s.campaign.rate_for(s.platform) %}
+      {% set need = (low / rate * 1000000)|round(0, 'ceil')|int if low and rate else 0 %}
+      {% set pct = [((s.views or 0) / need * 100)|int, 100]|min if need else 100 %}
+      <a class="ct-row" href="{{ s.url }}" target="_blank" rel="noopener" id="clip-{{ s.id }}">
+        {{ clip_cover(s) }}
+        <span class="ct-main">
+          <b class="ct-t">{% if s.author %}@{{ s.author }}{% else %}{{ s.user.name }}{% endif %} <span class="muted">· {{ s.campaign.song }}</span></b>
+          <span class="small muted ct-cap">{{ s.caption or s.url }}</span>
+        </span>
+        <span class="ct-prog">
+          <span class="small tnum"><b>{{ s.views|num }}</b>{% if need %} / {{ need|num }} vistas{% else %} vistas{% endif %}</span>
+          <span class="ct-bar"><i style="width:{{ pct }}%"></i></span>
+        </span>
+        <span class="small muted ct-date">{{ (s.posted_at or s.created_at)|date }}</span>
+        <span class="ct-go" aria-hidden="true">↗</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% if more %}<div class="cr-more-wrap"><a class="btn soft" href="{{ url_for(rev_ep, **dict(base, p=page + 1)) }}#clip-{{ rows[-1].id }}">Ver más clips</a></div>{% endif %}
+    {% elif rows %}
     <div class="cr-list">
       {% for s in rows %}
       {% set nxt = rows[loop.index] if not loop.last else None %}

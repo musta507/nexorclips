@@ -2238,3 +2238,14 @@ b>.m-earn,b>.m-zero{font-size:inherit!important;line-height:inherit}
 @media (max-width:800px){.aud-ghost{grid-template-columns:1fr}}
 .cr-copy{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .cr-copy form{margin:0}
+.ct-list{padding:4px 0}
+.ct-row{display:grid;grid-template-columns:38px minmax(0,1fr) 190px 90px 16px;gap:14px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
+.ct-row:last-child{border-bottom:0}
+.ct-row:hover{background:var(--soft)}
+.ct-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ct-t,.ct-cap{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ct-prog{display:flex;flex-direction:column;gap:5px}
+.ct-bar{height:5px;border-radius:9px;background:var(--soft);overflow:hidden}
+.ct-bar i{display:block;height:100%;background:var(--money);border-radius:9px}
+.ct-go{color:var(--muted)}
+@media (max-width:700px){.ct-row{grid-template-columns:38px minmax(0,1fr) 110px}.ct-date,.ct-go{display:none}}
