@@ -2236,3 +2236,5 @@ b>.m-earn,b>.m-zero{font-size:inherit!important;line-height:inherit}
 .aud-empty p{margin:12px 0 0}
 .mc .aud{margin-top:0}
 @media (max-width:800px){.aud-ghost{grid-template-columns:1fr}}
+.cr-copy{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.cr-copy form{margin:0}

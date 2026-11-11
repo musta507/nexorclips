@@ -103,6 +103,8 @@
             {% endif %}
           </div>
           <div class="cr-stats">
+            {% if s.platform in ('tiktok', 'instagram') and s.status == 'pendiente' and clip_stage(s) != 'contando' %}<div class="small cr-copy">{% if own %}Copia en Bunny ✓{% elif s.video_status == 'subiendo' %}Copia en Bunny: procesándose…{% elif s.video_error %}<span style="color:var(--red-ink)">Copia: {{ s.video_error }}</span>{% else %}Sin copia en Bunny todavía{% endif %}
+              {% if not own and s.video_status != 'subiendo' %}<form method="post" action="{{ url_for('admin_bunny', accion='reintentar') }}" class="inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="sid" value="{{ s.id }}"><button class="btn sm soft">Copiar ahora</button></form>{% endif %}</div>{% endif %}
             {% set g = growth[s.id] %}
             <div class="cr-tiles">
               <div class="cr-tile main">

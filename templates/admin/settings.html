@@ -26,6 +26,19 @@
   </div>
 </div>
 
+<div class="card tight form-stack" id="bunny">
+  <h3>Copias de vídeo para revisar (Bunny)</h3>
+  <p class="small muted">Cuando un clip llega al mínimo de vistas y pasa a Revisar, se guarda una copia en Bunny para verlo sin la interfaz de TikTok/Instagram (y aunque lo borren). Los clips en «Contando» no se copian.</p>
+  {% if bunny_info.ready %}<span class="small"><span class="status aprobado">Variables puestas</span> Librería <code>{{ bunny_info.lib }}</code>{% if bunny_info.cdn %} · CDN <code>{{ bunny_info.cdn }}</code>{% else %} · <b>falta BUNNY_CDN_HOST</b> (solo para portadas){% endif %}</span>
+  {% else %}<span class="small"><span class="status pausada">Sin configurar</span> Faltan <code>BUNNY_LIBRARY_ID</code> y/o <code>BUNNY_API_KEY</code> en Railway.</span>{% endif %}
+  <span class="small">Clips en revisión: <b>{{ bunny_info.listo }}</b> con copia lista · <b>{{ bunny_info.subiendo }}</b> procesándose · <b>{{ bunny_info.waiting }}</b> esperando copia{% if bunny_info.error %} · <b style="color:var(--red-ink)">{{ bunny_info.error }} con error</b>{% endif %}</span>
+  <div class="inline" style="flex-wrap:wrap;gap:8px">
+    <form method="post" action="{{ url_for('admin_bunny', accion='probar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Probar conexión</button></form>
+    <form method="post" action="{{ url_for('admin_bunny', accion='copiar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm">Copiar vídeos ahora</button></form>
+  </div>
+  {% if bunny_report %}<div class="small" style="display:grid;gap:4px">{% for sid, name, res in bunny_report %}<span>#{{ sid }} {{ name }} → <b>{{ res }}</b></span>{% endfor %}</div>{% endif %}
+</div>
+
 <div class="card tight form-stack api-card" id="apis">
   <h3>APIs oficiales (TikTok, Instagram, YouTube)</h3>
   <p class="small muted">Cuando un clipper conecta su cuenta, sus vídeos y vistas se leen de la red (gratis) y se guarda su audiencia (país, edad, sexo). Las cuentas sin conectar se siguen leyendo con Apify.</p>

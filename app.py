@@ -526,6 +526,7 @@ class Submission(db.Model):
     video_status = db.Column(db.String(20), default="")      # "" · subiendo · listo · error · borrado
     video_tries = db.Column(db.Integer, default=0)
     media_url = db.Column(db.String(1000), default="")       # enlace de descarga que da Apify (caduca)
+    video_error = db.Column(db.String(300), default="")      # por qué falló la copia en Bunny
     thumb_url = db.Column(db.String(1000), default="")       # portada que da Apify (se renueva en cada lectura)
     caption = db.Column(db.String(300), default="")          # texto del vídeo
     views_updated_at = db.Column(db.DateTime, nullable=True)
@@ -1788,8 +1789,8 @@ def apply_reading(sub, info, now):
     comments = info.get("comments") if isinstance(info, dict) else None
     shares = info.get("shares") if isinstance(info, dict) else None
     posted = info.get("posted_at") if isinstance(info, dict) else None
-    if isinstance(info, dict) and info.get("video_url"):
-        sub.media_url = str(info["video_url"])[:1000]
+    if isinstance(info, dict) and info.get("video_url") and (sub.platform != "tiktok" or "apify" in str(info["video_url"])):
+        sub.media_url = str(info["video_url"])[:1000]       # el enlace directo de TikTok pide cookies: solo vale el de Apify
     if isinstance(info, dict) and info.get("thumb"):
         sub.thumb_url = str(info["thumb"])[:1000]
     if isinstance(info, dict) and info.get("caption") and not sub.caption:
@@ -1956,13 +1957,67 @@ def copy_review_videos(limit=30):
             continue
         s_.stats_guid = ""
     db.session.commit()
-    todo = (Submission.query.filter(Submission.status == "pendiente", Submission.review_since.isnot(None),
-                                    Submission.video_guid == "", Submission.video_tries < 3,
-                                    Submission.platform.in_(("tiktok", "instagram")))
-            .order_by(Submission.review_since).limit(limit).all())
-    todo = [s_ for s_ in todo if not is_fake(s_)]
-    tiktok = [s_ for s_ in todo if s_.platform == "tiktok" and not s_.media_url]
-    if tiktok and api_mode() == "solo":           # sin Apify no hay enlace de descarga de TikTok: se revisan con el vídeo de la red
+    return copy_videos_now()[0]
+
+
+def bunny_test():
+    """(ok, mensaje): comprueba que las variables llegan y que la clave de Bunny funciona."""
+    if not BUNNY_LIBRARY_ID or not BUNNY_API_KEY:
+        falta = [n for n, v in (("BUNNY_LIBRARY_ID", BUNNY_LIBRARY_ID), ("BUNNY_API_KEY", BUNNY_API_KEY)) if not v]
+        return False, "Falta en Railway: " + ", ".join(falta)
+    try:
+        ok, code, data = bunny_call("GET", "/videos", params={"page": 1, "itemsPerPage": 1})
+    except requests.RequestException as e:
+        return False, f"No se pudo conectar con Bunny: {e.__class__.__name__}"
+    if code == 401:
+        return False, "Bunny rechaza la clave (401): revisa BUNNY_API_KEY (es la clave de la librería, pestaña API)"
+    if code == 404:
+        return False, "Bunny no encuentra la librería (404): revisa BUNNY_LIBRARY_ID"
+    if not ok:
+        return False, f"Bunny respondió {code}"
+    return True, f"Conexión correcta · {data.get('totalItems', 0)} vídeos en la librería"
+
+
+def copy_candidates(ids=None):
+    q = Submission.query.filter(Submission.status == "pendiente", Submission.video_guid == "",
+                                Submission.platform.in_(("tiktok", "instagram")))
+    if ids:
+        q = q.filter(Submission.id.in_(ids))
+    else:
+        q = q.filter(Submission.video_tries < 3)
+    subs = q.order_by(Submission.created_at).all()
+    return [s_ for s_ in subs if not is_fake(s_) and clip_stage(s_) != "contando"]
+
+
+def poll_bunny_copies():
+    """Mira en Bunny si las copias que se están subiendo ya están listas."""
+    if not bunny_ready():
+        return
+    for s_ in Submission.query.filter(Submission.video_status == "subiendo").limit(100).all():
+        try:
+            ok, code, data = bunny_call("GET", f"/videos/{s_.video_guid}")
+        except requests.RequestException:
+            continue
+        if ok:
+            st = data.get("status")
+            s_.video_status = {4: "listo", 5: "error", 6: "error"}.get(st, "subiendo")
+            if s_.video_status == "error":
+                s_.video_error = "Bunny no pudo procesar el vídeo"
+        elif code == 404:
+            s_.video_guid, s_.video_status, s_.video_error = "", "error", "El vídeo ya no está en Bunny"
+    db.session.commit()
+
+
+def copy_videos_now(ids=None, limit=30):
+    """Copia a Bunny los clips que ya están en revisión. Devuelve (copiados, [(clip, resultado)])."""
+    if not bunny_ready():
+        return 0, []
+    todo = copy_candidates(ids)[:limit]
+    report = []
+    tiktok = [s_ for s_ in todo if s_.platform == "tiktok" and "apify" not in (s_.media_url or "")]
+    if tiktok and api_mode() == "solo":           # sin Apify no hay enlace de descarga de TikTok
+        for s_ in tiktok:
+            report.append((s_, "sin copiar: en modo «solo APIs» no se puede descargar de TikTok"))
         todo = [s_ for s_ in todo if s_ not in tiktok]
         tiktok = []
     if tiktok:
@@ -1971,40 +2026,45 @@ def copy_review_videos(limit=30):
         except Exception as e:  # noqa: BLE001
             log.warning("Apify no dio los vídeos de TikTok: %s", e)
             links = {}
+            for s_ in tiktok:
+                s_.video_error = f"Apify falló al pedir la descarga: {e}"[:300]
         for s_ in tiktok:
             s_.media_url = (links.get(s_.video_key.split(":", 1)[1]) or "")[:1000]
     done = 0
     for s_ in todo:
         s_.video_tries = (s_.video_tries or 0) + 1
         if not s_.media_url:
+            s_.video_status = "error"
+            s_.video_error = (s_.video_error if s_.video_error.startswith("Apify") else
+                              "Apify no dio enlace de descarga (vídeo privado, borrado o la red lo bloqueó)")[:300]
+            report.append((s_, s_.video_error))
+            db.session.commit()
             continue
         try:
             r = requests.get(s_.media_url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
-            if r.status_code >= 400 or len(r.content) < 10_000 or len(r.content) > 300 * 1024 * 1024:
-                raise RuntimeError(f"descarga {r.status_code} · {len(r.content)} bytes")
+            if r.status_code >= 400:
+                raise RuntimeError(f"la descarga del vídeo dio {r.status_code} (el enlace caducó o está protegido)")
+            if len(r.content) < 10_000 or len(r.content) > 300 * 1024 * 1024:
+                raise RuntimeError(f"la descarga no parece un vídeo ({len(r.content)} bytes)")
             ok, code, data = bunny_call("POST", "/videos", json={"title": f"Clip {s_.id} · {s_.campaign.song}"[:200]})
             if not ok or not data.get("guid"):
-                raise RuntimeError(f"Bunny {code}")
+                raise RuntimeError(f"Bunny no dejó crear el vídeo ({code})")
             guid = data["guid"]
             up = requests.put(f"https://video.bunnycdn.com/library/{BUNNY_LIBRARY_ID}/videos/{guid}", data=r.content,
                               headers={"AccessKey": BUNNY_API_KEY, "Content-Type": "application/octet-stream"}, timeout=180)
             if up.status_code >= 300:
-                raise RuntimeError(f"subida {up.status_code}")
-            s_.video_guid, s_.video_status = guid, "subiendo"
+                raise RuntimeError(f"la subida a Bunny dio {up.status_code}")
+            s_.video_guid, s_.video_status, s_.video_error = guid, "subiendo", ""
             done += 1
+            report.append((s_, "copiado: Bunny lo está procesando (1–3 min)"))
         except Exception as e:  # noqa: BLE001
             log.warning("No se pudo copiar el vídeo del clip %s: %s", s_.id, e)
-            s_.video_status = "error"
+            s_.video_status, s_.video_error = "error", str(e)[:300]
+            s_.media_url = ""                        # la próxima vez se pide un enlace nuevo
+            report.append((s_, s_.video_error))
         db.session.commit()
-    for s_ in Submission.query.filter(Submission.video_status == "subiendo").limit(100).all():
-        try:
-            ok, _, data = bunny_call("GET", f"/videos/{s_.video_guid}")
-            if ok:
-                s_.video_status = {4: "listo", 5: "error", 6: "error"}.get(data.get("status"), "subiendo")
-        except requests.RequestException:
-            pass
-    db.session.commit()
-    return done
+    poll_bunny_copies()
+    return done, report
 
 
 def clip_player(sub):
@@ -2444,6 +2504,10 @@ def _auto_refresh_loop():
         try:
             with app.app_context():
                 call_reminders()
+                try:
+                    poll_bunny_copies()
+                except Exception:  # noqa: BLE001
+                    log.exception("Fallo mirando las copias de Bunny")
                 fresh = False
                 if _refresh_due():
                     set_setting("last_refresh_at", datetime.utcnow().isoformat())
@@ -5088,6 +5152,15 @@ def admin_payouts():
     return render_template("admin/payouts.html", open_requests=open_requests, failed=failed, history=history)
 
 
+def bunny_info():
+    q = Submission.query.filter(Submission.platform.in_(("tiktok", "instagram")), Submission.status == "pendiente")
+    return {"ready": bunny_ready(), "lib": BUNNY_LIBRARY_ID, "cdn": BUNNY_CDN_HOST,
+            "listo": q.filter(Submission.video_status == "listo").count(),
+            "subiendo": q.filter(Submission.video_status == "subiendo").count(),
+            "error": q.filter(Submission.video_status == "error", Submission.video_guid == "").count(),
+            "waiting": len(copy_candidates())}
+
+
 @app.route("/admin/ajustes")
 @admin_required
 def admin_settings(app_test=None):
@@ -5101,11 +5174,51 @@ def admin_settings(app_test=None):
     api_info = {"mode": api_mode(), "modes": API_MODES, "apis": apis, "deletion": base + url_for("data_deletion_page"),
                 "meta_deletion": base + url_for("meta_data_deletion"), "privacy": base + url_for("privacy"), "terms": base + url_for("terms")}
     return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"), allow_wipe=ALLOW_WIPE,
-                           api_info=api_info,
+                           api_info=api_info, bunny_info=bunny_info(), bunny_report=session.pop("bunny_report", None),
                            alerts=tech_alerts(), creators_on=CREATORS_ENABLED, tech_set=bool(TECH_EMAILS),
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
                            my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count())
+
+
+@app.route("/admin/bunny/<accion>", methods=["POST"])
+@admin_required
+def admin_bunny(accion):
+    if accion == "reintentar":                         # desde Revisar: un clip
+        sub = db.get_or_404(Submission, request.form.get("sid", type=int))
+        if sub.video_guid:
+            flash("Ese clip ya tiene copia.", "ok")
+        else:
+            sub.video_tries, sub.video_error = 0, ""
+            db.session.commit()
+            ok, msg = bunny_test()
+            if not ok:
+                flash(msg, "error")
+            else:
+                _, rep_ = copy_videos_now(ids=[sub.id])
+                flash(rep_[0][1].capitalize() if rep_ else "Este clip aún no está en revisión: no se copia.",
+                      "ok" if sub.video_guid else "error")
+        return redirect(request.referrer or url_for("admin_clips"))
+    if not is_tech():
+        abort(403)
+    ok, msg = bunny_test()
+    if accion == "probar":
+        flash(msg, "ok" if ok else "error")
+    elif accion == "copiar":
+        if not ok:
+            flash(msg, "error")
+        else:
+            Submission.query.filter(Submission.video_guid == "", Submission.status == "pendiente").update(
+                {"video_tries": 0}, synchronize_session=False)
+            db.session.commit()
+            done, rep_ = copy_videos_now(limit=15)
+            session["bunny_report"] = [[s_.id, f"{s_.campaign.song} · {PLATFORMS.get(s_.platform, s_.platform)}", r]
+                                       for s_, r in rep_][:15]
+            flash(f"{done} vídeos copiados de {len(rep_)} clips en revisión." if rep_ else
+                  "No hay clips en revisión sin copia (los que están en «Contando» no se copian).", "ok")
+    else:
+        abort(404)
+    return redirect(url_for("admin_settings", _anchor="bunny"))
 
 
 @app.route("/admin/ajustes/apis", methods=["POST"])
