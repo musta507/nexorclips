@@ -596,6 +596,7 @@ function iniciarChat() {
 // Pastilla negra que se desliza: en «Más nuevas / Más presupuesto / Mejor pago» y en las pestañas de Ganancias. En los menús que cambian de página, se guarda dónde estaba la pastilla
 // al pulsar y la página nueva la desliza desde ahí (solo desplazamiento: lo hace la tarjeta gráfica, sin tirones).
 var PILL_KEY = "pill-from:";
+var PILL_MS = 320;
 function pastillaOrden() {
   var grupos = [[".sortbar", "button", ""], [".seg", "a", "seg"]];
   grupos.forEach(function (g) {
@@ -624,18 +625,21 @@ function montarPastilla(box, sel, name) {
     if (!animate) { void pill.offsetWidth; pill.style.transition = ""; }
   }
   var cur = box.querySelector(sel + ".on");
+  var key = PILL_KEY + (box.getAttribute("aria-label") || name || "x");
   var from = null;
-  if (name) { try { from = JSON.parse(sessionStorage.getItem(PILL_KEY + name) || "null"); sessionStorage.removeItem(PILL_KEY + name); } catch (e) { from = null; } }
-  if (from && cur && pill.animate && Math.abs(from.x - cur.offsetLeft) > 2) {
+  try { from = JSON.parse(sessionStorage.getItem(key) || "null"); sessionStorage.removeItem(key); } catch (e) { from = null; }
+  var left = from ? PILL_MS - (Date.now() - from.t) : 0;      // lo que le quedaba a la animación cuando cambió la página
+  if (from && cur && pill.animate && left > 30 && Math.abs(from.x - cur.offsetLeft) > 2) {
+    // La página nueva sigue la animación justo donde iba (la carga no la corta ni la reinicia)
     var y = cur.offsetTop;
-    var startT = "translate(" + Math.round(from.x + from.w / 2 - cur.offsetWidth / 2) + "px," + y + "px)";
-    var endT = "translate(" + cur.offsetLeft + "px," + y + "px)";
     pill.style.transition = "none";
-    pill.style.width = cur.offsetWidth + "px";
     pill.style.height = cur.offsetHeight + "px";
     pill.style.opacity = 1;
-    pill.style.transform = endT;
-    pill.animate([{ transform: startT }, { transform: endT }], { duration: 300, easing: "cubic-bezier(.3,.9,.3,1)" })
+    pill.style.width = cur.offsetWidth + "px";
+    pill.style.transform = "translate(" + cur.offsetLeft + "px," + y + "px)";
+    pill.animate([{ transform: "translate(" + from.x + "px," + y + "px)", width: from.w + "px" },
+                  { transform: "translate(" + cur.offsetLeft + "px," + y + "px)", width: cur.offsetWidth + "px" }],
+                 { duration: Math.max(120, left), easing: "cubic-bezier(.2,.7,.3,1)" })
       .onfinish = function () { pill.style.transition = ""; };
   } else {
     place(cur, false);
@@ -647,7 +651,18 @@ function montarPastilla(box, sel, name) {
     var was = box.querySelector(sel + ".on");
     if (was && was !== it) { was.classList.remove("on"); was.removeAttribute("aria-current"); }
     it.classList.add("on");
-    place(it, true);                            // la pastilla se mueve al momento; la página nueva ya la trae en su sitio
+    place(it, true);                            // la pastilla se mueve al momento
+    if (it.tagName === "A" && it.getAttribute("href") && !it.hasAttribute("data-tab")) {
+      // Si cambia de página, la nueva sigue la animación desde donde vaya en ese momento
+      var t0 = Date.now();
+      var save = function () {
+        var m = new DOMMatrixReadOnly(getComputedStyle(pill).transform);
+        try { sessionStorage.setItem(key, JSON.stringify({ x: Math.round(m.m41), w: Math.round(pill.getBoundingClientRect().width), t: t0 })); } catch (err) { /* sin almacenamiento: sin más */ }
+      };
+      save();
+      document.addEventListener("turbo:before-render", save, { once: true });
+      document.addEventListener("turbo:before-frame-render", save, { once: true });
+    }
   });
   var onResize = function () { place(box.querySelector(sel + ".on"), false); };
   window.addEventListener("resize", onResize);
