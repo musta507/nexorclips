@@ -6,6 +6,7 @@ import tempfile
 from datetime import datetime, timedelta
 
 DB = os.path.join(tempfile.mkdtemp(), "test.db")
+os.environ.setdefault("SEARCH_ENGINE", "apify")
 os.environ.update(DATABASE_URL=os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{DB}", ADMIN_EMAIL="admin@test.com", APIFY_TOKEN="test",
                   CRON_SECRET="cron-key", DEV_LOGIN="1", GOOGLE_CLIENT_ID="cid", GOOGLE_CLIENT_SECRET="sec",
                   SUPPORT_EMAIL="soporte@test.com")
@@ -2521,3 +2522,45 @@ def test_api_refresh_by_ids_and_solo_mode(monkeypatch):
         A.set_setting("api_mode", "solo")
         A.db.session.commit()
         assert A.api_required()
+
+
+def test_ytdlp_finds_clips_apify_only_reads_and_check_changes_nothing(monkeypatch):
+    cid = make_campaign(song="Bali")
+    client_for("a@test.com", tiktok="clipsdepablo")
+    _auto_accept()
+    now = datetime.utcnow()
+    with A.app.app_context():
+        acc = A.CampaignAccount.query.one()
+        acc.decided_at = now - timedelta(days=2)
+        A.set_setting("search_engine", "ytdlp")
+        A.db.session.commit()
+    vids = [{"url": "https://www.tiktok.com/@clipsdepablo/video/7500000000000000011", "vid": "7500000000000000011",
+             "author": "clipsdepablo", "posted_at": now - timedelta(hours=3), "views": None}]
+    monkeypatch.setattr(A.viewcounter, "ytdlp_available", lambda: True)
+    monkeypatch.setattr(A.viewcounter, "ytdlp_profile_videos", lambda p, h, per=12, known=(): list(vids))
+
+    def no_apify(*a, **k):
+        raise AssertionError("no debe buscar en Apify")
+    monkeypatch.setattr(A.viewcounter, "fetch_profile_videos", no_apify)
+    with A.app.app_context():
+        added, errors = A.discover_clips()
+        assert added == 1 and not errors
+        assert A.Submission.query.one().campaign_id == cid
+        # comprobación: un vídeo de antes de la última búsqueda que falta → aviso, sin añadirlo
+        A.set_setting("last_refresh_at", now.isoformat())
+        vids.append({"url": "https://www.tiktok.com/@clipsdepablo/video/7500000000000000012", "vid": "7500000000000000012",
+                     "author": "clipsdepablo", "posted_at": now - timedelta(hours=1), "views": None})
+        vids.append({"url": "https://www.tiktok.com/@clipsdepablo/video/7500000000000000013", "vid": "7500000000000000013",
+                     "author": "clipsdepablo", "posted_at": now + timedelta(minutes=5), "views": None})   # después: normal
+        res = A.ytdlp_check()
+        assert [i[0] for i in res["issues"]] == ["falta"] and A.Submission.query.count() == 1
+    # si yt-dlp falla, esa cuenta va a Apify
+    def boom(*a, **k):
+        raise RuntimeError("bloqueado")
+    monkeypatch.setattr(A.viewcounter, "ytdlp_profile_videos", boom)
+    monkeypatch.setattr(A.viewcounter, "fetch_profile_videos", lambda p, hs, per=12: [])
+    with A.app.app_context():
+        A.discover_clips()
+        assert A.json.loads(A.get_setting("ytdlp_stats"))["fail"] == 1
+        A.apify_log("vistas", "tiktok", 3, 3, 200)
+        assert A.apify_summary()["by"]["vistas"]["items"] == 3

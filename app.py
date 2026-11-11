@@ -2014,7 +2014,14 @@ def copy_videos_now(ids=None, limit=30):
         return 0, []
     todo = copy_candidates(ids)[:limit]
     report = []
-    tiktok = [s_ for s_ in todo if s_.platform == "tiktok" and "apify" not in (s_.media_url or "")]
+    got = {}
+    if search_engine() == "ytdlp":                  # primero yt-dlp (gratis); lo que falle, por Apify
+        for s_ in [x for x in todo if x.platform == "tiktok"]:
+            try:
+                got[s_.id] = viewcounter.ytdlp_download(s_.url)
+            except Exception as e:  # noqa: BLE001
+                log.warning("yt-dlp no pudo descargar el clip %s: %s", s_.id, e)
+    tiktok = [s_ for s_ in todo if s_.platform == "tiktok" and s_.id not in got and "apify" not in (s_.media_url or "")]
     if tiktok and api_mode() == "solo":           # sin Apify no hay enlace de descarga de TikTok
         for s_ in tiktok:
             report.append((s_, "sin copiar: en modo «solo APIs» no se puede descargar de TikTok"))
@@ -2033,7 +2040,7 @@ def copy_videos_now(ids=None, limit=30):
     done = 0
     for s_ in todo:
         s_.video_tries = (s_.video_tries or 0) + 1
-        if not s_.media_url:
+        if not s_.media_url and s_.id not in got:
             s_.video_status = "error"
             s_.video_error = (s_.video_error if s_.video_error.startswith("Apify") else
                               "Apify no guardó el vídeo (no devolvió mediaUrls): vídeo privado, borrado o Apify no pudo descargarlo")[:300]
@@ -2041,17 +2048,21 @@ def copy_videos_now(ids=None, limit=30):
             db.session.commit()
             continue
         try:
-            r = viewcounter.download_video(s_.media_url)
-            if r.status_code >= 400:
-                host = urlparse(s_.media_url).netloc
-                raise RuntimeError(f"la descarga del vídeo dio {r.status_code} desde {host}")
-            if len(r.content) < 10_000 or len(r.content) > 300 * 1024 * 1024:
-                raise RuntimeError(f"la descarga no parece un vídeo ({len(r.content)} bytes)")
+            if s_.id in got:
+                content = got.pop(s_.id)
+            else:
+                r = viewcounter.download_video(s_.media_url)
+                if r.status_code >= 400:
+                    host = urlparse(s_.media_url).netloc
+                    raise RuntimeError(f"la descarga del vídeo dio {r.status_code} desde {host}")
+                content = r.content
+            if len(content) < 10_000 or len(content) > 300 * 1024 * 1024:
+                raise RuntimeError(f"la descarga no parece un vídeo ({len(content)} bytes)")
             ok, code, data = bunny_call("POST", "/videos", json={"title": f"Clip {s_.id} · {s_.campaign.song}"[:200]})
             if not ok or not data.get("guid"):
                 raise RuntimeError(f"Bunny no dejó crear el vídeo ({code})")
             guid = data["guid"]
-            up = requests.put(f"https://video.bunnycdn.com/library/{BUNNY_LIBRARY_ID}/videos/{guid}", data=r.content,
+            up = requests.put(f"https://video.bunnycdn.com/library/{BUNNY_LIBRARY_ID}/videos/{guid}", data=content,
                               headers={"AccessKey": BUNNY_API_KEY, "Content-Type": "application/octet-stream"}, timeout=180)
             if up.status_code >= 300:
                 raise RuntimeError(f"la subida a Bunny dio {up.status_code}")
@@ -2298,8 +2309,18 @@ def discover_clips(now=None):
                     errors.append(f"API {PLATFORMS[a.platform]} @{a.handle}: {e}")
                 except Exception as e:  # noqa: BLE001
                     log.warning("API oficial de %s falló para @%s: %s", a.platform, a.handle, e)
+        if a.platform in viewcounter.YTDLP_PLATFORMS and search_engine() == "ytdlp":
+            try:
+                items = viewcounter.ytdlp_profile_videos(a.platform, a.handle, known=_known_vids(a))
+                a.last_scan_at = now
+                added += _ingest(a.platform, [a], items, now)
+                ytdlp_note(True)
+                continue
+            except Exception as e:  # noqa: BLE001
+                ytdlp_note(False, f"@{a.handle} ({PLATFORMS[a.platform]}): {str(e)[:160]}")
+                log.warning("yt-dlp no pudo leer @%s (%s): %s — se usa Apify", a.handle, a.platform, e)
         if api_mode() != "solo":
-            by_platform.setdefault(a.platform, []).append(a)   # sin API (o falló): Apify, como siempre
+            by_platform.setdefault(a.platform, []).append(a)   # sin API ni yt-dlp (o fallaron): Apify
     for platform, group in by_platform.items():
         for i in range(0, len(group), SCAN_CHUNK):
             chunk = group[i:i + SCAN_CHUNK]
@@ -2316,6 +2337,155 @@ def discover_clips(now=None):
     if added:
         log.info("Clips detectados solos: %s", added)
     return added, errors
+
+
+SEARCH_ENGINES = {"ytdlp": "yt-dlp busca los clips de TikTok y YouTube (gratis) · Apify si falla",
+                  "apify": "Solo Apify (como antes)"}
+
+
+def search_engine():
+    v = get_setting("search_engine", os.environ.get("SEARCH_ENGINE", "ytdlp"))
+    if v == "ytdlp" and not viewcounter.ytdlp_available():
+        return "apify"
+    return v if v in SEARCH_ENGINES else "ytdlp"
+
+
+def _known_vids(acc):
+    rows = (Submission.query.with_entities(Submission.video_key)
+            .filter(Submission.campaign_id == acc.campaign_id, Submission.platform == acc.platform).all())
+    return {k.split(":", 1)[1] for (k,) in rows if k and ":" in k}
+
+
+def ytdlp_note(ok, err=""):
+    """Lleva la cuenta de los fallos de yt-dlp de hoy (para el aviso del panel técnico)."""
+    day = _local().strftime("%Y-%m-%d")
+    try:
+        st = json.loads(get_setting("ytdlp_stats", "{}") or "{}")
+    except ValueError:
+        st = {}
+    if st.get("day") != day:
+        st = {"day": day, "ok": 0, "fail": 0, "errors": []}
+    st["ok" if ok else "fail"] += 1
+    if err:
+        st["errors"] = ([err] + st.get("errors", []))[:10]
+    set_setting("ytdlp_stats", json.dumps(st))
+
+
+def apify_log(kind, platform, n_in, n_out, code):
+    """Apunta cada llamada a Apify (para ver qué es lo que gasta)."""
+    try:
+        with app.app_context():
+            try:
+                rows = json.loads(get_setting("apify_log", "[]") or "[]")
+            except ValueError:
+                rows = []
+            rows.insert(0, [datetime.utcnow().isoformat(timespec="seconds"), kind, platform, n_in, n_out, code])
+            set_setting("apify_log", json.dumps(rows[:300]))
+            db.session.commit()
+    except Exception:  # noqa: BLE001
+        log.exception("No se pudo apuntar la llamada a Apify")
+
+
+viewcounter.APIFY_HOOK = apify_log
+
+
+def apify_summary():
+    try:
+        rows = json.loads(get_setting("apify_log", "[]") or "[]")
+    except ValueError:
+        rows = []
+    week = (datetime.utcnow() - timedelta(days=7)).isoformat()
+    by = {}
+    for r in rows:
+        if r[0] >= week:
+            k = by.setdefault(r[1], {"calls": 0, "items": 0})
+            k["calls"] += 1
+            k["items"] += r[4] or 0
+    return {"rows": rows[:40], "by": by}
+
+
+YTDLP_CHECK_AT = [x.strip() for x in os.environ.get("YTDLP_CHECK_AT", "03:30,11:00,19:00").split(",") if x.strip()]
+
+
+def ytdlp_check_slot(now=None):
+    """Si toca una comprobación de yt-dlp, devuelve su clave (día + hora); si no, None."""
+    local = _local(now)
+    cur = local.hour * 60 + local.minute
+    due = None
+    for t in YTDLP_CHECK_AT:
+        try:
+            hh, mm = (int(x) for x in t.split(":"))
+        except ValueError:
+            continue
+        if cur >= hh * 60 + mm:
+            due = f"{local.strftime('%Y-%m-%d')} {t}"
+    if due and get_setting("ytdlp_check_slot", "") != due:
+        return due
+    return None
+
+
+def ytdlp_check(now=None):
+    """Comprobación con yt-dlp que NO cambia nada: compara los perfiles con lo que tiene la web.
+    Avisa de vídeos publicados antes de la última búsqueda que no están, de clips que ya no están en el perfil
+    y de cuentas que yt-dlp no puede leer."""
+    now = now or datetime.utcnow()
+    try:
+        last_search = datetime.fromisoformat(get_setting("last_refresh_at", ""))
+    except ValueError:
+        last_search = None
+    accs = (CampaignAccount.query.join(Campaign)
+            .filter(CampaignAccount.status == "aceptada", Campaign.status.in_(("activa", DIST_STATUS)),
+                    CampaignAccount.platform.in_(viewcounter.YTDLP_PLATFORMS)).all())
+    accs = [a for a in accs if not is_fake(a)]
+    issues, ok = [], 0
+    for a in accs:
+        known = _known_vids(a)
+        try:
+            items = viewcounter.ytdlp_profile_videos(a.platform, a.handle, known=known)
+        except Exception as e:  # noqa: BLE001
+            issues.append(["cuenta", f"@{a.handle} ({PLATFORMS[a.platform]}) · {a.campaign.song}",
+                           f"yt-dlp no puede leer la cuenta: {str(e)[:150]}", ""])
+            continue
+        ok += 1
+        since = (a.decided_at or a.created_at or now) - timedelta(hours=1)
+        listed = {it["vid"] for it in items}
+        for it in items:
+            p = it.get("posted_at")
+            if (it["vid"] not in known and p and last_search and since <= p < last_search
+                    and not IgnoredClip.query.filter_by(video_key=f"{a.platform}:{it['vid']}").first()):
+                issues.append(["falta", f"@{a.handle} ({PLATFORMS[a.platform]}) · {a.campaign.song}",
+                               f"Vídeo publicado el {p:%d/%m %H:%M} (UTC) que la búsqueda no añadió", it["url"]])
+        dates = [it["posted_at"] for it in items if it.get("posted_at")]
+        if a.platform == "tiktok" and dates and len(items) >= 1:
+            oldest = min(dates)
+            gone = (Submission.query.filter(Submission.campaign_id == a.campaign_id, Submission.platform == "tiktok",
+                                            Submission.user_id == a.user_id, Submission.status != "rechazado",
+                                            Submission.posted_at.isnot(None), Submission.posted_at >= oldest).all())
+            for s_ in gone:
+                if viewcounter.clean_handle(s_.author or "") == viewcounter.clean_handle(a.handle) \
+                        and s_.video_key.split(":", 1)[1] not in listed:
+                    issues.append(["borrado", f"@{a.handle} (TikTok) · {a.campaign.song}",
+                                   f"El clip #{s_.id} ya no está en el perfil (¿borrado o privado?)", s_.url])
+    res = {"at": now.isoformat(timespec="seconds"), "accounts": len(accs), "ok": ok, "issues": issues[:60]}
+    prev = get_setting("ytdlp_check", "")
+    set_setting("ytdlp_check", json.dumps(res))
+    db.session.commit()
+    try:
+        prev_issues = json.loads(prev).get("issues", []) if prev else []
+    except ValueError:
+        prev_issues = []
+    new = [i for i in issues if i not in prev_issues]
+    if new:
+        notify_phone(f"🔎 Comprobación de clips: {len(new)} cosas raras",
+                     "; ".join(i[2] for i in new[:3])[:300], url_for_safe("admin_settings", "ytdlp"), tags="mag")
+    return res
+
+
+def url_for_safe(endpoint, anchor=""):
+    try:
+        return url_for(endpoint, _anchor=anchor or None)
+    except RuntimeError:
+        return f"/admin/ajustes#{anchor}" if anchor else ""
 
 
 def _ingest(platform, chunk, items, now, update_existing=False):
@@ -2510,6 +2680,14 @@ def _auto_refresh_loop():
                 except Exception:  # noqa: BLE001
                     log.exception("Fallo mirando las copias de Bunny")
                 fresh = False
+                slot = ytdlp_check_slot()
+                if slot and search_engine() == "ytdlp" and not _refresh_due():
+                    set_setting("ytdlp_check_slot", slot)
+                    db.session.commit()
+                    try:
+                        ytdlp_check()
+                    except Exception:  # noqa: BLE001
+                        log.exception("Fallo en la comprobación con yt-dlp")
                 if _refresh_due():
                     set_setting("last_refresh_at", datetime.utcnow().isoformat())
                     set_setting("refresh_day", _local().strftime("%Y-%m-%d"))
@@ -5153,6 +5331,17 @@ def admin_payouts():
     return render_template("admin/payouts.html", open_requests=open_requests, failed=failed, history=history)
 
 
+def search_info():
+    def load(k, d):
+        try:
+            return json.loads(get_setting(k, "") or d)
+        except ValueError:
+            return json.loads(d)
+    return {"engine": search_engine(), "engines": SEARCH_ENGINES, "installed": viewcounter.ytdlp_available(),
+            "stats": load("ytdlp_stats", "{}"), "check": load("ytdlp_check", "{}"), "times": YTDLP_CHECK_AT,
+            "test": session.pop("ytdlp_test", None), "apify": apify_summary()}
+
+
 def bunny_info():
     q = Submission.query.filter(Submission.platform.in_(("tiktok", "instagram")), Submission.status == "pendiente")
     return {"ready": bunny_ready(), "lib": BUNNY_LIBRARY_ID, "cdn": BUNNY_CDN_HOST,
@@ -5175,11 +5364,54 @@ def admin_settings(app_test=None):
     api_info = {"mode": api_mode(), "modes": API_MODES, "apis": apis, "deletion": base + url_for("data_deletion_page"),
                 "meta_deletion": base + url_for("meta_data_deletion"), "privacy": base + url_for("privacy"), "terms": base + url_for("terms")}
     return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"), allow_wipe=ALLOW_WIPE,
-                           api_info=api_info, bunny_info=bunny_info(), bunny_report=session.pop("bunny_report", None),
+                           api_info=api_info, bunny_info=bunny_info(), search=search_info(), bunny_report=session.pop("bunny_report", None),
                            alerts=tech_alerts(), creators_on=CREATORS_ENABLED, tech_set=bool(TECH_EMAILS),
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
                            my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count())
+
+
+@app.route("/admin/busqueda/<accion>", methods=["POST"])
+@admin_required
+def admin_search(accion):
+    if not is_tech():
+        abort(403)
+    if accion == "motor":
+        v = request.form.get("engine", "")
+        if v not in SEARCH_ENGINES:
+            abort(400)
+        set_setting("search_engine", v)
+        audit("motor_busqueda", v)
+        db.session.commit()
+        flash(f"Búsqueda de clips: {SEARCH_ENGINES[v]}.", "ok")
+    elif accion == "probar":
+        platform = request.form.get("platform", "tiktok")
+        handle = viewcounter.clean_handle(request.form.get("handle", ""))
+        if platform not in viewcounter.YTDLP_PLATFORMS or not handle:
+            flash("Pon una cuenta de TikTok o YouTube.", "error")
+        elif not viewcounter.ytdlp_available():
+            flash("yt-dlp no está instalado en el servidor.", "error")
+        else:
+            t0 = time.time()
+            try:
+                items = viewcounter.ytdlp_profile_videos(platform, handle)
+                session["ytdlp_test"] = {"handle": handle, "platform": platform, "secs": round(time.time() - t0, 1),
+                                         "items": [[it["url"], it["posted_at"].strftime("%d/%m/%Y %H:%M") if it.get("posted_at") else "—"]
+                                                   for it in items]}
+                flash(f"yt-dlp encontró {len(items)} vídeos de @{handle} en {round(time.time() - t0, 1)} s.", "ok")
+            except Exception as e:  # noqa: BLE001
+                session["ytdlp_test"] = {"handle": handle, "platform": platform, "error": str(e)[:400]}
+                flash(f"yt-dlp falló con @{handle}.", "error")
+    elif accion == "comprobar":
+        res = ytdlp_check()
+        flash(f"Comprobación hecha: {res['ok']} de {res['accounts']} cuentas leídas · {len(res['issues'])} cosas raras.", "ok")
+    elif accion == "borrar_registro":
+        set_setting("apify_log", "[]")
+        db.session.commit()
+        flash("Registro de Apify vaciado.", "ok")
+    else:
+        abort(404)
+    return redirect(url_for("admin_settings", _anchor="ytdlp"))
 
 
 @app.route("/admin/bunny/<accion>", methods=["POST"])
@@ -5688,6 +5920,15 @@ def tech_alerts():
             out.append(("aviso", "Las vistas llevan tiempo sin actualizarse", f"Última lectura: {get_setting('last_refresh', '—')}"))
     except ValueError:
         pass
+    if search_engine() == "ytdlp":
+        try:
+            st = json.loads(get_setting("ytdlp_stats", "{}") or "{}")
+        except ValueError:
+            st = {}
+        if st.get("fail") and st.get("fail", 0) >= max(1, st.get("ok", 0)):
+            out.append(("aviso", "yt-dlp está fallando hoy",
+                        f"{st['fail']} cuentas no se pudieron leer con yt-dlp (se buscaron con Apify). "
+                        f"Puede que TikTok/YouTube estén bloqueando el servidor. Último error: {(st.get('errors') or ['—'])[0]}"))
     bad = Submission.query.filter(Submission.views_error != "", Submission.status != "rechazado").count()
     if bad:
         out.append(("aviso", f"{bad} clips sin poder leer sus vistas", "Puede ser un vídeo borrado o privado, o un fallo de Apify. Míralos en «Clips por revisar»."))

@@ -26,6 +26,45 @@
   </div>
 </div>
 
+<div class="card tight form-stack" id="ytdlp">
+  <h3>Búsqueda de clips (yt-dlp + Apify)</h3>
+  <p class="small muted">yt-dlp (gratis) busca los vídeos nuevos de las cuentas de TikTok y YouTube; Apify solo lee las cifras (vistas, likes…). Instagram se busca con Apify. Si yt-dlp falla con una cuenta, ese día la busca Apify.{% if not search.installed %} <b style="color:var(--red-ink)">yt-dlp no está instalado en el servidor.</b>{% endif %}</p>
+  <form method="post" action="{{ url_for('admin_search', accion='motor') }}" class="inline" style="flex-wrap:wrap;gap:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <select name="engine" aria-label="Motor de búsqueda" data-native>{% for k, label in search.engines.items() %}<option value="{{ k }}"{% if search.engine == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <button class="btn sm">Guardar</button></form>
+  {% if search.stats.day %}<span class="small">Hoy: <b>{{ search.stats.ok }}</b> cuentas leídas con yt-dlp{% if search.stats.fail %} · <b style="color:var(--red-ink)">{{ search.stats.fail }} fallaron</b> (se usó Apify){% endif %}</span>
+  {% for e in search.stats.errors[:3] %}<span class="small muted">· {{ e }}</span>{% endfor %}{% endif %}
+
+  <form method="post" action="{{ url_for('admin_search', accion='probar') }}" class="inline" style="flex-wrap:wrap;gap:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <select name="platform" aria-label="Red" data-native><option value="tiktok">TikTok</option><option value="youtube">YouTube</option></select>
+    <input name="handle" placeholder="@cuenta" aria-label="Cuenta" style="width:180px" required>
+    <button class="btn sm soft">Probar yt-dlp con una cuenta</button></form>
+  {% if search.test %}<div class="small" style="display:grid;gap:3px">
+    {% if search.test.error %}<span style="color:var(--red-ink)"><b>@{{ search.test.handle }}:</b> {{ search.test.error }}</span>
+    {% else %}<b>@{{ search.test.handle }} · {{ search.test['items']|length }} vídeos en {{ search.test.secs }} s</b>
+      {% for u, d in search.test['items'] %}<span>{{ d }} · <a class="link" href="{{ u }}" target="_blank" rel="noopener">{{ u }}</a></span>{% endfor %}{% endif %}
+  </div>{% endif %}
+
+  <div class="inline" style="flex-wrap:wrap;gap:8px;align-items:center">
+    <b class="small">Comprobación sin cambios</b><span class="small muted">a las {{ search.times|join(", ") }} (hora de España): compara los perfiles con la web y solo avisa.</span>
+    <form method="post" action="{{ url_for('admin_search', accion='comprobar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Comprobar ahora</button></form>
+  </div>
+  {% if search.check.at %}<div class="small" style="display:grid;gap:3px">
+    <span>Última: <time data-local data-local-full datetime="{{ search.check.at }}Z">{{ search.check.at }}</time> · {{ search.check.ok }} de {{ search.check.accounts }} cuentas leídas · {% if search.check.issues %}<b style="color:var(--red-ink)">{{ search.check.issues|length }} cosas raras</b>{% else %}<b style="color:var(--green-ink)">todo cuadra</b>{% endif %}</span>
+    {% for kind, who, what, url in search.check.issues %}<span>{{ {'falta': '⚠️', 'borrado': '🗑️', 'cuenta': '❌'}.get(kind, '•') }} <b>{{ who }}</b> · {{ what }}{% if url %} · <a class="link" href="{{ url }}" target="_blank" rel="noopener">ver</a>{% endif %}</span>{% endfor %}
+  </div>{% endif %}
+
+  <details{% if search.apify.rows %} open{% endif %}><summary class="small link">Qué ha gastado Apify (últimas llamadas)</summary>
+    <div class="small" style="display:grid;gap:3px;margin-top:8px">
+      {% if search.apify.by %}<span><b>Últimos 7 días:</b> {% for k, v in search.apify.by.items() %}{{ k }}: {{ v.calls }} llamadas · {{ v.items }} resultados{{ " · " if not loop.last }}{% endfor %}</span>{% endif %}
+      <span class="muted">Apify cobra sobre todo por resultado devuelto. «perfiles» = buscar clips en cuentas · «vistas» = leer cifras · «descarga» = vídeo para Bunny (lo más caro) · «bio» = verificar cuenta.</span>
+      {% for at, kind, pl, n_in, n_out, code in search.apify.rows %}<span><time data-local data-local-full datetime="{{ at }}Z">{{ at }}</time> · <b>{{ kind }}</b> {{ pl }} · {{ n_in }} pedidos → {{ n_out }} resultados{% if code >= 400 %} · <b style="color:var(--red-ink)">error {{ code }}</b>{% endif %}</span>
+      {% else %}<span class="muted">Aún no hay llamadas apuntadas (se apuntan desde ahora).</span>{% endfor %}
+      {% if search.apify.rows %}<form method="post" action="{{ url_for('admin_search', accion='borrar_registro') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Vaciar registro</button></form>{% endif %}
+    </div>
+  </details>
+</div>
+
 <div class="card tight form-stack" id="bunny">
   <h3>Copias de vídeo para revisar (Bunny)</h3>
   <p class="small muted">Cuando un clip llega al mínimo de vistas y pasa a Revisar, se guarda una copia en Bunny para verlo sin la interfaz de TikTok/Instagram (y aunque lo borren). Los clips en «Contando» no se copian.</p>

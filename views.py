@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+from datetime import datetime
 
 import requests
 
@@ -252,20 +253,35 @@ def parse_item(platform, item):
             "avatar": avatar if isinstance(avatar, str) and avatar.startswith("https://") else ""}
 
 
+APIFY_HOOK = None       # la web lo pone para apuntar cada llamada (qué, cuántos enlaces, cuántos resultados)
+
+
+def _apify(actor, body, kind, platform, n, timeout=300):
+    resp = requests.post(f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items",
+                         params={"token": APIFY_TOKEN, "timeout": timeout - 20}, json=body, timeout=timeout)
+    items = None
+    if resp.status_code < 400:
+        try:
+            items = resp.json() or []
+        except ValueError:
+            items = []
+    if APIFY_HOOK:
+        try:
+            APIFY_HOOK(kind, platform, n, len(items) if isinstance(items, list) else 0, resp.status_code)
+        except Exception:  # noqa: BLE001
+            pass
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Apify respondió {resp.status_code}: {resp.text[:200]}")
+    return items if isinstance(items, list) else []
+
+
 def fetch_items(platform, urls):
     """Llama a Apify y devuelve los datos tal cual llegan (lista de diccionarios)."""
     if not APIFY_TOKEN:
         raise RuntimeError("Falta APIFY_TOKEN en las variables de entorno.")
     if not urls:
         return []
-    actor = ACTORS[platform]
-    endpoint = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
-    resp = requests.post(endpoint, params={"token": APIFY_TOKEN, "timeout": 280},
-                         json=_build_input(platform, urls), timeout=300)
-    if resp.status_code >= 400:
-        raise RuntimeError(f"Apify respondió {resp.status_code}: {resp.text[:200]}")
-    data = resp.json() or []
-    return data if isinstance(data, list) else []
+    return _apify(ACTORS[platform], _build_input(platform, urls), "vistas", platform, len(urls))
 
 
 def info_by_id(platform, items):
@@ -291,12 +307,8 @@ def fetch_download_urls(platform, urls):
     body = _build_input(platform, urls)
     if platform == "tiktok":
         body["shouldDownloadVideos"] = True
-    resp = requests.post(f"https://api.apify.com/v2/acts/{ACTORS[platform]}/run-sync-get-dataset-items",
-                         params={"token": APIFY_TOKEN, "timeout": 280}, json=body, timeout=300)
-    if resp.status_code >= 400:
-        raise RuntimeError(f"Apify respondió {resp.status_code}: {resp.text[:200]}")
     out = {}
-    for item in resp.json() or []:
+    for item in _apify(ACTORS[platform], body, "descarga", platform, len(urls)):
         if isinstance(item, dict):
             url = parse_item(platform, item).get("video_url")
             if platform == "tiktok":            # solo vale la copia que guarda Apify; el enlace de TikTok da 403
@@ -376,12 +388,7 @@ def fetch_bio(platform, handle):
     else:
         actor, body = ACTORS["youtube"], {"startUrls": [{"url": f"https://www.youtube.com/@{handle}"}],
                                           "maxResults": 1, "maxResultsShorts": 0}
-    resp = requests.post(f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items",
-                         params={"token": APIFY_TOKEN, "timeout": 110}, json=body, timeout=120)
-    if resp.status_code >= 400:
-        raise RuntimeError(f"Apify respondió {resp.status_code}: {resp.text[:200]}")
-    data = resp.json() or []
-    for item in data if isinstance(data, list) else []:
+    for item in _apify(actor, body, "bio", platform, 1, timeout=120):
         bio = _first(item, BIO_KEYS[platform]) if isinstance(item, dict) else None
         if isinstance(bio, str):
             return bio
@@ -411,11 +418,7 @@ def fetch_profile_videos(platform, handles, per=12):
         raise RuntimeError("Falta APIFY_TOKEN en las variables de entorno.")
     if not handles:
         return []
-    resp = requests.post(f"https://api.apify.com/v2/acts/{ACTORS[platform]}/run-sync-get-dataset-items",
-                         params={"token": APIFY_TOKEN, "timeout": 280}, json=_profile_input(platform, handles, per), timeout=300)
-    if resp.status_code >= 400:
-        raise RuntimeError(f"Apify respondió {resp.status_code}: {resp.text[:200]}")
-    data = resp.json() or []
+    data = _apify(ACTORS[platform], _profile_input(platform, handles, per), "perfiles", platform, len(handles))
     out = []
     for item in data if isinstance(data, list) else []:
         if not isinstance(item, dict):
@@ -430,3 +433,92 @@ def fetch_profile_videos(platform, handles, per=12):
         info.update({"url": url, "vid": vid})
         out.append(info)
     return out
+
+
+# ---------------------------------------------------------------- yt-dlp (gratis): perfiles de TikTok/YouTube y descargas
+YTDLP_PLATFORMS = ("tiktok", "youtube")
+
+
+def ytdlp_available():
+    try:
+        import yt_dlp  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _ydl(opts):
+    import yt_dlp
+    base = {"quiet": True, "no_warnings": True, "skip_download": True, "socket_timeout": 25, "retries": 2,
+            "extractor_retries": 2, "noplaylist": False, "ignoreerrors": False}
+    base.update(opts)
+    return yt_dlp.YoutubeDL(base)
+
+
+def tiktok_id_time(vid):
+    """Los ID de TikTok llevan dentro el momento de publicación (los 32 bits altos son segundos Unix)."""
+    try:
+        ts = int(vid) >> 32
+    except (TypeError, ValueError):
+        return None
+    if 1_450_000_000 < ts < 4_000_000_000:
+        return datetime.utcfromtimestamp(ts)
+    return None
+
+
+def _ts(e):
+    if e.get("timestamp"):
+        try:
+            return datetime.utcfromtimestamp(int(e["timestamp"]))
+        except (TypeError, ValueError, OSError):
+            return None
+    d = e.get("upload_date")
+    if isinstance(d, str) and len(d) == 8:
+        try:
+            return datetime.strptime(d, "%Y%m%d")
+        except ValueError:
+            return None
+    return None
+
+
+def ytdlp_profile_videos(platform, handle, per=12, known=()):
+    """Últimos vídeos de una cuenta con yt-dlp: [{url, vid, author, posted_at, views: None}].
+    Las cifras no se toman de aquí (las lee Apify). `known`: IDs que ya tenemos (no hace falta su fecha)."""
+    if platform not in YTDLP_PLATFORMS:
+        raise RuntimeError("yt-dlp solo se usa para TikTok y YouTube")
+    h = clean_handle(handle)
+    url = f"https://www.tiktok.com/@{h}" if platform == "tiktok" else f"https://www.youtube.com/@{h}/shorts"
+    out = []
+    with _ydl({"extract_flat": "in_playlist", "playlistend": per}) as y:
+        info = y.extract_info(url, download=False) or {}
+        entries = [e for e in (info.get("entries") or []) if isinstance(e, dict) and e.get("id")][:per]
+        for e in entries:
+            vid = str(e["id"])
+            if platform == "tiktok":
+                link = f"https://www.tiktok.com/@{h}/video/{vid}"
+                posted = _ts(e) or tiktok_id_time(vid)
+            else:
+                link = f"https://www.youtube.com/shorts/{vid}"
+                posted = _ts(e)
+                if not posted and vid not in known:     # vídeo nuevo: hace falta su fecha
+                    full = y.extract_info(link, download=False) or {}
+                    posted = _ts(full)
+                    if not posted:
+                        raise RuntimeError(f"yt-dlp no dio la fecha del vídeo {vid}")
+            out.append({"url": link, "vid": vid, "author": h, "posted_at": posted, "views": None})
+    return out
+
+
+def ytdlp_download(url, max_mb=300):
+    """Descarga el vídeo con yt-dlp y devuelve sus bytes."""
+    import glob
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        with _ydl({"skip_download": False, "outtmpl": f"{d}/v.%(ext)s", "max_filesize": max_mb * 1024 * 1024,
+                   "format": "best[ext=mp4][height<=1080]/best[ext=mp4]/best"}) as y:
+            y.download([url])
+        files = glob.glob(f"{d}/v.*")
+        if not files:
+            raise RuntimeError("yt-dlp no descargó nada")
+        with open(files[0], "rb") as f:
+            return f.read()
