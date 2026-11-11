@@ -1754,10 +1754,10 @@ body.has-tabs>.site-footer{flex:none}
 
 /* Marcos de Turbo: solo cambia la parte de abajo, con un fundido suave */
 turbo-frame { display: block; }
-turbo-frame[busy] { opacity: .55; transition: opacity .15s .1s; pointer-events: none; }
+turbo-frame[busy] .fr-dim { opacity: .55; transition: opacity .15s .1s; pointer-events: none; }
 .fr-in { animation: frIn .18s ease-out; }
 @keyframes frIn { from { opacity: .4; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .fr-in { animation: none; } turbo-frame[busy] { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .fr-in { animation: none; } turbo-frame[busy] .fr-dim { transition: none; } }
 
 /* BETA junto al logo */
 .beta-tag{font:700 10px/1 var(--font);letter-spacing:.06em;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:4px 6px;margin-left:8px;align-self:center;background:var(--card)}

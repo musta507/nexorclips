@@ -691,10 +691,27 @@ if (window.Turbo) {
     e.preventDefault();
     e.detail.visit(e.detail.response);
   });
+  // Dentro de un marco, el fundido solo va en el contenido: las barras de pestañas, el buscador y los filtros no parpadean
+  var FR_FIJO = ".seg, .sortbar, form[data-autosubmit], .mc-tools";
+  function contenidoMarco(fr) {
+    var out = [];
+    (function walk(el) {
+      Array.prototype.forEach.call(el.children, function (c) {
+        if (c.matches(FR_FIJO)) return;
+        if (c.querySelector(FR_FIJO)) walk(c); else out.push(c);
+      });
+    })(fr);
+    return out;
+  }
+  document.addEventListener("turbo:before-fetch-request", function (e) {
+    var fr = e.target;
+    if (fr && fr.tagName === "TURBO-FRAME") contenidoMarco(fr).forEach(function (c) { c.classList.add("fr-dim"); });
+  });
   document.addEventListener("turbo:frame-load", function (e) {
     pagina();                                                    // solo arranca lo nuevo: lo de fuera ya está listo
-    var fr = e.target;
-    fr.classList.remove("fr-in"); void fr.offsetWidth; fr.classList.add("fr-in");
+    contenidoMarco(e.target).forEach(function (c) {
+      c.classList.remove("fr-dim", "fr-in"); void c.offsetWidth; c.classList.add("fr-in");
+    });
   });
   document.addEventListener("turbo:before-render", salirDePagina);
   // Animación de entrada: solo el contenido (la barra de arriba no se mueve) y solo al navegar
