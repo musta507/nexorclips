@@ -299,10 +299,23 @@ def fetch_download_urls(platform, urls):
     for item in resp.json() or []:
         if isinstance(item, dict):
             url = parse_item(platform, item).get("video_url")
+            if platform == "tiktok":            # solo vale la copia que guarda Apify; el enlace de TikTok da 403
+                media = item.get("mediaUrls") or []
+                url = next((m for m in media if isinstance(m, str) and m.startswith("https://")), "")
             if url:
                 for vid in _ids_from_item(item):
                     out[vid] = url
     return out
+
+
+def download_video(url):
+    """Descarga un vídeo. Los que guarda Apify se piden con el token (si no, pueden dar 403)."""
+    headers = {"User-Agent": "Mozilla/5.0"}
+    if "api.apify.com" in url and APIFY_TOKEN:
+        headers["Authorization"] = f"Bearer {APIFY_TOKEN}"
+    elif "tiktok" in url:
+        headers["Referer"] = "https://www.tiktok.com/"
+    return requests.get(url, timeout=90, headers=headers)
 
 
 def fetch_views(platform, urls):

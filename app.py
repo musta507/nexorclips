@@ -2036,14 +2036,15 @@ def copy_videos_now(ids=None, limit=30):
         if not s_.media_url:
             s_.video_status = "error"
             s_.video_error = (s_.video_error if s_.video_error.startswith("Apify") else
-                              "Apify no dio enlace de descarga (vídeo privado, borrado o la red lo bloqueó)")[:300]
+                              "Apify no guardó el vídeo (no devolvió mediaUrls): vídeo privado, borrado o Apify no pudo descargarlo")[:300]
             report.append((s_, s_.video_error))
             db.session.commit()
             continue
         try:
-            r = requests.get(s_.media_url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
+            r = viewcounter.download_video(s_.media_url)
             if r.status_code >= 400:
-                raise RuntimeError(f"la descarga del vídeo dio {r.status_code} (el enlace caducó o está protegido)")
+                host = urlparse(s_.media_url).netloc
+                raise RuntimeError(f"la descarga del vídeo dio {r.status_code} desde {host}")
             if len(r.content) < 10_000 or len(r.content) > 300 * 1024 * 1024:
                 raise RuntimeError(f"la descarga no parece un vídeo ({len(r.content)} bytes)")
             ok, code, data = bunny_call("POST", "/videos", json={"title": f"Clip {s_.id} · {s_.campaign.song}"[:200]})
