@@ -604,6 +604,43 @@ function pastillaOrden() {
   });
 }
 var pastillasMontadas = new WeakSet();
+
+// Barras de pestañas que cambian de página: la barra se queda (no se vuelve a pintar) y solo cambia lo de abajo.
+// Antes de pintar la página nueva, se copian a la barra actual sus enlaces y números, y Turbo la conserva tal cual.
+function idBarra(box) {
+  var l = box.getAttribute("aria-label");
+  return l ? "pb-" + l.toLowerCase().replace(/[^a-z0-9]+/g, "-") : "";
+}
+function conservarBarras(nuevo) {
+  document.querySelectorAll(".seg.has-pill, .sortbar.has-pill").forEach(function (box) {
+    var id = idBarra(box);
+    if (!id) return;
+    var sel = box.classList.contains("sortbar") ? "button" : "a";
+    var otra = Array.prototype.find.call(nuevo.querySelectorAll(".seg, .sortbar"), function (b) { return idBarra(b) === id; });
+    var mios = box.querySelectorAll(":scope > " + sel), suyos = otra ? otra.querySelectorAll(":scope > " + sel) : [];
+    box.removeAttribute("data-turbo-permanent");
+    if (!otra || mios.length !== suyos.length || box.closest("turbo-frame") !== null && !nuevo.contains(otra)) return;
+    for (var i = 0; i < mios.length; i++) {          // enlaces y números al día; la pastilla y su animación siguen
+      var on = suyos[i].classList.contains("on");
+      mios[i].innerHTML = suyos[i].innerHTML;
+      mios[i].className = suyos[i].className;
+      ["href", "data-turbo-frame", "aria-current"].forEach(function (k) {
+        if (suyos[i].hasAttribute(k)) mios[i].setAttribute(k, suyos[i].getAttribute(k)); else mios[i].removeAttribute(k);
+      });
+      mios[i].classList.toggle("on", on);
+    }
+    box.id = otra.id = id;
+    box.setAttribute("data-turbo-permanent", "");
+    otra.setAttribute("data-turbo-permanent", "");
+  });
+}
+document.addEventListener("turbo:before-render", function (e) { conservarBarras(e.detail.newBody); });
+function recolocarBarras() {          // los números pueden cambiar el ancho: la pastilla se ajusta sin saltos
+  document.querySelectorAll("[data-turbo-permanent].has-pill").forEach(function (b) { if (b._pillPlace) b._pillPlace(true); });
+}
+document.addEventListener("turbo:render", recolocarBarras);
+document.addEventListener("turbo:frame-render", recolocarBarras);
+document.addEventListener("turbo:before-frame-render", function (e) { conservarBarras(e.detail.newFrame); });
 function montarPastilla(box, sel, name) {
   if (pastillasMontadas.has(box)) return;
   pastillasMontadas.add(box);
@@ -664,9 +701,12 @@ function montarPastilla(box, sel, name) {
       document.addEventListener("turbo:before-frame-render", save, { once: true });
     }
   });
-  var onResize = function () { place(box.querySelector(sel + ".on"), false); };
+  box._pillPlace = function (animate) { place(box.querySelector(sel + ".on"), animate); };
+  var onResize = function () {
+    if (!box.isConnected) { window.removeEventListener("resize", onResize); return; }
+    place(box.querySelector(sel + ".on"), false);
+  };
   window.addEventListener("resize", onResize);
-  limpiar.push(function () { window.removeEventListener("resize", onResize); });
 }
 
 // =============================================================== cuándo se ejecuta
