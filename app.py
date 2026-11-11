@@ -2615,7 +2615,7 @@ def reminders_due(now=None):
 
 
 REFRESH_HOURS = parse_float(os.environ.get("REFRESH_HOURS"), 6) or 0   # solo si REFRESH_AT está vacío: cada cuántas horas
-REFRESH_AT = (os.environ.get("REFRESH_AT", "03:00") or "").strip()      # hora fija (España) de la lectura diaria: clips nuevos + vistas
+REFRESH_AT = (os.environ.get("REFRESH_AT", "") or "").strip() or "03:00"    # siempre una vez al día (las lecturas cuestan)      # hora fija (España) de la lectura diaria: clips nuevos + vistas
 
 
 def _refresh_minute():
@@ -8511,8 +8511,13 @@ def cron_refresh():
     if not CRON_SECRET or not secrets.compare_digest(request.args.get("key", ""), CRON_SECRET):
         abort(403)
     whop_sync(Payout.query.filter_by(status="procesando").all())
-    refresh_in_background()
-    return "ok"
+    if _refresh_due():                       # la lectura de pago solo una vez al día, aunque el aviso externo llame más
+        set_setting("last_refresh_at", datetime.utcnow().isoformat())
+        set_setting("refresh_day", _local().strftime("%Y-%m-%d"))
+        db.session.commit()
+        refresh_in_background()
+        return "ok"
+    return "ok (ya se leyó hoy)"
 
 
 if __name__ == "__main__":
