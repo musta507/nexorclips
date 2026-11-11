@@ -36,7 +36,7 @@
   {% for e in search.stats.errors[:3] %}<span class="small muted">· {{ e }}</span>{% endfor %}{% endif %}
 
   <form method="post" action="{{ url_for('admin_search', accion='probar') }}" class="inline" style="flex-wrap:wrap;gap:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <select name="platform" aria-label="Red" data-native><option value="tiktok">TikTok</option><option value="youtube">YouTube</option></select>
+    <select name="platform" aria-label="Red" data-native><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="instagram">Instagram (prueba)</option></select>
     <input name="handle" placeholder="@cuenta" aria-label="Cuenta" style="width:180px" required>
     <button class="btn sm soft">Probar yt-dlp con una cuenta</button></form>
   {% if search.test %}<div class="small" style="display:grid;gap:3px">

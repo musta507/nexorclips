@@ -484,10 +484,11 @@ def _ts(e):
 def ytdlp_profile_videos(platform, handle, per=12, known=()):
     """Últimos vídeos de una cuenta con yt-dlp: [{url, vid, author, posted_at, views: None}].
     Las cifras no se toman de aquí (las lee Apify). `known`: IDs que ya tenemos (no hace falta su fecha)."""
-    if platform not in YTDLP_PLATFORMS:
-        raise RuntimeError("yt-dlp solo se usa para TikTok y YouTube")
+    if platform not in YTDLP_PLATFORMS + ("instagram",):
+        raise RuntimeError("yt-dlp solo se usa para TikTok, YouTube e Instagram (en pruebas)")
     h = clean_handle(handle)
-    url = f"https://www.tiktok.com/@{h}" if platform == "tiktok" else f"https://www.youtube.com/@{h}/shorts"
+    url = {"tiktok": f"https://www.tiktok.com/@{h}", "youtube": f"https://www.youtube.com/@{h}/shorts",
+           "instagram": f"https://www.instagram.com/{h}/"}[platform]
     out = []
     with _ydl({"extract_flat": "in_playlist", "playlistend": per}) as y:
         info = y.extract_info(url, download=False) or {}
@@ -497,6 +498,9 @@ def ytdlp_profile_videos(platform, handle, per=12, known=()):
             if platform == "tiktok":
                 link = f"https://www.tiktok.com/@{h}/video/{vid}"
                 posted = _ts(e) or tiktok_id_time(vid)
+            elif platform == "instagram":
+                link = e.get("url") if str(e.get("url", "")).startswith("https://www.instagram.com/") else f"https://www.instagram.com/reel/{vid}/"
+                posted = _ts(e)
             else:
                 link = f"https://www.youtube.com/shorts/{vid}"
                 posted = _ts(e)

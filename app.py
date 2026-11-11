@@ -5387,8 +5387,8 @@ def admin_search(accion):
     elif accion == "probar":
         platform = request.form.get("platform", "tiktok")
         handle = viewcounter.clean_handle(request.form.get("handle", ""))
-        if platform not in viewcounter.YTDLP_PLATFORMS or not handle:
-            flash("Pon una cuenta de TikTok o YouTube.", "error")
+        if platform not in viewcounter.YTDLP_PLATFORMS + ("instagram",) or not handle:
+            flash("Pon una cuenta de TikTok, YouTube o Instagram.", "error")
         elif not viewcounter.ytdlp_available():
             flash("yt-dlp no está instalado en el servidor.", "error")
         else:
