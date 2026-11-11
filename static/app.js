@@ -196,7 +196,7 @@ function pagina() {
 
 // Aviso flotante creado desde aquí (p. ej. «Enlace copiado»)
 function toast(msg, cat) {
-  var box = document.querySelector(".toasts");
+  var box = Array.prototype.find.call(document.querySelectorAll(".toasts"), function (b) { return b.parentNode === document.body; }) || document.querySelector(".toasts");
   if (!box) { box = document.createElement("div"); box.className = "toasts"; box.setAttribute("aria-live", "polite"); document.body.appendChild(box); }
   var t = document.createElement("div");
   t.className = "flash " + (cat || "info"); t.setAttribute("role", "status"); t.setAttribute("data-toast", "");
@@ -208,6 +208,17 @@ function toast(msg, cat) {
 
 // =============================================================== avisos flotantes (toast): se van solos, el de error dura más
 function avisosToast() {
+  // Siempre colgados del <body>: si están dentro de algo con animación, «fixed» deja de ser fijo y se van al final de la página
+  var boxes = document.querySelectorAll(".toasts");
+  if (boxes.length) {
+    var main = Array.prototype.find.call(boxes, function (b) { return b.parentNode === document.body; }) || boxes[0];
+    if (main.parentNode !== document.body) document.body.appendChild(main);
+    Array.prototype.forEach.call(boxes, function (b) {
+      if (b === main) return;
+      while (b.firstChild) main.appendChild(b.firstChild);
+      b.remove();
+    });
+  }
   document.querySelectorAll("[data-toast]").forEach(function (t, i) {
     if (t.dataset.ready) return;
     t.dataset.ready = "1";
