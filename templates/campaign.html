@@ -228,7 +228,7 @@
 </dialog>
 {% endif %}
 {% if camp.status == 'activa' and not st.exhausted and not member %}
-<dialog class="wd-dialog join-dialog" id="join-dialog" aria-labelledby="join-title">
+<dialog class="wd-dialog join-dialog" id="join-dialog" aria-labelledby="join-title"{% if request.args.get('solicitar') %} data-auto-open{% endif %}>
   <form method="post" action="{{ url_for('join_campaign', cid=camp.id) }}" class="form-stack">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <div>

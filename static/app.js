@@ -174,6 +174,9 @@ document.addEventListener("click", function (e) {
 var limpiar = [];   // cosas que hay que parar al salir de la página (temporizadores del chat…)
 
 function pagina() {
+  // «Rellenar formulario» desde el destacado: la campaña se abre ya con la ventana de solicitud
+  var auto = document.querySelector("dialog[data-auto-open]");
+  if (auto && auto.showModal && !auto.open) { auto.removeAttribute("data-auto-open"); auto.showModal(); }
   iniciarChat();
   pastillaOrden();
   graficas();

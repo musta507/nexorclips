@@ -2310,3 +2310,14 @@ b>.m-earn,b>.m-zero{font-size:inherit!important;line-height:inherit}
   .hm-week th:last-child,.hm-week td:last-child{padding-right:12px}
 }
 @media (max-width:520px){.hm-week td:nth-child(4){display:none}.hm-week td:nth-child(3) .hm-camp-n{display:none}}
+
+/* Destacado: toda la tarjeta lleva a la campaña y el botón, directo al formulario */
+.featured .f-link{position:absolute;inset:0;z-index:1;border-radius:inherit}
+.featured .f-cta{position:relative;z-index:2}
+.featured .eyebrow.open{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;background:var(--pop);color:#06301b;font-weight:700;font-size:14px;letter-spacing:0;padding:7px 14px;border-radius:999px;box-shadow:0 0 0 4px rgba(46,232,143,.18)}
+.f-rates{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.f-rate{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:6px 12px 6px 10px;color:#fff}
+.f-rate svg{width:16px;height:16px}
+.f-rate b{font:700 15px var(--display)}
+.f-rate-note{font-size:13px;opacity:.6}
+.f-stats.two{grid-template-columns:repeat(2,minmax(0,1fr))}

@@ -1749,9 +1749,10 @@ def test_home_feature_announcement_and_campaign():
         assert A.Notice.query.filter_by(kind="destacado").count() >= 1
     post(admin, "/admin/destacado", mode="campaign", campaign_id=str(cid))
     home = a.get("/campanas").get_data(as_text=True)
-    assert "home-ann" not in home and "Campaña destacada" in home
+    assert "home-ann" not in home and "featured fcar-slide" in home and "Plazas abiertas" in home
+    assert "Rellenar formulario" in home and "solicitar=1" in home          # el botón lleva directo a solicitar
     post(admin, "/admin/destacado", mode="none")
-    assert "Campaña destacada" not in a.get("/campanas").get_data(as_text=True)
+    assert "featured fcar-slide" not in a.get("/campanas").get_data(as_text=True)
 
 
 def test_review_cards_filters_and_video_copy(monkeypatch):

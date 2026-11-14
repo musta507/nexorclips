@@ -18,23 +18,30 @@
   <div class="fcar-track" data-car-track>
   {% for c, st, why in slides %}
   {% set tint, lqip = cover_meta(c) %}
-  <a class="featured fcar-slide" href="{{ url_for('campaign', cid=c.id) }}"{% if tint %} style="background:{{ tint }}"{% endif %} aria-roledescription="diapositiva" aria-label="{{ loop.index }} de {{ slides|length }}: {{ c.song }}">
+  {% set inside = c.id in my_join %}
+  <div class="featured fcar-slide"{% if tint %} style="background:{{ tint }}"{% endif %} aria-roledescription="diapositiva" aria-label="{{ loop.index }} de {{ slides|length }}: {{ c.song }}">
+    <a class="f-link" href="{{ url_for('campaign', cid=c.id) }}" aria-label="Ver la campaña {{ c.song }}"></a>
     <div class="art"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 720) }}" alt="Portada de {{ c.song }}" width="330" height="330"{% if loop.first %} fetchpriority="high"{% else %} loading="lazy"{% endif %} decoding="async">{% else %}<span class="cover-fallback">{{ c.song[:1] }}</span>{% endif %}</div>
     <div class="info">
-      <span class="eyebrow">{% if why == 'plazas' %}🔓 Plazas abiertas{% elif why == 'nueva' %}✨ Nueva campaña{% else %}Campaña destacada{% endif %}</span>
+      {% if not c.full and not st.exhausted %}<span class="eyebrow open">🔓 Plazas abiertas{% if why == 'nueva' %} · Nueva{% endif %}</span>{% else %}<span class="eyebrow">Campaña destacada</span>{% endif %}
       <div>
         <h2>{{ c.song }} {{ icon("check") }}</h2>
         <p class="artist">{{ c.artist }}</p>
       </div>
-      <div class="f-stats tnum">
-        <div><b class="hot">{{ c.rate|rate_k }}</b><span>{% if c.rates_vary %}hasta, {% endif %}por 1.000 vistas</span></div>
+      <div class="f-rates tnum" aria-label="Pago por cada 1.000 vistas en cada red">
+        {% for p, r in c.platform_rates %}<span class="f-rate" title="{{ PLATFORMS[p] }}">{{ icon(p) }}<b>{{ r|rate_k }}</b></span>{% endfor %}
+        <span class="f-rate-note">por 1.000 vistas</span>
+      </div>
+      <div class="f-stats two tnum">
         <div><b>{% if st.views %}{{ st.views|short }}{% else %}Nueva{% endif %}</b><span>{% if st.views %}vistas generadas{% else %}aún sin vistas{% endif %}</span></div>
         <div><b>{{ st.remaining|money(0) }}</b><span>por repartir</span></div>
       </div>
       {{ budget(c, st) }}
-      <span class="btn accent">Ver campaña {{ icon("arrow") }}</span>
+      {% if inside or c.full or st.exhausted %}<a class="btn accent f-cta" href="{{ url_for('campaign', cid=c.id) }}">Ver campaña {{ icon("arrow") }}</a>
+      {% elif c.apply_form_url %}<a class="btn accent f-cta" href="{{ c.apply_form_url }}" target="_blank" rel="noopener">Rellenar formulario {{ icon("arrow") }}</a>
+      {% else %}<a class="btn accent f-cta" href="{{ url_for('campaign', cid=c.id, solicitar=1) }}">Rellenar formulario {{ icon("arrow") }}</a>{% endif %}
     </div>
-  </a>
+  </div>
   {% endfor %}
   </div>
   {% if slides|length > 1 %}
