@@ -11,7 +11,7 @@
     <a href="#perfil" class="on">{{ icon("users") }} Perfil</a>
     <a href="#cobro">{{ icon("wallet") }} Cobros</a>
     {% if api_mode() != 'off' %}<a href="#redes">{{ icon("link") }} Redes conectadas</a>{% endif %}
-    <a href="#notificaciones">{{ icon("bell") }} Notificaciones</a>
+    {% if clipper_push %}<a href="#notificaciones">{{ icon("bell") }} Notificaciones</a>{% endif %}
     <a href="#cuenta">{{ icon("gear") }} Cuenta</a>
   </nav>
   <div class="set-main">
@@ -97,6 +97,7 @@
     </section>
     {% endif %}
 
+    {% if clipper_push %}
     <section id="notificaciones" class="card set-sec">
       <header><h2>Notificaciones</h2><p class="small muted">Todos los avisos te llegan a la campanita de arriba. Aquí eliges cuáles quieres también en tu móvil u ordenador.</p></header>
       {% if push_ready %}
@@ -114,6 +115,7 @@
         <button class="btn accent sm set-save">Guardar avisos</button>
       </form>
     </section>
+    {% endif %}
 
     <section id="cuenta" class="card set-sec">
       <header><h2>Cuenta</h2></header>

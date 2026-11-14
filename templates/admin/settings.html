@@ -158,12 +158,6 @@
   <a class="btn soft" href="{{ url_for('admin_backup') }}" data-turbo="false">Descargar copia de seguridad</a>
 </div>
 
-<div class="card tight form-stack">
-  <h3>Avisos a los clippers</h3>
-  <p class="small">{% if VAPID_ON %}✓ Avisos al móvil y al ordenador activados.{% else %}Avisos al móvil: falta la variable <code>VAPID_PRIVATE_KEY</code> en Railway.{% endif %}</p>
-  {% if not VAPID_ON %}<form method="post" action="{{ url_for('admin_vapid_keys') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Generar la clave de avisos</button></form>{% endif %}
-</div>
-
 <div class="card tight toolbar">
   <div>
     <h3>Datos de demostración</h3>

@@ -58,7 +58,6 @@
             <a href="{{ url_for('account') }}">{{ icon("gear") }} Ajustes</a>
             <a href="{{ url_for('earnings') }}">{{ icon("wallet") }} Ganancias</a>
             <a href="{{ url_for('ranking_page') }}">{{ icon("trophy") }} Ranking</a>
-            <a href="{{ url_for('account', _anchor='notificaciones') }}">{{ icon("bell") }} Notificaciones</a>
             <a href="{{ url_for('support') }}">{{ icon("chat") }} Soporte{% if unread and not current_user.is_admin %} <span class="count">{{ unread }}</span>{% endif %}</a>
             {% if current_user.is_admin %}
             <a href="{{ url_for('admin_home') }}">{{ icon("grid") }} Panel de admin</a>

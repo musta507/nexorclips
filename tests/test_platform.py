@@ -639,6 +639,7 @@ def test_logout_really_logs_out():
 
 
 def test_phone_notifications(monkeypatch):
+    monkeypatch.setattr(A, "PHONE_ALERTS", True)            # (apagados en la web; aquí se prueba que el código sigue bien)
     sent = []
     monkeypatch.setattr(A, "NTFY_TOPIC", "prueba-topic")
     monkeypatch.setattr(A.requests, "post", lambda url, json=None, timeout=None: sent.append((url, json)))
@@ -1485,6 +1486,7 @@ def test_notifications_respect_preferences(monkeypatch):
     sent = []
     monkeypatch.setattr(A, "VAPID_PRIVATE_KEY", "x")
     monkeypatch.setattr(A, "VAPID_PUBLIC_KEY", "y")
+    monkeypatch.setattr(A, "CLIPPER_PUSH", True)            # (apagado para los clippers; aquí se prueba que el código sigue bien)
     monkeypatch.setattr(A, "_spawn", lambda fn, *args: sent.append(args))
     cid = make_campaign()
     admin = client_for("admin@test.com")
@@ -1505,7 +1507,8 @@ def test_notifications_respect_preferences(monkeypatch):
         assert "hay campaña" in m.body and m.user_id == u.id and m.from_admin
 
 
-def test_push_subscribe_saves_device():
+def test_push_subscribe_saves_device(monkeypatch):
+    monkeypatch.setattr(A, "CLIPPER_PUSH", True)
     a = client_for("a@test.com")
     r = a.post("/push/suscribir", data={"_csrf": "t", "endpoint": "https://fcm.googleapis.com/abc", "p256dh": "k", "auth": "a"})
     assert r.status_code == 200
@@ -1705,7 +1708,7 @@ def test_demo_data_loads_and_removes_cleanly():
 def test_demo_and_notify_cards_visible_in_production(monkeypatch):
     monkeypatch.setattr(A, "ALLOW_WIPE", False)
     page = client_for("admin@test.com").get("/admin/ajustes").get_data(as_text=True)
-    assert "Cargar datos de demostración" in page and "Avisos a los clippers" in page
+    assert "Cargar datos de demostración" in page and "Avisos a los clippers" not in page
 
 
 def test_tech_panel_only_for_tech_email(monkeypatch):
@@ -2874,3 +2877,45 @@ def test_profile_menu_balance_matches_full_calculation():
                 A.g.pop("_memo", None)                         # (el contexto de la prueba se comparte entre vueltas)
                 assert A.my_available() == A.user_money(u)["available"]
         assert any(A.user_money(u)["available"] > 0 for u in users)
+
+
+def test_clippers_have_no_phone_notifications():
+    a = client_for("a@test.com")
+    page = a.get("/cuenta").get_data(as_text=True)
+    assert "Avisos en este dispositivo" not in page and 'id="notificaciones"' not in page
+    assert a.post("/push/suscribir", data={"_csrf": "t", "endpoint": "https://fcm.googleapis.com/abc", "p256dh": "k", "auth": "a"}).status_code == 404
+    assert not A.push_ready()
+
+
+def test_phone_alerts_are_off_for_everyone(monkeypatch):
+    monkeypatch.setattr(A, "NTFY_TOPIC", "tema")
+    sent = []
+    monkeypatch.setattr(A, "_spawn", lambda fn, *args: sent.append(args))
+    with A.app.app_context():
+        A.notify_phone("Hola", "mensaje")
+    assert not sent and not A.push_ready()
+
+
+def test_home_shows_global_rank_even_without_earnings():
+    make_campaign(budget=5000)
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/ajustes/demo", accion="cargar")
+    nuevo = client_for("nuevo@test.com")
+    page = nuevo.get("/").get_data(as_text=True)
+    assert "Clasificación" in page and "Ver completa" in page and "Tu puesto" in page
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="nuevo@test.com").one()
+        r = A.my_rank(u)
+        ranked = len(A.rank_table())
+        assert r["pos"] > ranked > 3 and r["earned"] == 0 and r["goal"] and r["need"] > 0     # sale su puesto aunque no haya ganado nada
+        first = A.db.session.get(A.User, A.rank_table()[0][0])
+        assert A.my_rank(first)["pos"] == 1
+        A.snapshot_ranks()
+        u = A.User.query.filter_by(email="nuevo@test.com").one()
+        assert u.rank_pos == r["pos"]
+        u.rank_prev = u.rank_pos + 25                       # ayer estaba 25 puestos más abajo
+        A.db.session.commit()
+        r2 = A.my_rank(u)
+        assert r2["up"] == 25 and r2["fire"]
+    page = nuevo.get("/").get_data(as_text=True)
+    assert "▲ 25" in page and "🔥" in page and f"#{r['pos']}" in page

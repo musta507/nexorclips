@@ -228,6 +228,8 @@ class User(UserMixin, db.Model):
     avatar_data = db.deferred(db.Column(db.LargeBinary, nullable=True))
     avatar_ver = db.Column(db.Integer, default=0)
     last_seen_at = db.Column(db.DateTime, nullable=True)
+    rank_pos = db.Column(db.Integer, nullable=True)        # puesto en la clasificación en la última lectura diaria
+    rank_prev = db.Column(db.Integer, nullable=True)       # …y en la anterior (para enseñar cuántos puestos sube)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property
@@ -2043,6 +2045,7 @@ def refresh_views():
         if errors:
             msg += " Errores: " + " | ".join(errors)
         log.info(msg)
+        _ttl.clear()                                   # cifras nuevas: fuera lo guardado (ranking, totales de campaña…)
         set_setting("last_refresh", datetime.utcnow().strftime("%d/%m/%Y %H:%M") + " UTC · " + msg)
         set_setting("last_refresh_at", datetime.utcnow().isoformat())   # el reloj interno cuenta desde aquí
         return msg
@@ -2986,6 +2989,11 @@ def run_daily_refresh(now=None):
             read_audiences()                          # audiencia de las cuentas conectadas con la API oficial
             check_creator_balances()
             try:
+                snapshot_ranks()
+            except Exception:  # noqa: BLE001
+                db.session.rollback()
+                log.exception("Fallo guardando los puestos de la clasificación")
+            try:
                 prune_snapshots()
             except Exception:  # noqa: BLE001
                 db.session.rollback()
@@ -3849,16 +3857,8 @@ def home_data(u):
                   "done": bool(CampaignMember.query.filter_by(user_id=u.id).first()), "btn": "Ver campañas",
                   "url": url_for("campaigns_page")})
     show_steps = not all(st["done"] or st.get("soon") for st in steps)
-    # ranking de la semana: mi puesto y cuánto falta para el de arriba
-    ranks = {}
-    for per in RANK_PERIODS:                     # semana, mes y siempre: se cambia de pestaña sin recargar
-        full = ranking(per, 1000)
-        me = next((r for r in full if r["user"].id == u.id), None)
-        above = full[me["pos"] - 2] if me and me["pos"] > 1 else None
-        ranks[per] = {"top": full[:5], "me": me, "total": len(full), "above": above, "label": RANK_PERIODS[per][0],
-                      "pct": (round(me["pos"] / len(full) * 100) if me else None),
-                      "bar": (min(100, round(me["earned"] / above["earned"] * 100)) if me and above and above["earned"] else 100)}
-    rank = ranks["semana"]
+    # clasificación global: tu puesto (siempre sale) y los primeros
+    rank = my_rank(u)
     # tu resumen rápido
     week_ago = datetime.utcnow() - timedelta(days=7)
     money_ = user_money(u)
@@ -3878,8 +3878,8 @@ def home_data(u):
                   "best": max([max([c.rate or 0] + [r for _, r in c.platform_rates]) for c in actives] or [0])}
     return {"quick": quick, "hero_camps": live[:3], "pot": pot, "hero_stats": hero_stats,
             "summary": summary, "learn_url": learn_url, "learn": learn, "steps": steps, "show_steps": show_steps,
-            "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(6),
-            "rank": rank, "ranks": ranks, "masked": mask_name}
+            "steps_done": sum(1 for st in steps if st["done"]), "wa_general": wa, "week_clips": clips_of_week(8),
+            "rank": rank, "rank_top": rank_top(6), "masked": mask_name}
 
 
 @app.route("/grupo-whatsapp")
@@ -4445,6 +4445,73 @@ def ranking(period="semana", limit=50):
              "earned": cents(r[2]), "clips": r[3]} for i, r in enumerate(rows) if r[0] in users]
 
 
+RANK_GOALS = (1000, 500, 250, 100, 50, 25, 10)      # «te faltan X para el top N»
+RANK_FIRE = 10                                        # subir al menos estos puestos de un día a otro lleva fueguito
+
+
+def rank_table():
+    """Clasificación global: (usuario, ganado, vistas) de quien tiene algún clip aprobado, ya en orden. 2 min en caché."""
+    def load():
+        e, v = db.func.coalesce(db.func.sum(Submission.earned), 0), db.func.coalesce(db.func.sum(Submission.views), 0)
+        q = (db.session.query(Submission.user_id, e, v).join(User, User.id == Submission.user_id)
+             .filter(Submission.status == "aprobado", User.is_banned.is_(False), User.is_admin.is_(False))
+             .group_by(Submission.user_id).order_by(e.desc(), v.desc(), Submission.user_id))
+        return [(uid, cents(a), int(b or 0)) for uid, a, b in q]
+    return ttl_cache("rank_table", 120, load)
+
+
+def _clippers_before(uid=None):
+    q = db.session.query(db.func.count(User.id)).filter(User.is_banned.is_(False), User.is_admin.is_(False))
+    if uid is not None:
+        q = q.filter(User.id < uid)
+    return int(q.scalar() or 0)
+
+
+def my_rank(user):
+    """Tu puesto en la clasificación global. Sale siempre: quien aún no ha ganado nada va detrás, por orden de llegada."""
+    rows = rank_table()
+    total = max(ttl_cache("clippers_total", 120, _clippers_before), len(rows), 1)
+    idx = next((i for i, r in enumerate(rows) if r[0] == user.id), None)
+    if idx is not None:
+        pos, earned, views = idx + 1, rows[idx][1], rows[idx][2]
+    else:
+        ranked_before = sum(1 for r in rows if r[0] < user.id)
+        pos, earned, views = len(rows) + 1 + max(0, _clippers_before(user.id) - ranked_before), 0.0, 0
+    total = max(total, pos)
+    goal = pos - 1 if pos <= 10 else next((g for g in RANK_GOALS if g < pos), 10)
+    goal = min(goal, len(rows))                       # nadie por delante con dinero más allá del último de la lista
+    target = rows[goal - 1] if goal >= 1 and goal < pos else None
+    need = cents(target[1] - earned + 0.01) if target else 0
+    up = (user.rank_prev - pos) if user.rank_prev and user.rank_prev > pos else 0
+    return {"pos": pos, "total": total, "earned": earned, "views": views, "pct": max(1, round(pos / total * 100)),
+            "goal": goal if target else 0, "goal_top": bool(target) and goal >= 10, "need": need,
+            "bar": 100 if not target else (min(100, round(earned / target[1] * 100)) if target[1] else 0),
+            "up": up, "fire": up >= RANK_FIRE}
+
+
+def rank_top(n=6):
+    rows = rank_table()[:n]
+    users = {u.id: u for u in User.query.filter(User.id.in_([r[0] for r in rows] or [0]))}
+    return [{"pos": i + 1, "user": users[r[0]], "name": mask_name(users[r[0]].name), "earned": r[1], "views": r[2]}
+            for i, r in enumerate(rows) if r[0] in users]
+
+
+def snapshot_ranks():
+    """Tras la lectura diaria: guarda el puesto de cada clipper (y el del día anterior) para enseñar las subidas."""
+    _ttl.pop("rank_table", None)                      # con las cifras recién leídas, no las guardadas
+    rows = rank_table()
+    ranked = {r[0]: i + 1 for i, r in enumerate(rows)}
+    rest = [uid for (uid,) in db.session.query(User.id).filter(User.is_banned.is_(False), User.is_admin.is_(False))
+            .order_by(User.id) if uid not in ranked]
+    pos = dict(ranked)
+    for k, uid in enumerate(rest):
+        pos[uid] = len(rows) + 1 + k
+    db.session.execute(db.update(User).values(rank_prev=User.rank_pos))
+    db.session.bulk_update_mappings(User, [{"id": uid, "rank_pos": p_} for uid, p_ in pos.items()])
+    db.session.commit()
+    return len(pos)
+
+
 @app.route("/ranking")
 @login_required
 def ranking_page():
@@ -4468,7 +4535,8 @@ def first_steps(user):
 
 
 def clips_of_week(limit=3):
-    return (Submission.query.join(Campaign).join(User, User.id == Submission.user_id)
+    return (Submission.query.options(joinedload(Submission.user), joinedload(Submission.campaign))
+            .join(Campaign).join(User, User.id == Submission.user_id)
             .filter(Submission.status == "aprobado", Submission.created_at >= datetime.utcnow() - timedelta(days=7),
                     User.is_banned.is_(False), User.is_admin.is_(False), Submission.views > 0)   # igual que el ranking
             .order_by(Submission.views.desc()).limit(limit).all())
@@ -4759,7 +4827,7 @@ def account():
     return render_template("account.html", events=NOTIFY_EVENTS, channels=NOTIFY_CHANNELS, wants=wants,
                            tokens=ApiToken.query.filter_by(user_id=current_user.id).order_by(ApiToken.platform).all(),
                            devices=PushSub.query.filter_by(user_id=current_user.id).count(),
-                           push_ready=push_ready(), vapid=VAPID_PUBLIC_KEY)
+                           push_ready=push_ready(), vapid=VAPID_PUBLIC_KEY, clipper_push=CLIPPER_PUSH)
 
 
 # ---------------------------------------------------------------- panel de admin
@@ -5753,7 +5821,7 @@ def clips_page(camp_id=None):
                               "aprobados": n_done.get("aprobado", 0), "rechazados": n_done.get("rechazado", 0)},
                            growth=clip_growth(shown), players={s_.id: clip_player(s_) for s_ in shown},
                            bots={s_.id: bot_check(s_) for s_ in shown}, hours={s_.id: waiting_hours(s_) for s_ in shown},
-                           sla=REVIEW_SLA_HOURS, filters=REVIEW_FILTERS, in_camp=bool(camp_id),
+                           sla=REVIEW_SLA_HOURS, filters=REVIEW_FILTERS, in_camp=bool(camp_id), bunny_on=bunny_ready(),
                            pend=pending_by_campaign().get(cid, {}) if camp_id else {}, sec="revisar")
 
 
@@ -7822,8 +7890,9 @@ def unread_messages():
 
 
 def notify_phone(title, message, path="", tags="speech_balloon"):
-    """Manda un aviso al móvil del admin (app ntfy). Va en segundo plano: nunca frena ni rompe la web."""
-    if not NTFY_TOPIC:
+    """Manda un aviso al móvil del admin (app ntfy). Va en segundo plano: nunca frena ni rompe la web.
+    Apagado (PHONE_ALERTS): los avisos se ven en el panel (campanita y Panel técnico), no llegan al móvil."""
+    if not PHONE_ALERTS or not NTFY_TOPIC:
         return
     base = BASE_URL or (request.host_url.rstrip("/") if request else "")
     payload = {"topic": NTFY_TOPIC, "title": title[:120], "message": message[:400], "tags": [tags]}
@@ -7852,8 +7921,12 @@ WHATSAPP_ENABLED = False          # WhatsApp en pausa hasta hablarlo con el clie
 NOTIFY_CHANNELS = {"push": "En este móvil u ordenador"}
 
 
+CLIPPER_PUSH = False              # avisos al móvil de los clippers: quitados (a ellos les llega todo a la campanita)
+PHONE_ALERTS = False              # avisos al móvil del equipo (ntfy): quitados también
+
+
 def push_ready():
-    return bool(VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY)
+    return CLIPPER_PUSH and bool(VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY)
 
 
 def whatsapp_ready():
@@ -8444,6 +8517,8 @@ def service_worker():
 @login_required
 def notification_settings():
     u = current_user
+    if not CLIPPER_PUSH:
+        return redirect(url_for("account"))
     if request.method == "POST":
         off = [f"{e}.{c}" for e in NOTIFY_EVENTS for c in NOTIFY_CHANNELS if not request.form.get(f"{e}.{c}")]
         u.notify_off = ",".join(off)[:400]
@@ -8464,6 +8539,8 @@ def notification_settings():
 @app.route("/push/suscribir", methods=["POST"])
 @login_required
 def push_subscribe():
+    if not CLIPPER_PUSH:
+        abort(404)
     endpoint = (request.form.get("endpoint") or "").strip()
     p256dh, auth = (request.form.get("p256dh") or "").strip(), (request.form.get("auth") or "").strip()
     if not endpoint.startswith("https://") or len(endpoint) > 800 or not p256dh or not auth or len(p256dh) > 200 or len(auth) > 60:
