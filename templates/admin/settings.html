@@ -35,6 +35,14 @@
   {% if search.stats.day %}<span class="small">Hoy: <b>{{ search.stats.ok }}</b> cuentas leídas con yt-dlp{% if search.stats.fail %} · <b style="color:var(--red-ink)">{{ search.stats.fail }} fallaron</b> (se usó Apify){% endif %}</span>
   {% for e in search.stats.errors[:3] %}<span class="small muted">· {{ e }}</span>{% endfor %}{% endif %}
 
+  <form method="post" action="{{ url_for('admin_search', accion='ahorro') }}" class="form-stack" style="gap:8px;border:1px solid var(--line);border-radius:14px;padding:12px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <b class="small">Gasto de Apify</b>
+    <label class="small" style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" name="ytdlp_stats" value="1"{% if search.stats_on %} checked{% endif %}> <span>Usar las vistas que ya trae yt-dlp al mirar el perfil (gratis) y pedir a Apify solo las que falten. <span class="muted">Con miles de clips, leerlos todos con Apify cuesta cientos de dólares al mes.</span></span></label>
+    <label class="small" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">Tope diario de Apify <input name="apify_daily_max" value="{{ search.daily_max }}" inputmode="numeric" style="width:100px" aria-label="Tope diario de resultados de Apify"> resultados <span class="muted">(≈ {{ "%.2f"|format(search.daily_max * 0.004) }} $/día · 0 = sin tope) · hoy van <b>{{ search.used_today }}</b></span></label>
+    {% if search.scan.at %}<span class="small muted">Última búsqueda: {{ search.scan.scanned }} cuentas miradas · {{ search.scan.dormant }} paradas (se miran 1 día a la semana) · {{ search.scan.ytdlp_failed }} fallos de yt-dlp · {{ search.scan.added }} clips nuevos{% if search.deferred.n %} · <b style="color:var(--red-ink)">{{ search.deferred.n }} clips sin leer por el tope</b>{% endif %}</span>{% endif %}
+    <div><button class="btn sm">Guardar</button></div>
+  </form>
+
   <form method="post" action="{{ url_for('admin_search', accion='probar') }}" class="inline" style="flex-wrap:wrap;gap:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <select name="platform" aria-label="Red" data-native><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="instagram">Instagram (prueba)</option></select>
     <input name="handle" placeholder="@cuenta" aria-label="Cuenta" style="width:180px" required>

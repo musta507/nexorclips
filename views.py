@@ -518,7 +518,16 @@ def ytdlp_profile_videos(platform, handle, per=12, known=()):
                     posted = _ts(full)
                     if not posted:
                         raise RuntimeError(f"yt-dlp no dio la fecha del vídeo {vid}")
-            out.append({"url": link, "vid": vid, "author": h, "posted_at": posted, "views": None})
+            def num(*keys):
+                for k in keys:
+                    v = e.get(k)
+                    if isinstance(v, (int, float)) and v >= 0:
+                        return int(v)
+                return None
+            # Si el listado ya trae las cifras (TikTok suele darlas), se devuelven: quien llama decide si las usa
+            out.append({"url": link, "vid": vid, "author": h, "posted_at": posted, "views": None,
+                        "yt_views": num("view_count"), "likes": num("like_count"), "comments": num("comment_count"),
+                        "shares": num("repost_count", "share_count")})
     return out
 
 

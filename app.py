@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import json
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import math
 import os
@@ -709,12 +710,16 @@ MAX_JOIN_ACCOUNTS = 5
 
 
 def campaign_accounts(user_id, campaign_id, status=None, platform=None):
-    q = CampaignAccount.query.filter_by(user_id=user_id, campaign_id=campaign_id)
-    if status:
-        q = q.filter_by(status=status)
-    if platform:
-        q = q.filter_by(platform=platform)
-    return q.order_by(CampaignAccount.created_at).all()
+    def load():
+        q = CampaignAccount.query.filter_by(user_id=user_id, campaign_id=campaign_id)
+        if status:
+            q = q.filter_by(status=status)
+        if platform:
+            q = q.filter_by(platform=platform)
+        return q.order_by(CampaignAccount.created_at).all()
+    if has_request_context() and request.method == "GET":      # al pintar listas se pide lo mismo por cada clip: una vez basta
+        return list(_per_request(("camp_accs", user_id, campaign_id, status, platform), load))
+    return load()
 
 
 class CampaignLead(db.Model):
@@ -1548,7 +1553,7 @@ def _camp_aggs():
         for cid, st, n, v in q:
             out.setdefault(cid, {})[st] = (int(n), int(v or 0))
         return out
-    return _per_request("camp_aggs", load)
+    return ttl_cache("camp_aggs", 30, load)
 
 
 def campaign_stats(camp):
@@ -1665,31 +1670,44 @@ def clipper_analytics(subs, days=30):
     dates = [start + timedelta(days=i) for i in range((today - start).days + 1)]
     cum = {m: [0] * len(dates) for m in CLIP_METRICS}
     idx = {d: i for i, d in enumerate(dates)}
-    snaps = {}
-    if live:
-        for sn in (ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_([s.id for s in live]))
-                   .order_by(ViewSnapshot.taken_at).all()):
-            snaps.setdefault(sn.submission_id, []).append(sn)
     now = datetime.utcnow()
-    for s in live:                                      # vistas, me gusta…: la última lectura de cada día (se arrastra)
-        cur_views = s.views or 0
-        ratio = {m: (getattr(s, m) or 0) / cur_views if cur_views else 0 for m in METRICS[1:]}
-        points = [(s.created_at, {m: 0 for m in METRICS})]
-        for sn in snaps.get(s.id, []):
-            vals = {"views": sn.views or 0}
-            for m in METRICS[1:]:
-                v = getattr(sn, m)
-                vals[m] = v if v is not None else round(vals["views"] * ratio[m])
-            points.append((sn.taken_at, vals))
-        points.append((now, {m: getattr(s, m) or 0 for m in METRICS}))
-        j, last = 0, points[0][1]
-        for i, d in enumerate(dates):
-            end = datetime.combine(d, datetime.max.time())
-            while j < len(points) and points[j][0] <= end:
-                last = points[j][1]
-                j += 1
-            for m in METRICS:
-                cum[m][i] += last[m]
+    n = len(dates)
+    if live:                                            # vistas, me gusta…: la última lectura de cada día (se arrastra)
+        cur = {s.id: (s.views or 0, s.likes or 0, s.comments or 0, s.shares or 0) for s in live}
+        last = {sid: [0, 0, 0, 0] for sid in cur}
+        diff = [[0] * n for _ in METRICS]
+
+        def put(sid, when, vals):                       # cada lectura suma su diferencia en su día (no clip × día)
+            i = (when.date() - start).days
+            if i >= n:
+                return
+            i = max(i, 0)
+            prev = last[sid]
+            for k in range(4):
+                d = vals[k] - prev[k]
+                if d:
+                    diff[k][i] += d
+            last[sid] = vals
+        ids = list(cur)
+        for a in range(0, len(ids), 500):
+            for sid, when, v, lk, cm, sh in (db.session.query(ViewSnapshot.submission_id, ViewSnapshot.taken_at, ViewSnapshot.views,
+                                                              ViewSnapshot.likes, ViewSnapshot.comments, ViewSnapshot.shares)
+                                             .filter(ViewSnapshot.submission_id.in_(ids[a:a + 500])).order_by(ViewSnapshot.taken_at)):
+                if when > now:
+                    continue
+                c = cur[sid]
+                v = v or 0
+                cv = c[0]
+                put(sid, when, [v, lk if lk is not None else round(v * (c[1] / cv if cv else 0)),
+                                cm if cm is not None else round(v * (c[2] / cv if cv else 0)),
+                                sh if sh is not None else round(v * (c[3] / cv if cv else 0))])
+        for sid, c in cur.items():
+            put(sid, now, list(c))
+        for k, m in enumerate(METRICS):
+            run = 0
+            for i2 in range(n):
+                run += diff[k][i2]
+                cum[m][i2] = run
     def add_from(day, metric, amount):                  # suma desde ese día en adelante
         i = idx.get(max(day, start))
         if i is None:
@@ -1810,6 +1828,49 @@ def is_demo(user):
     return bool(user and (user.email or "").endswith(DEMO_DOMAIN))
 
 
+READ_DAILY_DAYS = int(os.environ.get("READ_DAILY_DAYS", "14"))     # clips más nuevos que esto: lectura diaria
+READ_OLD_EVERY = float(os.environ.get("READ_OLD_EVERY", "3"))       # los más antiguos: cada tantos días
+APIFY_DAILY_MAX = int(os.environ.get("APIFY_DAILY_MAX", "800"))     # resultados de Apify al día como mucho (0 = sin tope)
+
+
+def _drop(objs):
+    """Suelta de la memoria una tanda de clips ya guardada (con decenas de miles, no caben todos a la vez)."""
+    for o in objs:
+        try:
+            db.session.expunge(o)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def read_due(sub, now):
+    """¿Toca leer hoy las vistas de este clip? Los nuevos, cada día; los antiguos (que ya casi no crecen), cada 3 días."""
+    age = now - (sub.posted_at or sub.created_at or now)
+    if age < timedelta(days=READ_DAILY_DAYS) or not sub.checked_at:
+        return True
+    return now - sub.checked_at >= timedelta(days=READ_OLD_EVERY) - timedelta(hours=6)
+
+
+def apify_daily_max():
+    try:
+        return int(get_setting("apify_daily_max", "") or APIFY_DAILY_MAX)
+    except ValueError:
+        return APIFY_DAILY_MAX
+
+
+def apify_used_today():
+    try:
+        st = json.loads(get_setting("apify_day", "") or "{}")
+    except ValueError:
+        st = {}
+    return int(st.get("n", 0)) if st.get("day") == _local().strftime("%Y-%m-%d") else 0
+
+
+def apify_left():
+    """Resultados de Apify que quedan hoy antes del tope (cada resultado cuesta dinero). Sin tope: muchos."""
+    top = apify_daily_max()
+    return 10 ** 9 if top <= 0 else max(0, top - apify_used_today())
+
+
 def is_fake(obj):
     """Clip o cuenta inventados: de un clipper de demostración o de la demo personal del admin. Nunca se leen en Apify."""
     return bool(getattr(obj, "my_demo", False)) or is_demo(getattr(obj, "user", None))
@@ -1868,19 +1929,48 @@ def refresh_views():
              .filter(Campaign.status.in_(("activa", DIST_STATUS)), Submission.status != "rechazado"))
         if REFRESH_DAYS > 0:
             q = q.filter(Submission.created_at >= datetime.utcnow() - timedelta(days=REFRESH_DAYS))
-        subs = q.order_by(Submission.created_at).all()
+        # Con decenas de miles de clips no se cargan todos a la vez: primero solo sus números, luego por tandas
+        all_ids = [i for (i,) in q.with_entities(Submission.id).order_by(Submission.created_at, Submission.id)]
         apply_schedule()
         now0 = datetime.utcnow()
-        subs = [s for s in subs if not is_fake(s) and (s.campaign.status == DIST_STATUS
-                or (not s.campaign.exhausted and not earn_window_closed(s, now0)))]
-        read, errors = 0, []
+        todo, live_n, waiting = {p: [] for p in PLATFORMS}, 0, 0
+        for a in range(0, len(all_ids), 1000):
+            page = (Submission.query.options(joinedload(Submission.user), joinedload(Submission.campaign))
+                    .filter(Submission.id.in_(all_ids[a:a + 1000])).all())
+            for s in page:
+                if is_fake(s) or not (s.campaign.status == DIST_STATUS
+                                      or (not s.campaign.exhausted and not earn_window_closed(s, now0))):
+                    continue
+                live_n += 1
+                if s.id in _api_fresh:                    # ya lo leyó hoy la API oficial o el perfil (gratis)
+                    continue
+                if not read_due(s, now0):                 # clip antiguo: no toca hoy
+                    waiting += 1
+                    continue
+                todo.setdefault(s.platform, []).append((s.checked_at or datetime.min, s.id))
+            _drop(page)
+        read, errors, deferred = 0, [], 0
         for platform in PLATFORMS:
-            group = [s for s in subs if s.platform == platform and s.id not in _api_fresh]   # lo leído por la API, no a Apify
-            group = api_refresh(platform, group)          # clips de cuentas conectadas: por la API; el resto, a Apify
+            ids = [i for _, i in sorted(todo.get(platform, []))]      # primero los que llevan más tiempo sin leerse
+            if api_mode() != "off" and ids:               # clips de cuentas conectadas: por la API; el resto, a Apify
+                rest = []
+                for a in range(0, len(ids), 500):
+                    objs = Submission.query.filter(Submission.id.in_(ids[a:a + 500])).all()
+                    rest += [s.id for s in api_refresh(platform, objs)]
+                    read += sum(1 for s in objs if s.id in _api_fresh)
+                    db.session.commit()
+                    _drop(objs)
+                keep = set(rest)
+                ids = [i for i in ids if i in keep]
             if api_mode() == "solo":
-                group = []                                # modo «solo APIs»: no se gasta nada en Apify
-            for i in range(0, len(group), 50):
-                chunk = group[i:i + 50]
+                ids = []                                  # modo «solo APIs»: no se gasta nada en Apify
+            for a in range(0, len(ids), 50):
+                left = apify_left()
+                take = ids[a:a + min(50, left)] if left > 0 else []
+                if not take:                              # tope diario de Apify: lo que falta, mañana (los más atrasados primero)
+                    deferred += len(ids) - a
+                    break
+                chunk = Submission.query.filter(Submission.id.in_(take)).all()
                 try:
                     found = viewcounter.fetch_views(platform, [s.url for s in chunk])
                 except Exception as exc:  # noqa: BLE001
@@ -1889,6 +1979,7 @@ def refresh_views():
                     for s in chunk:
                         s.views_error = "Error al consultar Apify"
                     db.session.commit()
+                    _drop(chunk)
                     continue
                 now = datetime.utcnow()
                 for s in chunk:
@@ -1900,6 +1991,11 @@ def refresh_views():
                         apply_reading(s, info, now)
                         read += 1
                 db.session.commit()
+                _drop(chunk)
+                if len(take) < len(ids[a:a + 50]):        # el tope cortó esta tanda
+                    deferred += len(ids) - a - len(take)
+                    break
+        set_setting("apify_deferred", json.dumps({"day": _local().strftime("%Y-%m-%d"), "n": deferred}))
         # Reparto del dinero por orden de envío, hasta agotar cada presupuesto
         assigned = 0.0
         auto = {"aprobado": 0, "rechazado": 0}
@@ -1913,15 +2009,35 @@ def refresh_views():
             r = auto_review(s)
             if r:
                 auto[r] += 1
-        for s in sorted((s for s in subs if s.status == "aprobado"), key=lambda s: s.created_at):
-            assigned += accrue(s)
+        db.session.commit()
+        _drop(pend)
+        ok_ids = [i for (i,) in q.with_entities(Submission.id).filter(Submission.status == "aprobado")
+                  .order_by(Submission.created_at, Submission.id)]
+        for a in range(0, len(ok_ids), 1000):             # por tandas, en el mismo orden de envío
+            page = (Submission.query.options(joinedload(Submission.user), joinedload(Submission.campaign))
+                    .filter(Submission.id.in_(ok_ids[a:a + 1000])).all())
+            for s in sorted(page, key=lambda s: (s.created_at, s.id)):
+                if is_fake(s) or s.campaign.status != "activa" and s.campaign.status != DIST_STATUS:
+                    continue
+                if s.campaign.exhausted or earn_window_closed(s, now0):
+                    continue
+                if cents(raw_earning(s, s.campaign) - float(s.earned or 0)) < CENT:
+                    continue                              # ya tiene lo que le toca: sin tocar el presupuesto
+                assigned += accrue(s)
+            db.session.commit()
+            _drop(page)
+        subs_n = live_n
         db.session.commit()
         budget_alerts()
         try:
             copy_review_videos()
         except Exception:  # noqa: BLE001
             log.exception("Fallo copiando vídeos a Bunny")
-        msg = f"Vistas leídas en {read} de {len(subs)} clips · {money(assigned)} repartidos."
+        msg = f"Vistas leídas en {read + len(_api_fresh)} de {subs_n} clips · {money(assigned)} repartidos."
+        if waiting:
+            msg += f" {waiting} clips antiguos no tocaban hoy."
+        if deferred:
+            msg += f" Tope diario de Apify: {deferred} clips se leerán mañana."
         if auto["aprobado"] or auto["rechazado"]:
             msg += f" Automático: {auto['aprobado']} aprobados, {auto['rechazado']} rechazados."
         if errors:
@@ -2378,10 +2494,33 @@ def audience_for(subs):
 _api_fresh = set()      # clips cuyas cifras ya leyó la API oficial en esta pasada (refresh_views no los manda a Apify)
 
 
+YTDLP_PARALLEL = int(os.environ.get("YTDLP_PARALLEL", "6"))            # perfiles que se miran a la vez con yt-dlp
+YTDLP_PER = int(os.environ.get("YTDLP_PER", "30"))                     # últimos vídeos que se miran de cada cuenta
+APIFY_FALLBACK_MAX = int(os.environ.get("APIFY_FALLBACK_MAX", "40"))   # cuentas al día que pueden pasar a Apify si yt-dlp falla
+DORMANT_AFTER = 21                                                      # días sin publicar para tratar una cuenta como parada
+
+
+def scan_today(acc, now):
+    """Las cuentas paradas (aceptadas hace tiempo y sin publicar en 3 semanas) se miran un día a la semana, no cada día.
+    Con miles de personas que entran, ponen su cuenta y no vuelven, mirarlas a diario no sirve de nada."""
+    since = acc.decided_at or acc.created_at or now
+    if now - since < timedelta(days=DORMANT_AFTER):
+        return True
+    if acc.last_post_at and now - acc.last_post_at < timedelta(days=DORMANT_AFTER):
+        return True
+    return (acc.id + now.toordinal()) % 7 == 0
+
+
+def ytdlp_stats_on():
+    """¿Se usan las cifras que trae el listado de yt-dlp (gratis) en vez de pedirlas a Apify? Por defecto, sí."""
+    return get_setting("ytdlp_stats", "on") != "off"
+
+
 def discover_clips(now=None):
     """Mira el perfil de cada cuenta aceptada en una campaña activa y añade solos los vídeos nuevos.
     Cada cuenta es de una sola campaña, así que todo lo que publica después de entrar es un clip de esa campaña.
-    Si la cuenta está conectada con la API oficial, se lee de ahí (gratis y con más datos); si no, con Apify."""
+    Orden: API oficial si la cuenta está conectada; si no, yt-dlp (gratis, varias cuentas a la vez); si falla, Apify
+    (con un máximo de cuentas al día, para que un bloqueo de TikTok no dispare el gasto)."""
     now = now or datetime.utcnow()
     _api_fresh.clear()
     accs = (CampaignAccount.query.join(Campaign)
@@ -2389,8 +2528,12 @@ def discover_clips(now=None):
                     CampaignAccount.platform.in_(AUTO_PLATFORMS)).all())
     accs = [a for a in accs if not is_fake(a) and (a.campaign.status == DIST_STATUS
             or (not a.campaign.exhausted and a.platform in a.campaign.platform_list))]
+    skipped = len(accs)
+    accs = [a for a in accs if scan_today(a, now)]
+    skipped -= len(accs)
     added, errors = 0, []
-    by_platform = {}
+    by_platform, with_ytdlp = {}, []
+    engine, use_stats = search_engine(), ytdlp_stats_on()
     for a in accs:
         if api_mode() != "off":
             tok = api_token_for(a.platform, a.handle)
@@ -2406,21 +2549,47 @@ def discover_clips(now=None):
                     errors.append(f"API {PLATFORMS[a.platform]} @{a.handle}: {e}")
                 except Exception as e:  # noqa: BLE001
                     log.warning("API oficial de %s falló para @%s: %s", a.platform, a.handle, e)
-        if a.platform in viewcounter.YTDLP_PLATFORMS and search_engine() == "ytdlp":
+        if a.platform in viewcounter.YTDLP_PLATFORMS and engine == "ytdlp":
+            with_ytdlp.append(a)
+        elif api_mode() != "solo":
+            by_platform.setdefault(a.platform, []).append(a)   # sin API ni yt-dlp: Apify
+    # yt-dlp: se piden varios perfiles a la vez (solo la parte de red); guardar, de uno en uno
+    failed = []
+    if with_ytdlp:
+        jobs = [(a, a.platform, a.handle, _known_vids(a)) for a in with_ytdlp]
+
+        def fetch(job):
             try:
-                items = viewcounter.ytdlp_profile_videos(a.platform, a.handle, known=_known_vids(a))
-                a.last_scan_at = now
-                added += _ingest(a.platform, [a], items, now)
-                ytdlp_note(True)
-                continue
+                return job[0], viewcounter.ytdlp_profile_videos(job[1], job[2], per=YTDLP_PER, known=job[3]), None
             except Exception as e:  # noqa: BLE001
-                ytdlp_note(False, f"@{a.handle} ({PLATFORMS[a.platform]}): {str(e)[:160]}")
-                log.warning("yt-dlp no pudo leer @%s (%s): %s — se usa Apify", a.handle, a.platform, e)
-        if api_mode() != "solo":
-            by_platform.setdefault(a.platform, []).append(a)   # sin API ni yt-dlp (o fallaron): Apify
+                return job[0], None, e
+        with ThreadPoolExecutor(max_workers=max(1, YTDLP_PARALLEL)) as pool:
+            for a, items, err in pool.map(fetch, jobs):
+                if err is not None:
+                    ytdlp_note(False, f"@{a.handle} ({PLATFORMS[a.platform]}): {str(err)[:160]}")
+                    log.warning("yt-dlp no pudo leer @%s (%s): %s", a.handle, a.platform, err)
+                    failed.append(a)
+                    continue
+                if use_stats:                              # el listado ya trae las cifras: no hace falta pedirlas a Apify
+                    for it in items:
+                        if it.get("yt_views") is not None:
+                            it["views"] = it["yt_views"]
+                a.last_scan_at = now
+                added += _ingest(a.platform, [a], items, now, update_existing=use_stats)
+                ytdlp_note(True)
+    if failed and api_mode() != "solo":
+        room = failed[:max(0, APIFY_FALLBACK_MAX)]
+        for a in room:
+            by_platform.setdefault(a.platform, []).append(a)
+        if len(failed) > len(room):
+            errors.append(f"yt-dlp falló en {len(failed)} cuentas: solo {len(room)} se buscan hoy con Apify (tope de gasto); "
+                          f"las otras {len(failed) - len(room)}, mañana")
     for platform, group in by_platform.items():
         for i in range(0, len(group), SCAN_CHUNK):
             chunk = group[i:i + SCAN_CHUNK]
+            if apify_left() <= 0:
+                errors.append(f"{PLATFORMS[platform]}: tope diario de Apify alcanzado, {len(group) - i} cuentas sin mirar hoy")
+                break
             try:
                 items = viewcounter.fetch_profile_videos(platform, [a.handle for a in chunk])
             except Exception as e:  # noqa: BLE001
@@ -2429,8 +2598,10 @@ def discover_clips(now=None):
                 continue
             for a in chunk:
                 a.last_scan_at = now
-            added += _ingest(platform, chunk, items, now)
+            added += _ingest(platform, chunk, items, now, update_existing=True)   # el perfil ya trae las cifras: no se piden otra vez
     db.session.commit()
+    set_setting("scan_info", json.dumps({"at": now.isoformat(timespec="seconds"), "scanned": len(accs), "dormant": skipped,
+                                         "ytdlp_failed": len(failed), "added": added}))
     if added:
         log.info("Clips detectados solos: %s", added)
     return added, errors
@@ -2449,7 +2620,8 @@ def search_engine():
 
 def _known_vids(acc):
     rows = (Submission.query.with_entities(Submission.video_key)
-            .filter(Submission.campaign_id == acc.campaign_id, Submission.platform == acc.platform).all())
+            .filter(Submission.campaign_id == acc.campaign_id, Submission.platform == acc.platform,
+                    Submission.user_id == acc.user_id).all())
     return {k.split(":", 1)[1] for (k,) in rows if k and ":" in k}
 
 
@@ -2478,6 +2650,14 @@ def apify_log(kind, platform, n_in, n_out, code):
                 rows = []
             rows.insert(0, [datetime.utcnow().isoformat(timespec="seconds"), kind, platform, n_in, n_out, code])
             set_setting("apify_log", json.dumps(rows[:300]))
+            day = _local().strftime("%Y-%m-%d")
+            try:
+                st = json.loads(get_setting("apify_day", "") or "{}")
+            except ValueError:
+                st = {}
+            st = st if st.get("day") == day else {"day": day, "n": 0}
+            st["n"] += int(n_out or 0)
+            set_setting("apify_day", json.dumps(st))
             db.session.commit()
     except Exception:  # noqa: BLE001
         log.exception("No se pudo apuntar la llamada a Apify")
@@ -2502,6 +2682,9 @@ def apify_summary():
 
 
 YTDLP_CHECK_AT = [x.strip() for x in os.environ.get("YTDLP_CHECK_AT", "03:30,11:00,19:00").split(",") if x.strip()]
+
+
+YTDLP_CHECK_MAX = int(os.environ.get("YTDLP_CHECK_MAX", "300"))     # cuentas por comprobación como mucho
 
 
 def ytdlp_check_slot(now=None):
@@ -2533,15 +2716,24 @@ def ytdlp_check(now=None):
     accs = (CampaignAccount.query.join(Campaign)
             .filter(CampaignAccount.status == "aceptada", Campaign.status.in_(("activa", DIST_STATUS)),
                     CampaignAccount.platform.in_(viewcounter.YTDLP_PLATFORMS)).all())
-    accs = [a for a in accs if not is_fake(a)]
+    accs = [a for a in accs if not is_fake(a) and scan_today(a, now)]      # las paradas no se miran a diario
+    if len(accs) > YTDLP_CHECK_MAX:                  # con muchas cuentas, una muestra distinta cada vez
+        import random as _rnd
+        accs = _rnd.sample(accs, YTDLP_CHECK_MAX)
     issues, ok = [], 0
-    for a in accs:
-        known = _known_vids(a)
+    jobs = [(a, a.platform, a.handle, _known_vids(a)) for a in accs]
+
+    def fetch(job):
         try:
-            items = viewcounter.ytdlp_profile_videos(a.platform, a.handle, known=known)
+            return job[0], job[3], viewcounter.ytdlp_profile_videos(job[1], job[2], known=job[3]), None
         except Exception as e:  # noqa: BLE001
+            return job[0], job[3], None, e
+    with ThreadPoolExecutor(max_workers=max(1, YTDLP_PARALLEL)) as pool:
+        results = list(pool.map(fetch, jobs))
+    for a, known, items, err in results:
+        if err is not None:
             issues.append(["cuenta", f"@{a.handle} ({PLATFORMS[a.platform]}) · {a.campaign.song}",
-                           f"yt-dlp no puede leer la cuenta: {str(e)[:150]}", ""])
+                           f"yt-dlp no puede leer la cuenta: {str(err)[:150]}", ""])
             continue
         ok += 1
         since = (a.decided_at or a.created_at or now) - timedelta(hours=1)
@@ -2650,6 +2842,8 @@ def inactivity_reminders(now=None):
             continue                                          # si no hemos podido mirar su perfil, no avisamos a ciegas
         if a.last_post_at and a.last_post_at > now - timedelta(hours=24):
             continue
+        if not a.last_post_at or now - a.last_post_at > timedelta(days=DORMANT_AFTER):
+            continue                                          # cuenta parada (nunca publicó o lleva semanas): sin aviso diario
         st = campaign_stats(camp)
         notify_user(a.user_id, "inactividad", f"@{a.handle} no ha subido ningún clip en 24 h",
                     f"Quedan {money(st['remaining'], 0)} por repartir en {camp.song}. Sube un clip para no quedarte fuera.",
@@ -2791,6 +2985,11 @@ def run_daily_refresh(now=None):
         if ok:
             read_audiences()                          # audiencia de las cuentas conectadas con la API oficial
             check_creator_balances()
+            try:
+                prune_snapshots()
+            except Exception:  # noqa: BLE001
+                db.session.rollback()
+                log.exception("Fallo resumiendo el historial de vistas antiguo")
     except Exception:  # noqa: BLE001
         db.session.rollback()
         log.exception("La lectura diaria falló (intento %s)", st["tries"])
@@ -2813,6 +3012,26 @@ def refresh_pending():
     return _refresh_due() and _refresh_run()["tries"] < REFRESH_TRIES
 
 
+SNAP_KEEP_DAYS = int(os.environ.get("SNAP_KEEP_DAYS", "90"))
+
+
+def prune_snapshots(now=None):
+    """El historial de vistas crece una fila por clip y día. De lo que tiene más de 90 días se deja una lectura por
+    semana y clip (las gráficas antiguas siguen saliendo, con menos detalle). Una vez a la semana, solo en Postgres."""
+    now = now or datetime.utcnow()
+    week = now.strftime("%G-%V")
+    if db.engine.dialect.name != "postgresql" or get_setting("snap_pruned", "") == week:
+        return 0
+    res = db.session.execute(text("""
+        DELETE FROM view_snapshot v USING (
+            SELECT id, row_number() OVER (PARTITION BY submission_id, date_trunc('week', taken_at) ORDER BY taken_at DESC) AS rn
+            FROM view_snapshot WHERE taken_at < :lim) d
+        WHERE v.id = d.id AND d.rn > 1"""), {"lim": now - timedelta(days=SNAP_KEEP_DAYS)})
+    set_setting("snap_pruned", week)
+    db.session.commit()
+    return res.rowcount or 0
+
+
 def check_creator_balances():
     """Una vez al día: si a algún creador no le llega el saldo de su Whop para lo que deben sus campañas, aviso al móvil."""
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -2825,12 +3044,21 @@ def check_creator_balances():
                          f"Debe {money(r['owed'])} a clippers y tiene {money(r['balance'])}. Faltan {money(r['missing'])}.", tags="warning")
 
 
+_leader_lock = GlobalLock(731900)       # quién lleva el reloj interno cuando hay varios procesos
+
+
 def _auto_refresh_loop():
     """Reloj interno: cada 10 minutos mira si toca la lectura diaria (o la de cada REFRESH_HOURS horas)."""
     time.sleep(90)                          # deja arrancar la web primero
+    leader = False
     while True:
         try:
             with app.app_context():
+                if not leader:                            # con varios procesos, solo uno lleva las tareas automáticas
+                    leader = _leader_lock.acquire()
+                if not leader:
+                    time.sleep(600)
+                    continue
                 call_reminders()
                 try:
                     poll_bunny_copies()
@@ -3724,13 +3952,14 @@ def campaign(cid):
         flash(msg, "ok" if ok else "error")
         return redirect(url_for("campaign", cid=cid))
     st = campaign_stats(camp)
-    mine = sorted([s for s in camp.submissions if s.user_id == current_user.id],
-                  key=lambda s: s.created_at, reverse=True)
+    mine = (Submission.query.filter_by(campaign_id=camp.id, user_id=current_user.id)
+            .order_by(Submission.created_at.desc()).all())
     accounts = campaign_accounts(current_user.id, camp.id)
     accepted = [a for a in accounts if a.status == "aceptada"]
     waiting = bool(CampaignWaitlist.query.filter_by(user_id=current_user.id, campaign_id=camp.id).first())
-    winners = sorted((s for s in camp.submissions if s.status == "aprobado" and (s.views or 0) > 0),
-                     key=lambda s: -(s.views or 0))[:10]
+    winners = (Submission.query.options(joinedload(Submission.user))
+               .filter(Submission.campaign_id == camp.id, Submission.status == "aprobado", Submission.views > 0)
+               .order_by(Submission.views.desc()).limit(10).all())
     ctab = request.args.get("tab", "resumen")
     real_member = (not current_user.is_admin and is_campaign_member(current_user, camp)) or is_mod(current_user, camp.id)
     staff_view = current_user.is_admin and request.args.get("hub") == "1"   # el equipo ve la campaña como un clipper de fuera…
@@ -3777,24 +4006,31 @@ def campaign(cid):
                            mod_ids_all=campaign_mod_ids(cid) if support and support["open"] else set(), **extra)
 
 
+def _camp_nets(camp, with_views=False):
+    q = db.session.query(Submission.platform).filter(Submission.campaign_id == camp.id).distinct()
+    have = {p for (p,) in q}
+    return [p for p in camp.platform_list if p in have]
+
+
 def top_accounts(camp, red=""):
     """Cuentas de la campaña con más vistas (sin contar clips rechazados), por red. Con su foto de perfil."""
-    accs = {(a.platform, a.handle.lower()): a for a in CampaignAccount.query.filter_by(campaign_id=camp.id, status="aceptada")}
-    agg = {}
-    for s in camp.submissions:
-        if s.status == "rechazado" or not s.author:
-            continue
-        k = (s.platform, s.author.lower())
-        r = agg.setdefault(k, {"platform": s.platform, "handle": s.author, "views": 0, "clips": 0, "best": 0,
-                               "acc": accs.get(k), "user": s.user})
-        r["views"] += s.views or 0
-        r["clips"] += 1
-        r["best"] = max(r["best"], s.views or 0)
-    rows = sorted(agg.values(), key=lambda r: -r["views"])
-    nets = [p for p in camp.platform_list if any(r["platform"] == p for r in rows)]
+    handle = db.func.lower(Submission.author)
+    q = (db.session.query(Submission.platform, handle, db.func.coalesce(db.func.sum(Submission.views), 0),
+                          db.func.count(Submission.id), db.func.coalesce(db.func.max(Submission.views), 0),
+                          db.func.min(Submission.user_id), db.func.min(Submission.author))
+         .filter(Submission.campaign_id == camp.id, Submission.status != "rechazado", Submission.author != "",
+                 Submission.author.isnot(None))
+         .group_by(Submission.platform, handle))
+    nets = [p for p in camp.platform_list if p in {r[0] for r in q.with_entities(Submission.platform).distinct()}]
     if red in nets:
-        rows = [r for r in rows if r["platform"] == red]
-    return {"rows": rows[:15], "nets": nets, "red": red if red in nets else ""}
+        q = q.filter(Submission.platform == red)
+    top = q.order_by(db.func.coalesce(db.func.sum(Submission.views), 0).desc()).limit(15).all()
+    accs = {(a.platform, a.handle.lower()): a for a in CampaignAccount.query.filter_by(campaign_id=camp.id, status="aceptada")
+            .filter(db.func.lower(CampaignAccount.handle).in_([r[1] for r in top] or [""]))}
+    users = {u.id: u for u in User.query.filter(User.id.in_([r[5] for r in top] or [0]))}
+    rows = [{"platform": r[0], "handle": r[6], "views": int(r[2] or 0), "clips": r[3], "best": int(r[4] or 0),
+             "acc": accs.get((r[0], r[1])), "user": users.get(r[5])} for r in top]
+    return {"rows": rows, "nets": nets, "red": red if red in nets else ""}
 
 
 VIRAL_PERIODS = {"7": ("7 días", 7), "30": ("30 días", 30), "todo": ("Siempre", 0)}
@@ -3804,14 +4040,15 @@ def viral_clips(camp, red="", periodo="30"):
     """Los vídeos con más vistas de la campaña, para ver qué funciona. Filtros: red y periodo."""
     periodo = periodo if periodo in VIRAL_PERIODS else "30"
     days = VIRAL_PERIODS[periodo][1]
-    since = datetime.utcnow() - timedelta(days=days) if days else None
-    subs = [s for s in camp.submissions if s.status != "rechazado" and (s.views or 0) > 0
-            and (not since or (s.posted_at or s.created_at) >= since)]
-    nets = [p for p in camp.platform_list if any(s.platform == p for s in camp.submissions)]
+    nets = _camp_nets(camp)
+    q = (Submission.query.options(joinedload(Submission.campaign))
+         .filter(Submission.campaign_id == camp.id, Submission.status != "rechazado", Submission.views > 0))
+    if days:
+        q = q.filter(db.func.coalesce(Submission.posted_at, Submission.created_at) >= datetime.utcnow() - timedelta(days=days))
     if red in nets:
-        subs = [s for s in subs if s.platform == red]
-    subs.sort(key=lambda s: -(s.views or 0))
-    return {"clips": subs[:24], "nets": nets, "red": red if red in nets else "", "periodo": periodo, "periods": VIRAL_PERIODS}
+        q = q.filter(Submission.platform == red)
+    return {"clips": q.order_by(Submission.views.desc()).limit(24).all(), "nets": nets, "red": red if red in nets else "",
+            "periodo": periodo, "periods": VIRAL_PERIODS}
 
 
 def _member_post(cid, pid):
@@ -4198,8 +4435,11 @@ def ranking(period="semana", limit=50):
          .filter(Submission.status == "aprobado", User.is_banned.is_(False), User.is_admin.is_(False)))
     if days:
         q = q.filter(Submission.created_at >= datetime.utcnow() - timedelta(days=days))
-    rows = (q.group_by(Submission.user_id)                 # por dinero ganado; a igualdad, por vistas
-            .order_by(db.func.sum(Submission.earned).desc(), db.func.sum(Submission.views).desc()).limit(limit).all())
+    def load():
+        return [tuple(r) for r in
+                q.group_by(Submission.user_id)             # por dinero ganado; a igualdad, por vistas
+                .order_by(db.func.sum(Submission.earned).desc(), db.func.sum(Submission.views).desc()).limit(limit).all()]
+    rows = ttl_cache(f"ranking:{period}:{limit}", 120, load)
     users = {u.id: u for u in User.query.filter(User.id.in_([r[0] for r in rows])).all()} if rows else {}
     return [{"pos": i + 1, "user": users[r[0]], "name": mask_name(users[r[0]].name), "views": int(r[1] or 0),
              "earned": cents(r[2]), "clips": r[3]} for i, r in enumerate(rows) if r[0] in users]
@@ -4533,6 +4773,28 @@ def _per_request(key, fn):
     return memo[key]
 
 
+_ttl, _ttl_lock = {}, threading.Lock()
+
+
+def ttl_cache(key, seconds, fn):
+    """Guarda un cálculo caro unos segundos (cifras iguales para todos: rankings, totales de campaña…).
+    Con miles de usuarios, cada página deja de repetir las mismas sumas. Solo valores sencillos (nunca filas de la base
+    de datos). En las pruebas no se guarda nada."""
+    if app.testing or os.environ.get("PYTEST_CURRENT_TEST"):
+        return _per_request(key, fn)
+    now = time.time()
+    hit = _ttl.get(key)
+    if hit and hit[0] > now:
+        return hit[1]
+    val = fn()
+    with _ttl_lock:
+        _ttl[key] = (now + seconds, val)
+        if len(_ttl) > 500:                           # limpieza de lo caducado
+            for k in [k for k, v in _ttl.items() if v[0] <= now]:
+                _ttl.pop(k, None)
+    return val
+
+
 def review_queue(cid=None):
     """Clips pendientes repartidos en «por revisar» y «contando vistas»."""
     if cid is None:
@@ -4578,7 +4840,8 @@ def _pending_by_campaign():
 
 
 def review_queue_count():
-    return len(review_queue()[0]) + Submission.query.filter_by(appeal_status="pendiente").count()
+    return ttl_cache("review_count", 15, lambda: len(review_queue()[0])
+                     + Submission.query.filter_by(appeal_status="pendiente").count())
 
 
 def admin_counts():
@@ -4671,7 +4934,7 @@ def admin_kpis(camps):
         "paid": cents(db.session.query(db.func.coalesce(db.func.sum(Payout.amount), 0)).filter(Payout.status == "pagado").scalar()),
         "open_payouts": cents(sum(p.amount for p in open_payouts)),
         "open_payouts_n": len(open_payouts),
-        "week": views_week(),
+        "week": ttl_cache("views_week", 600, views_week),
         "views": db.session.query(db.func.coalesce(db.func.sum(Submission.views), 0)).filter(Submission.status == "aprobado").scalar() or 0,
         "live_camps": sum(1 for c in camps if c.status == "activa"),
     }
@@ -5516,7 +5779,9 @@ def search_info():
             return json.loads(d)
     return {"engine": search_engine(), "engines": SEARCH_ENGINES, "installed": viewcounter.ytdlp_available(),
             "stats": load("ytdlp_stats", "{}"), "check": load("ytdlp_check", "{}"), "times": YTDLP_CHECK_AT,
-            "test": session.pop("ytdlp_test", None), "apify": apify_summary()}
+            "test": session.pop("ytdlp_test", None), "apify": apify_summary(), "stats_on": ytdlp_stats_on(),
+            "daily_max": apify_daily_max(), "used_today": apify_used_today(), "scan": load("scan_info", "{}"),
+            "deferred": load("apify_deferred", "{}")}
 
 
 def bunny_info():
@@ -5573,12 +5838,23 @@ def admin_search(accion):
             try:
                 items = viewcounter.ytdlp_profile_videos(platform, handle)
                 session["ytdlp_test"] = {"handle": handle, "platform": platform, "secs": round(time.time() - t0, 1),
-                                         "items": [[it["url"], it["posted_at"].strftime("%d/%m/%Y %H:%M") if it.get("posted_at") else "—"]
+                                         "items": [[it["url"], (it["posted_at"].strftime("%d/%m/%Y %H:%M") if it.get("posted_at") else "—")
+                                                    + (f" · {it['yt_views']:,} vistas".replace(",", ".") if it.get("yt_views") is not None else " · sin cifras")]
                                                    for it in items]}
                 flash(f"yt-dlp encontró {len(items)} vídeos de @{handle} en {round(time.time() - t0, 1)} s.", "ok")
             except Exception as e:  # noqa: BLE001
                 session["ytdlp_test"] = {"handle": handle, "platform": platform, "error": str(e)[:400]}
                 flash(f"yt-dlp falló con @{handle}.", "error")
+    elif accion == "ahorro":
+        set_setting("ytdlp_stats", "on" if request.form.get("ytdlp_stats") else "off")
+        try:
+            top = max(0, int(request.form.get("apify_daily_max", "") or APIFY_DAILY_MAX))
+        except ValueError:
+            top = APIFY_DAILY_MAX
+        set_setting("apify_daily_max", str(top))
+        audit("ahorro_apify", f"cifras de yt-dlp: {'sí' if request.form.get('ytdlp_stats') else 'no'} · tope diario: {top}")
+        db.session.commit()
+        flash("Guardado.", "ok")
     elif accion == "comprobar":
         res = ytdlp_check()
         flash(f"Comprobación hecha: {res['ok']} de {res['accounts']} cuentas leídas · {len(res['issues'])} cosas raras.", "ok")
@@ -6099,6 +6375,14 @@ def tech_alerts():
             out.append(("aviso", "Las vistas llevan tiempo sin actualizarse", f"Última lectura: {get_setting('last_refresh', '—')}"))
     except ValueError:
         pass
+    try:
+        dfr = json.loads(get_setting("apify_deferred", "") or "{}")
+    except ValueError:
+        dfr = {}
+    if dfr.get("n") and dfr.get("day") == _local().strftime("%Y-%m-%d"):
+        out.append(("aviso", "Tope diario de Apify alcanzado",
+                    f"Hoy quedaron {dfr['n']} clips sin leer (se leen mañana, los más atrasados primero). "
+                    "Si pasa a menudo, sube el tope en Panel técnico → Búsqueda de clips, o conecta las APIs oficiales."))
     run = _refresh_run()
     if run["tries"] >= REFRESH_TRIES and not run.get("done"):
         out.append(("error", "La lectura diaria de hoy no ha terminado",
@@ -6830,7 +7114,7 @@ def admin_campaign(cid):
             shortfall = {"balance": bal, "owed": owed, "missing": cents(owed - bal)}
     aud = audience_for([s for s in camp.submissions if s.status == "aprobado"]) if can["estadisticas"] else {}
     return render_template("admin/campaign.html", camp=camp, st=st, report_url=report_url, can=can, aud=aud,
-                           an=campaign_analytics(camp) if can["estadisticas"] else None, shortfall=shortfall, pend=pending_by_campaign().get(cid, {}), sec="resumen")
+                           an=ttl_cache(f"analytics:{camp.id}", 300, lambda: campaign_analytics(camp)) if can["estadisticas"] else None, shortfall=shortfall, pend=pending_by_campaign().get(cid, {}), sec="resumen")
 
 
 @app.route("/admin/campana/<int:cid>/clips.csv")
@@ -7380,25 +7664,30 @@ def admin_clippers():
         db.session.commit()
         return redirect(url_for("admin_payouts"))
     q = request.args.get("q", "").strip().lower()
-    users = (User.query.options(selectinload(User.submissions).joinedload(Submission.campaign), selectinload(User.payouts))
-             .order_by(User.created_at.desc()).all())          # todo en 3 consultas aunque haya miles de clippers
+    # Con miles de clippers: se ordena, se busca y se cuenta en la base de datos, y solo se calculan los 50 que se ven
+    agg = (db.session.query(Submission.user_id.label("uid"),
+                            db.func.coalesce(db.func.sum(db.case((Submission.status == "aprobado", Submission.earned), else_=0)), 0).label("e"),
+                            db.func.count(Submission.id).label("n"))
+           .group_by(Submission.user_id).subquery())
+    base = db.session.query(User, db.func.coalesce(agg.c.n, 0)).outerjoin(agg, agg.c.uid == User.id)
     if q:
-        users = [u for u in users if q in u.email.lower() or q in u.name.lower()
-                 or any(q in h for p in PLATFORMS for h in u.handles(p))]
-    rows = [(u, user_money(u), len(u.submissions)) for u in users]
+        like = f"%{q}%"
+        base = base.filter(db.or_(db.func.lower(User.email).like(like), db.func.lower(User.name).like(like),
+                                  *[db.func.lower(getattr(User, f"{p}_handles")).like(like) for p in PLATFORMS
+                                    if hasattr(User, f"{p}_handles")]))
     order = request.args.get("orden", "ganado")
     if order == "actividad":                       # los que entraron hace menos, primero; los que nunca, al final
-        rows.sort(key=lambda r: r[0].last_seen_at or datetime.min, reverse=True)
+        base = base.order_by(User.last_seen_at.desc().nullslast(), User.created_at.desc())
     else:
-        rows.sort(key=lambda r: -r[1]["earned"])
-    now = datetime.utcnow()
-    clippers = [u for u in users if not u.is_admin]
-    activity = {"online": sum(1 for u in clippers if u.last_seen_at and (now - u.last_seen_at).total_seconds() < ONLINE_FOR),
-                "day": sum(1 for u in clippers if u.last_seen_at and now - u.last_seen_at < timedelta(days=1)),
-                "idle": sum(1 for u in clippers if not u.last_seen_at or now - u.last_seen_at >= timedelta(days=7))}
+        base = base.order_by(db.func.coalesce(agg.c.e, 0).desc(), User.created_at.desc())
     page = max(request.args.get("p", 1, type=int), 1)             # de 50 en 50 (la búsqueda y el orden van sobre todos)
-    total = len(rows)
-    rows = rows[: page * LIST_PAGE]
+    total = base.count()
+    rows = [(u, user_money(u), n) for u, n in base.limit(page * LIST_PAGE).all()]
+    now = datetime.utcnow()
+    seen = db.session.query(db.func.count(User.id)).filter(User.is_admin.is_(False))
+    activity = {"online": seen.filter(User.last_seen_at >= now - timedelta(seconds=ONLINE_FOR)).scalar(),
+                "day": seen.filter(User.last_seen_at >= now - timedelta(days=1)).scalar(),
+                "idle": seen.filter(db.or_(User.last_seen_at.is_(None), User.last_seen_at < now - timedelta(days=7))).scalar()}
     return render_template("admin/clippers.html", rows=rows, q=q, order=order, activity=activity,
                            total=total, more=total > len(rows), page=page)
 
@@ -7703,7 +7992,15 @@ def my_available():
     """Saldo que el clipper puede retirar ya (para el menú de perfil). Una vez por petición."""
     if not current_user.is_authenticated or current_user.is_admin:
         return 0
-    return _per_request("my_available", lambda: user_money(current_user)["available"])
+    uid = current_user.id
+
+    def load():                                       # dos sumas en la base de datos (antes cargaba todos sus clips)
+        closed = (db.session.query(db.func.coalesce(db.func.sum(Submission.earned), 0)).join(Campaign)
+                  .filter(Submission.user_id == uid, Submission.status == "aprobado", Campaign.status == "finalizada").scalar())
+        out = (db.session.query(db.func.coalesce(db.func.sum(Payout.amount), 0))
+               .filter(Payout.user_id == uid, Payout.status.in_(PAYOUT_OPEN + ("pagado",))).scalar())
+        return max(cents(cents(closed) - cents(out)), 0.0)
+    return _per_request("my_available", load)
 
 
 def pop_undo():

@@ -2732,3 +2732,145 @@ def test_daily_refresh_is_marked_done_only_when_it_finishes(monkeypatch):
         monkeypatch.setattr(A, "refresh_views", lambda: "ok")
         assert A.run_daily_refresh(t0) is True and A.get_setting("refresh_day") == day
         assert A.run_daily_refresh(t0 + timedelta(hours=2)) is False                            # ya hecha hoy
+
+
+def _clipper_reference(subs, days=30):
+    """Versión anterior (clip × día), como referencia. Panel de Mis clips: totales, evolución día a día de cada métrica y vistas por red de los clips del periodo."""
+    today = datetime.utcnow().date()
+    if days:
+        start = today - timedelta(days=days - 1)
+    else:
+        start = max(min((s.created_at.date() for s in subs), default=today), today - timedelta(days=364))
+    subs = [s for s in subs if s.created_at.date() >= start]
+    live = [s for s in subs if s.status != "rechazado"]
+    approved = [s for s in subs if s.status == "aprobado"]
+    totals = {m: sum(getattr(s, m) or 0 for s in live) for m in A.METRICS}
+    totals.update({"earned": A.cents(sum(s.earned or 0 for s in approved)), "sent": len(subs), "approved": len(approved)})
+    by_platform = sorted(({"key": p, "name": A.PLATFORMS[p], "posts": sum(1 for s in subs if s.platform == p),
+                           "views": sum(s.views or 0 for s in live if s.platform == p)} for p in A.PLATFORMS
+                          if any(s.platform == p for s in subs)), key=lambda r: -r["views"])
+    dates = [start + timedelta(days=i) for i in range((today - start).days + 1)]
+    cum = {m: [0] * len(dates) for m in A.CLIP_METRICS}
+    idx = {d: i for i, d in enumerate(dates)}
+    snaps = {}
+    if live:
+        for sn in (A.ViewSnapshot.query.filter(A.ViewSnapshot.submission_id.in_([s.id for s in live]))
+                   .order_by(A.ViewSnapshot.taken_at).all()):
+            snaps.setdefault(sn.submission_id, []).append(sn)
+    now = datetime.utcnow()
+    for s in live:                                      # vistas, me gusta…: la última lectura de cada día (se arrastra)
+        cur_views = s.views or 0
+        ratio = {m: (getattr(s, m) or 0) / cur_views if cur_views else 0 for m in A.METRICS[1:]}
+        points = [(s.created_at, {m: 0 for m in A.METRICS})]
+        for sn in snaps.get(s.id, []):
+            vals = {"views": sn.views or 0}
+            for m in A.METRICS[1:]:
+                v = getattr(sn, m)
+                vals[m] = v if v is not None else round(vals["views"] * ratio[m])
+            points.append((sn.taken_at, vals))
+        points.append((now, {m: getattr(s, m) or 0 for m in A.METRICS}))
+        j, last = 0, points[0][1]
+        for i, d in enumerate(dates):
+            end = datetime.combine(d, datetime.max.time())
+            while j < len(points) and points[j][0] <= end:
+                last = points[j][1]
+                j += 1
+            for m in A.METRICS:
+                cum[m][i] += last[m]
+    def add_from(day, metric, amount):                  # suma desde ese día en adelante
+        i = idx.get(max(day, start))
+        if i is None:
+            return
+        for k in range(i, len(dates)):
+            cum[metric][k] += amount
+    for s in subs:
+        add_from(s.created_at.date(), "sent", 1)
+    for s in approved:
+        when = (s.reviewed_at or s.created_at).date()
+        add_from(when, "approved", 1)
+        add_from(when, "earned", float(s.earned or 0))
+    cum["earned"] = [round(v, 2) for v in cum["earned"]]
+    daily = {m: [max(0, round(cum[m][i] - (cum[m][i - 1] if i else 0), 2)) for i in range(len(dates))] for m in A.CLIP_METRICS}
+    return {"totals": totals, "by_platform": by_platform,
+            "series": {"labels": [d.isoformat() for d in dates], "cumulative": cum, "daily": daily}}
+
+
+def test_clipper_analytics_matches_previous_version():
+    make_campaign(budget=5000)
+    post(client_for("admin@test.com"), "/admin/ajustes/demo", accion="cargar")
+    with A.app.app_context():
+        u = A.User.query.join(A.Submission).filter(A.User.is_admin.is_(False)).first()
+        subs = list(u.submissions)
+        assert len(subs) > 2
+        for days in (7, 30, 0):
+            assert A.clipper_analytics(subs, days) == _clipper_reference(subs, days)
+
+
+# ---------------------------------------------------------------- escala (miles de usuarios)
+def test_old_clips_are_read_every_few_days_and_dormant_accounts_weekly():
+    now = datetime.utcnow()
+    S = type("S", (), {})
+    new, old = S(), S()
+    new.posted_at, new.created_at, new.checked_at = now - timedelta(days=3), now - timedelta(days=3), now - timedelta(hours=20)
+    old.posted_at, old.created_at, old.checked_at = now - timedelta(days=40), now - timedelta(days=40), now - timedelta(hours=20)
+    assert A.read_due(new, now) and not A.read_due(old, now)
+    old.checked_at = now - timedelta(days=3)
+    assert A.read_due(old, now)
+    old.checked_at = None
+    assert A.read_due(old, now)                               # nunca leído: siempre toca
+    acc = S()
+    acc.id, acc.decided_at, acc.created_at, acc.last_post_at = 7, now - timedelta(days=5), now - timedelta(days=5), None
+    assert A.scan_today(acc, now)                             # recién aceptada: a diario
+    acc.decided_at = now - timedelta(days=60)
+    assert sum(A.scan_today(acc, now + timedelta(days=d)) for d in range(14)) == 2      # parada: un día a la semana
+    acc.last_post_at = now - timedelta(days=2)
+    assert A.scan_today(acc, now)                             # ha publicado hace poco: a diario
+
+
+def test_apify_daily_cap_defers_reads_and_ytdlp_figures_are_used(monkeypatch):
+    cid = make_campaign(song="Bali")
+    client_for("a@test.com", tiktok="clipsdepablo")
+    _auto_accept()
+    now = datetime.utcnow()
+    with A.app.app_context():
+        acc = A.CampaignAccount.query.one()
+        acc.decided_at = now - timedelta(days=2)
+        A.set_setting("search_engine", "ytdlp")
+        A.db.session.commit()
+    vids = [{"url": f"https://www.tiktok.com/@clipsdepablo/video/750000000000000001{i}", "vid": f"750000000000000001{i}",
+             "author": "clipsdepablo", "posted_at": now - timedelta(hours=3), "views": None, "yt_views": 4000 + i,
+             "likes": 10, "comments": 1, "shares": 0} for i in range(3)]
+    monkeypatch.setattr(A.viewcounter, "ytdlp_available", lambda: True)
+    monkeypatch.setattr(A.viewcounter, "ytdlp_profile_videos", lambda p, h, per=12, known=(): [dict(v) for v in vids])
+    asked = []
+    monkeypatch.setattr(A.viewcounter, "fetch_views", lambda p, urls: asked.extend(urls) or {})
+    monkeypatch.setattr(A.viewcounter, "fetch_profile_videos", lambda *a, **k: [])
+    with A.app.app_context():
+        A.refresh_views()
+        subs = A.Submission.query.order_by(A.Submission.id).all()
+        assert [s.views for s in subs] == [4000, 4001, 4002] and not asked       # cifras de yt-dlp: Apify no se usa
+        # sin las cifras de yt-dlp, se piden a Apify… hasta el tope diario
+        A.set_setting("ytdlp_stats", "off")
+        A.set_setting("apify_daily_max", "2")
+        A.db.session.commit()
+        A.refresh_views()
+        assert len(asked) == 2
+        assert A.json.loads(A.get_setting("apify_deferred"))["n"] == 1
+        assert any("Tope diario de Apify" in a[1] for a in A.tech_alerts())
+
+
+def test_profile_menu_balance_matches_full_calculation():
+    make_campaign(budget=5000)
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/ajustes/demo", accion="cargar")
+    with A.app.app_context():
+        for c in A.Campaign.query.all():
+            c.status = "finalizada"
+        A.db.session.commit()
+        users = A.User.query.join(A.Submission).filter(A.User.is_admin.is_(False)).distinct().limit(6).all()
+        for u in users:
+            with A.app.test_request_context("/"):
+                A.login_user(u)
+                A.g.pop("_memo", None)                         # (el contexto de la prueba se comparte entre vueltas)
+                assert A.my_available() == A.user_money(u)["available"]
+        assert any(A.user_money(u)["available"] > 0 for u in users)
