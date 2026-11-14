@@ -1576,9 +1576,13 @@ METRICS = ("views", "likes", "comments", "shares")
 def campaign_analytics(camp, max_days=180):
     """Estadísticas de una campaña para el panel: totales, por red y la evolución día a día de cada métrica.
     Los días sin lectura arrastran la última conocida. Si un clip no tiene historial de me gusta / comentarios /
-    compartidos (se empezaron a guardar después), se estiman en proporción a sus vistas de ese momento."""
-    subs = [s for s in camp.submissions if s.status == "aprobado"]
-    totals = {m: sum(getattr(s, m) or 0 for s in subs) for m in METRICS}
+    compartidos (se empezaron a guardar después), se estiman en proporción a sus vistas de ese momento.
+    Solo se leen las columnas necesarias y cada lectura suma su diferencia en su día (no se recorre clip × día)."""
+    subs = (db.session.query(Submission.id, Submission.created_at, Submission.platform, Submission.views,
+                             Submission.likes, Submission.comments, Submission.shares)
+            .filter(Submission.campaign_id == camp.id, Submission.status == "aprobado").all())
+    cur = {s.id: (s.views or 0, s.likes or 0, s.comments or 0, s.shares or 0) for s in subs}
+    totals = {m: sum(v[k] for v in cur.values()) for k, m in enumerate(METRICS)}
     spent = cents(camp.spent)
     by_platform = [{"key": p, "name": PLATFORMS[p],
                     "views": sum(s.views or 0 for s in subs if s.platform == p),
@@ -1590,34 +1594,51 @@ def campaign_analytics(camp, max_days=180):
            "by_platform": by_platform, "series": None}
     if not subs:
         return out
-    snaps = {}
-    for sn in (ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_([s.id for s in subs]))
-               .order_by(ViewSnapshot.taken_at).all()):
-        snaps.setdefault(sn.submission_id, []).append(sn)
-    today = datetime.utcnow().date()
+    now = datetime.utcnow()
+    today = now.date()
     start = max(min(s.created_at.date() for s in subs), today - timedelta(days=max_days - 1))
-    days = [start + timedelta(days=i) for i in range((today - start).days + 1)]
-    cum = {m: [0] * len(days) for m in METRICS}
-    for s in subs:
-        cur_views = s.views or 0
-        ratio = {m: (getattr(s, m) or 0) / cur_views if cur_views else 0 for m in METRICS[1:]}
-        points = [(s.created_at, {m: 0 for m in METRICS})]
-        for sn in snaps.get(s.id, []):
-            vals = {"views": sn.views or 0}
-            for m in METRICS[1:]:
-                v = getattr(sn, m)
-                vals[m] = v if v is not None else round(vals["views"] * ratio[m])
-            points.append((sn.taken_at, vals))
-        points.append((datetime.utcnow(), {m: getattr(s, m) or 0 for m in METRICS}))   # la lectura de ahora
-        j, last = 0, points[0][1]
-        for i, d in enumerate(days):
-            end = datetime.combine(d, datetime.max.time())
-            while j < len(points) and points[j][0] <= end:
-                last = points[j][1]
-                j += 1
-            for m in METRICS:
-                cum[m][i] += last[m]
-    daily = {m: [max(0, cum[m][i] - (cum[m][i - 1] if i else 0)) for i in range(len(days))] for m in METRICS}
+    n = (today - start).days + 1
+    diff = [[0] * n for _ in METRICS]
+    last = {s.id: [0, 0, 0, 0] for s in subs}
+
+    def put(sid, when, vals):
+        i = (when.date() - start).days
+        if i >= n:                                   # una lectura «del futuro»: no entra en ningún día
+            return
+        i = max(i, 0)
+        prev = last[sid]
+        for k in range(4):
+            d = vals[k] - prev[k]
+            if d:
+                diff[k][i] += d
+        last[sid] = vals
+
+    q = (db.session.query(ViewSnapshot.submission_id, ViewSnapshot.taken_at, ViewSnapshot.views, ViewSnapshot.likes,
+                          ViewSnapshot.comments, ViewSnapshot.shares)
+         .join(Submission, Submission.id == ViewSnapshot.submission_id)
+         .filter(Submission.campaign_id == camp.id, Submission.status == "aprobado")
+         .order_by(ViewSnapshot.taken_at))
+    for sid, when, v, lk, cm, sh in q:
+        c = cur.get(sid)
+        if c is None or when > now:
+            continue
+        v = v or 0
+        cv = c[0]
+        put(sid, when, [v,
+                        lk if lk is not None else round(v * (c[1] / cv if cv else 0)),
+                        cm if cm is not None else round(v * (c[2] / cv if cv else 0)),
+                        sh if sh is not None else round(v * (c[3] / cv if cv else 0))])
+    for sid, c in cur.items():                       # la lectura de ahora
+        put(sid, now, list(c))
+    cum = {}
+    for k, m in enumerate(METRICS):
+        run, col = 0, []
+        for d in diff[k]:
+            run += d
+            col.append(run)
+        cum[m] = col
+    days = [start + timedelta(days=i) for i in range(n)]
+    daily = {m: [max(0, cum[m][i] - (cum[m][i - 1] if i else 0)) for i in range(n)] for m in METRICS}
     out["series"] = {"labels": [d.isoformat() for d in days], "cumulative": cum, "daily": daily}
     return out
 
@@ -2021,24 +2042,62 @@ def poll_bunny_copies():
     db.session.commit()
 
 
+def _bunny_upload(s_, content):
+    """Sube un vídeo ya descargado a Bunny y deja el clip en «subiendo»."""
+    if len(content) < 10_000 or len(content) > 300 * 1024 * 1024:
+        raise RuntimeError(f"la descarga no parece un vídeo ({len(content)} bytes)")
+    ok, code, data = bunny_call("POST", "/videos", json={"title": f"Clip {s_.id} · {s_.campaign.song}"[:200]})
+    if not ok or not data.get("guid"):
+        raise RuntimeError(f"Bunny no dejó crear el vídeo ({code})")
+    guid = data["guid"]
+    up = requests.put(f"https://video.bunnycdn.com/library/{BUNNY_LIBRARY_ID}/videos/{guid}", data=content,
+                      headers={"AccessKey": BUNNY_API_KEY, "Content-Type": "application/octet-stream"}, timeout=180)
+    if up.status_code >= 300:
+        raise RuntimeError(f"la subida a Bunny dio {up.status_code}")
+    s_.video_guid, s_.video_status, s_.video_error = guid, "subiendo", ""
+
+
 def copy_videos_now(ids=None, limit=30):
-    """Copia a Bunny los clips que ya están en revisión. Devuelve (copiados, [(clip, resultado)])."""
+    """Copia a Bunny los clips que ya están en revisión, de uno en uno (descargar → subir → soltar la memoria).
+    Devuelve (copiados, [(clip, resultado)])."""
     if not bunny_ready():
         return 0, []
     todo = copy_candidates(ids)[:limit]
-    report = []
-    got = {}
-    if search_engine() == "ytdlp":                  # primero yt-dlp (gratis); lo que falle, por Apify
-        for s_ in [x for x in todo if x.platform == "tiktok"]:
-            try:
-                got[s_.id] = viewcounter.ytdlp_download(s_.url)
-            except Exception as e:  # noqa: BLE001
-                log.warning("yt-dlp no pudo descargar el clip %s: %s", s_.id, e)
-    tiktok = [s_ for s_ in todo if s_.platform == "tiktok" and s_.id not in got and "apify" not in (s_.media_url or "")]
-    if tiktok and api_mode() == "solo":           # sin Apify no hay enlace de descarga de TikTok
+    report, done, later = [], 0, []
+    OK = "copiado: Bunny lo está procesando (1–3 min)"
+
+    def fail(s_, msg):
+        s_.video_status, s_.video_error = "error", str(msg)[:300]
+        s_.media_url = ""                            # la próxima vez se pide un enlace nuevo
+        report.append((s_, s_.video_error))
+
+    # 1) TikTok con yt-dlp (gratis): cada vídeo se sube nada más descargarlo; nunca hay más de uno en memoria
+    for s_ in todo:
+        if not (s_.platform == "tiktok" and search_engine() == "ytdlp"):
+            later.append(s_)
+            continue
+        try:
+            content = viewcounter.ytdlp_download(s_.url)
+        except Exception as e:  # noqa: BLE001
+            log.warning("yt-dlp no pudo descargar el clip %s: %s", s_.id, e)
+            later.append(s_)                         # este, por Apify
+            continue
+        s_.video_tries = (s_.video_tries or 0) + 1
+        try:
+            _bunny_upload(s_, content)
+            done += 1
+            report.append((s_, OK))
+        except Exception as e:  # noqa: BLE001
+            log.warning("No se pudo copiar el vídeo del clip %s: %s", s_.id, e)
+            fail(s_, e)
+        del content
+        db.session.commit()
+    # 2) El resto (Instagram, y los TikTok que yt-dlp no pudo): con el enlace de descarga de Apify
+    tiktok = [s_ for s_ in later if s_.platform == "tiktok" and "apify" not in (s_.media_url or "")]
+    if tiktok and api_mode() == "solo":              # sin Apify no hay enlace de descarga de TikTok
         for s_ in tiktok:
             report.append((s_, "sin copiar: en modo «solo APIs» no se puede descargar de TikTok"))
-        todo = [s_ for s_ in todo if s_ not in tiktok]
+        later = [s_ for s_ in later if s_ not in tiktok]
         tiktok = []
     if tiktok:
         try:
@@ -2050,46 +2109,71 @@ def copy_videos_now(ids=None, limit=30):
                 s_.video_error = f"Apify falló al pedir la descarga: {e}"[:300]
         for s_ in tiktok:
             s_.media_url = (links.get(s_.video_key.split(":", 1)[1]) or "")[:1000]
-    done = 0
-    for s_ in todo:
+    for s_ in later:
         s_.video_tries = (s_.video_tries or 0) + 1
-        if not s_.media_url and s_.id not in got:
+        if not s_.media_url:
             s_.video_status = "error"
-            s_.video_error = (s_.video_error if s_.video_error.startswith("Apify") else
+            s_.video_error = (s_.video_error if (s_.video_error or "").startswith("Apify") else
                               "Apify no guardó el vídeo (no devolvió mediaUrls): vídeo privado, borrado o Apify no pudo descargarlo")[:300]
             report.append((s_, s_.video_error))
             db.session.commit()
             continue
         try:
-            if s_.id in got:
-                content = got.pop(s_.id)
-            else:
-                r = viewcounter.download_video(s_.media_url)
-                if r.status_code >= 400:
-                    host = urlparse(s_.media_url).netloc
-                    raise RuntimeError(f"la descarga del vídeo dio {r.status_code} desde {host}")
-                content = r.content
-            if len(content) < 10_000 or len(content) > 300 * 1024 * 1024:
-                raise RuntimeError(f"la descarga no parece un vídeo ({len(content)} bytes)")
-            ok, code, data = bunny_call("POST", "/videos", json={"title": f"Clip {s_.id} · {s_.campaign.song}"[:200]})
-            if not ok or not data.get("guid"):
-                raise RuntimeError(f"Bunny no dejó crear el vídeo ({code})")
-            guid = data["guid"]
-            up = requests.put(f"https://video.bunnycdn.com/library/{BUNNY_LIBRARY_ID}/videos/{guid}", data=content,
-                              headers={"AccessKey": BUNNY_API_KEY, "Content-Type": "application/octet-stream"}, timeout=180)
-            if up.status_code >= 300:
-                raise RuntimeError(f"la subida a Bunny dio {up.status_code}")
-            s_.video_guid, s_.video_status, s_.video_error = guid, "subiendo", ""
+            r = viewcounter.download_video(s_.media_url)
+            if r.status_code >= 400:
+                raise RuntimeError(f"la descarga del vídeo dio {r.status_code} desde {urlparse(s_.media_url).netloc}")
+            _bunny_upload(s_, r.content)
             done += 1
-            report.append((s_, "copiado: Bunny lo está procesando (1–3 min)"))
+            report.append((s_, OK))
         except Exception as e:  # noqa: BLE001
             log.warning("No se pudo copiar el vídeo del clip %s: %s", s_.id, e)
-            s_.video_status, s_.video_error = "error", str(e)[:300]
-            s_.media_url = ""                        # la próxima vez se pide un enlace nuevo
-            report.append((s_, s_.video_error))
+            fail(s_, e)
+        r = None
         db.session.commit()
     poll_bunny_copies()
     return done, report
+
+
+_bunny_lock = GlobalLock(731903)         # una sola copia de vídeos a la vez
+
+
+def copy_videos_background(limit=15):
+    """«Copiar vídeos ahora» sin bloquear la web: corre aparte y deja el informe en el ajuste bunny_report."""
+    def run():
+        with app.app_context():
+            if not _bunny_lock.acquire():
+                return
+            try:
+                set_setting("bunny_report", json.dumps({"running": True, "at": datetime.utcnow().isoformat(timespec="seconds")}))
+                db.session.commit()
+                done, rep_ = copy_videos_now(limit=limit)
+                rows = [[s_.id, f"{s_.campaign.song} · {PLATFORMS.get(s_.platform, s_.platform)}", r] for s_, r in rep_][:15]
+                set_setting("bunny_report", json.dumps({"running": False, "done": done, "rows": rows,
+                                                        "at": datetime.utcnow().isoformat(timespec="seconds")}))
+                db.session.commit()
+            except Exception:  # noqa: BLE001
+                db.session.rollback()
+                log.exception("Fallo copiando vídeos a Bunny en segundo plano")
+                set_setting("bunny_report", json.dumps({"running": False, "error": "La copia falló: revisa los logs.",
+                                                        "at": datetime.utcnow().isoformat(timespec="seconds")}))
+                db.session.commit()
+            finally:
+                _bunny_lock.release()
+    threading.Thread(target=run, daemon=True, name="bunny-copy").start()
+
+
+def bunny_report():
+    try:
+        rep_ = json.loads(get_setting("bunny_report", "") or "null")
+    except ValueError:
+        return None
+    if rep_ and rep_.get("running"):                 # si lleva más de 20 min «en marcha», es que se cortó
+        try:
+            if datetime.utcnow() - datetime.fromisoformat(rep_["at"]) > timedelta(minutes=20):
+                rep_ = {"running": False, "error": "La copia se interrumpió. Vuelve a pulsar el botón.", "at": rep_["at"]}
+        except (KeyError, ValueError):
+            pass
+    return rep_
 
 
 def clip_player(sub):
@@ -2669,6 +2753,66 @@ def _refresh_due(now=None):
     return now - last >= timedelta(hours=REFRESH_HOURS)
 
 
+REFRESH_TRIES = 3            # intentos al día de la lectura diaria
+REFRESH_RETRY_MIN = 45       # si un intento no termina (reinicio, fallo), se reintenta pasado este tiempo
+
+
+def _refresh_run():
+    try:
+        st = json.loads(get_setting("refresh_run", "") or "{}")
+    except ValueError:
+        st = {}
+    today = _local().strftime("%Y-%m-%d")
+    return st if st.get("day") == today else {"day": today, "tries": 0}
+
+
+def run_daily_refresh(now=None):
+    """La lectura diaria (perfiles, vistas, dinero). El día solo se da por hecho CUANDO TERMINA: si la web se reinicia
+    a mitad o falla, se reintenta a los 45 min (hasta 3 veces) y, si no sale, avisa al móvil. Devuelve True si se completó."""
+    now = now or datetime.utcnow()
+    st = _refresh_run()
+    if st.get("done") or st["tries"] >= REFRESH_TRIES:
+        return False
+    if st.get("started"):
+        try:
+            if now - datetime.fromisoformat(st["started"]) < timedelta(minutes=REFRESH_RETRY_MIN):
+                return False                          # hay un intento en marcha (o recién fallado): se espera
+        except ValueError:
+            pass
+    st["tries"] += 1
+    st["started"] = now.isoformat(timespec="seconds")
+    set_setting("refresh_run", json.dumps(st))
+    set_setting("last_refresh_at", now.isoformat())
+    db.session.commit()
+    ok = False
+    try:
+        res = refresh_views()                         # primero busca los clips nuevos en los perfiles, luego las vistas
+        ok = res != "Ya hay una actualización en marcha."
+        if ok:
+            read_audiences()                          # audiencia de las cuentas conectadas con la API oficial
+            check_creator_balances()
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
+        log.exception("La lectura diaria falló (intento %s)", st["tries"])
+    st = _refresh_run()
+    if ok:
+        st["done"] = True
+        set_setting("refresh_day", st["day"])
+    elif st["tries"] >= REFRESH_TRIES and not st.get("alerted"):
+        st["alerted"] = True
+        notify_phone("⚠️ La lectura diaria no ha terminado",
+                     f"Se intentó {REFRESH_TRIES} veces y no se completó: hoy no se han leído vistas ni repartido dinero. "
+                     "Pulsa «Actualizar vistas» en el Panel técnico.", tags="warning")
+    set_setting("refresh_run", json.dumps(st))
+    db.session.commit()
+    return ok
+
+
+def refresh_pending():
+    """¿Queda por hacer la lectura de hoy y aún se va a intentar?"""
+    return _refresh_due() and _refresh_run()["tries"] < REFRESH_TRIES
+
+
 def check_creator_balances():
     """Una vez al día: si a algún creador no le llega el saldo de su Whop para lo que deben sus campañas, aviso al móvil."""
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -2694,7 +2838,7 @@ def _auto_refresh_loop():
                     log.exception("Fallo mirando las copias de Bunny")
                 fresh = False
                 slot = ytdlp_check_slot()
-                if slot and search_engine() == "ytdlp" and not _refresh_due():
+                if slot and search_engine() == "ytdlp" and not refresh_pending():
                     set_setting("ytdlp_check_slot", slot)
                     db.session.commit()
                     try:
@@ -2702,12 +2846,7 @@ def _auto_refresh_loop():
                     except Exception:  # noqa: BLE001
                         log.exception("Fallo en la comprobación con yt-dlp")
                 if _refresh_due():
-                    set_setting("last_refresh_at", datetime.utcnow().isoformat())
-                    set_setting("refresh_day", _local().strftime("%Y-%m-%d"))
-                    refresh_views()                       # primero busca los clips nuevos en los perfiles, luego las vistas
-                    read_audiences()                      # audiencia de las cuentas conectadas con la API oficial
-                    check_creator_balances()
-                    fresh = True
+                    fresh = run_daily_refresh()           # el día se marca al terminar; si se corta, se reintenta
                 due, day = reminders_due()
                 if due:                                   # justo después de la lectura: aviso a quien no publicó en 24 h
                     set_setting("reminders_sent", day)
@@ -4008,7 +4147,10 @@ def my_clips():
     if tab == "estadisticas" and not show_stats:
         return redirect(url_for("my_clips"))
     aud = audience_for([s for s in scoped if s.status != "rechazado"])
-    return render_template("submit.html", camps=camps, subs=subs, selected=request.args.get("c", type=int), aud=aud,
+    page = max(request.args.get("p", 1, type=int), 1)             # de 50 en 50; filtros y búsqueda van sobre todos
+    total = len(subs)
+    subs = subs[: page * LIST_PAGE]
+    return render_template("submit.html", total=total, more=total > len(subs), page=page, camps=camps, subs=subs, selected=request.args.get("c", type=int), aud=aud,
                            tab=tab, counts=counts, stats=clipper_stats(allsubs), my_camps=my_camps, fc=fc, fp=fp,
                            stats_sent=stats_sent, show_stats=show_stats, now=datetime.utcnow(), an=an, dias=dias,
                            q=q, orden=orden, ranges=CLIP_RANGES)
@@ -4445,17 +4587,25 @@ def admin_counts():
 
 
 def _admin_counts():
-    req, clips = CampaignMember.query.filter_by(status="pendiente").count(), review_queue_count()
-    accs = CampaignAccount.query.filter_by(status="pendiente").count()
-    sup = (db.session.query(db.func.count(db.distinct(CampMessage.user_id)))
-           .filter(CampMessage.from_staff.is_(False), CampMessage.read_by_staff.is_(False)).scalar() or 0)
+    def n(model, *cond):                              # cada número, una subconsulta: todos juntos en UNA consulta
+        return db.select(db.func.count()).select_from(model).where(*cond).scalar_subquery()
+    req, accs, sup, pay, msg, leads = db.session.execute(db.select(
+        n(CampaignMember, CampaignMember.status == "pendiente"),
+        n(CampaignAccount, CampaignAccount.status == "pendiente"),
+        db.select(db.func.count(db.distinct(CampMessage.user_id)))
+        .where(CampMessage.from_staff.is_(False), CampMessage.read_by_staff.is_(False)).scalar_subquery(),
+        n(Payout, Payout.status.in_(PAYOUT_OPEN)),
+        n(Message, Message.from_admin.is_(False), Message.read_by_admin.is_(False)),
+        n(CampaignLead, CampaignLead.status == "nueva"))).one()
+    req, accs, sup = int(req or 0), int(accs or 0), int(sup or 0)
+    clips = review_queue_count()
     return {
         "requests": req,
         "clips": clips,
         "accounts": accs,
-        "payouts": Payout.query.filter(Payout.status.in_(PAYOUT_OPEN)).count(),
-        "messages": Message.query.filter_by(from_admin=False, read_by_admin=False).count(),
-        "leads": CampaignLead.query.filter_by(status="nueva").count(),
+        "payouts": int(pay or 0),
+        "messages": int(msg or 0),
+        "leads": int(leads or 0),
         "creators_alert": 0,
         "camps": req + clips + accs + sup,
         "tech": tech_alert_count(),
@@ -5391,7 +5541,7 @@ def admin_settings(app_test=None):
     api_info = {"mode": api_mode(), "modes": API_MODES, "apis": apis, "deletion": base + url_for("data_deletion_page"),
                 "meta_deletion": base + url_for("meta_data_deletion"), "privacy": base + url_for("privacy"), "terms": base + url_for("terms")}
     return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"), allow_wipe=ALLOW_WIPE,
-                           api_info=api_info, bunny_info=bunny_info(), search=search_info(), bunny_report=session.pop("bunny_report", None),
+                           api_info=api_info, bunny_info=bunny_info(), search=search_info(), bunny_report=bunny_report(),
                            alerts=tech_alerts(), creators_on=CREATORS_ENABLED, tech_set=bool(TECH_EMAILS),
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
@@ -5471,11 +5621,13 @@ def admin_bunny(accion):
             Submission.query.filter(Submission.video_guid == "", Submission.status == "pendiente").update(
                 {"video_tries": 0}, synchronize_session=False)
             db.session.commit()
-            done, rep_ = copy_videos_now(limit=15)
-            session["bunny_report"] = [[s_.id, f"{s_.campaign.song} · {PLATFORMS.get(s_.platform, s_.platform)}", r]
-                                       for s_, r in rep_][:15]
-            flash(f"{done} vídeos copiados de {len(rep_)} clips en revisión." if rep_ else
-                  "No hay clips en revisión sin copia (los que están en «Contando» no se copian).", "ok")
+            if not copy_candidates():
+                flash("No hay clips en revisión sin copia (los que están en «Contando» no se copian).", "ok")
+            elif (bunny_report() or {}).get("running"):
+                flash("Ya hay una copia en marcha. Recarga en un minuto para ver el resultado.", "info")
+            else:
+                copy_videos_background(limit=15)
+                flash("Copiando en segundo plano: recarga esta página en un minuto para ver el resultado.", "ok")
     else:
         abort(404)
     return redirect(url_for("admin_settings", _anchor="bunny"))
@@ -5947,6 +6099,11 @@ def tech_alerts():
             out.append(("aviso", "Las vistas llevan tiempo sin actualizarse", f"Última lectura: {get_setting('last_refresh', '—')}"))
     except ValueError:
         pass
+    run = _refresh_run()
+    if run["tries"] >= REFRESH_TRIES and not run.get("done"):
+        out.append(("error", "La lectura diaria de hoy no ha terminado",
+                    f"Se intentó {REFRESH_TRIES} veces y no se completó: hoy no se han leído vistas ni repartido dinero. "
+                    "Pulsa «Actualizar vistas ahora» y, si vuelve a fallar, mira los logs de Railway."))
     if search_engine() == "ytdlp":
         try:
             st = json.loads(get_setting("ytdlp_stats", "{}") or "{}")
@@ -7239,7 +7396,14 @@ def admin_clippers():
     activity = {"online": sum(1 for u in clippers if u.last_seen_at and (now - u.last_seen_at).total_seconds() < ONLINE_FOR),
                 "day": sum(1 for u in clippers if u.last_seen_at and now - u.last_seen_at < timedelta(days=1)),
                 "idle": sum(1 for u in clippers if not u.last_seen_at or now - u.last_seen_at >= timedelta(days=7))}
-    return render_template("admin/clippers.html", rows=rows, q=q, order=order, activity=activity)
+    page = max(request.args.get("p", 1, type=int), 1)             # de 50 en 50 (la búsqueda y el orden van sobre todos)
+    total = len(rows)
+    rows = rows[: page * LIST_PAGE]
+    return render_template("admin/clippers.html", rows=rows, q=q, order=order, activity=activity,
+                           total=total, more=total > len(rows), page=page)
+
+
+LIST_PAGE = 50               # filas por tanda en las listas largas («Ver más»)
 
 
 def delete_user_account(user):
@@ -7363,8 +7527,9 @@ def unread_messages():
     if not current_user.is_authenticated:
         return 0
     if current_user.is_admin:
-        return Message.query.filter_by(from_admin=False, read_by_admin=False).count()
-    return Message.query.filter_by(user_id=current_user.id, from_admin=True, read_by_user=False).count()
+        return _per_request("unread_admin", lambda: Message.query.filter_by(from_admin=False, read_by_admin=False).count())
+    uid = current_user.id
+    return _per_request("unread_user", lambda: Message.query.filter_by(user_id=uid, from_admin=True, read_by_user=False).count())
 
 
 def notify_phone(title, message, path="", tags="speech_balloon"):
@@ -8538,11 +8703,11 @@ def cron_refresh():
     if not CRON_SECRET or not secrets.compare_digest(request.args.get("key", ""), CRON_SECRET):
         abort(403)
     whop_sync(Payout.query.filter_by(status="procesando").all())
-    if _refresh_due():                       # la lectura de pago solo una vez al día, aunque el aviso externo llame más
-        set_setting("last_refresh_at", datetime.utcnow().isoformat())
-        set_setting("refresh_day", _local().strftime("%Y-%m-%d"))
-        db.session.commit()
-        refresh_in_background()
+    if refresh_pending():                    # la lectura de pago solo una vez al día, aunque el aviso externo llame más
+        def run():
+            with app.app_context():
+                run_daily_refresh()
+        threading.Thread(target=run, daemon=True).start()
         return "ok"
     return "ok (ya se leyó hoy)"
 

@@ -51,5 +51,6 @@
       </tbody>
     </table></div>
   </div>
+  {% if more %}<div class="cr-more-wrap" style="margin-top:14px"><a class="btn soft" href="{{ url_for('admin_clippers', q=q or None, orden=order if order != 'ganado' else None, p=page + 1) }}" data-turbo-action="replace">Ver más clippers ({{ total - rows|length }} más)</a></div>{% endif %}
 </section>
 {% endblock %}

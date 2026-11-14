@@ -75,7 +75,12 @@
     <form method="post" action="{{ url_for('admin_bunny', accion='probar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Probar conexión</button></form>
     <form method="post" action="{{ url_for('admin_bunny', accion='copiar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm">Copiar vídeos ahora</button></form>
   </div>
-  {% if bunny_report %}<div class="small" style="display:grid;gap:4px">{% for sid, name, res in bunny_report %}<span>#{{ sid }} {{ name }} → <b>{{ res }}</b></span>{% endfor %}</div>{% endif %}
+  {% if bunny_report %}<div class="small" style="display:grid;gap:4px">
+    {% if bunny_report.running %}<span><b>Copiando ahora…</b> recarga en un minuto.</span>
+    {% elif bunny_report.error %}<span style="color:var(--red-ink)"><b>{{ bunny_report.error }}</b></span>
+    {% else %}<span class="muted">Última copia: <time data-local data-local-full datetime="{{ bunny_report.at }}Z">{{ bunny_report.at }}</time> · {{ bunny_report.done }} vídeos copiados</span>
+    {% for sid, name, res in bunny_report.rows %}<span>#{{ sid }} {{ name }} → <b>{{ res }}</b></span>{% endfor %}{% endif %}
+  </div>{% endif %}
 </div>
 
 <div class="card tight form-stack api-card" id="apis">

@@ -6,7 +6,7 @@
   <div class="card stat hero">
     <span class="l">Balance disponible</span>
     <div class="row">
-      <span class="v">{{ m.available|amount }}</span>
+      <span class="v">{{ m.available|money }}</span>
       {% if not current_user.payout_ready %}
         <a class="btn sm" href="{{ url_for('account') }}#cobro"><span class="whop-ico" aria-hidden="true"></span>Conectar Whop</a>
       {% elif m.open_payout %}
@@ -27,17 +27,17 @@
   </div>
   <div class="card stat">
     <span class="l">En campañas abiertas</span>
-    <span class="v">{{ m.live|amount }}</span>
+    <span class="v">{{ m.live|money }}</span>
     <span class="small muted">Ya ganado. Podrás retirarlo cuando termine cada campaña</span>
   </div>
   <a class="card stat stat-link" href="{{ url_for('my_clips', tab='revisar') }}">
     <span class="l">En revisión</span>
-    <span class="v">{{ m.pending|amount }}</span>
+    <span class="v">{{ m.pending|money }}</span>
     <span class="small muted">Estimación de clips que aún revisamos · <u>ver clips</u></span>
   </a>
   <div class="card stat">
     <span class="l">Ganancias totales</span>
-    <span class="v">{{ m.earned|amount }}</span>
+    <span class="v">{{ m.earned|money }}</span>
     <span class="small muted">Todo lo que has ganado ({{ CUR_CODE }})</span>
   </div>
 </div>

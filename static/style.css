@@ -431,7 +431,7 @@ tr.row-flag td{background:#f5f7ff}
 .thread-preview{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* botón flotante del chat */
-.chat-fab{position:fixed;left:max(16px,env(safe-area-inset-left,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:40;display:inline-flex;align-items:center;gap:9px;
+.chat-fab{position:fixed;right:max(20px,env(safe-area-inset-right,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:40;display:inline-flex;align-items:center;gap:9px;
   background:var(--ink);color:#fff;font-weight:700;font-size:14px;padding:13px 18px;border-radius:999px;box-shadow:0 10px 28px rgba(0,0,0,.35);transition:background-color .15s}
 .chat-fab:hover{background:#2a2a2e}
 .chat-fab svg{width:19px;height:19px}
@@ -551,7 +551,7 @@ details.answers[open] summary::before{content:"▾ "}
   .tab.on{background:transparent;color:var(--ink);font-weight:700}
   body.has-tabs{padding-bottom:84px}
 
-  .chat-fab{left:auto;right:14px;bottom:calc(84px + env(safe-area-inset-bottom,0px));padding:14px;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+  .chat-fab{right:14px;bottom:calc(84px + env(safe-area-inset-bottom,0px));padding:14px;box-shadow:0 8px 22px rgba(0,0,0,.4)}
   .chat-fab span:not(.count){display:none}
   .chat-fab .count{position:absolute;top:-4px;right:-4px;border:2px solid var(--bg)}
 
@@ -1317,7 +1317,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 .cr-facts dt{font-size:12px;color:var(--muted)}
 .cr-facts dd{margin:2px 0 0;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;overflow-wrap:anywhere}
 .cr-facts dd svg{width:14px;height:14px}
-.cr-stats{justify-content:center;gap:12px}
+.cr-stats{justify-content:flex-start;gap:12px}
 @media (max-width:1100px){.cr-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:600px){.cr-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.cr-facts>div:nth-child(3n){border-right:1px solid var(--line)}.cr-facts>div:nth-child(2n){border-right:0}.cr-facts>div:nth-last-child(3){border-bottom:1px solid var(--line)}}
 .bell-btn{background:transparent!important;width:34px;height:34px}.bell-btn:hover,.bell-menu[open] .bell-btn{background:transparent!important;color:var(--ink-2)}.bell-btn svg{width:21px;height:21px}
@@ -1677,9 +1677,8 @@ body.has-tabs>.site-footer{flex:none}
 .hm-lessons:hover .hm-ls:nth-child(3){transform:rotate(7deg) translate(-2px,4px)}
 
 /* =============================================================== Mis clips: panel de estadísticas y lista */
-.mc{display:flex;flex-direction:column;gap:12px;--an-c:#f08a24}
-.mc[data-metric=earned]{--an-c:#12b76a}.mc[data-metric=sent]{--an-c:#8b6cf0}.mc[data-metric=approved]{--an-c:#14b8a6}
-.mc[data-metric=likes]{--an-c:#f04466}.mc[data-metric=comments]{--an-c:#3b82f6}.mc[data-metric=shares]{--an-c:#0ea5e9}
+.mc{display:flex;flex-direction:column;gap:12px;--an-c:var(--ink)}
+.mc[data-metric=earned]{--an-c:var(--money)}          /* un solo acento: negro, y verde solo para el dinero */
 .mc-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .mc-bar select{width:auto;min-width:180px}
 .mc-plats{display:inline-flex;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px}
@@ -1688,8 +1687,8 @@ body.has-tabs>.site-footer{flex:none}
 .mc-plat:hover{background:var(--soft)}
 .mc-plat.on{background:var(--ink);color:#fff}
 .mc-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.mc-kpi{--k:#f08a24;display:flex;align-items:center;gap:12px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;cursor:pointer;font:inherit;color:var(--ink);transition:border-color .2s,background .2s,box-shadow .2s}
-.mc-kpi.k-earned{--k:#12b76a}.mc-kpi.k-sent{--k:#8b6cf0}.mc-kpi.k-approved{--k:#14b8a6}
+.mc-kpi{--k:var(--ink);display:flex;align-items:center;gap:12px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;cursor:pointer;font:inherit;color:var(--ink);transition:border-color .2s,background .2s,box-shadow .2s}
+.mc-kpi.k-earned{--k:var(--money)}
 .mc-kpi:hover{border-color:var(--soft-2)}
 .mc-kpi .mc-ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--soft);color:var(--muted);flex:none;transition:background .2s,color .2s}
 .mc-kpi .mc-ico svg{width:20px;height:20px}
@@ -1706,7 +1705,7 @@ body.has-tabs>.site-footer{flex:none}
 .mc-plat-list{display:flex;flex-direction:column;gap:6px;padding:16px}
 .mc-prow{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;overflow:hidden}
 .mc-pfill{position:absolute;left:0;top:0;bottom:0;border-radius:12px;background:var(--soft);z-index:0}
-.mc-prow.p-tiktok .mc-pfill{background:#e6f7f6}.mc-prow.p-youtube .mc-pfill{background:#fdecec}.mc-prow.p-instagram .mc-pfill{background:#fbecf6}
+
 .mc-pname,.mc-pnum{position:relative;z-index:1;display:flex;align-items:center;gap:8px;font-size:14px}
 .mc-pname{font-weight:600}.mc-pname svg{width:16px;height:16px}
 .mc-list{display:flex;flex-direction:column;gap:12px;margin-top:8px}
@@ -2142,7 +2141,7 @@ a.ov-k:hover{border-color:#d6d7db}
 .nt-bell small{color:var(--muted);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .nt-chat{max-width:none;margin:0}
 .nt-chat .bubble{white-space:pre-wrap}
-@media (max-width:1000px){.nt{grid-template-columns:1fr}.nt-msg{position:static}}
+@media (max-width:1000px){.nt{grid-template-columns:minmax(0,1fr)}.nt-msg{position:static}}
 /* Invitaciones */
 .inv-box{padding:18px;display:flex;flex-direction:column;gap:12px;margin-bottom:16px}
 .inv-head{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
@@ -2260,3 +2259,13 @@ b>.m-earn,b>.m-zero{font-size:inherit!important;line-height:inherit}
 /* Ranking del inicio: tres pestañas iguales que ocupan todo el ancho (la pastilla nunca toca el borde) */
 .hm-rtabs{display:flex;width:100%;overflow:hidden;align-self:stretch}
 .hm-rtabs a{flex:1 1 0;text-align:center;padding:10px 8px;font-weight:500}
+/* Avisos flotantes por encima del botón de chat (los dos van abajo a la derecha) */
+@media (min-width:641px){body:has(.chat-fab) .toasts{bottom:84px}}
+/* Móvil: Avisos del panel e invitaciones no se salen de la pantalla */
+.nt > *{min-width:0}
+.nt-people .seg{max-width:100%}
+@media (max-width:640px){.inv-new{flex-wrap:wrap}.inv-new input[name=note]{min-width:0;flex:1 1 140px}}
+.field .dd .dd-btn,.form-grid .dd .dd-btn,.nt-msg .dd .dd-btn{min-width:0}
+.nt-msg .dd{display:block;width:100%}
+/* Botón de chat: con texto solo si cabe en el margen; si no, redondo (no tapa el contenido) */
+@media (max-width:1519px){.chat-fab{padding:14px}.chat-fab span:not(.count){display:none}.chat-fab .count{position:absolute;top:-4px;right:-4px;border:2px solid var(--bg)}}

@@ -2564,3 +2564,171 @@ def test_ytdlp_finds_clips_apify_only_reads_and_check_changes_nothing(monkeypatc
         assert A.json.loads(A.get_setting("ytdlp_stats"))["fail"] == 1
         A.apify_log("vistas", "tiktok", 3, 3, 200)
         assert A.apify_summary()["by"]["vistas"]["items"] == 3
+
+
+
+# ---------------------------------------------------------------- auditoría de noviembre
+def _analytics_reference(camp, max_days=180):
+    """Versión anterior (clip × día), como referencia: estadísticas de una campaña: totales, por red y la evolución día a día de cada métrica.
+    Los días sin lectura arrastran la última conocida. Si un clip no tiene historial de me gusta / comentarios /
+    compartidos (se empezaron a guardar después), se estiman en proporción a sus vistas de ese momento."""
+    subs = [s for s in camp.submissions if s.status == "aprobado"]
+    totals = {m: sum(getattr(s, m) or 0 for s in subs) for m in A.METRICS}
+    spent = A.cents(camp.spent)
+    by_platform = [{"key": p, "name": A.PLATFORMS[p],
+                    "views": sum(s.views or 0 for s in subs if s.platform == p),
+                    "posts": sum(1 for s in subs if s.platform == p)} for p in camp.platform_list]
+    out = {"totals": totals, "spent": spent, "posts": len(subs),
+           "ecpm": spent / totals["views"] * 1000 if totals["views"] else 0,
+           "cpm": (camp.rate or 0) / 1000,
+           "engagement": (totals["likes"] + totals["comments"] + totals["shares"]) / totals["views"] * 100 if totals["views"] else 0,
+           "by_platform": by_platform, "series": None}
+    if not subs:
+        return out
+    snaps = {}
+    for sn in (A.ViewSnapshot.query.filter(A.ViewSnapshot.submission_id.in_([s.id for s in subs]))
+               .order_by(A.ViewSnapshot.taken_at).all()):
+        snaps.setdefault(sn.submission_id, []).append(sn)
+    today = datetime.utcnow().date()
+    start = max(min(s.created_at.date() for s in subs), today - timedelta(days=max_days - 1))
+    days = [start + timedelta(days=i) for i in range((today - start).days + 1)]
+    cum = {m: [0] * len(days) for m in A.METRICS}
+    for s in subs:
+        cur_views = s.views or 0
+        ratio = {m: (getattr(s, m) or 0) / cur_views if cur_views else 0 for m in A.METRICS[1:]}
+        points = [(s.created_at, {m: 0 for m in A.METRICS})]
+        for sn in snaps.get(s.id, []):
+            vals = {"views": sn.views or 0}
+            for m in A.METRICS[1:]:
+                v = getattr(sn, m)
+                vals[m] = v if v is not None else round(vals["views"] * ratio[m])
+            points.append((sn.taken_at, vals))
+        points.append((datetime.utcnow(), {m: getattr(s, m) or 0 for m in A.METRICS}))   # la lectura de ahora
+        j, last = 0, points[0][1]
+        for i, d in enumerate(days):
+            end = datetime.combine(d, datetime.max.time())
+            while j < len(points) and points[j][0] <= end:
+                last = points[j][1]
+                j += 1
+            for m in A.METRICS:
+                cum[m][i] += last[m]
+    daily = {m: [max(0, cum[m][i] - (cum[m][i - 1] if i else 0)) for i in range(len(days))] for m in A.METRICS}
+    out["series"] = {"labels": [d.isoformat() for d in days], "cumulative": cum, "daily": daily}
+    return out
+
+
+def test_campaign_analytics_matches_previous_version():
+    cid = make_campaign(budget=5000)
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/ajustes/demo", accion="cargar")
+    with A.app.app_context():
+        c = get(A.Campaign, cid)
+        new, ref = A.campaign_analytics(c), _analytics_reference(c)
+        assert new["posts"] == ref["posts"] > 5 and new["totals"] == ref["totals"] and new["by_platform"] == ref["by_platform"]
+        assert new["series"]["labels"] == ref["series"]["labels"]
+        assert new["series"]["cumulative"] == ref["series"]["cumulative"]
+        assert new["series"]["daily"] == ref["series"]["daily"]
+        new7, ref7 = A.campaign_analytics(c, max_days=7), _analytics_reference(c, max_days=7)
+        assert new7["series"] == ref7["series"]
+
+
+def test_campaign_stats_and_review_counts_come_from_database():
+    cid = make_campaign(budget=5000)
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/ajustes/demo", accion="cargar")
+    with A.app.app_context():
+        c = get(A.Campaign, cid)
+        st = A.campaign_stats(c)
+        ok = [s for s in c.submissions if s.status == "aprobado"]
+        assert st["clips"] == len(ok) and st["views"] == sum(s.views or 0 for s in ok)
+        assert st["pending"] == sum(1 for s in c.submissions if s.status == "pendiente")
+        n_ok = A.Submission.query.filter_by(status="aprobado").count()
+        n_no = A.Submission.query.filter_by(status="rechazado").count()
+        assert A.views_week()["views"] >= 0
+    page = admin.get("/admin/clips").get_data(as_text=True)            # en «Por revisar» también salen los números reales
+    assert f'Aprobados <b class="tnum">{n_ok}</b>' in page and f'Rechazados <b class="tnum">{n_no}</b>' in page
+
+
+def test_long_lists_are_paged():
+    make_campaign(budget=5000)
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/ajustes/demo", accion="cargar")
+    with A.app.app_context():
+        A.LIST_PAGE, keep = 5, A.LIST_PAGE
+    try:
+        page = admin.get("/admin/clippers").get_data(as_text=True)
+        assert "Ver más clippers" in page and page.count("/admin/clipper/") < admin.get("/admin/clippers?p=9").get_data(as_text=True).count("/admin/clipper/")
+        assert "Ver más clippers" not in admin.get("/admin/clippers?p=9").get_data(as_text=True)
+    finally:
+        A.LIST_PAGE = keep
+
+
+def test_bunny_copies_one_video_at_a_time(monkeypatch):
+    monkeypatch.setattr(A, "BUNNY_LIBRARY_ID", "1")
+    monkeypatch.setattr(A, "BUNNY_API_KEY", "k")
+    monkeypatch.setattr(A, "search_engine", lambda: "ytdlp")
+    monkeypatch.setattr(A, "poll_bunny_copies", lambda: None)
+    holding, peak, order = [], [0], []
+
+    class Sub:
+        def __init__(self, i):
+            self.id, self.platform, self.url, self.media_url, self.video_tries = i, "tiktok", f"u{i}", "", 0
+            self.video_guid = self.video_status = self.video_error = ""
+            self.campaign = type("C", (), {"song": "X"})()
+            self.video_key = f"tiktok:{i}"
+    subs = [Sub(1), Sub(2), Sub(3)]
+    monkeypatch.setattr(A, "copy_candidates", lambda ids=None: list(subs))
+
+    def download(url):
+        holding.append(url)
+        peak[0] = max(peak[0], len(holding))
+        order.append("baja " + url)
+        if url == "u2":
+            holding.remove(url)
+            raise RuntimeError("bloqueado")
+        return b"x" * 20000
+    monkeypatch.setattr(A.viewcounter, "ytdlp_download", download)
+    monkeypatch.setattr(A, "bunny_call", lambda m, path, **k: (True, 200, {"guid": "g"}))
+
+    class Up:
+        status_code = 200
+
+    def put(url, data=None, **k):
+        order.append("sube")
+        if holding:
+            holding.pop()
+        return Up()
+    monkeypatch.setattr(A.requests, "put", put)
+    monkeypatch.setattr(A.viewcounter, "fetch_download_urls", lambda p, urls: {})
+    with A.app.app_context():
+        done, rep = A.copy_videos_now()
+    assert done == 2 and peak[0] == 1                       # nunca dos vídeos descargados a la vez
+    assert order[:4] == ["baja u1", "sube", "baja u2", "baja u3"]
+    assert subs[1].video_status == "error" and "Apify" in subs[1].video_error
+
+
+def test_daily_refresh_is_marked_done_only_when_it_finishes(monkeypatch):
+    calls, sent = [], []
+    monkeypatch.setattr(A, "read_audiences", lambda: None)
+    monkeypatch.setattr(A, "check_creator_balances", lambda: None)
+    monkeypatch.setattr(A, "notify_phone", lambda *a, **k: sent.append(a[0]))
+
+    def boom():
+        calls.append(1)
+        raise RuntimeError("se cortó")
+    monkeypatch.setattr(A, "refresh_views", boom)
+    t0 = datetime.utcnow()
+    with A.app.app_context():
+        day = A._local().strftime("%Y-%m-%d")
+        assert A.run_daily_refresh(t0) is False and A.get_setting("refresh_day") != day       # falló: el día sigue pendiente
+        assert A.run_daily_refresh(t0 + timedelta(minutes=10)) is False and len(calls) == 1   # aún no toca reintentar
+        assert A.run_daily_refresh(t0 + timedelta(minutes=50)) is False and len(calls) == 2
+        assert not sent
+        assert A.run_daily_refresh(t0 + timedelta(minutes=100)) is False and len(calls) == 3
+        assert sent and "no ha terminado" in sent[0]                                            # tercer fallo: aviso
+        assert A.run_daily_refresh(t0 + timedelta(minutes=200)) is False and len(calls) == 3   # no insiste más
+        assert any("lectura diaria" in a[1].lower() for a in A.tech_alerts())
+        A.set_setting("refresh_run", "")
+        monkeypatch.setattr(A, "refresh_views", lambda: "ok")
+        assert A.run_daily_refresh(t0) is True and A.get_setting("refresh_day") == day
+        assert A.run_daily_refresh(t0 + timedelta(hours=2)) is False                            # ya hecha hoy

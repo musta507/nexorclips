@@ -63,17 +63,6 @@
     <div class="an-plot" data-chart-plot>{% if not an.totals.sent %}<div class="empty mc-empty"><h3>No hay datos que ver</h3><p class="muted">Aún no hay clips en este periodo. Cuando los tengas, aquí verás cómo crecen sus vistas y lo que ganas.</p></div>{% endif %}</div>
   </div>
 
-  {% include "_audience.html" %}
-
-  {% if an.by_platform %}
-  <div class="card mc-plat-list">
-    <span class="small muted">Visualizaciones por plataforma</span>
-    {% set maxv = an.by_platform|map(attribute="views")|max %}
-    {% for p in an.by_platform %}
-    <div class="mc-prow p-{{ p.key }}"><span class="mc-pfill" style="width:{{ (p.views / maxv * 100)|round(1) if maxv else 0 }}%"></span><span class="mc-pname">{{ icon(p.key) }} {{ p.name }}</span><span class="mc-pnum"><span class="muted">{{ p.posts }} clip{{ 's' if p.posts != 1 }} ·</span> <b class="tnum">{{ p.views|short }}</b></span></div>
-    {% endfor %}
-  </div>
-  {% endif %}
 </section>
 
 <turbo-frame id="mc-list" target="_top" data-turbo-action="advance">
@@ -146,6 +135,7 @@
       {% endfor %}
       </tbody>
     </table></div>
+    {% if more %}<div class="cr-more-wrap" style="padding:14px"><a class="btn soft" href="{{ url_for('my_clips', tab=tab if tab != 'todos' else None, campana=fc or None, red=fp or None, dias=dias if dias != 30 else None, q=q or None, orden=orden if orden != 'recientes' else None, p=page + 1) }}" data-turbo-frame="mc-list" data-turbo-action="replace">Ver más clips ({{ total - subs|length }} más)</a></div>{% endif %}
     {% else %}
     <div class="empty"><h3>{{ "Aún no tienes clips" if tab == 'todos' and not fc and not fp and not q else "Nada por aquí" }}</h3><p class="muted">{{ "Publica en tu cuenta de campaña y aparecerán aquí solos." if tab == 'todos' and not q else "Prueba con otro filtro o búsqueda." }}</p></div>
     {% endif %}
@@ -153,4 +143,18 @@
   {% endif %}
 </section>
 </turbo-frame>
+
+<section class="mc mc-after">
+  {% include "_audience.html" %}
+
+  {% if an.by_platform %}
+  <div class="card mc-plat-list">
+    <span class="small muted">Visualizaciones por plataforma</span>
+    {% set maxv = an.by_platform|map(attribute="views")|max %}
+    {% for p in an.by_platform %}
+    <div class="mc-prow p-{{ p.key }}"><span class="mc-pfill" style="width:{{ (p.views / maxv * 100)|round(1) if maxv else 0 }}%"></span><span class="mc-pname">{{ icon(p.key) }} {{ p.name }}</span><span class="mc-pnum"><span class="muted">{{ p.posts }} clip{{ 's' if p.posts != 1 }} ·</span> <b class="tnum">{{ p.views|short }}</b></span></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
 {% endblock %}
