@@ -2919,3 +2919,17 @@ def test_home_shows_global_rank_even_without_earnings():
         assert r2["up"] == 25 and r2["fire"]
     page = nuevo.get("/").get_data(as_text=True)
     assert "▲ 25" in page and "🔥" in page and f"#{r['pos']}" in page
+
+
+def test_week_table_is_filled_with_older_clips_when_the_week_is_short():
+    make_campaign(budget=5000)
+    post(client_for("admin@test.com"), "/admin/ajustes/demo", accion="cargar")
+    with A.app.app_context():
+        old = datetime.utcnow() - timedelta(days=20)
+        ids = [s.id for s in A.Submission.query.filter_by(status="aprobado").order_by(A.Submission.id).all()]
+        A.Submission.query.filter(A.Submission.id.in_(ids[2:])).update({"created_at": old}, synchronize_session=False)
+        A.db.session.commit()
+        rows = A.clips_of_week(8)
+        assert len(rows) == 8 and len({s.id for s in rows}) == 8
+        week = [s for s in rows if s.created_at > datetime.utcnow() - timedelta(days=7)]
+        assert rows[:len(week)] == week                       # primero los de esta semana, luego el relleno

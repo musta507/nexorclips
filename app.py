@@ -4535,11 +4535,21 @@ def first_steps(user):
 
 
 def clips_of_week(limit=3):
-    return (Submission.query.options(joinedload(Submission.user), joinedload(Submission.campaign))
+    """Los clips aprobados con más vistas de los últimos 7 días. Si la semana trae pocos, la tabla se completa con los
+    mejores de los últimos 30 días y, si aún faltan, con los mejores de siempre (nunca queda medio vacía)."""
+    base = (Submission.query.options(joinedload(Submission.user), joinedload(Submission.campaign))
             .join(Campaign).join(User, User.id == Submission.user_id)
-            .filter(Submission.status == "aprobado", Submission.created_at >= datetime.utcnow() - timedelta(days=7),
-                    User.is_banned.is_(False), User.is_admin.is_(False), Submission.views > 0)   # igual que el ranking
-            .order_by(Submission.views.desc()).limit(limit).all())
+            .filter(Submission.status == "aprobado", User.is_banned.is_(False), User.is_admin.is_(False),
+                    Submission.views > 0))                                                   # igual que el ranking
+    out, now = [], datetime.utcnow()
+    for days in (7, 30, 0):
+        q = base.filter(Submission.id.notin_([s.id for s in out] or [0]))
+        if days:
+            q = q.filter(Submission.created_at >= now - timedelta(days=days))
+        out += q.order_by(Submission.views.desc()).limit(limit - len(out)).all()
+        if len(out) >= limit:
+            break
+    return out
 
 
 # ---------------------------------------------------------------- bienvenida (3 pasos)
