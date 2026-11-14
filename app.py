@@ -4383,7 +4383,7 @@ def my_clips():
     show_stats = bool(counts.get("estadisticas") or stats_sent or bunny_ready())
     if tab == "estadisticas" and not show_stats:
         return redirect(url_for("my_clips"))
-    aud = audience_for([s for s in scoped if s.status != "rechazado"])
+    aud = None                                      # en Mis clips ya no se enseña la audiencia (ubicación, edad, sexo)
     page = max(request.args.get("p", 1, type=int), 1)             # de 50 en 50; filtros y búsqueda van sobre todos
     total = len(subs)
     subs = subs[: page * LIST_PAGE]

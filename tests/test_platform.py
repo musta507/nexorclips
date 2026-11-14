@@ -2934,3 +2934,12 @@ def test_week_table_is_filled_with_older_clips_when_the_week_is_short():
         assert len(rows) == 8 and len({s.id for s in rows}) == 8
         week = [s for s in rows if s.created_at > datetime.utcnow() - timedelta(days=7)]
         assert rows[:len(week)] == week                       # primero los de esta semana, luego el relleno
+
+
+def test_my_clips_has_no_audience_panel():
+    make_campaign(budget=5000)
+    post(client_for("admin@test.com"), "/admin/ajustes/demo", accion="cargar")
+    with A.app.app_context():
+        email = A.User.query.join(A.Submission).filter(A.User.is_admin.is_(False)).first().email
+    page = client_for(email).get("/mis-clips").get_data(as_text=True)
+    assert "Mis clips" in page and "Ubicación" not in page and "aud-" not in page
