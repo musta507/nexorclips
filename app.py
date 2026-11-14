@@ -549,6 +549,7 @@ class Submission(db.Model):
 
 
 class ViewSnapshot(db.Model):
+    __table_args__ = (db.Index("ix_view_snapshot_sub_time", "submission_id", "taken_at"),)   # «última lectura hasta tal día»
     id = db.Column(db.Integer, primary_key=True)
     submission_id = db.Column(db.Integer, db.ForeignKey("submission.id"), nullable=False, index=True)
     views = db.Column(db.Integer, nullable=False)
@@ -1535,24 +1536,37 @@ def clawback(sub):
     return amount
 
 
+def _camp_aggs():
+    """Clips y vistas de cada campaña por estado, en UNA consulta (y una sola vez por página).
+    Antes se cargaban todos los clips de todas las campañas para sumarlos uno a uno."""
+    def load():
+        out = {}
+        q = (db.session.query(Submission.campaign_id, Submission.status, db.func.count(Submission.id),
+                              db.func.coalesce(db.func.sum(Submission.views), 0))
+             .filter(Submission.status.in_(("aprobado", "pendiente")))
+             .group_by(Submission.campaign_id, Submission.status))
+        for cid, st, n, v in q:
+            out.setdefault(cid, {})[st] = (int(n), int(v or 0))
+        return out
+    return _per_request("camp_aggs", load)
+
+
 def campaign_stats(camp):
-    approved = [s for s in camp.submissions if s.status == "aprobado"]
-    pending = [s for s in camp.submissions if s.status == "pendiente"]
+    ag = _camp_aggs().get(camp.id, {})
+    clips, views = ag.get("aprobado", (0, 0))
+    pending = ag.get("pendiente", (0, 0))[0]
     spent = cents(camp.spent)
     pct = min(100, round(spent / camp.budget * 100)) if camp.budget else 100
     return {
-        "earnings": {s.id: cents(s.earned) for s in approved},
-        "estimates": {s.id: min(raw_earning(s, camp), camp.remaining) for s in pending},
         "spent": spent,
         "remaining": camp.remaining,
         "pct": pct,
         "left_pct": 0 if camp.exhausted else max(0, 100 - pct),
-        "views": sum(s.views or 0 for s in approved),
-        "clips": len(approved),
-        "pending": len(pending),
-        "flagged": sum(1 for s in pending if s.flag_list),
+        "views": views,
+        "clips": clips,
+        "pending": pending,
         "exhausted": camp.exhausted,
-        "effective_cpm": cents(spent / (sum(s.views or 0 for s in approved) or 1) * 1_000_000) if approved else 0,
+        "effective_cpm": cents(spent / (views or 1) * 1_000_000) if clips else 0,
     }
 
 
@@ -1676,13 +1690,12 @@ def clipper_analytics(subs, days=30):
 def user_money(user):
     """Disponible = ganado en clips aprobados de campañas ya cerradas − retirado.
     En curso = ganado en campañas que siguen abiertas (se libera al cerrarse). Pendiente = clips en revisión."""
-    earned_rows, live_rows, pending_rows, stats = [], [], [], {}
+    earned_rows, live_rows, pending_rows = [], [], []
     for s in user.submissions:
         if s.status == "aprobado":
             (earned_rows if s.campaign.status == "finalizada" else live_rows).append((s, cents(s.earned)))
         elif s.status == "pendiente":
-            st = stats.setdefault(s.campaign_id, campaign_stats(s.campaign))
-            pending_rows.append((s, st["estimates"].get(s.id, 0)))
+            pending_rows.append((s, min(raw_earning(s, s.campaign), s.campaign.remaining)))
     closed = cents(sum(a for _, a in earned_rows))
     live = cents(sum(a for _, a in live_rows))
     earned = cents(closed + live)
@@ -3101,8 +3114,7 @@ def datetime_f(dt):
 
 def active_campaigns():
     """Campañas activas: la destacada primero, después la música y luego el resto, de más nueva a más antigua."""
-    camps = (Campaign.query.filter_by(status="activa").options(selectinload(Campaign.submissions))
-             .order_by(Campaign.created_at.desc()).all())     # los clips de todas las campañas en una sola consulta
+    camps = Campaign.query.filter_by(status="activa").order_by(Campaign.created_at.desc()).all()
     return sorted(camps, key=lambda c: not c.featured)
 
 
@@ -4477,18 +4489,26 @@ def views_at(subs, snaps, when):
     return total
 
 
+def _views_as_of(when):
+    """Vistas que sumaban los clips aprobados en un momento dado (la última lectura de cada clip hasta entonces)."""
+    last = (db.session.query(ViewSnapshot.submission_id.label("sid"), db.func.max(ViewSnapshot.taken_at).label("mt"))
+            .join(Submission, Submission.id == ViewSnapshot.submission_id)
+            .filter(Submission.status == "aprobado", Submission.created_at <= when, ViewSnapshot.taken_at <= when)
+            .group_by(ViewSnapshot.submission_id).subquery())
+    per_clip = (db.session.query(ViewSnapshot.submission_id, db.func.max(ViewSnapshot.views).label("v"))
+                .join(last, db.and_(ViewSnapshot.submission_id == last.c.sid, ViewSnapshot.taken_at == last.c.mt))
+                .group_by(ViewSnapshot.submission_id).subquery())
+    return int(db.session.query(db.func.coalesce(db.func.sum(per_clip.c.v), 0)).scalar() or 0)
+
+
 def views_week():
     """Vistas conseguidas en los últimos 7 días y el cambio frente a los 7 anteriores."""
-    subs = Submission.query.filter(Submission.status == "aprobado").all()
-    if not subs:
+    c = int(db.session.query(db.func.coalesce(db.func.sum(Submission.views), 0))
+            .filter(Submission.status == "aprobado").scalar() or 0)
+    if not Submission.query.filter(Submission.status == "aprobado").first():
         return {"views": 0, "change": None}
     now = datetime.utcnow()
-    snaps = {}
-    for sn in (db.session.query(ViewSnapshot.submission_id, ViewSnapshot.taken_at, ViewSnapshot.views)
-               .filter(ViewSnapshot.submission_id.in_([x.id for x in subs])).order_by(ViewSnapshot.taken_at)):
-        snaps.setdefault(sn[0], []).append((sn[1], sn[2] or 0))
-    a, b, c = (views_at(subs, snaps, now - timedelta(days=14)), views_at(subs, snaps, now - timedelta(days=7)),
-               sum(x.views or 0 for x in subs))
+    a, b = _views_as_of(now - timedelta(days=14)), _views_as_of(now - timedelta(days=7))
     this, prev = max(0, c - b), max(0, b - a)
     return {"views": this, "change": round((this - prev) / prev * 100) if prev else None}
 
@@ -4510,7 +4530,7 @@ def admin_kpis(camps):
 @app.route("/admin")
 @admin_required
 def admin_home():
-    camps = Campaign.query.filter(Campaign.status != DIST_STATUS).options(selectinload(Campaign.submissions)).order_by(Campaign.created_at.desc()).all()
+    camps = Campaign.query.filter(Campaign.status != DIST_STATUS).order_by(Campaign.created_at.desc()).all()
     cards = [(c, campaign_stats(c)) for c in camps]
     since = datetime.utcnow() - timedelta(days=31)
     clips_day = daily_series([(s.created_at, 1) for s in Submission.query.filter(Submission.created_at >= since)
@@ -4598,7 +4618,7 @@ def admin_analytics(days=30):
 @app.route("/admin/campanas")
 @admin_required
 def admin_campaigns():
-    camps = Campaign.query.filter(Campaign.status != DIST_STATUS).options(selectinload(Campaign.submissions)).order_by(Campaign.created_at.desc()).all()
+    camps = Campaign.query.filter(Campaign.status != DIST_STATUS).order_by(Campaign.created_at.desc()).all()
     filt = request.args.get("estado", "")
     if filt in ("activa", "pausada", "finalizada"):
         camps = [c for c in camps if c.status == filt]
@@ -5281,6 +5301,13 @@ def clips_page(camp_id=None):
             if acting_as_mod() and s_.user_id == current_user.id:
                 continue
             done["aprobados" if s_.status == "aprobado" else "rechazados"].append(s_)
+    # Los números de las pestañas, siempre (antes Aprobados/Rechazados salían a 0 fuera de su pestaña)
+    nq = db.session.query(Submission.status, db.func.count(Submission.id)).filter(Submission.status.in_(("aprobado", "rechazado")))
+    if cid:
+        nq = nq.filter(Submission.campaign_id == cid)
+    if acting_as_mod():
+        nq = nq.filter(Submission.user_id != current_user.id)
+    n_done = dict(nq.group_by(Submission.status).all())
     rows = {"revisar": rev, "contando": cnt, "apelaciones": appeals, **done}[tab]
     if tab not in done:
         rows = sorted(rows, key=lambda s_: -waiting_hours(s_))        # lo que más espera, primero
@@ -5310,7 +5337,7 @@ def clips_page(camp_id=None):
     return render_template("admin/clips.html", rows=shown, total=total, more=total > len(shown), page=page, tab=tab, f=f,
                            q=request.args.get("q", ""), camps=camps, cid=cid, camp=camp, counts=counts,
                            n={"revisar": len(rev), "contando": len(cnt), "apelaciones": len(appeals),
-                              "aprobados": len(done["aprobados"]), "rechazados": len(done["rechazados"])},
+                              "aprobados": n_done.get("aprobado", 0), "rechazados": n_done.get("rechazado", 0)},
                            growth=clip_growth(shown), players={s_.id: clip_player(s_) for s_ in shown},
                            bots={s_.id: bot_check(s_) for s_ in shown}, hours={s_.id: waiting_hours(s_) for s_ in shown},
                            sla=REVIEW_SLA_HOURS, filters=REVIEW_FILTERS, in_camp=bool(camp_id),

@@ -604,121 +604,128 @@ function iniciarChat() {
   limpiar.push(tuyo(chat, function () { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); }));
 }
 
-// Pastilla negra que se desliza: en «Más nuevas / Más presupuesto / Mejor pago» y en las pestañas de Ganancias. En los menús que cambian de página, se guarda dónde estaba la pastilla
-// al pulsar y la página nueva la desliza desde ahí (solo desplazamiento: lo hace la tarjeta gráfica, sin tirones).
-var PILL_KEY = "pill-from:";
+// =============================================================== barras de pestañas con pastilla que se desliza
+// Dos capas: abajo, las pestañas en gris; arriba, una copia en blanco sobre negro que solo se ve a través de un
+// recorte con forma de pastilla. Lo único que se anima es ese recorte, así que el texto se lee siempre
+// (blanco donde está la pastilla, gris donde no) y la barra de verdad no se toca.
+// Si la barra se vuelve a pintar (otra página, un marco), la nueva sigue el movimiento desde donde iba la anterior.
 var PILL_MS = 320;
-function pastillaOrden() {
-  var grupos = [[".sortbar", "button", ""], [".seg", "a", "seg"]];
-  grupos.forEach(function (g) {
-    document.querySelectorAll(g[0]).forEach(function (box) { montarPastilla(box, g[1], g[2]); });
-  });
+var pillPrev = {};                    // por barra: dónde estaba el recorte justo antes de volver a pintarse
+function pillKey(box) { return (box.getAttribute("aria-label") || "") + "|" + (box.classList.contains("sortbar") ? "s" : "g"); }
+function pillItems(box) { return box.querySelectorAll(":scope > a, :scope > button"); }
+function pillCambiaPagina(it) {
+  var h = it.tagName === "A" ? (it.getAttribute("href") || "") : "";
+  return h !== "" && h.charAt(0) !== "#" && !it.hasAttribute("data-tab");
 }
-var pastillasMontadas = new WeakSet();
-
-// Barras de pestañas que cambian de página: la barra se queda (no se vuelve a pintar) y solo cambia lo de abajo.
-// Antes de pintar la página nueva, se copian a la barra actual sus enlaces y números, y Turbo la conserva tal cual.
-function idBarra(box) {
-  var l = box.getAttribute("aria-label");
-  return l ? "pb-" + l.toLowerCase().replace(/[^a-z0-9]+/g, "-") : "";
+function pillClip(box, pill, l, t, w, h, animate) {
+  var W = box.scrollWidth, H = box.clientHeight;
+  var v = "inset(" + t + "px " + Math.max(0, W - l - w) + "px " + Math.max(0, H - t - h) + "px " + l + "px round 999px)";
+  if (!animate) pill.style.transition = "none";
+  pill.style.clipPath = v;
+  if (!animate) { void pill.offsetWidth; pill.style.transition = ""; }
+  box._pillAt = { l: l, w: w, t: Date.now(), anim: !!animate };
 }
-function conservarBarras(nuevo) {
-  document.querySelectorAll(".seg.has-pill, .sortbar.has-pill").forEach(function (box) {
-    var id = idBarra(box);
-    if (!id) return;
-    var sel = box.classList.contains("sortbar") ? "button" : "a";
-    var otra = Array.prototype.find.call(nuevo.querySelectorAll(".seg, .sortbar"), function (b) { return idBarra(b) === id; });
-    var mios = box.querySelectorAll(":scope > " + sel), suyos = otra ? otra.querySelectorAll(":scope > " + sel) : [];
-    box.removeAttribute("data-turbo-permanent");
-    if (!otra || mios.length !== suyos.length || box.closest("turbo-frame") !== null && !nuevo.contains(otra)) return;
-    for (var i = 0; i < mios.length; i++) {          // enlaces y números al día; la pastilla y su animación siguen
-      var on = suyos[i].classList.contains("on");
-      mios[i].innerHTML = suyos[i].innerHTML;
-      mios[i].className = suyos[i].className;
-      ["href", "data-turbo-frame", "aria-current"].forEach(function (k) {
-        if (suyos[i].hasAttribute(k)) mios[i].setAttribute(k, suyos[i].getAttribute(k)); else mios[i].removeAttribute(k);
-      });
-      mios[i].classList.toggle("on", on);
+// Dónde se ve el recorte ahora mismo (a mitad de animación, el punto intermedio)
+function pillAhora(box, pill) {
+  var m = /inset\(([^)]*?)(?: round|\))/.exec(getComputedStyle(pill).clipPath || "");
+  if (!m) return null;
+  var v = m[1].trim().split(/\s+/).map(parseFloat);          // el navegador abrevia: 1, 2, 3 o 4 valores
+  if (!v.length || v.some(isNaN)) return null;
+  var right = v.length > 1 ? v[1] : v[0], left = v.length > 3 ? v[3] : right;
+  return { l: left, w: Math.max(0, box.scrollWidth - left - right) };
+}
+function pillSync(box, target, animate) {
+  var pill = box._pill;
+  if (!pill) return;
+  var cs = getComputedStyle(box), its = pillItems(box);
+  pill.style.width = "0px";                       // que no cuente al medir el ancho real de la barra
+  pill.style.width = box.scrollWidth + "px";
+  pill.style.height = box.clientHeight + "px";
+  // La copia de arriba: mismo texto, misma letra y mismo sitio que cada pestaña (misma etiqueta: le valen los mismos estilos)
+  if (pill.children.length !== its.length) {
+    pill.textContent = "";
+    for (var k = 0; k < its.length; k++) {
+      var el = document.createElement(its[k].tagName);
+      el.tabIndex = -1;
+      if (el.tagName === "BUTTON") el.type = "button";
+      pill.appendChild(el);
     }
-    box.id = otra.id = id;
-    box.setAttribute("data-turbo-permanent", "");
-    otra.setAttribute("data-turbo-permanent", "");
-  });
+  }
+  for (var i = 0; i < its.length; i++) {
+    var it = its[i], c = pill.children[i], s = getComputedStyle(it);
+    if (c._html !== it.innerHTML) { c.innerHTML = it.innerHTML; c._html = it.innerHTML; }
+    c.className = it.className.replace(/(^|\s)on(\s|$)/, " ");
+    c.style.cssText = "left:" + it.offsetLeft + "px;top:" + it.offsetTop + "px;width:" + it.offsetWidth + "px;height:" + it.offsetHeight +
+      "px;padding:" + s.padding + ";font:" + s.font + ";letter-spacing:" + s.letterSpacing + ";text-align:" + s.textAlign;
+  }
+  target = target || box.querySelector(":scope > .on");
+  if (!target) { pill.style.opacity = 0; return; }
+  pill.style.opacity = 1;
+  pillClip(box, pill, target.offsetLeft, target.offsetTop, target.offsetWidth, target.offsetHeight, animate);
+  box._pillTarget = target;
 }
-document.addEventListener("turbo:before-render", function (e) { conservarBarras(e.detail.newBody); });
-function recolocarBarras() {          // los números pueden cambiar el ancho: la pastilla se ajusta sin saltos
-  document.querySelectorAll("[data-turbo-permanent].has-pill").forEach(function (b) { if (b._pillPlace) b._pillPlace(true); });
-}
-document.addEventListener("turbo:render", recolocarBarras);
-document.addEventListener("turbo:frame-render", recolocarBarras);
-document.addEventListener("turbo:before-frame-render", function (e) { conservarBarras(e.detail.newFrame); });
-function montarPastilla(box, sel, name) {
-  if (pastillasMontadas.has(box)) return;
-  pastillasMontadas.add(box);
-  // Una página restaurada por Turbo (atrás / volver) trae la pastilla vieja pero sin sus escuchas: se rehace de cero
+function montarPastilla(box) {
+  if (box._pill && box._pill.isConnected) { pillSync(box, null, false); return; }
+  // Una página restaurada (atrás) trae la copia vieja sin sus escuchas: se rehace
   box.querySelectorAll(":scope > .pill").forEach(function (old) { old.remove(); });
-  box.classList.remove("has-pill", "pill-ready");
-  delete box.dataset.pill;
   var pill = document.createElement("span");
   pill.className = "pill";
-  box.insertBefore(pill, box.firstChild);
+  pill.setAttribute("aria-hidden", "true");
+  box.appendChild(pill);
+  box._pill = pill;
   box.classList.add("has-pill");
-  function place(el, animate) {
-    if (!el) { pill.style.opacity = 0; return; }
-    if (!animate) pill.style.transition = "none";
-    pill.style.width = el.offsetWidth + "px";
-    pill.style.height = el.offsetHeight + "px";
-    pill.style.transform = "translate(" + el.offsetLeft + "px," + el.offsetTop + "px)";
-    pill.style.opacity = 1;
-    if (!animate) { void pill.offsetWidth; pill.style.transition = ""; }
-  }
-  var cur = box.querySelector(sel + ".on");
-  var key = PILL_KEY + (box.getAttribute("aria-label") || name || "x");
-  var from = null;
-  try { from = JSON.parse(sessionStorage.getItem(key) || "null"); sessionStorage.removeItem(key); } catch (e) { from = null; }
-  var left = from ? PILL_MS - (Date.now() - from.t) : 0;      // lo que le quedaba a la animación cuando cambió la página
-  if (from && cur && pill.animate && left > 30 && Math.abs(from.x - cur.offsetLeft) > 2) {
-    // La página nueva sigue la animación justo donde iba (la carga no la corta ni la reinicia)
-    var y = cur.offsetTop;
-    pill.style.transition = "none";
-    pill.style.height = cur.offsetHeight + "px";
-    pill.style.opacity = 1;
-    pill.style.width = cur.offsetWidth + "px";
-    pill.style.transform = "translate(" + cur.offsetLeft + "px," + y + "px)";
-    pill.animate([{ transform: "translate(" + from.x + "px," + y + "px)", width: from.w + "px" },
-                  { transform: "translate(" + cur.offsetLeft + "px," + y + "px)", width: cur.offsetWidth + "px" }],
-                 { duration: Math.max(120, left), easing: "cubic-bezier(.2,.7,.3,1)" })
-      .onfinish = function () { pill.style.transition = ""; };
+  var prev = pillPrev[pillKey(box)], cur = box.querySelector(":scope > .on");
+  if (prev && cur && Date.now() - prev.t < 900 && Math.abs(prev.l - cur.offsetLeft) > 2) {
+    // La barra anterior iba de camino: esta arranca donde aquella se quedó y termina el recorrido
+    pillSync(box, cur, false);
+    pillClip(box, pill, prev.l, cur.offsetTop, prev.w, cur.offsetHeight, false);
+    pillClip(box, pill, cur.offsetLeft, cur.offsetTop, cur.offsetWidth, cur.offsetHeight, true);
   } else {
-    place(cur, false);
+    pillSync(box, cur, false);
   }
-  box.classList.add("pill-ready");
+  delete pillPrev[pillKey(box)];
+  if (box._pillBound) return;
+  box._pillBound = true;
   box.addEventListener("click", function (e) {
-    var it = e.target.closest(sel);
-    if (!it || !box.contains(it) || e.metaKey || e.ctrlKey || e.shiftKey) return;
-    var was = box.querySelector(sel + ".on");
-    if (was && was !== it) { was.classList.remove("on"); was.removeAttribute("aria-current"); }
-    it.classList.add("on");
-    place(it, true);                            // la pastilla se mueve al momento
-    if (it.tagName === "A" && it.getAttribute("href") && !it.hasAttribute("data-tab")) {
-      // Si cambia de página, la nueva sigue la animación desde donde vaya en ese momento
-      var t0 = Date.now();
-      var save = function () {
-        var m = new DOMMatrixReadOnly(getComputedStyle(pill).transform);
-        try { sessionStorage.setItem(key, JSON.stringify({ x: Math.round(m.m41), w: Math.round(pill.getBoundingClientRect().width), t: t0 })); } catch (err) { /* sin almacenamiento: sin más */ }
-      };
-      save();
-      document.addEventListener("turbo:before-render", save, { once: true });
-      document.addEventListener("turbo:before-frame-render", save, { once: true });
-    }
+    var it = e.target.closest("a, button");
+    if (!it || it.parentNode !== box || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+    if (!pillCambiaPagina(it)) {                 // pestañas de la misma página: la activa cambia aquí mismo
+      pillItems(box).forEach(function (x) { if (x !== it) { x.classList.remove("on"); x.removeAttribute("aria-current"); } });
+      it.classList.add("on");
+    }                                            // si cambia de página, la activa la trae la página nueva (así «atrás» cuadra)
+    pillSync(box, it, true);
   });
-  box._pillPlace = function (animate) { place(box.querySelector(sel + ".on"), animate); };
-  var onResize = function () {
-    if (!box.isConnected) { window.removeEventListener("resize", onResize); return; }
-    place(box.querySelector(sel + ".on"), false);
-  };
-  window.addEventListener("resize", onResize);
+  if (window.ResizeObserver) {                   // cambia el ancho (móvil girado, letra cargada, números nuevos): se recoloca
+    var ro = new ResizeObserver(function () {
+      if (!box.isConnected) { ro.disconnect(); return; }
+      var at = box._pillAt;
+      if (at && at.anim && Date.now() - at.t < PILL_MS + 60) return;      // a mitad de animación no se toca
+      pillSync(box, box._pillTarget && box._pillTarget.isConnected ? box._pillTarget : null, false);
+    });
+    ro.observe(box);
+  }
 }
+function pastillaOrden() {
+  document.querySelectorAll(".seg, .sortbar").forEach(montarPastilla);
+}
+// Justo antes de que Turbo guarde o cambie la página: se apunta por dónde iba cada pastilla y se deja la barra
+// como la manda el servidor (la copia que Turbo guarda para «atrás» queda bien)
+function pillGuardar() {
+  document.querySelectorAll(".seg.has-pill, .sortbar.has-pill").forEach(function (box) {
+    if (!box._pill) return;
+    var k = pillKey(box), now = pillAhora(box, box._pill);
+    if (now && !(pillPrev[k] && Date.now() - pillPrev[k].t < 120)) pillPrev[k] = { l: now.l, w: now.w, t: Date.now() };
+  });
+}
+document.addEventListener("turbo:before-cache", function () {
+  pillGuardar();
+  document.querySelectorAll(".seg.has-pill, .sortbar.has-pill").forEach(function (box) { if (box._pill) pillSync(box, null, false); });
+});
+document.addEventListener("turbo:before-render", pillGuardar);
+document.addEventListener("turbo:before-frame-render", pillGuardar);
+document.addEventListener("turbo:render", pastillaOrden);          // antes de que se pinte: sin un fotograma sin pastilla
+document.addEventListener("turbo:frame-render", pastillaOrden);
+
 
 // =============================================================== cuándo se ejecuta
 // Algo que se limpia solo cuando desaparece su parte de la página (al cambiar un marco) o al salir de la página

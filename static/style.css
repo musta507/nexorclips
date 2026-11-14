@@ -189,9 +189,17 @@ input:focus,textarea:focus,select:focus{outline:none;background:#fff;border-colo
 .sortbar button:hover,.seg a:hover{color:var(--ink)}
 .sortbar button:not(.on):hover,.seg a:not(.on):hover{background:var(--soft)}
 .sortbar button.on,.seg a.on{background:var(--ink);color:#fff;font-weight:600}
-.has-pill{position:relative;isolation:isolate}
-.has-pill .pill{position:absolute;left:0;top:0;border-radius:999px;background:var(--ink);z-index:-1;pointer-events:none;opacity:0;transition:transform .32s cubic-bezier(.3,.9,.3,1),width .32s cubic-bezier(.3,.9,.3,1)}
-.has-pill.pill-ready > .on{background:transparent}
+/* Pastilla deslizante en dos capas: abajo las pestañas en gris; arriba (.pill) una copia en blanco sobre negro
+   que solo se ve por un recorte con forma de pastilla. Se anima el recorte: el texto se lee siempre. */
+.has-pill{position:relative}
+.has-pill > a,.has-pill > button,.has-pill > a.on,.has-pill > button.on{font-weight:500}
+.has-pill > a.on,.has-pill > button.on{background:transparent;color:var(--muted)}
+.has-pill .pill{position:absolute;left:0;top:0;background:var(--ink);color:#fff;pointer-events:none;opacity:0;border-radius:999px;
+  clip-path:inset(0 100% 0 0 round 999px);transition:clip-path .32s cubic-bezier(.3,.85,.3,1);will-change:clip-path}
+.has-pill .pill > *{position:absolute;box-sizing:border-box;white-space:nowrap;color:#fff;display:block;background:transparent;border:0;margin:0;border-radius:0;flex:none}
+.has-pill .pill .seg-n,.has-pill .pill b{color:inherit}
+.has-pill .pill .seg-n{opacity:.7}
+@media (prefers-reduced-motion: reduce){.has-pill .pill{transition:none}}
 
 /* =============================================================== portada (visitantes) */
 .landing{background:var(--bg);min-height:100vh;display:flex;flex-direction:column;overflow-x:clip}
@@ -2249,13 +2257,6 @@ b>.m-earn,b>.m-zero{font-size:inherit!important;line-height:inherit}
 .ct-bar i{display:block;height:100%;background:var(--money);border-radius:9px}
 .ct-go{color:var(--muted)}
 @media (max-width:700px){.ct-row{grid-template-columns:38px minmax(0,1fr) 110px}.ct-date,.ct-go{display:none}}
-/* Pastilla deslizante: el texto cambia de color cuando la pastilla ya ha llegado (si no, se ve texto blanco sobre blanco) */
-.has-pill.pill-ready > a,.has-pill.pill-ready > button{transition:color .1s,background-color .15s}
-.has-pill.pill-ready > a.on,.has-pill.pill-ready > button.on{transition:color .14s ease .06s}
 /* Ranking del inicio: tres pestañas iguales que ocupan todo el ancho (la pastilla nunca toca el borde) */
 .hm-rtabs{display:flex;width:100%;overflow:hidden;align-self:stretch}
 .hm-rtabs a{flex:1 1 0;text-align:center;padding:10px 8px;font-weight:500}
-/* Capas: gris del hover (abajo) → pastilla negra → texto (arriba). El gris va en un ::before para que la pastilla pase por encima */
-.has-pill.pill-ready > a,.has-pill.pill-ready > button{position:relative;background:transparent!important}
-.has-pill.pill-ready > a::before,.has-pill.pill-ready > button::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--soft);opacity:0;z-index:-2;transition:opacity .15s;pointer-events:none}
-.has-pill.pill-ready > a:not(.on):hover::before,.has-pill.pill-ready > button:not(.on):hover::before{opacity:1}

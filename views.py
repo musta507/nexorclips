@@ -257,8 +257,17 @@ APIFY_HOOK = None       # la web lo pone para apuntar cada llamada (qué, cuánt
 
 
 def _apify(actor, body, kind, platform, n, timeout=300):
-    resp = requests.post(f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items",
-                         params={"token": APIFY_TOKEN, "timeout": timeout - 20}, json=body, timeout=timeout)
+    try:                                          # la clave va en la cabecera, nunca en la dirección
+        resp = requests.post(f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items",
+                             params={"timeout": timeout - 20}, headers={"Authorization": f"Bearer {APIFY_TOKEN}"},
+                             json=body, timeout=timeout)
+    except requests.RequestException as e:        # y los fallos de conexión se cuentan sin datos sensibles
+        if APIFY_HOOK:
+            try:
+                APIFY_HOOK(kind, platform, n, 0, 0)
+            except Exception:  # noqa: BLE001
+                pass
+        raise RuntimeError(f"No se pudo conectar con Apify ({e.__class__.__name__})") from None
     items = None
     if resp.status_code < 400:
         try:
