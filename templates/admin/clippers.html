@@ -39,7 +39,7 @@
         <td data-label="Disponible" class="r tnum"><b>{{ m.available|money }}</b>{% if m.debt %}<div class="small" style="color:var(--red)">Debe {{ m.debt|money }}</div>{% endif %}</td>
         <td data-label="" class="r">
           {% if not u.is_admin %}
-            <a class="btn sm" href="{{ url_for('admin_clipper', uid=u.id) }}" style="margin-bottom:6px">Ficha</a>
+            <a class="btn sm soft" href="{{ url_for('admin_clipper', uid=u.id) }}" style="margin-bottom:6px">Ficha</a>
             <a class="btn sm soft" href="{{ url_for('admin_chat', uid=u.id) }}" style="margin-bottom:6px">Escribir</a>
             {% if u.is_banned %}<span class="flag">Bloqueado</span>{% endif %}
           {% endif %}

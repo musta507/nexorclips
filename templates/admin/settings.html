@@ -31,7 +31,7 @@
   <p class="small muted">yt-dlp (gratis) busca los vídeos nuevos de las cuentas de TikTok y YouTube; Apify solo lee las cifras (vistas, likes…). Instagram se busca con Apify. Si yt-dlp falla con una cuenta, ese día la busca Apify.{% if not search.installed %} <b style="color:var(--red-ink)">yt-dlp no está instalado en el servidor.</b>{% endif %}</p>
   <form method="post" action="{{ url_for('admin_search', accion='motor') }}" class="inline" style="flex-wrap:wrap;gap:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <select name="engine" aria-label="Motor de búsqueda" data-native>{% for k, label in search.engines.items() %}<option value="{{ k }}"{% if search.engine == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-    <button class="btn sm">Guardar</button></form>
+    <button class="btn sm soft">Guardar</button></form>
   {% if search.stats.day %}<span class="small">Hoy: <b>{{ search.stats.ok }}</b> cuentas leídas con yt-dlp{% if search.stats.fail %} · <b style="color:var(--red-ink)">{{ search.stats.fail }} fallaron</b> (se usó Apify){% endif %}</span>
   {% for e in search.stats.errors[:3] %}<span class="small muted">· {{ e }}</span>{% endfor %}{% endif %}
 
@@ -40,7 +40,7 @@
     <label class="small" style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" name="ytdlp_stats" value="1"{% if search.stats_on %} checked{% endif %}> <span>Usar las vistas que ya trae yt-dlp al mirar el perfil (gratis) y pedir a Apify solo las que falten. <span class="muted">Con miles de clips, leerlos todos con Apify cuesta cientos de dólares al mes.</span></span></label>
     <label class="small" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">Tope diario de Apify <input name="apify_daily_max" value="{{ search.daily_max }}" inputmode="numeric" style="width:100px" aria-label="Tope diario de resultados de Apify"> resultados <span class="muted">(≈ {{ "%.2f"|format(search.daily_max * 0.004) }} $/día · 0 = sin tope) · hoy van <b>{{ search.used_today }}</b></span></label>
     {% if search.scan.at %}<span class="small muted">Última búsqueda: {{ search.scan.scanned }} cuentas miradas · {{ search.scan.dormant }} paradas (se miran 1 día a la semana) · {{ search.scan.ytdlp_failed }} fallos de yt-dlp · {{ search.scan.added }} clips nuevos{% if search.deferred.n %} · <b style="color:var(--red-ink)">{{ search.deferred.n }} clips sin leer por el tope</b>{% endif %}</span>{% endif %}
-    <div><button class="btn sm">Guardar</button></div>
+    <div><button class="btn sm soft">Guardar</button></div>
   </form>
 
   <form method="post" action="{{ url_for('admin_search', accion='probar') }}" class="inline" style="flex-wrap:wrap;gap:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -81,7 +81,7 @@
   <span class="small">Clips en revisión: <b>{{ bunny_info.listo }}</b> con copia lista · <b>{{ bunny_info.subiendo }}</b> procesándose · <b>{{ bunny_info.waiting }}</b> esperando copia{% if bunny_info.error %} · <b style="color:var(--red-ink)">{{ bunny_info.error }} con error</b>{% endif %}</span>
   <div class="inline" style="flex-wrap:wrap;gap:8px">
     <form method="post" action="{{ url_for('admin_bunny', accion='probar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Probar conexión</button></form>
-    <form method="post" action="{{ url_for('admin_bunny', accion='copiar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm">Copiar vídeos ahora</button></form>
+    <form method="post" action="{{ url_for('admin_bunny', accion='copiar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Copiar vídeos ahora</button></form>
   </div>
   {% if bunny_report %}<div class="small" style="display:grid;gap:4px">
     {% if bunny_report.running %}<span><b>Copiando ahora…</b> recarga en un minuto.</span>
@@ -96,7 +96,7 @@
   <p class="small muted">Cuando un clipper conecta su cuenta, sus vídeos y vistas se leen de la red (gratis) y se guarda su audiencia (país, edad, sexo). Las cuentas sin conectar se siguen leyendo con Apify.</p>
   <form method="post" action="{{ url_for('admin_api_mode') }}" class="inline" style="flex-wrap:wrap;gap:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <select name="mode" aria-label="Modo de las APIs" data-native>{% for k, label in api_info.modes.items() %}<option value="{{ k }}"{% if api_info.mode == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-    <button class="btn sm">Guardar</button></form>
+    <button class="btn sm soft">Guardar</button></form>
   <div class="api-grid">
     {% for p in api_info.apis %}
     <div class="api-net">

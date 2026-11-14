@@ -18,7 +18,7 @@
           </div>
           <form method="post" class="form-stack hub-newch"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="canal_nuevo"><input type="hidden" name="section" value="{{ sec.id }}">
             <div class="inline"><input name="emoji" placeholder="😀" maxlength="8" style="width:52px" aria-label="Emoji"><input name="name" placeholder="Canal nuevo" maxlength="60" required aria-label="Nombre del canal"></div>
-            <div class="inline"><select name="kind" aria-label="Tipo de canal" data-native>{% for k, label in channel_kinds.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select><button class="btn sm">Crear</button></div></form>
+            <div class="inline"><select name="kind" aria-label="Tipo de canal" data-native>{% for k, label in channel_kinds.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select><button class="btn sm soft">Crear</button></div></form>
         </div>
       </details>{% endif %}
       {% for c in sec.live %}
