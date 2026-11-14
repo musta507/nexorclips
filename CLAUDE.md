@@ -1,0 +1,87 @@
+# ClipProfit Hispano
+
+Plataforma de clipping (pago por vistas) que Mustapha desarrolla para un cliente, Felipe.
+Repositorio `musta507/nexorclips`, rama `main`. Cada push a `main` se despliega solo en Railway.
+
+## Cómo trabajar con Mustapha
+
+- Responde en español, corto y sin jerga. No programa: explica qué cambia para quien usa la web, no cómo está hecho.
+- Cambios grandes o de gusto (diseño): proponlos numerados y espera a «ejecuta», «hazlo» o «sí». Arreglos de un fallo claro: hazlos directamente.
+- En diseño, pide una referencia o una captura antes de cambiar el aspecto de algo. No rediseñes lo que no se ha pedido.
+- Avisa de los riesgos y de lo que cuesta dinero (Apify, Bunny) antes de hacerlo.
+- Di siempre qué has comprobado y qué no.
+- Nunca pidas ni repitas claves. Las claves van en las variables de Railway.
+- Lo técnico (Panel técnico) solo lo ve Mustapha.
+
+## El negocio
+
+- Los clientes son creadores de contenido. En la web, en textos y en documentos se les llama solo «creadores».
+- Escala prevista: 10 campañas activas (ampliable a 20), 30–100 clippers por campaña, unos 4.000 usuarios registrados, la mayoría inactivos.
+- Presupuesto de servicios: menos de 100 $ al mes.
+- Cada cuenta de un clipper es de una sola campaña: todo lo que publica después de entrar cuenta como clip de esa campaña.
+- La grabación de verificación de vistas solo se pide a los clips que pasan el mínimo.
+- Referencia de producto: Content Rewards (Whop). Ante la duda, mirar cómo lo hacen ellos.
+- La web aún no tiene usuarios reales. Dominio previsto: clipprofit.es.
+
+## Cómo está hecha
+
+- Flask + SQLAlchemy + Jinja, Postgres en Railway, Turbo 8 en el navegador. Sin paso de compilación.
+- `app.py` (≈9.100 líneas): modelos, rutas y lógica, todo junto.
+- `views.py`: lectura de redes (Apify y yt-dlp). `official.py`: APIs oficiales (OAuth). `push.py`: avisos al navegador (apagados).
+- `templates/` (pantallas), `static/style.css`, `static/app.js`.
+- `ensure_schema` añade solas las columnas e índices nuevos al arrancar: no hay migraciones.
+- Producción: gunicorn con 2 procesos y 8 hilos. Las tareas automáticas las lleva un solo proceso (candado de líder).
+
+## Probar antes de subir
+
+```bash
+python -m pytest tests -q                 # 142 tests, en SQLite
+TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en Postgres
+```
+
+- No subas nada con un test en rojo. Cada función nueva lleva su test.
+- Las plantillas no se recargan sin reiniciar el servidor local.
+- Para ver la web en local: `DEV_LOGIN=1 ADMIN_EMAIL=admin@demo.com SECRET_KEY=x flask --app app run` y entrar con el formulario de pruebas del login.
+- Cambios de diseño: captura con Playwright antes y después, en PC y en móvil (375 px), y míralas.
+
+## Piezas delicadas (leer antes de tocar)
+
+- **Dinero.** `accrue` reparte por orden de envío hasta agotar el presupuesto; nunca baja lo ya ganado. `user_money` es el cálculo completo del saldo; `my_available` es la versión rápida para el menú y debe dar lo mismo.
+- **Lectura diaria** (03:00, hora de España): `run_daily_refresh` → `refresh_views`. El día solo se marca cuando termina; si se corta, reintenta a los 45 min, hasta 3 veces. Trabaja por tandas para no llenar la memoria.
+- **Gasto de Apify.** Tope diario (`apify_daily_max`, 800 resultados). Clips de más de 14 días se leen cada 3 días. Cuentas paradas se miran un día a la semana. Si yt-dlp falla, como mucho 40 cuentas al día pasan a Apify. No quitar estos límites sin avisar del coste.
+- **yt-dlp** busca los clips de TikTok y YouTube y, si el listado trae las vistas, se usan en vez de pedirlas a Apify (ajuste `ytdlp_stats`). Instagram va entero por Apify.
+- **Cifras guardadas unos segundos** (`ttl_cache`): totales de campaña, ranking, contador de revisión. Nunca guardar ahí el dinero de un clipper ni filas de la base de datos.
+- **Barras de pestañas con pastilla** (`.seg`, `.sortbar` en `app.js`): dos capas de texto y un recorte animado. Las pestañas que cambian de página no tocan la clase `.on`; la trae la página nueva.
+- **Avisos al móvil:** apagados para todos (`CLIPPER_PUSH`, `PHONE_ALERTS`). Los avisos van a la campanita y al Panel técnico.
+- **Bunny:** las copias de vídeo se hacen clip a clip y en segundo plano.
+
+## Cosas que a Mustapha le gustan (no cambiarlas sin que lo pida)
+
+- El Resumen del panel de admin, tal como está.
+- Los colores de las estadísticas de Mis clips (naranja, verde, morado, turquesa).
+- Pastillas negras, tarjetas blancas limpias, verde solo para el dinero.
+- El ranking del inicio y el destacado de campañas, recién hechos a su gusto.
+
+## Pendiente
+
+Acordado y sin hacer:
+1. Aviso automático de errores (Sentry, plan gratuito): cada fallo con página, usuario y línea.
+2. Copia de seguridad diaria automática de la base de datos (ahora solo hay botón manual).
+3. Copia de pruebas de la web en Railway, para ver los cambios antes de pasarlos a la real.
+4. Panel de admin más intuitivo: menú lateral por grupos, «Revisar clips» con enlace propio, tabla de Clippers (última columna cortada), Panel técnico por pestañas, buscador, cabeceras iguales, Canales en móvil.
+5. Arquitectura modular: repartir `app.py` en carpetas por temas (dinero, clips, lectura, campañas, comunidad, admin), un tema cada vez, sin reescribir y sin cambiar la base de datos. Empezar por dinero y lectura.
+
+Para el final:
+- Probar un retiro real por Whop de principio a fin.
+- Conectar el dominio clipprofit.es y poner la región de Railway en Europa.
+- Comprobar en producción que yt-dlp trae las vistas (Panel técnico → «Probar yt-dlp con una cuenta»).
+
+Sin decidir:
+- APIs oficiales de TikTok, Instagram y YouTube (el código está; faltan las apps y su revisión).
+- Botón «Conectar con Whop» para identificar a los miembros del Whop.
+- Acceso del cliente en los planes de distribución.
+
+Flojo, sin urgencia:
+- Avisos del admin carga todos los clippers de golpe.
+- Clippers de una campaña hace demasiadas consultas.
+- La hoja de estilos arrastra parches; limpiarla al modularizar.
