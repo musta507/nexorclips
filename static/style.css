@@ -1677,8 +1677,9 @@ body.has-tabs>.site-footer{flex:none}
 .hm-lessons:hover .hm-ls:nth-child(3){transform:rotate(7deg) translate(-2px,4px)}
 
 /* =============================================================== Mis clips: panel de estadísticas y lista */
-.mc{display:flex;flex-direction:column;gap:12px;--an-c:var(--ink)}
-.mc[data-metric=earned]{--an-c:var(--money)}          /* un solo acento: negro, y verde solo para el dinero */
+.mc{display:flex;flex-direction:column;gap:12px;--an-c:#f08a24}
+.mc[data-metric=earned]{--an-c:#12b76a}.mc[data-metric=sent]{--an-c:#8b6cf0}.mc[data-metric=approved]{--an-c:#14b8a6}
+.mc[data-metric=likes]{--an-c:#f04466}.mc[data-metric=comments]{--an-c:#3b82f6}.mc[data-metric=shares]{--an-c:#0ea5e9}
 .mc-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .mc-bar select{width:auto;min-width:180px}
 .mc-plats{display:inline-flex;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px}
@@ -1687,8 +1688,8 @@ body.has-tabs>.site-footer{flex:none}
 .mc-plat:hover{background:var(--soft)}
 .mc-plat.on{background:var(--ink);color:#fff}
 .mc-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.mc-kpi{--k:var(--ink);display:flex;align-items:center;gap:12px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;cursor:pointer;font:inherit;color:var(--ink);transition:border-color .2s,background .2s,box-shadow .2s}
-.mc-kpi.k-earned{--k:var(--money)}
+.mc-kpi{--k:#f08a24;display:flex;align-items:center;gap:12px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;cursor:pointer;font:inherit;color:var(--ink);transition:border-color .2s,background .2s,box-shadow .2s}
+.mc-kpi.k-earned{--k:#12b76a}.mc-kpi.k-sent{--k:#8b6cf0}.mc-kpi.k-approved{--k:#14b8a6}
 .mc-kpi:hover{border-color:var(--soft-2)}
 .mc-kpi .mc-ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--soft);color:var(--muted);flex:none;transition:background .2s,color .2s}
 .mc-kpi .mc-ico svg{width:20px;height:20px}
@@ -1705,6 +1706,7 @@ body.has-tabs>.site-footer{flex:none}
 .mc-plat-list{display:flex;flex-direction:column;gap:6px;padding:16px}
 .mc-prow{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;overflow:hidden}
 .mc-pfill{position:absolute;left:0;top:0;bottom:0;border-radius:12px;background:var(--soft);z-index:0}
+.mc-prow.p-tiktok .mc-pfill{background:#e6f7f6}.mc-prow.p-youtube .mc-pfill{background:#fdecec}.mc-prow.p-instagram .mc-pfill{background:#fbecf6}
 
 .mc-pname,.mc-pnum{position:relative;z-index:1;display:flex;align-items:center;gap:8px;font-size:14px}
 .mc-pname{font-weight:600}.mc-pname svg{width:16px;height:16px}
