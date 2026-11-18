@@ -35,7 +35,7 @@
   {% else %}<p class="small muted">Aún no hay cuentas. Añádelas abajo.</p>{% endfor %}
   <details class="ds-add"><summary class="small link">{{ icon("plus") }} Añadir cuentas</summary>
     <form method="post" class="form-stack" style="margin-top:10px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="cuentas">
-      <textarea name="accounts" rows="3" placeholder="tiktok @cuenta&#10;instagram @otra" aria-label="Cuentas"></textarea><button class="btn sm" style="align-self:flex-start">Añadir</button></form>
+      <div class="rows-in" data-rows="acc"><textarea name="accounts" rows="3" placeholder="tiktok @cuenta&#10;instagram @otra" aria-label="Cuentas"></textarea></div><button class="btn sm" style="align-self:flex-start">Añadir</button></form>
   </details>
 </section>
 

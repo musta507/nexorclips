@@ -3046,3 +3046,15 @@ def test_featured_carousel_markup():
     page = client_for("clipper@test.com").get("/campanas").get_data(as_text=True)
     if page.count("fcar-slide") > 1:
         assert "data-carousel" in page and "data-car-track" in page and "data-car-next" in page and "data-car-dot" in page
+
+
+def test_account_rows_widgets():
+    """Planes de distribución y preguntas de la campaña: filas cómodas (red + @), mandando el mismo texto de siempre."""
+    admin = client_for("admin@test.com")
+    page = admin.get("/admin/distribucion").get_data(as_text=True)
+    assert 'data-rows="acc"' in page and "una por línea" not in page
+    assert A.parse_dist_accounts("tiktok @cuenta.uno\ninstagram @otra_cuenta\nyoutube @canal.tres") == [
+        ("tiktok", "cuenta.uno"), ("instagram", "otra_cuenta"), ("youtube", "canal.tres")]
+    cid = make_campaign(budget=5000)
+    form = admin.get(f"/admin/campana/{cid}/editar").get_data(as_text=True)
+    assert 'data-rows="txt"' in form and 'name="join_questions"' in form

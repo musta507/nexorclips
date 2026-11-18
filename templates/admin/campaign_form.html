@@ -111,8 +111,8 @@
 
         <fieldset class="wz-step form-stack">
           <legend>Quién entra y publicar</legend>
-          <div class="field"><label for="join_questions">Preguntas para unirse (una por línea)</label>
-            <textarea id="join_questions" name="join_questions" rows="4">{{ camp.join_questions or '' }}</textarea>
+          <div class="field"><label>Preguntas para unirse</label>
+            <div class="rows-in" data-rows="txt" data-add="Añadir pregunta" data-ph="Escribe la pregunta"><textarea id="join_questions" name="join_questions" rows="4" aria-label="Preguntas para unirse">{{ camp.join_questions or '' }}</textarea></div>
             <span class="hint">Las ves antes de aceptar a cada clipper. Vacío = sin preguntas.</span></div>
           <div class="form-grid">
             <div class="field"><label for="max_members">Plazas</label><input id="max_members" name="max_members" value="{{ camp.max_members or '' }}" inputmode="numeric" placeholder="Sin límite"><span class="hint">Al aceptar a ese número de clippers pasa sola a «plazas completas».</span></div>

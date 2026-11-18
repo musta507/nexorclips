@@ -178,6 +178,7 @@ function pagina() {
   var auto = document.querySelector("dialog[data-auto-open]");
   if (auto && auto.showModal && !auto.open) { auto.removeAttribute("data-auto-open"); auto.showModal(); }
   pestanasHash();
+  listas();
   var navOn = document.querySelector(".adm-side .adm-link.on"), side = document.querySelector(".adm-side");
   if (navOn && side && side.scrollWidth > side.clientWidth) side.scrollLeft = Math.max(0, navOn.offsetLeft - 16);
   iniciarChat();
@@ -1758,3 +1759,91 @@ function carruseles() {
 document.addEventListener("turbo:before-cache", function () {
   document.querySelectorAll("[data-carousel][data-ready]").forEach(function (b) { b.removeAttribute("data-ready"); });
 });
+
+// =============================================================== Listas cómodas en vez de «una por línea»
+// Cuentas: elegir la red y escribir el @ (si pegas un enlace de perfil, se queda solo la cuenta y se elige la red).
+// Preguntas: una casilla por pregunta. Por debajo se sigue mandando el mismo texto de siempre, línea a línea.
+var REDES = [["tiktok", "TikTok"], ["instagram", "Instagram"], ["youtube", "YouTube"]];
+function listas() {
+  document.querySelectorAll("[data-rows]").forEach(function (box) {
+    if (box.dataset.ready) return;
+    box.dataset.ready = "1";
+    var ta = box.querySelector("textarea"), acc = box.getAttribute("data-rows") === "acc";
+    var list = document.createElement("div"); list.className = "ri-list";
+    var add = document.createElement("button"); add.type = "button"; add.className = "ri-add";
+    add.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>' + (box.getAttribute("data-add") || "Añadir otra cuenta");
+    ta.hidden = true;
+    box.appendChild(list); box.appendChild(add);
+    function leerCuenta(v, sel) {
+      v = (v || "").trim();
+      var low = v.toLowerCase();
+      if (/tiktok\.com/.test(low)) sel.value = "tiktok";
+      else if (/instagram\.com/.test(low)) sel.value = "instagram";
+      else if (/youtu\.?be/.test(low)) sel.value = "youtube";
+      if (v.indexOf("/") > -1) v = v.replace(/[?#].*$/, "").replace(/\/+$/, "").split("/").pop();
+      return v.replace(/^@+/, "").replace(/\s+/g, "");
+    }
+    function guardar() {
+      var out = [];
+      list.querySelectorAll(".ri-row").forEach(function (r) {
+        var inp = r.querySelector("input"), v = inp.value.trim();
+        if (!v) return;
+        out.push(acc ? r.querySelector("select").value + " @" + v.replace(/^@+/, "") : v);
+      });
+      ta.value = out.join("\n");
+    }
+    function fila(red, valor, foco) {
+      var r = document.createElement("div"); r.className = "ri-row";
+      var inp = document.createElement("input"); inp.type = "text"; inp.value = valor || "";
+      if (acc) {
+        var sel = document.createElement("select"); sel.setAttribute("aria-label", "Red"); sel.setAttribute("data-native", "");
+        REDES.forEach(function (x) { var o = document.createElement("option"); o.value = x[0]; o.textContent = x[1]; sel.appendChild(o); });
+        sel.value = red || "tiktok";
+        var at = document.createElement("label"); at.className = "ri-at";
+        var pre = document.createElement("span"); pre.textContent = "@"; pre.setAttribute("aria-hidden", "true");
+        inp.placeholder = "cuenta"; inp.autocapitalize = "none"; inp.autocomplete = "off"; inp.spellcheck = false; inp.setAttribute("aria-label", "Cuenta");
+        inp.addEventListener("change", function () { inp.value = leerCuenta(inp.value, sel); guardar(); });
+        inp.addEventListener("paste", function () { setTimeout(function () { inp.value = leerCuenta(inp.value, sel); guardar(); }, 0); });
+        sel.addEventListener("change", guardar);
+        at.appendChild(pre); at.appendChild(inp);
+        r.appendChild(sel); r.appendChild(at);
+      } else {
+        inp.placeholder = box.getAttribute("data-ph") || ""; inp.maxLength = 300; inp.setAttribute("aria-label", inp.placeholder || "Texto");
+        r.appendChild(inp);
+      }
+      var del = document.createElement("button"); del.type = "button"; del.className = "ri-del"; del.setAttribute("aria-label", "Quitar"); del.title = "Quitar";
+      del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+      del.addEventListener("click", function () {
+        r.remove();
+        if (!list.children.length) fila(acc ? (sel && sel.value) : "", "");
+        guardar();
+      });
+      inp.addEventListener("input", guardar);
+      inp.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); if (inp.value.trim()) fila(acc ? r.querySelector("select").value : "", "", true); }
+      });
+      r.appendChild(del);
+      list.appendChild(r);
+      if (foco) inp.focus();
+      return r;
+    }
+    // Lo que ya hubiera escrito (al editar) se reparte en filas
+    var lineas = ta.value.split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+    lineas.forEach(function (l) {
+      if (!acc) { fila("", l); return; }
+      var tmp = document.createElement("select"); REDES.forEach(function (x) { var o = document.createElement("option"); o.value = x[0]; tmp.appendChild(o); });
+      var low = l.toLowerCase(), red = REDES.map(function (x) { return x[0]; }).filter(function (k) { return low.indexOf(k) > -1; })[0] || "tiktok";
+      tmp.value = red;
+      var h = leerCuenta(l.indexOf("/") > -1 ? l : l.split(/\s+/).pop(), tmp);
+      fila(tmp.value, h);
+    });
+    if (!lineas.length) fila("", "");
+    add.addEventListener("click", function () {
+      var last = list.lastElementChild, red = acc && last ? last.querySelector("select").value : "";
+      fila(red, "", true);
+    });
+    var form = box.closest("form");
+    if (form) form.addEventListener("submit", guardar);
+    guardar();
+  });
+}

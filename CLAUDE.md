@@ -35,7 +35,7 @@ Repositorio `musta507/nexorclips`, rama `main`. Cada push a `main` se despliega 
 ## Probar antes de subir
 
 ```bash
-python -m pytest tests -q                 # 149 tests, en SQLite
+python -m pytest tests -q                 # 151 tests, en SQLite
 TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en Postgres
 ```
 

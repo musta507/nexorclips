@@ -12,9 +12,9 @@
       <div class="field"><label for="client">Cliente</label><input id="client" name="client" maxlength="200" required placeholder="Nombre del creador o la marca"></div>
       <div class="field"><label for="name">Nombre del plan</label><input id="name" name="name" maxlength="200" placeholder="Plan de distribución"></div>
     </div>
-    <div class="field"><label for="accounts">Cuentas (una por línea)</label>
-      <textarea id="accounts" name="accounts" rows="6" placeholder="tiktok @cuenta1&#10;instagram @cuenta2&#10;https://www.youtube.com/@cuenta3"></textarea>
-      <span class="hint">Red y @cuenta, o el enlace del perfil. TikTok, Instagram y YouTube. Puedes añadir más luego.</span></div>
+    <div class="field"><label>Cuentas</label>
+      <div class="rows-in" data-rows="acc"><textarea name="accounts" rows="6" aria-label="Cuentas" placeholder="tiktok @cuenta1&#10;instagram @cuenta2"></textarea></div>
+      <span class="hint">Elige la red y escribe el @. Puedes añadir más luego.</span></div>
     <button class="btn accent" style="align-self:flex-start">Crear plan</button>
   </form>
 </details>
