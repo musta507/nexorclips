@@ -2438,17 +2438,18 @@ tr.row-link:hover{background:#fafafb}
   /* Chat: el texto de ayuda no se parte */
   .chat-form textarea::placeholder{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
-/* Barras de secciones (cambian de página): línea debajo de la activa, sin pastilla ni animación.
-   Las barras de filtros siguen con la pastilla negra (.seg). */
-.tl{display:flex;gap:26px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;align-self:stretch}
+/* Barras de secciones (cambian de página): línea gruesa y redondeada bajo la activa, sin pastilla ni animación
+   (opción E, elegida por Mustapha). Las barras de filtros siguen con la pastilla negra (.seg). */
+.tl{display:flex;gap:6px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;align-self:stretch}
 .tl::-webkit-scrollbar{display:none}
-.tl > a{flex:none;display:inline-flex;align-items:center;gap:6px;padding:0 2px 12px;margin-bottom:-1px;border-bottom:2px solid transparent;
-  font:500 15px var(--display);color:var(--muted);white-space:nowrap;transition:color .15s}
-.tl > a:hover{color:var(--ink)}
-.tl > a.on{color:var(--ink);border-bottom-color:var(--ink)}
+.tl > a{position:relative;flex:none;display:inline-flex;align-items:center;gap:6px;padding:9px 14px 13px;border-radius:10px 10px 0 0;
+  font:500 15px var(--display);color:var(--muted);white-space:nowrap;transition:color .15s,background-color .15s}
+.tl > a:hover{color:var(--ink);background:var(--soft)}
+.tl > a.on{color:var(--ink)}
+.tl > a.on::after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--ink)}
 .tl .cn-n{margin-left:0}
 .cn-tabs.tl{margin-bottom:18px}
-@media (max-width:640px){.tl{gap:20px}.tl > a{font-size:14px}}
+@media (max-width:640px){.tl{gap:2px}.tl > a{font-size:14px;padding:8px 12px 12px}.tl > a:hover{background:transparent}}
 /* Destacado: «Plazas abiertas» sobria (punto verde que late, texto blanco, «Nueva» aparte) */
 .featured .eyebrow.open{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);color:#fff;
   border:1px solid rgba(255,255,255,.14);box-shadow:none;font:600 13px/1 var(--font);letter-spacing:0;padding:7px 12px 7px 10px;border-radius:999px}
