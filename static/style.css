@@ -2506,3 +2506,30 @@ tr.row-link:hover{background:#fafafb}
 .fchips > a svg{width:14px;height:14px}
 .fchips-sep{width:1px;height:22px;background:var(--line);margin:0 4px}
 @media (max-width:640px){.fchips,.fchips-row{gap:6px}.fchips > a{padding:8px 12px;font-size:13px}.fchips-sep{display:none}}
+/* ===== Carrusel del destacado: fundido con portada que se desliza y texto en cascada ===== */
+.fcar-fx .fcar-track{display:grid;overflow:hidden;scroll-snap-type:none;touch-action:pan-y;border-radius:28px}
+.fcar-fx .fcar-slide{grid-area:1/1;opacity:0;visibility:hidden;transition:opacity .6s cubic-bezier(.22,.61,.36,1),visibility 0s linear .6s}
+.fcar-fx .fcar-slide.is-on{opacity:1;visibility:visible;z-index:2;transition:opacity .6s cubic-bezier(.22,.61,.36,1),visibility 0s}
+.fcar-fx .fcar-slide.is-out{opacity:1;visibility:visible;z-index:1;transition:none}   /* la que se va se queda debajo, opaca, hasta que la nueva termina de aparecer */
+.fcar-fx .fcar-slide .art{transition:transform .7s cubic-bezier(.22,.61,.36,1)}
+.fcar-fx .fcar-slide:not(.is-on) .art{transform:translateX(calc(var(--dir,1) * 28px)) scale(1.04)}
+.fcar-fx .fcar-slide.is-out .art{transform:translateX(calc(var(--dir,1) * -28px)) scale(.98)}
+.fcar-fx .fcar-slide .info > *{transition:transform .55s cubic-bezier(.22,.61,.36,1),opacity .45s ease}
+.fcar-fx .fcar-slide:not(.is-on) .info > *{opacity:0;transform:translateY(12px)}
+.fcar-fx .fcar-slide.is-out .info > *{transform:translateY(-6px);transition:opacity .18s ease,transform .3s ease;transition-delay:0s!important}
+.fcar-fx .fcar-slide.is-on .info > :nth-child(1){transition-delay:.10s}
+.fcar-fx .fcar-slide.is-on .info > :nth-child(2){transition-delay:.16s}
+.fcar-fx .fcar-slide.is-on .info > :nth-child(3){transition-delay:.22s}
+.fcar-fx .fcar-slide.is-on .info > :nth-child(4){transition-delay:.28s}
+.fcar-fx .fcar-slide.is-on .info > :nth-child(5){transition-delay:.34s}
+.fcar-fx .fcar-slide.is-on .info > :nth-child(n+6){transition-delay:.40s}
+/* Puntos: el activo se alarga y se va llenando mientras corre el tiempo */
+.fcar-dot{position:relative;overflow:hidden;transition:width .35s cubic-bezier(.22,.61,.36,1),background-color .25s}
+.fcar-dot.on{width:28px;background:#d6d7db}
+.fcar-dot.on::after{content:"";position:absolute;inset:0;background:var(--ink);border-radius:inherit;transform-origin:left;transform:scaleX(1)}
+.fcar-dot.on.run::after{animation:car-fill 6s linear forwards}
+@keyframes car-fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media (prefers-reduced-motion:reduce){
+  .fcar-fx .fcar-slide,.fcar-fx .fcar-slide .art,.fcar-fx .fcar-slide .info > *{transition:none!important;transform:none!important}
+  .fcar-dot.on.run::after{animation:none}
+}

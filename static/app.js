@@ -1633,38 +1633,68 @@ function avisosPanel() {
 }
 
 // =============================================================== carrusel de campañas destacadas (pasa solo cada 6 s)
+// Las diapositivas están una encima de otra: la nueva entra con un fundido, la portada se desliza un poco desde el lado
+// por el que llega y el texto sube en cascada. El punto activo se va llenando mientras corre el tiempo.
+// Con el dedo se pasa deslizando. Si el sistema pide menos movimiento, cambia sin animación.
+var CAR_MS = 6000;
 function carruseles() {
   document.querySelectorAll("[data-carousel]").forEach(function (box) {
     if (box.dataset.ready) return;
     box.dataset.ready = "1";
     var track = box.querySelector("[data-car-track]"), dots = box.querySelectorAll("[data-car-dot]");
-    var n = track.children.length, cur = 0, timer = null;
+    var slides = Array.prototype.slice.call(track.children), n = slides.length, cur = 0, timer = null, busy = false;
+    box.classList.add("fcar-fx");
+    slides.forEach(function (sl, k) { sl.classList.toggle("is-on", k === 0); sl.setAttribute("aria-hidden", k === 0 ? "false" : "true"); if (k) sl.inert = true; });
     if (n < 2) return;
-    function ir(i, suave) {
-      cur = (i + n) % n;
-      track.scrollTo({ left: track.children[cur].offsetLeft - track.offsetLeft, behavior: suave === false ? "auto" : "smooth" });
-      dots.forEach(function (d, k) { d.classList.toggle("on", k === cur); });
+    var quieto = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function puntos() {
+      dots.forEach(function (d, k) {
+        d.classList.remove("on", "run");
+        if (k === cur) { void d.offsetWidth; d.classList.add("on"); if (timer) d.classList.add("run"); }
+      });
+    }
+    function ir(i, dir) {
+      i = (i + n) % n;
+      if (i === cur || busy) return;
+      dir = dir || (i > cur ? 1 : -1);
+      var from = slides[cur], to = slides[i];
+      busy = true;
+      box.style.setProperty("--dir", dir);
+      from.classList.remove("is-on"); from.classList.add("is-out"); from.setAttribute("aria-hidden", "true"); from.inert = true;
+      to.classList.remove("is-out"); to.classList.add("is-on"); to.setAttribute("aria-hidden", "false"); to.inert = false;
+      cur = i;
+      puntos();
+      setTimeout(function () { from.classList.remove("is-out"); busy = false; }, quieto ? 0 : 700);
     }
     function play() {
-      clearInterval(timer);
-      if (!box.hasAttribute("data-autoplay") || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
-      timer = setInterval(function () { if (!document.hidden) ir(cur + 1); }, 6000);
+      clearInterval(timer); timer = null;
+      if (box.hasAttribute("data-autoplay") && !quieto) timer = setInterval(function () { if (!document.hidden) ir(cur + 1, 1); }, CAR_MS);
+      puntos();
     }
+    function pausa() { clearInterval(timer); timer = null; dots.forEach(function (d) { d.classList.remove("run"); }); }
     box.addEventListener("click", function (e) {
       var d = e.target.closest("[data-car-dot]"), p = e.target.closest("[data-car-prev]"), nx = e.target.closest("[data-car-next]");
-      if (d) ir(+d.getAttribute("data-car-dot")); else if (p) ir(cur - 1); else if (nx) ir(cur + 1); else return;
+      if (d) ir(+d.getAttribute("data-car-dot")); else if (p) ir(cur - 1, -1); else if (nx) ir(cur + 1, 1); else return;
       e.preventDefault(); play();
     });
-    var t;
-    track.addEventListener("scroll", function () {             // al deslizar con el dedo, los puntos siguen
-      clearTimeout(t);
-      t = setTimeout(function () {
-        var w = track.clientWidth || 1, i = Math.round(track.scrollLeft / w);
-        if (i !== cur) { cur = i; dots.forEach(function (d, k) { d.classList.toggle("on", k === cur); }); }
-      }, 80);
-    }, { passive: true });
-    box.addEventListener("mouseenter", function () { clearInterval(timer); });
+    // Deslizar con el dedo (o arrastrar con el ratón en horizontal)
+    var x0 = null, y0 = 0, moved = false;
+    track.addEventListener("pointerdown", function (e) { if (e.pointerType === "mouse" && e.button) return; x0 = e.clientX; y0 = e.clientY; moved = false; }, { passive: true });
+    track.addEventListener("pointermove", function (e) { if (x0 !== null && Math.abs(e.clientX - x0) > 8) moved = true; }, { passive: true });
+    track.addEventListener("pointerup", function (e) {
+      if (x0 === null) return;
+      var dx = e.clientX - x0, dy = e.clientY - y0; x0 = null;
+      if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.2) { ir(cur + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1); play(); }
+    });
+    track.addEventListener("pointercancel", function () { x0 = null; });
+    track.addEventListener("dragstart", function (e) { e.preventDefault(); });   // que el enlace no se arrastre al deslizar
+    track.addEventListener("click", function (e) { if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; } }, true);
+    box.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowRight") { ir(cur + 1, 1); play(); } else if (e.key === "ArrowLeft") { ir(cur - 1, -1); play(); }
+    });
+    box.addEventListener("mouseenter", pausa);
     box.addEventListener("mouseleave", play);
+    box.addEventListener("focusin", pausa);
     play();
     limpiar.push(tuyo(box, function () { clearInterval(timer); }));
   });
@@ -1724,3 +1754,7 @@ function carruseles() {
     if (was && p.hidden) abrir(true);
   });
 })();
+// Al guardar la página para «atrás», el carrusel se deja listo para arrancar otra vez
+document.addEventListener("turbo:before-cache", function () {
+  document.querySelectorAll("[data-carousel][data-ready]").forEach(function (b) { b.removeAttribute("data-ready"); });
+});

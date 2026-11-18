@@ -3037,3 +3037,12 @@ def test_featured_open_badge_is_plain():
     assert "🔓" not in page
     if "Plazas abiertas" in page:
         assert 'class="eyebrow open"><i aria-hidden="true"></i>Plazas abiertas' in page
+
+
+def test_featured_carousel_markup():
+    """El carrusel del destacado trae lo que necesita la transición: pista, diapositivas, puntos y flechas."""
+    for i in range(3):
+        make_campaign(budget=5000 + i)
+    page = client_for("clipper@test.com").get("/campanas").get_data(as_text=True)
+    if page.count("fcar-slide") > 1:
+        assert "data-carousel" in page and "data-car-track" in page and "data-car-next" in page and "data-car-dot" in page
