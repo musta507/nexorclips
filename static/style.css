@@ -2533,3 +2533,6 @@ tr.row-link:hover{background:#fafafb}
   .fcar-fx .fcar-slide,.fcar-fx .fcar-slide .art,.fcar-fx .fcar-slide .info > *{transition:none!important;transform:none!important}
   .fcar-dot.on.run::after{animation:none}
 }
+/* Inicio: la tarjeta de «Clips de la semana» termina donde acaba la tabla (sin hueco abajo) */
+.hm-two{align-items:start}
+.hm-two > section > .hm-card{flex:none}
