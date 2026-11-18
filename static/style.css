@@ -2496,6 +2496,13 @@ tr.row-link:hover{background:#fafafb}
 .tl > a .seg-n{font-size:12px;color:var(--muted);font-weight:500}
 .tl > a.seg-alert b{background:var(--red);color:#fff;border-radius:999px;padding:0 6px;opacity:1}
 .tl > a svg{width:14px;height:14px}
-/* Vídeos virales: red y periodo en dos filas, para que no parezcan una sola barra */
-.vr-bar:has(> .tl){flex-direction:column;align-items:flex-start;gap:4px}
-.vr-bar > .tl{align-self:flex-start;max-width:100%}
+/* Filtros en chips (Vídeos virales y Cuentas TOP): botoncitos sueltos, el elegido en negro, sin animación (opción B) */
+.fchips-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fchips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.fchips > a{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;
+  color:var(--ink);font:500 14px/1 var(--display);white-space:nowrap;transition:background-color .15s,border-color .15s}
+.fchips > a:hover{border-color:#cfd0d6}
+.fchips > a.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.fchips > a svg{width:14px;height:14px}
+.fchips-sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+@media (max-width:640px){.fchips,.fchips-row{gap:6px}.fchips > a{padding:8px 12px;font-size:13px}.fchips-sep{display:none}}
