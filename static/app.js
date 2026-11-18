@@ -614,10 +614,8 @@ function iniciarChat() {
 // Dos capas: abajo, las pestañas en gris; arriba, una copia en blanco sobre negro que solo se ve a través de un
 // recorte con forma de pastilla. Lo único que se anima es ese recorte, así que el texto se lee siempre
 // (blanco donde está la pastilla, gris donde no) y la barra de verdad no se toca.
-// Si la barra se vuelve a pintar (otra página, un marco), la nueva sigue el movimiento desde donde iba la anterior.
+// Solo se anima en las pestañas de la misma página; las que llevan a otra página no se deslizan.
 var PILL_MS = 320;
-var pillPrev = {};                    // por barra: dónde estaba el recorte justo antes de volver a pintarse
-function pillKey(box) { return (box.getAttribute("aria-label") || "") + "|" + (box.classList.contains("sortbar") ? "s" : "g"); }
 function pillItems(box) { return box.querySelectorAll(":scope > a, :scope > button"); }
 function pillCambiaPagina(it) {
   var h = it.tagName === "A" ? (it.getAttribute("href") || "") : "";
@@ -630,15 +628,6 @@ function pillClip(box, pill, l, t, w, h, animate) {
   pill.style.clipPath = v;
   if (!animate) { void pill.offsetWidth; pill.style.transition = ""; }
   box._pillAt = { l: l, w: w, t: Date.now(), anim: !!animate };
-}
-// Dónde se ve el recorte ahora mismo (a mitad de animación, el punto intermedio)
-function pillAhora(box, pill) {
-  var m = /inset\(([^)]*?)(?: round|\))/.exec(getComputedStyle(pill).clipPath || "");
-  if (!m) return null;
-  var v = m[1].trim().split(/\s+/).map(parseFloat);          // el navegador abrevia: 1, 2, 3 o 4 valores
-  if (!v.length || v.some(isNaN)) return null;
-  var right = v.length > 1 ? v[1] : v[0], left = v.length > 3 ? v[3] : right;
-  return { l: left, w: Math.max(0, box.scrollWidth - left - right) };
 }
 function pillSync(box, target, animate) {
   var pill = box._pill;
@@ -680,25 +669,17 @@ function montarPastilla(box) {
   box.appendChild(pill);
   box._pill = pill;
   box.classList.add("has-pill");
-  var prev = pillPrev[pillKey(box)], cur = box.querySelector(":scope > .on");
-  if (prev && cur && Date.now() - prev.t < 900 && Math.abs(prev.l - cur.offsetLeft) > 2) {
-    // La barra anterior iba de camino: esta arranca donde aquella se quedó y termina el recorrido
-    pillSync(box, cur, false);
-    pillClip(box, pill, prev.l, cur.offsetTop, prev.w, cur.offsetHeight, false);
-    pillClip(box, pill, cur.offsetLeft, cur.offsetTop, cur.offsetWidth, cur.offsetHeight, true);
-  } else {
-    pillSync(box, cur, false);
-  }
-  delete pillPrev[pillKey(box)];
+  pillSync(box, box.querySelector(":scope > .on"), false);   // la pastilla aparece ya en su sitio, sin deslizarse
   if (box._pillBound) return;
   box._pillBound = true;
   box.addEventListener("click", function (e) {
     var it = e.target.closest("a, button");
     if (!it || it.parentNode !== box || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
-    if (!pillCambiaPagina(it)) {                 // pestañas de la misma página: la activa cambia aquí mismo
-      pillItems(box).forEach(function (x) { if (x !== it) { x.classList.remove("on"); x.removeAttribute("aria-current"); } });
-      it.classList.add("on");
-    }                                            // si cambia de página, la activa la trae la página nueva (así «atrás» cuadra)
+    // Si la pestaña cambia de página (cambia el enlace de arriba), no hay deslizamiento: la página nueva trae la
+    // pastilla ya en su sitio. Solo se desliza en las pestañas que cambian dentro de la misma página.
+    if (pillCambiaPagina(it)) return;
+    pillItems(box).forEach(function (x) { if (x !== it) { x.classList.remove("on"); x.removeAttribute("aria-current"); } });
+    it.classList.add("on");
     pillSync(box, it, true);
   });
   if (window.ResizeObserver) {                   // cambia el ancho (móvil girado, letra cargada, números nuevos): se recoloca
@@ -714,21 +695,10 @@ function montarPastilla(box) {
 function pastillaOrden() {
   document.querySelectorAll(".seg, .sortbar").forEach(montarPastilla);
 }
-// Justo antes de que Turbo guarde o cambie la página: se apunta por dónde iba cada pastilla y se deja la barra
-// como la manda el servidor (la copia que Turbo guarda para «atrás» queda bien)
-function pillGuardar() {
-  document.querySelectorAll(".seg.has-pill, .sortbar.has-pill").forEach(function (box) {
-    if (!box._pill) return;
-    var k = pillKey(box), now = pillAhora(box, box._pill);
-    if (now && !(pillPrev[k] && Date.now() - pillPrev[k].t < 120)) pillPrev[k] = { l: now.l, w: now.w, t: Date.now() };
-  });
-}
+// La copia que Turbo guarda para «atrás» queda como la manda el servidor
 document.addEventListener("turbo:before-cache", function () {
-  pillGuardar();
   document.querySelectorAll(".seg.has-pill, .sortbar.has-pill").forEach(function (box) { if (box._pill) pillSync(box, null, false); });
 });
-document.addEventListener("turbo:before-render", pillGuardar);
-document.addEventListener("turbo:before-frame-render", pillGuardar);
 document.addEventListener("turbo:render", pastillaOrden);          // antes de que se pinte: sin un fotograma sin pastilla
 document.addEventListener("turbo:frame-render", pastillaOrden);
 

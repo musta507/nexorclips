@@ -51,7 +51,7 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 - **Gasto de Apify.** Tope diario (`apify_daily_max`, 800 resultados). Clips de más de 14 días se leen cada 3 días. Cuentas paradas se miran un día a la semana. Si yt-dlp falla, como mucho 40 cuentas al día pasan a Apify. No quitar estos límites sin avisar del coste.
 - **yt-dlp** busca los clips de TikTok y YouTube y, si el listado trae las vistas, se usan en vez de pedirlas a Apify (ajuste `ytdlp_stats`). Instagram va entero por Apify.
 - **Cifras guardadas unos segundos** (`ttl_cache`): totales de campaña, ranking, contador de revisión. Nunca guardar ahí el dinero de un clipper ni filas de la base de datos.
-- **Barras de pestañas con pastilla** (`.seg`, `.sortbar` en `app.js`): dos capas de texto y un recorte animado. Las pestañas que cambian de página no tocan la clase `.on`; la trae la página nueva.
+- **Barras de pestañas con pastilla** (`.seg`, `.sortbar` en `app.js`): dos capas de texto y un recorte animado. Solo se desliza en las pestañas de la misma página; las que cambian de página (cambia el enlace) no se animan ni tocan la clase `.on`: la página nueva trae la pastilla ya en su sitio. Mustapha lo pidió así porque la animación fallaba al cambiar de página.
 - **Avisos al móvil:** apagados para todos (`CLIPPER_PUSH`, `PHONE_ALERTS`). Los avisos van a la campanita y al Panel técnico.
 - **Bunny:** las copias de vídeo se hacen clip a clip y en segundo plano.
 - **Panel de admin:** menú por grupos en `base.html`; buscador en `/admin/buscar`; el Panel técnico va por pestañas (`data-hash-tabs`) y los botones vuelven a su pestaña con `_anchor`.
