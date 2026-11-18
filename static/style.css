@@ -2536,3 +2536,74 @@ tr.row-link:hover{background:#fafafb}
 /* Inicio: la tarjeta de «Clips de la semana» termina donde acaba la tabla (sin hueco abajo) */
 .hm-two{align-items:start}
 .hm-two > section > .hm-card{flex:none}
+/* ===== Tablas sin desplazamiento horizontal =====
+   Ninguna tabla se desliza de lado: si no cabe, se esconden primero las columnas menos importantes
+   (según el ancho que tiene la tabla, no la pantalla) y en el móvil cada fila pasa a ser una tarjeta. */
+table{min-width:0}
+.table-scroll{container-type:inline-size;container-name:tbl;overflow-x:visible}
+@media (min-width:641px){
+  /* Clippers (panel): Clipper | Última vez | Cuentas | Cobra por | Clips | Ganado | Pagado | Disponible | botón */
+  @container tbl (max-width:1040px){#clippers-table :is(th,td):nth-child(4){display:none}}
+  @container tbl (max-width:900px){#clippers-table :is(th,td):nth-child(7){display:none}}
+  @container tbl (max-width:780px){#clippers-table :is(th,td):nth-child(2){display:none}}
+  @container tbl (max-width:680px){#clippers-table :is(th,td):nth-child(3){display:none}}
+  /* Clippers de una campaña: Clipper | Cuentas | Clips | Vistas | Ganado | Último clip | Última vez | botón */
+  @container tbl (max-width:940px){#camp-clippers :is(th,td):nth-child(6){display:none}}
+  @container tbl (max-width:840px){#camp-clippers :is(th,td):nth-child(7){display:none}}
+  @container tbl (max-width:720px){#camp-clippers :is(th,td):nth-child(4){display:none}}
+  /* Campañas (panel): Campaña | Estado | Pago / 1.000 | Repartido | Vistas | Clips | botón */
+  @container tbl (max-width:760px){.adm-camps-t :is(th,td):nth-child(3){display:none}}
+  @container tbl (max-width:660px){.adm-camps-t :is(th,td):nth-child(6){display:none}}
+  /* Mis clips: Clip | Estado | Vistas | Ganado | Avisos | Actualizado | menú */
+  @container tbl (max-width:860px){.mc-table :is(th,td):nth-child(6){display:none}}
+  @container tbl (max-width:740px){.mc-table :is(th,td):nth-child(5){display:none}}
+  .mc-table td:first-child{max-width:0;width:40%}
+  .mc-table td:first-child :is(b,.small,a,span){overflow:hidden;text-overflow:ellipsis}
+}
+/* Barra de arriba entre tablet y PC pequeño: las secciones caben sin empujar la foto fuera */
+@media (min-width:641px) and (max-width:1000px){
+  .tab{padding:9px 12px;gap:6px}
+  .tab svg{display:none}
+}
+/* Títulos de clip largos dentro de tablas: se cortan con «…» en vez de ensanchar la tabla */
+@media (min-width:641px){
+  td:has(> .mc-clip){max-width:0;width:44%}
+  .mc-clip{min-width:0}
+  .mc-ct{min-width:0;overflow:hidden}
+  .mc-ct b,.mc-ct small,.mc-ct a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Clippers (panel): un poco más justos */
+  #clippers-table .who-cell .small{max-width:170px}
+  @container tbl (max-width:880px){#clippers-table :is(th,td):nth-child(2){display:none}}
+  @container tbl (max-width:780px){#clippers-table :is(th,td):nth-child(3){display:none}}
+  /* Clips de la semana (inicio): la campaña se va si no cabe */
+  .hm-card{container-type:inline-size}
+  @container (max-width:600px){.hm-week :is(th,td):nth-child(3){display:none}}
+}
+/* Barra de arriba en pantallas medianas: sin el nombre junto al logo y pestañas más justas */
+@media (min-width:641px) and (max-width:820px){
+  .cp-name{display:none}
+  .tab{padding:8px 10px;font-size:13px}
+}
+@media (min-width:641px){
+  #camp-clippers td:first-child .who-cell b,#camp-clippers td:first-child .small{white-space:nowrap}
+  @container tbl (max-width:900px){#camp-clippers :is(th,td):nth-child(4){display:none}}
+}
+/* ===== Soporte a pantalla completa: la página no se mueve; solo se desplazan los mensajes dentro del chat ===== */
+body.page-support{height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+body.page-support > main{flex:1;min-height:0;display:flex;flex-direction:column;padding-bottom:24px}
+body.page-support > main > .page{flex:1;min-height:0;display:flex;flex-direction:column}
+body.page-support .chat-wrap{flex:1;min-height:0}
+body.page-support .chat{flex:1;min-height:0}
+body.page-support .chat-log{height:auto;flex:1;min-height:0}
+body.page-support .site-footer{display:none}
+@media (max-width:640px){body.page-support > main{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}}
+/* Preguntas sugeridas: en líneas, sin desplazarse de lado */
+.chat-sugg{flex-wrap:wrap;overflow:visible}
+@media (max-width:640px){
+  .chat-sugg .chip-q:nth-child(n+3){display:none}     /* en el móvil, solo dos preguntas sugeridas: el chat cabe entero */
+  body.page-support .section-head p{display:none}
+}
+@media (min-width:641px){@container tbl (max-width:640px){#camp-clippers :is(th,td):nth-child(3){display:none}}}
+body.page-support > main{flex:1 1 0}
+body.page-support > main > .page{padding-bottom:0;gap:16px}
+@media (max-width:640px){body.page-support > main > .page{padding-top:18px}body.page-support .chat-head{padding:12px 16px}}

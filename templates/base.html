@@ -7,7 +7,7 @@
 </head>
 {% set ep = request.endpoint or "" %}
 {% set admin_page = ep.startswith("admin_") and current_user.is_authenticated and current_user.is_admin %}
-<body class="{{ 'admin-shell' if admin_page else 'has-tabs' }}" data-notices="{{ url_for('notices') }}" data-unread="{{ note.unread }}" {% if current_user.is_authenticated and current_user.is_admin %}data-staff {% endif %}data-on-chat="{{ 1 if (request.endpoint or '') in ['support', 'admin_chat', 'admin_inbox'] else 0 }}">
+<body class="{{ 'admin-shell' if admin_page else 'has-tabs' }}{{ ' page-support' if ep == 'support' }}" data-notices="{{ url_for('notices') }}" data-unread="{{ note.unread }}" {% if current_user.is_authenticated and current_user.is_admin %}data-staff {% endif %}data-on-chat="{{ 1 if (request.endpoint or '') in ['support', 'admin_chat', 'admin_inbox'] else 0 }}">
   <a class="skip" href="#contenido">Saltar al contenido</a>
   <header class="topbar">
     <div class="wrap">

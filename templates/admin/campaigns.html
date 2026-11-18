@@ -13,7 +13,7 @@
 </nav>
 {% if cards|length > 6 %}<div class="mc-tools"><label class="cr-q mc-q">{{ icon("search") }}<input type="search" placeholder="Buscar campaña o creador" aria-label="Buscar campaña" data-live-search="#camp-rows"></label></div>{% endif %}
 <div class="table-card">
-  <div class="table-scroll"><table class="rt">
+  <div class="table-scroll"><table class="rt adm-camps-t">
     <thead><tr><th>Campaña</th><th>Estado</th><th class="r">Pago / 1.000</th><th>Repartido</th><th class="r">Vistas</th><th class="r">Clips</th><th></th></tr></thead>
     <tbody id="camp-rows">
     {% for c, st in cards %}
