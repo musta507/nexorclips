@@ -522,9 +522,10 @@ function graficas() {
 }
 
 // Chat de soporte
-function iniciarChat() {
-  var chat = document.querySelector("[data-chat]");
+function iniciarChat(chat) {
+  chat = chat || document.querySelector("main [data-chat]");
   if (!chat || chat.dataset.ready) return;
+  var enVentanita = !!chat.closest("#chat-pop");      // el chat pequeño sigue abierto al cambiar de página
   chat.dataset.ready = "1";
   var log = chat.querySelector(".chat-log");
   var form = chat.querySelector("[data-chat-form]");
@@ -544,7 +545,7 @@ function iniciarChat() {
   function scrollDown() { log.scrollTop = log.scrollHeight; }
   function add(m) {
     if (log.querySelector('[data-id="' + m.id + '"]')) return;
-    var empty = document.getElementById("chat-empty");
+    var empty = chat.querySelector(".chat-empty");
     if (empty) empty.remove();
     var row = document.createElement("div");
     row.className = "msg " + (m.mine ? "mine" : "theirs") + (m.agent ? " agent" : "");
@@ -573,7 +574,7 @@ function iniciarChat() {
     scrollDown();
   }
   function poll() {
-    if (document.hidden || !document.body.contains(chat)) return;
+    if (document.hidden || !document.body.contains(chat) || chat.closest("[hidden]")) return;
     fetch(chat.getAttribute("data-poll") + "?after=" + after, { headers: { "X-Requested-With": "fetch" }, credentials: "same-origin" })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) { if (d) d.messages.forEach(add); })
@@ -607,7 +608,9 @@ function iniciarChat() {
   var timer = setInterval(poll, 8000);
   var onVisible = function () { if (!document.hidden) poll(); };
   document.addEventListener("visibilitychange", onVisible);
-  limpiar.push(tuyo(chat, function () { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); }));
+  if (!enVentanita) limpiar.push(tuyo(chat, function () { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); }));
+  chat._poll = poll;
+  chat._scroll = scrollDown;
 }
 
 // =============================================================== barras de pestañas con pastilla que se desliza
@@ -1525,7 +1528,7 @@ function ajustes() {
 document.addEventListener("click", function (e) {
   var b = e.target.closest("[data-sugg]");
   if (!b) return;
-  var ta = document.getElementById("chat-body");
+  var c = b.closest("[data-chat]"), ta = c && c.querySelector("textarea");
   if (!ta) return;
   ta.value = b.getAttribute("data-sugg");
   ta.focus();
@@ -1666,3 +1669,58 @@ function carruseles() {
     limpiar.push(tuyo(box, function () { clearInterval(timer); }));
   });
 }
+
+// =============================================================== Chat de soporte en una ventanita (como los asistentes de otras webs)
+// El botón flotante abre un panel pequeño con la conversación; arriba hay un botón discreto para verla a pantalla completa.
+// El panel se queda abierto al cambiar de página (data-turbo-permanent).
+(function () {
+  function pop() { return document.getElementById("chat-pop"); }
+  function fab() { return document.getElementById("chat-fab"); }
+  function cargar(p) {
+    var body = p.querySelector("[data-cp-body]");
+    if (!body || body.dataset.loaded === "1" || body.dataset.loaded === "…") return;
+    body.dataset.loaded = "…";
+    fetch(body.getAttribute("data-src"), { headers: { "X-Requested-With": "fetch" }, credentials: "same-origin" })
+      .then(function (r) { if (!r.ok) throw r; return r.text(); })
+      .then(function (html) {
+        body.innerHTML = html; body.dataset.loaded = "1";
+        var chat = body.querySelector("[data-chat]");
+        iniciarChat(chat);
+        if (chat && chat._scroll) chat._scroll();
+        var ta = body.querySelector("textarea"); if (ta && window.matchMedia("(min-width:641px)").matches) ta.focus();
+      })
+      .catch(function () { body.dataset.loaded = ""; body.innerHTML = '<p class="cp-err">No se ha podido abrir el chat. <a class="link" href="' + (pop().getAttribute("data-full") || "/soporte") + '">Abrirlo aquí</a></p>'; });
+  }
+  function abrir(on) {
+    var p = pop(), f = fab();
+    if (!p) return false;
+    p.hidden = !on;
+    if (f) { f.classList.toggle("open", on); f.setAttribute("aria-expanded", on ? "true" : "false"); }
+    if (on) {
+      cargar(p);
+      var chat = p.querySelector("[data-chat]");
+      if (chat && chat._poll) { chat._poll(); if (chat._scroll) chat._scroll(); }
+      var n = document.getElementById("fab-count"); if (n) n.hidden = true;
+      if (f) f.classList.remove("has-unread");
+    }
+    try { sessionStorage.setItem("chatPop", on ? "1" : ""); } catch (e) {}
+    return true;
+  }
+  document.addEventListener("click", function (e) {
+    var f = e.target.closest("#chat-fab");
+    if (f && !e.metaKey && !e.ctrlKey && !e.shiftKey && pop()) { e.preventDefault(); abrir(pop().hidden); return; }
+    if (e.target.closest("[data-cp-close]")) { e.preventDefault(); abrir(false); if (fab()) fab().focus(); }
+    if (e.target.closest("[data-cp-full]")) abrir(false);    // a pantalla completa: la ventanita se cierra (y no vuelve al ir atrás)
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && pop() && !pop().hidden) { abrir(false); if (fab()) fab().focus(); }
+  });
+  // Al recargar la página, si estaba abierto, se vuelve a abrir
+  document.addEventListener("turbo:load", function () {
+    var p = pop();
+    if (!p) return;
+    if (fab()) { fab().classList.toggle("open", !p.hidden); fab().setAttribute("aria-expanded", p.hidden ? "false" : "true"); }
+    var was = ""; try { was = sessionStorage.getItem("chatPop") || ""; } catch (e) {}
+    if (was && p.hidden) abrir(true);
+  });
+})();

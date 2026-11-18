@@ -3015,3 +3015,25 @@ def test_legal_pages_cover_connected_networks():
         assert txt in priv
     assert "youtube.com/t/terms" in c.get("/terminos").get_data(as_text=True)
     assert c.get("/eliminar-datos").status_code == 200
+
+
+def test_support_chat_popup():
+    """El botón flotante abre una ventanita con el chat; la conversación se carga sola y se puede abrir a pantalla completa."""
+    make_campaign(budget=5000)
+    c = client_for("clipper@test.com")
+    page = c.get("/campanas").get_data(as_text=True)
+    assert 'id="chat-pop"' in page and 'data-src="/soporte/mini"' in page and 'data-cp-full' in page and 'href="/soporte"' in page
+    post(c, "/soporte", body="Hola desde la ventanita")
+    mini = c.get("/soporte/mini").get_data(as_text=True)
+    assert "Hola desde la ventanita" in mini and "data-chat" in mini and "<html" not in mini
+    assert 'id="chat-pop"' not in c.get("/soporte").get_data(as_text=True)      # en la página del chat no hace falta
+    assert A.app.test_client().get("/soporte/mini").status_code in (302, 401)
+
+
+def test_featured_open_badge_is_plain():
+    """«Plazas abiertas» del destacado: sin emoji y con «Nueva» aparte."""
+    make_campaign(budget=5000)
+    page = client_for("clipper@test.com").get("/campanas").get_data(as_text=True)
+    assert "🔓" not in page
+    if "Plazas abiertas" in page:
+        assert 'class="eyebrow open"><i aria-hidden="true"></i>Plazas abiertas' in page

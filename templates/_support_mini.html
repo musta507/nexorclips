@@ -1,0 +1,10 @@
+{# Chat de soporte dentro de la ventanita del botón flotante (se carga al abrirla) #}
+<div class="cp-hello">
+  <span class="team-avs" aria-hidden="true">{% for t in team %}<span class="avatar">{% if t.avatar %}<img src="{{ t.avatar }}" alt="" referrerpolicy="no-referrer">{% else %}{{ t.initial }}{% endif %}</span>{% else %}<span class="avatar team"><span class="logo-mark"></span></span>{% endfor %}<i class="team-on"></i></span>
+  <div><b>{% if team %}{% for t in team %}{{ t.name }}{{ " y " if loop.revindex == 2 else (", " if not loop.last) }}{% endfor %}{% else %}Equipo de {{ APP_NAME }}{% endif %}</b>
+    <span class="small muted">Solemos responder en menos de 24 horas</span></div>
+</div>
+{% with viewer_admin=false, post_url=url_for('support'), poll_url=url_for('support_poll'),
+        empty_text="¿En qué podemos ayudarte? Escríbenos o elige una pregunta." %}
+  {% include "_chat.html" %}
+{% endwith %}

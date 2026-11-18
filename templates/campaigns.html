@@ -23,7 +23,7 @@
     <a class="f-link" href="{{ url_for('campaign', cid=c.id) }}" aria-label="Ver la campaña {{ c.song }}"></a>
     <div class="art"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 720) }}" alt="Portada de {{ c.song }}" width="330" height="330"{% if loop.first %} fetchpriority="high"{% else %} loading="lazy"{% endif %} decoding="async">{% else %}<span class="cover-fallback">{{ c.song[:1] }}</span>{% endif %}</div>
     <div class="info">
-      {% if not c.full and not st.exhausted %}<span class="eyebrow open">🔓 Plazas abiertas{% if why == 'nueva' %} · Nueva{% endif %}</span>{% else %}<span class="eyebrow">Campaña destacada</span>{% endif %}
+      {% if not c.full and not st.exhausted %}<span class="eyebrow open"><i aria-hidden="true"></i>Plazas abiertas{% if why == 'nueva' %}<span class="eb-new">Nueva</span>{% endif %}</span>{% else %}<span class="eyebrow">Campaña destacada</span>{% endif %}
       <div>
         <h2>{{ c.song }} {{ icon("check") }}</h2>
         <p class="artist">{{ c.artist }}</p>

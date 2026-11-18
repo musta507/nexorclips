@@ -2449,3 +2449,43 @@ tr.row-link:hover{background:#fafafb}
 .tl .cn-n{margin-left:0}
 .cn-tabs.tl{margin-bottom:18px}
 @media (max-width:640px){.tl{gap:20px}.tl > a{font-size:14px}}
+/* Destacado: «Plazas abiertas» sobria (punto verde que late, texto blanco, «Nueva» aparte) */
+.featured .eyebrow.open{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);color:#fff;
+  border:1px solid rgba(255,255,255,.14);box-shadow:none;font:600 13px/1 var(--font);letter-spacing:0;padding:7px 12px 7px 10px;border-radius:999px}
+.featured .eyebrow.open > i{width:8px;height:8px;border-radius:50%;background:var(--pop);box-shadow:0 0 0 0 rgba(46,232,143,.55);animation:eb-live 2s ease-out infinite}
+.featured .eyebrow.open .eb-new{margin-left:2px;padding-left:9px;border-left:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.65);font-weight:500}
+@keyframes eb-live{0%{box-shadow:0 0 0 0 rgba(46,232,143,.55)}70%{box-shadow:0 0 0 7px rgba(46,232,143,0)}100%{box-shadow:0 0 0 0 rgba(46,232,143,0)}}
+@media (prefers-reduced-motion:reduce){.featured .eyebrow.open > i{animation:none}}
+/* ===== Chat de soporte en ventanita ===== */
+.chat-pop{position:fixed;right:max(20px,env(safe-area-inset-right,0px));bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:41;
+  width:380px;height:min(600px,calc(100dvh - 160px));display:flex;flex-direction:column;background:#fff;border-radius:22px;overflow:hidden;
+  box-shadow:0 1px 2px rgba(16,24,40,.06),0 18px 50px rgba(16,24,40,.18);border:1px solid var(--line);transform-origin:bottom right;animation:cp-in .18s ease-out}
+.chat-pop[hidden]{display:none}
+@keyframes cp-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+.cp-bar{display:grid;grid-template-columns:36px 1fr 36px;align-items:center;padding:10px 10px 8px;border-bottom:1px solid var(--line)}
+.cp-title{text-align:center;font:600 15px var(--display)}
+.cp-ic{width:34px;height:34px;display:grid;place-items:center;border:0;background:transparent;border-radius:10px;color:var(--muted);cursor:pointer;transition:background-color .15s,color .15s}
+.cp-ic:hover{background:var(--soft);color:var(--ink)}
+.cp-ic svg{width:17px;height:17px}
+.cp-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.cp-hello{display:flex;align-items:center;gap:12px;padding:14px 16px 12px}
+.cp-hello > div{display:flex;flex-direction:column;min-width:0}
+.cp-hello b{font-size:14px}
+.chat-pop .chat{flex:1;min-height:0}
+.chat-pop .chat-log{height:auto;flex:1;min-height:0;padding:14px 16px;border-top:1px solid var(--line)}
+.chat-pop .chat-sugg{padding:10px 12px 0}
+.chat-pop .chat-form{padding:10px 12px 12px}
+.chat-pop .chat-empty{margin:auto 0;text-align:center}
+.cp-load{margin:auto;display:flex;gap:6px}
+.cp-load span{width:7px;height:7px;border-radius:50%;background:var(--soft-2);animation:cp-dot 1s infinite ease-in-out}
+.cp-load span:nth-child(2){animation-delay:.15s}.cp-load span:nth-child(3){animation-delay:.3s}
+@keyframes cp-dot{0%,80%,100%{opacity:.4;transform:scale(.8)}40%{opacity:1;transform:none}}
+.cp-err{margin:auto;padding:20px;text-align:center;color:var(--muted);font-size:14px}
+.chat-fab .fab-down{display:none;width:20px;height:20px}
+.chat-fab.open{padding:14px;animation:none}
+.chat-fab.open > svg:first-child,.chat-fab.open > span{display:none!important}
+.chat-fab.open .fab-down{display:block}
+@media (max-width:640px){
+  .chat-pop{left:10px;right:10px;width:auto;top:calc(70px + env(safe-area-inset-top,0px));bottom:calc(146px + env(safe-area-inset-bottom,0px));height:auto}
+}
+@media (prefers-reduced-motion:reduce){.chat-pop{animation:none}}

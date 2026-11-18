@@ -8962,6 +8962,16 @@ def support():
                            suggestions=SUPPORT_SUGGESTIONS)
 
 
+@app.route("/soporte/mini")
+@login_required
+def support_mini():
+    """La conversación de soporte sola, para la ventanita del botón flotante."""
+    msgs = conversation(current_user.id)
+    mark_read(current_user.id, by_admin=False)
+    return render_template("_support_mini.html", msgs=msgs, prefill="", team=support_team(), agent_info=agent_info,
+                           suggestions=SUPPORT_SUGGESTIONS)
+
+
 SUPPORT_SUGGESTIONS = ["¿Cuándo puedo retirar mi dinero?", "¿Por qué han rechazado mi clip?", "No me aparece un clip que he subido",
                        "¿Cómo verifico mi cuenta con el código?", "Tengo un problema con Whop"]
 
