@@ -2943,3 +2943,75 @@ def test_my_clips_has_no_audience_panel():
         email = A.User.query.join(A.Submission).filter(A.User.is_admin.is_(False)).first().email
     page = client_for(email).get("/mis-clips").get_data(as_text=True)
     assert "Mis clips" in page and "Ubicación" not in page and "aud-" not in page
+
+
+def test_admin_menu_groups_and_search():
+    """El menú del panel va por grupos, «Revisar clips» tiene enlace propio y el buscador encuentra clippers y campañas."""
+    make_campaign(budget=5000)
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/ajustes/demo", accion="cargar")
+    page = admin.get("/admin").get_data(as_text=True)
+    for txt in ("Por hacer", "Comunidad", "Sistema", "Revisar clips", 'action="/admin/buscar"'):
+        assert txt in page
+    with A.app.app_context():
+        u = A.User.query.filter(A.User.is_admin.is_(False)).first()
+        uid, name = u.id, u.name
+        acc = A.CampaignAccount.query.first()
+        handle, acc_uid = acc.handle, acc.user_id
+    r = admin.get("/admin/buscar?q=" + name.split()[0])
+    assert r.status_code in (200, 302)
+    if r.status_code == 200:
+        assert name in r.get_data(as_text=True)
+    r = admin.get("/admin/buscar?q=@" + handle)                  # una cuenta exacta: directo a la ficha de su dueño
+    assert r.status_code == 302 and r.headers["Location"].endswith(f"/admin/clipper/{acc_uid}")
+    assert "Sin resultados" in admin.get("/admin/buscar?q=zzzzqqqq").get_data(as_text=True)
+    assert admin.get("/admin/buscar").status_code == 200
+    with A.app.app_context():
+        email = A.db.session.get(A.User, uid).email
+    assert client_for(email).get("/admin/buscar?q=a").status_code == 403
+
+
+def test_tech_panel_tabs_and_api_guide():
+    """El Panel técnico va por pestañas y la de APIs trae la guía con las direcciones que piden las redes."""
+    page = client_for("admin@test.com").get("/admin/ajustes").get_data(as_text=True)
+    for tab in ("estado", "lectura", "videos", "apis", "pagos", "datos"):
+        assert f'data-tab="{tab}"' in page and f'id="{tab}"' in page
+    for txt in ("/conectar/tiktok/vuelta", "/conectar/instagram/vuelta", "/conectar/youtube/vuelta", "/meta/borrar-datos",
+                "/privacidad", "/eliminar-datos", "user.info.stats", "instagram_business_manage_insights", "yt-analytics.readonly"):
+        assert txt in page
+    assert "Avisos al móvil sin activar" not in page             # los avisos al móvil están apagados: no se reclama su clave
+
+
+def test_domain_verification_for_api_reviews():
+    """Los códigos de verificación de Google, Meta y TikTok se guardan en el panel y se sirven donde las redes los buscan."""
+    admin = client_for("admin@test.com")
+    assert admin.get("/tiktokAbC12345.txt").status_code == 404
+    assert "google-site-verification" not in admin.get("/privacidad").get_data(as_text=True)
+    post(admin, "/admin/ajustes/verificacion", google='<meta name="google-site-verification" content="g00gleC0de_123-xyz" />',
+         meta="metacode123456", google_file="google1a2b3c4d5e6f7a8b.html",
+         tiktok_file="tiktokAbC12345.txt", tiktok_body="tiktok-developers-site-verification=AbC12345")
+    home = A.app.test_client().get("/").get_data(as_text=True)
+    assert '<meta name="google-site-verification" content="g00gleC0de_123-xyz">' in home
+    assert '<meta name="facebook-domain-verification" content="metacode123456">' in home
+    r = A.app.test_client().get("/tiktokAbC12345.txt")
+    assert r.status_code == 200 and r.get_data(as_text=True) == "tiktok-developers-site-verification=AbC12345"
+    assert A.app.test_client().get("/tiktokOtro9999.txt").status_code == 404
+    r = A.app.test_client().get("/google1a2b3c4d5e6f7a8b.html")
+    assert r.status_code == 200 and r.get_data(as_text=True) == "google-site-verification: google1a2b3c4d5e6f7a8b.html"
+    post(admin, "/admin/ajustes/verificacion", google='"><script>alert(1)</script>', meta="", tiktok_file="../../etc/passwd", tiktok_body="x")
+    home = A.app.test_client().get("/").get_data(as_text=True)                # lo que no es un código se descarta entero
+    assert "google-site-verification" not in home and "<script>alert(1)" not in home
+    assert A.app.test_client().get("/tiktokAbC12345.txt").status_code == 404
+
+
+def test_legal_pages_cover_connected_networks():
+    """Lo que revisan TikTok, Meta y Google: portada pública con enlaces legales y política con el apartado de sus datos."""
+    c = A.app.test_client()
+    home = c.get("/").get_data(as_text=True)
+    assert 'href="/terminos"' in home and 'href="/privacidad"' in home
+    priv = c.get("/privacidad").get_data(as_text=True)
+    for txt in ("Datos de TikTok, Instagram y YouTube", "youtube.com/t/terms", "policies.google.com/privacy",
+                "api-services-user-data-policy", "myaccount.google.com/permissions", "/eliminar-datos"):
+        assert txt in priv
+    assert "youtube.com/t/terms" in c.get("/terminos").get_data(as_text=True)
+    assert c.get("/eliminar-datos").status_code == 200

@@ -3187,8 +3187,8 @@ def unhandled_error(e):
 ROLE_ENDPOINTS = {
     "reviewer": {"admin_home", "admin_clips", "admin_requests", "admin_review", "admin_review_bulk", "admin_campaign_member",
                  "admin_campaign_review", "admin_campaign_requests", "admin_campaign_clippers",
-                 "admin_campaign_account", "admin_campaign", "admin_campaigns", "admin_clipper"},
-    "support": {"admin_home", "admin_inbox", "admin_chat", "admin_chat_poll", "admin_clipper"},
+                 "admin_campaign_account", "admin_campaign", "admin_campaigns", "admin_clipper", "admin_find"},
+    "support": {"admin_home", "admin_inbox", "admin_chat", "admin_chat_poll", "admin_clipper", "admin_find"},
 }
 
 
@@ -3348,7 +3348,7 @@ def static_url(filename):
 
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": csrf_token, "admin_can": admin_can, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
+    return {"csrf_token": csrf_token, "admin_can": admin_can, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
@@ -4948,6 +4948,7 @@ def _admin_counts():
         "messages": int(msg or 0),
         "leads": int(leads or 0),
         "creators_alert": 0,
+        "support": sup,
         "camps": req + clips + accs + sup,
         "tech": tech_alert_count(),
     }
@@ -5883,6 +5884,9 @@ def admin_settings(app_test=None):
              "bad": ApiToken.query.filter_by(platform=p).filter(ApiToken.status != "ok").count()} for p in ("tiktok", "instagram", "youtube")]
     api_info = {"mode": api_mode(), "modes": API_MODES, "apis": apis, "deletion": base + url_for("data_deletion_page"),
                 "meta_deletion": base + url_for("meta_data_deletion"), "privacy": base + url_for("privacy"), "terms": base + url_for("terms")}
+    host = urlparse(base).hostname or ""
+    api_info.update(base=base, host=host, https=base.startswith("https://"), own_domain=not host.endswith(("railway.app", "localhost")) and host != "127.0.0.1",
+                    support_email=SUPPORT_EMAIL, verify=site_verify())
     return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"), allow_wipe=ALLOW_WIPE,
                            api_info=api_info, bunny_info=bunny_info(), search=search_info(), bunny_report=bunny_report(),
                            alerts=tech_alerts(), creators_on=CREATORS_ENABLED, tech_set=bool(TECH_EMAILS),
@@ -5942,7 +5946,7 @@ def admin_search(accion):
         flash("Registro de Apify vaciado.", "ok")
     else:
         abort(404)
-    return redirect(url_for("admin_settings", _anchor="ytdlp"))
+    return redirect(url_for("admin_settings", _anchor="lectura"))
 
 
 @app.route("/admin/bunny/<accion>", methods=["POST"])
@@ -5984,7 +5988,7 @@ def admin_bunny(accion):
                 flash("Copiando en segundo plano: recarga esta página en un minuto para ver el resultado.", "ok")
     else:
         abort(404)
-    return redirect(url_for("admin_settings", _anchor="bunny"))
+    return redirect(url_for("admin_settings", _anchor="videos"))
 
 
 @app.route("/admin/ajustes/apis", methods=["POST"])
@@ -6000,6 +6004,73 @@ def admin_api_mode():
     db.session.commit()
     flash(f"APIs oficiales: {API_MODES[mode]}.", "ok")
     return redirect(url_for("admin_settings", _anchor="apis"))
+
+
+# ---- Verificación del dominio que piden Google, Meta y TikTok al solicitar sus APIs
+_VERIFY_CODE = re.compile(r"[A-Za-z0-9_-]{6,120}")
+
+
+def _verify_code(raw):
+    """Acepta el código suelto o la etiqueta <meta …> entera pegada tal cual; devuelve solo el código."""
+    raw = (raw or "").strip()
+    m = re.search(r'content\s*=\s*["\']([^"\']+)["\']', raw)
+    code = (m.group(1) if m else raw).strip()
+    return code if _VERIFY_CODE.fullmatch(code) else ""
+
+
+def site_verify():
+    """Códigos de verificación del dominio guardados en el Panel técnico (se leen una vez cada pocos minutos)."""
+    def read():
+        try:
+            return json.loads(get_setting("site_verify", "") or "{}")
+        except ValueError:
+            return {}
+    return ttl_cache("site_verify", 60, read)
+
+
+@app.route("/admin/ajustes/verificacion", methods=["POST"])
+@admin_required
+def admin_site_verify():
+    if not is_tech():
+        abort(403)
+    f = request.form
+    tk_name = re.sub(r"\.txt$", "", (f.get("tiktok_file") or "").strip().rsplit("/", 1)[-1])
+    tk_name = tk_name if re.fullmatch(r"tiktok[A-Za-z0-9_-]{4,80}", tk_name) else ""
+    tk_body = (f.get("tiktok_body") or "").strip()[:300]
+    if not re.fullmatch(r"[A-Za-z0-9_=. -]{6,300}", tk_body):
+        tk_body = ""
+    g_file = re.sub(r"\.html$", "", (f.get("google_file") or "").strip().rsplit("/", 1)[-1])
+    data = {"google": _verify_code(f.get("google")), "meta": _verify_code(f.get("meta")),
+            "google_file": g_file if re.fullmatch(r"google[a-f0-9]{8,40}", g_file) else "",
+            "tiktok_file": tk_name if tk_body else "", "tiktok_body": tk_body if tk_name else ""}
+    set_setting("site_verify", json.dumps(data))
+    _ttl.pop("site_verify", None)
+    audit("verificacion_dominio", ", ".join(k for k, v in data.items() if v) or "vacío")
+    db.session.commit()
+    bad = [n for n, k in (("Google", "google"), ("Meta", "meta")) if (f.get(k) or "").strip() and not data[k]]
+    if (f.get("tiktok_file") or f.get("tiktok_body") or "").strip() and not data["tiktok_file"]:
+        bad.append("TikTok")
+    if bad:
+        flash("No he podido leer el código de " + ", ".join(bad) + ". Pégalo tal cual te lo da la red.", "error")
+    else:
+        flash("Verificación del dominio guardada. Ya puedes pulsar «Verificar» en la red.", "ok")
+    return redirect(url_for("admin_settings", _anchor="apis"))
+
+
+@app.route("/tiktok<code>.txt")
+def tiktok_verify_file(code):
+    v = site_verify()
+    if not v.get("tiktok_file") or v["tiktok_file"] != "tiktok" + code:
+        abort(404)
+    return Response(v.get("tiktok_body", ""), mimetype="text/plain")
+
+
+@app.route("/google<code>.html")
+def google_verify_file(code):
+    v = site_verify()
+    if not v.get("google_file") or v["google_file"] != "google" + code:
+        abort(404)
+    return Response(f"google-site-verification: google{code}.html", mimetype="text/html")
 
 
 DEMO_NAMES = ["Lucía Fernández", "Mateo Rodríguez", "Valentina Gómez", "Hugo Martín", "Camila Torres", "Leo Sánchez",
@@ -6399,7 +6470,7 @@ def admin_my_demo():
         audit("mi_demo_cargada", msg)
         db.session.commit()
         flash(msg, "ok")
-    return redirect(url_for("admin_settings"))
+    return redirect(url_for("admin_settings", _anchor="datos"))
 
 
 @app.route("/admin/ajustes/demo", methods=["POST"])
@@ -6418,7 +6489,7 @@ def admin_demo():
             audit("demo_cargada", msg)
             db.session.commit()
             flash(msg, "ok")
-    return redirect(url_for("admin_settings"))
+    return redirect(url_for("admin_settings", _anchor="datos"))
 
 
 def owed_total():
@@ -6481,8 +6552,8 @@ def tech_alerts():
     failed = Payout.query.filter(Payout.error != "", Payout.created_at >= datetime.utcnow() - timedelta(days=7)).count()
     if failed:
         out.append(("aviso", f"{failed} pagos de Whop fallidos esta semana", "El motivo está en Retiros → «Últimos pagos que Whop no pudo enviar»."))
-    if not VAPID_PUBLIC_KEY:
-        out.append(("aviso", "Avisos al móvil sin activar", "Genera la clave de avisos abajo y ponla en Railway."))
+    if not VAPID_PUBLIC_KEY and CLIPPER_PUSH:
+        out.append(("aviso", "Avisos al móvil sin activar", "Falta la clave de avisos en Railway."))
     if not bunny_ready():
         out.append(("aviso", "Vídeos sin activar (Bunny)", "Faltan BUNNY_LIBRARY_ID y BUNNY_API_KEY: la formación y la vista previa de los clips usan el reproductor de cada red."))
     if not TECH_EMAILS:
@@ -6503,13 +6574,13 @@ def admin_whop_app_test():
     """Prueba de la opción 2: pagar con la clave de la APP desde el saldo de la empresa del creador que la instaló."""
     if not WHOP_APP_API_KEY:
         flash("Falta WHOP_APP_API_KEY en las variables de Railway.", "error")
-        return redirect(url_for("admin_settings"))
+        return redirect(url_for("admin_settings", _anchor="pagos"))
     biz = (request.form.get("company") or "").strip()
     username = (request.form.get("username") or "").strip().lstrip("@")
     amount = parse_float(request.form.get("amount"), 0) or 0
     if not biz.startswith("biz_") or not re.fullmatch(r"[A-Za-z0-9_.-]{1,60}", username) or not (0 < amount <= 5):
         flash("Pon el código biz_ de la empresa, un usuario de Whop y una cantidad entre 0,01 y 5 $.", "error")
-        return redirect(url_for("admin_settings"))
+        return redirect(url_for("admin_settings", _anchor="pagos"))
     auth = {"Authorization": f"Bearer {WHOP_APP_API_KEY}"}
     steps = []
     ok, code, data = whop_call("GET", f"/users/{username}", headers=auth)
@@ -7371,7 +7442,7 @@ def appeal_clip(sid):
 def admin_refresh():
     refresh_in_background()
     flash("Actualizando vistas en segundo plano. Recarga en unos minutos.", "ok")
-    return redirect(url_for("admin_settings"))
+    return redirect(url_for("admin_settings", _anchor="lectura"))
 
 
 @app.route("/admin/probar-apify", methods=["GET", "POST"])
@@ -7676,10 +7747,10 @@ def admin_wipe():
     """Borra todos los datos de prueba (campañas, clips, retiros, mensajes, clippers…). Solo quedan los admins."""
     if not ALLOW_WIPE:
         flash("Borrar datos está desactivado en la web real. Para activarlo, añade ALLOW_WIPE=1 en Railway.", "error")
-        return redirect(url_for("admin_settings"))
+        return redirect(url_for("admin_settings", _anchor="datos"))
     if (request.form.get("confirm") or "").strip().upper() != "BORRAR":
         flash("Para borrar todo, escribe BORRAR en la casilla.", "error")
-        return redirect(url_for("admin_settings"))
+        return redirect(url_for("admin_settings", _anchor="datos"))
     admin_ids = [u.id for u in User.query.filter_by(is_admin=True).all()]
     if current_user.id not in admin_ids:
         admin_ids.append(current_user.id)
@@ -7705,6 +7776,39 @@ def admin_wipe():
     flash("Listo: se han borrado los clips, retiros, mensajes, solicitudes y clippers de prueba. Las campañas se quedan." if keep_campaigns
           else "Listo: se han borrado todas las campañas, clips, retiros, mensajes y clippers de prueba.", "ok")
     return redirect(url_for("admin_home"))
+
+
+@app.route("/admin/buscar")
+@admin_required
+def admin_find():
+    """Buscador del panel: clippers (nombre, correo, @cuenta), campañas y clips por número."""
+    q = request.args.get("q", "").strip()[:80]
+    term = q.lstrip("@#").lower()
+    users, camps, accs, clip = [], [], [], None
+    if len(term) >= 2 or term.isdigit():
+        like = f"%{term}%"
+        if term.isdigit() and len(term) < 10:
+            clip = db.session.get(Submission, int(term))
+        users = (User.query.filter(db.or_(db.func.lower(User.email).like(like), db.func.lower(User.name).like(like)))
+                 .order_by(User.name).limit(12).all())
+        seen = {u.id for u in users}
+        accs = [a for a in (CampaignAccount.query.filter(db.func.lower(CampaignAccount.handle).like(like))
+                            .options(joinedload(CampaignAccount.user), joinedload(CampaignAccount.campaign))
+                            .order_by(CampaignAccount.handle).limit(24).all()) if a.user_id not in seen][:12]
+        if admin_can("admin_campaign"):
+            camps = (Campaign.query.filter(db.or_(db.func.lower(Campaign.song).like(like), db.func.lower(Campaign.artist).like(like)))
+                     .order_by(Campaign.created_at.desc()).limit(12).all())
+    total = len(users) + len(camps) + len(accs) + (1 if clip else 0)
+    people = {u.id for u in users} | {a.user_id for a in accs}
+    if not clip and not camps and len(people) == 1:           # todo lleva a la misma persona: directo a su ficha
+        return redirect(url_for("admin_clipper", uid=people.pop()))
+    if not clip and not people and len(camps) == 1:
+        return redirect(camp_admin_url(camps[0]))
+    return render_template("admin/search.html", q=q, users=users, camps=camps, accs=accs, clip=clip, total=total)
+
+
+def camp_admin_url(camp):
+    return url_for("admin_dist", did=camp.id) if camp.status == DIST_STATUS else url_for("admin_campaign", cid=camp.id)
 
 
 @app.route("/admin/clippers", methods=["GET", "POST"])

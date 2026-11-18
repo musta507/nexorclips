@@ -1,11 +1,9 @@
 {% extends "base.html" %}
 {% from "_icons.html" import av %}
 {% block title %}Mensajes · Admin{% endblock %}
+{% import "admin/_ui.html" as ui %}
 {% block content %}
-<div class="toolbar">
-  <div><h1 style="margin-top:8px">Mensajes</h1></div>
-  <a class="btn soft" href="{{ url_for('admin_clippers') }}">Escribir a un clipper</a>
-</div>
+{% call ui.head("Mensajes", "Lo que te escriben los clippers por el chat de soporte. Los que tienen punto están sin leer.") %}<a class="btn soft" href="{{ url_for('admin_clippers') }}">Escribir a un clipper</a>{% endcall %}
 <div class="table-card inbox">
   {% for t in threads %}
   <a class="thread{% if t.unread %} unread{% endif %}" href="{{ url_for('admin_chat', uid=t.user.id) }}">

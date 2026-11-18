@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon, av %}
+{% import "admin/_ui.html" as ui %}
+{% block title %}Buscar · Admin{% endblock %}
+{% block content %}
+{% call ui.head("Buscar", ("Resultados de «" ~ q ~ "»") if q else "Clippers por nombre, correo o @cuenta, campañas por nombre y clips por su número.") %}{% endcall %}
+<form method="get" class="sr-form">
+  <label class="cr-q">{{ icon("search") }}<input type="search" name="q" value="{{ q }}" placeholder="Nombre, correo, @cuenta, campaña o nº de clip" aria-label="Buscar en el panel" autofocus></label>
+  <button class="btn sm">Buscar</button>
+</form>
+{% if q and not total %}
+<div class="card"><div class="empty"><h3>Sin resultados</h3><p class="muted">No hay ningún clipper, cuenta ni campaña con «{{ q }}».</p></div></div>
+{% endif %}
+{% if clip %}
+<section><h2 class="sr-h">Clip nº {{ clip.id }}</h2>
+  <div class="card sr-list">
+    <a class="sr-row" href="{{ url_for('admin_clipper', uid=clip.user_id) }}">{{ av(clip.user) }}<span class="sr-main"><b>{{ clip.user.name }}</b><span class="small muted">{{ clip.campaign.song }} · {{ PLATFORMS.get(clip.platform, clip.platform) }} · {{ clip.views|num }} vistas · {{ clip.status|capitalize }}</span></span><span class="small muted">Ver ficha</span>{{ icon("arrow") }}</a>
+    <a class="sr-row" href="{{ clip.url }}" target="_blank" rel="noopener"><span class="sr-ico">{{ icon(clip.platform) }}</span><span class="sr-main"><b>Abrir el vídeo</b><span class="small muted">{{ clip.url|truncate(60, True) }}</span></span>{{ icon("ext") }}</a>
+  </div>
+</section>
+{% endif %}
+{% if users %}
+<section><h2 class="sr-h">Clippers ({{ users|length }})</h2>
+  <div class="card sr-list">
+    {% for u in users %}
+    <a class="sr-row" href="{{ url_for('admin_clipper', uid=u.id) }}">{{ av(u) }}<span class="sr-main"><b>{{ u.name }}{% if u.is_banned %} <span class="flag">Bloqueado</span>{% endif %}</b><span class="small muted">{{ u.email }}</span></span>{{ icon("arrow") }}</a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% if accs %}
+<section><h2 class="sr-h">Cuentas ({{ accs|length }})</h2>
+  <div class="card sr-list">
+    {% for a in accs %}
+    <a class="sr-row" href="{{ url_for('admin_clipper', uid=a.user_id) }}"><span class="sr-ico">{{ icon(a.platform) }}</span><span class="sr-main"><b>@{{ a.handle }}</b><span class="small muted">{{ a.user.name }} · {{ a.campaign.song }}</span></span>{{ icon("arrow") }}</a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% if camps %}
+<section><h2 class="sr-h">Campañas ({{ camps|length }})</h2>
+  <div class="card sr-list">
+    {% for c in camps %}
+    <a class="sr-row" href="{{ camp_admin_url(c) }}"><span class="sr-ico">{{ icon("flag") }}</span><span class="sr-main"><b>{{ c.song }}</b><span class="small muted">{{ c.artist }} · {{ c.status|capitalize }}</span></span>{{ icon("arrow") }}</a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

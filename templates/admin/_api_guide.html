@@ -1,0 +1,119 @@
+{# Guía para solicitar las APIs oficiales: comprobaciones, verificación del dominio y textos para copiar #}
+{% macro cp(text) -%}
+<div class="ag-copy"><span class="selectable">{{ text }}</span><button type="button" class="btn sm soft" data-copy-text="{{ text }}">Copiar</button></div>
+{%- endmacro %}
+{% macro en(text, es) -%}
+{{ cp(text) }}<p class="small muted ag-es">En español: {{ es }}</p>
+{%- endmacro %}
+{% macro ck(ok, yes, no) -%}
+<li class="ag-ck {{ 'ok' if ok else 'no' }}"><span aria-hidden="true">{{ "✓" if ok else "!" }}</span><span>{{ yes if ok else no }}</span></li>
+{%- endmacro %}
+{% set v = api_info.verify %}
+{% set desc = APP_NAME ~ " is a platform where short-form video creators (“clippers”) join campaigns from content creators, publish clips on their own TikTok, Instagram and YouTube accounts and get paid per 1,000 views. Clippers connect their own account so we can confirm they own it and read the public statistics of their own videos." %}
+{% set desc_es = APP_NAME ~ " es una plataforma donde creadores de vídeo corto («clippers») entran en campañas de creadores de contenido, publican clips en sus propias cuentas de TikTok, Instagram y YouTube y cobran por cada 1.000 vistas. Conectan su cuenta para confirmar que es suya y leer las estadísticas de sus propios vídeos." %}
+
+<div class="card tight form-stack">
+  <h3>1. Antes de solicitar nada</h3>
+  <p class="small muted">Las tres redes revisan la web a mano. Si falta algo de esta lista, rechazan la solicitud y hay que volver a esperar.</p>
+  <ul class="ag-cks">
+    {{ ck(api_info.own_domain, "Dominio propio conectado: " ~ api_info.host, "La web sigue en la dirección de Railway (" ~ api_info.host ~ "). Conecta antes clipprofit.es y pon BASE_URL en Railway: las redes aprueban un dominio concreto y, si lo cambias después, hay que repetir la solicitud.") }}
+    {{ ck(api_info.https, "La web va por https.", "La web no va por https: las redes no aceptan direcciones sin https.") }}
+    {{ ck(api_info.support_email, "Correo de soporte puesto: " ~ api_info.support_email, "Falta SUPPORT_EMAIL en Railway. Las redes exigen un correo de contacto visible en la web.") }}
+    {{ ck(true, "Portada pública con enlaces visibles a Términos y Privacidad.", "") }}
+    {{ ck(true, "Política de privacidad con el apartado de TikTok, Instagram y YouTube, y página para borrar los datos.", "") }}
+    {{ ck(api_info.mode != "off", "APIs encendidas: el botón «Conectar» ya sale a los clippers cuyas redes tienen claves.", "Las APIs están apagadas. Para grabar el vídeo de demostración tienes que encenderlas arriba (y tener las claves de esa red puestas).") }}
+  </ul>
+  <p class="small muted">Además, a mano: crea en la web una <b>cuenta de prueba</b> con correo y contraseña (no con Google) para dársela a los revisores, y ten a mano el <b>logo cuadrado de 1024 × 1024</b>.</p>
+</div>
+
+<div class="card tight form-stack">
+  <h3>2. Verificar que el dominio es tuyo</h3>
+  <p class="small muted">Cada red te da un código para comprobar que la web es tuya. Pégalo aquí tal cual, guarda y después pulsa «Verificar» en la red. No son claves secretas.</p>
+  <form method="post" action="{{ url_for('admin_site_verify') }}" class="form-stack ag-verify"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <label><span class="small"><b>Google</b> · Search Console → «Etiqueta HTML» (pega la etiqueta entera o solo el código)</span>
+      <input name="google" value="{{ v.google or '' }}" placeholder='&lt;meta name="google-site-verification" content="…"&gt;' autocomplete="off"></label>
+    <label><span class="small"><b>Google</b> · si prefieres «Archivo HTML»: el nombre del archivo</span>
+      <input name="google_file" value="{{ (v.google_file ~ '.html') if v.google_file else '' }}" placeholder="google1234abcd5678.html" autocomplete="off"></label>
+    <label><span class="small"><b>Meta (Instagram)</b> · Configuración del negocio → Seguridad de la marca → Dominios → «Metaetiqueta»</span>
+      <input name="meta" value="{{ v.meta or '' }}" placeholder='&lt;meta name="facebook-domain-verification" content="…"&gt;' autocomplete="off"></label>
+    <div class="ag-two">
+      <label><span class="small"><b>TikTok</b> · «Verify URL properties» → nombre del archivo</span>
+        <input name="tiktok_file" value="{{ (v.tiktok_file ~ '.txt') if v.tiktok_file else '' }}" placeholder="tiktokAbC123.txt" autocomplete="off"></label>
+      <label><span class="small"><b>TikTok</b> · lo que hay escrito dentro del archivo</span>
+        <input name="tiktok_body" value="{{ v.tiktok_body or '' }}" placeholder="tiktok-developers-site-verification=…" autocomplete="off"></label>
+    </div>
+    <div><button class="btn sm soft">Guardar verificación</button></div>
+  </form>
+  {% if v.google or v.meta or v.tiktok_file or v.google_file %}<p class="small" style="color:var(--money-ink)">✓ Guardado: {{ [("Google (etiqueta)" if v.google), ("Google (archivo)" if v.google_file), ("Meta" if v.meta), ("TikTok" if v.tiktok_file)]|select|join(", ") }}.</p>{% endif %}
+</div>
+
+<div class="card tight form-stack">
+  <h3>3. Datos que te piden las tres</h3>
+  <div class="api-links small">
+    <span>Web</span>{{ cp(api_info.base ~ "/") }}
+    <span>Política de privacidad</span>{{ cp(api_info.privacy) }}
+    <span>Términos</span>{{ cp(api_info.terms) }}
+    <span>Borrar datos (instrucciones)</span>{{ cp(api_info.deletion) }}
+  </div>
+  <b class="small">Descripción de la app</b>
+  {{ en(desc, desc_es) }}
+</div>
+
+<details class="card tight ag-net">
+  <summary><span class="acc-pl p-tiktok">{{ icon("tiktok") }}</span><b>TikTok</b><span class="small muted">· developers.tiktok.com · suele tardar de 1 a 2 semanas</span></summary>
+  <ol class="ag-steps">
+    <li>Entra en <b>developers.tiktok.com</b> con la cuenta de TikTok del negocio → <b>Manage apps → Connect an app</b>. Nombre: <b>{{ APP_NAME }}</b> (no puede llevar la palabra «TikTok»). Sube el logo.</li>
+    <li>Categoría y descripción: pega la descripción de arriba. En <b>Terms of Service URL</b>, <b>Privacy Policy URL</b> y <b>Web/Desktop URL</b> pon los enlaces del punto 3.</li>
+    <li><b>Verify URL properties:</b> elige «URL prefix», pon la dirección de la web, descarga el archivo y pega su nombre y su contenido en el punto 2 de esta página. Guarda y pulsa «Verify».</li>
+    <li><b>Add products:</b> añade <b>Login Kit</b> y marca «Web». En <b>Redirect URI</b> pega: {{ cp(api_info.apis[0].redirect) }}</li>
+    <li><b>Scopes:</b> añade solo estos cuatro: <code>user.info.basic</code>, <code>user.info.profile</code>, <code>user.info.stats</code>, <code>video.list</code>. Si marcas alguno más, lo rechazan.</li>
+    <li>Copia el <b>Client key</b> y el <b>Client secret</b> y ponlos en Railway como <code>TIKTOK_CLIENT_KEY</code> y <code>TIKTOK_CLIENT_SECRET</code>.</li>
+    <li>Crea un <b>Sandbox</b> en la misma app, añade tu cuenta de TikTok como usuario de prueba y, con las claves del Sandbox puestas en Railway, graba el vídeo (punto 8). TikTok exige que la primera demostración sea en Sandbox.</li>
+    <li><b>Vídeo de demostración</b> (hasta 50 MB): se tiene que ver la dirección de la web en el navegador. Graba: entrar en la web → Campañas → entrar en una → pulsar «Conectar con TikTok» → pantalla de permisos de TikTok → vuelta a la web con la cuenta verificada → Mis clips con los vídeos y sus vistas.</li>
+    <li>En <b>App review → explain how each product and scope works</b>, pega:</li>
+  </ol>
+  {{ en("Login Kit: clippers log in with TikTok to connect their own account to their " ~ APP_NAME ~ " profile, so we can confirm the account belongs to them instead of asking them to paste a code in their bio. user.info.basic: we read the open id, display name and avatar to identify the connected account and show it in the user's settings. user.info.profile: we read the username to match the connected account with the account the clipper registered for a campaign. user.info.stats: we show the follower count of the account to the campaign team when they accept a clipper. video.list: we read the clipper's own public videos and their view, like, comment and share counts to detect the clips published for a campaign and calculate the payment per 1,000 views. We never post, edit or delete anything. Users can disconnect at any time in Settings → Connected accounts and their data is deleted.",
+        "Login Kit: los clippers entran con TikTok para conectar su cuenta y confirmar que es suya. user.info.basic: identificador, nombre y foto para mostrar la cuenta conectada. user.info.profile: el nombre de usuario para casarlo con la cuenta apuntada en la campaña. user.info.stats: seguidores, que ve el equipo al aceptar al clipper. video.list: sus vídeos y cifras para detectar los clips y calcular el pago. Nunca publicamos, editamos ni borramos nada. Pueden desconectar cuando quieran y se borran sus datos.") }}
+  <p class="small muted">Cuando aprueben la app, cambia en Railway las claves del Sandbox por las de producción.</p>
+</details>
+
+<details class="card tight ag-net">
+  <summary><span class="acc-pl p-instagram">{{ icon("instagram") }}</span><b>Instagram</b><span class="small muted">· developers.facebook.com · de 1 a 4 semanas, y pide verificar el negocio</span></summary>
+  <ol class="ag-steps">
+    <li>Entra en <b>developers.facebook.com</b> → <b>Mis apps → Crear app</b>. Caso de uso: <b>«Instagram»</b> (Instagram API con inicio de sesión de Instagram). Vincúlala a un <b>portfolio comercial</b> (Meta Business) del negocio.</li>
+    <li><b>Verificación del negocio:</b> en Configuración del negocio → Centro de seguridad. Piden un documento de la empresa o del autónomo (Felipe). Sin esto no dan acceso avanzado.</li>
+    <li>En <b>Configuración de la app → Básica</b>: icono 1024 × 1024, categoría, correo de contacto y estos enlaces. Política de privacidad y Términos: los del punto 3. <b>URL de solicitud de eliminación de datos</b>: {{ cp(api_info.meta_deletion) }}</li>
+    <li>En <b>Instagram → Configuración de la API con inicio de sesión de Instagram → Inicio de sesión para empresas</b>, pega como <b>URI de redireccionamiento</b>: {{ cp(api_info.apis[1].redirect) }}</li>
+    <li>Copia el <b>Identificador de la app de Instagram</b> y su <b>Clave secreta</b> (son las de Instagram, no las de la app de Meta) y ponlos en Railway como <code>INSTAGRAM_APP_ID</code> y <code>INSTAGRAM_APP_SECRET</code>.</li>
+    <li>Añade tu Instagram como <b>probador</b> (Roles de la app → Probadores de Instagram) y acepta la invitación desde Instagram. Conecta esa cuenta en la web al menos una vez: Meta exige una llamada correcta por cada permiso antes de dejar solicitar la revisión.</li>
+    <li><b>Importante:</b> solo funciona con cuentas de Instagram <b>profesionales</b> (creador o empresa). Los clippers con cuenta personal seguirán contándose como ahora.</li>
+    <li>En <b>Revisión de la app</b> pide acceso avanzado a <code>instagram_business_basic</code> y <code>instagram_business_manage_insights</code>. Por cada permiso piden una explicación y un vídeo de pantalla. Pon la web en inglés con el traductor del navegador o añade subtítulos. En «instrucciones para el revisor» da la dirección de la web y el correo y la contraseña de la cuenta de prueba.</li>
+  </ol>
+  <b class="small">instagram_business_basic</b>
+  {{ en("Clippers connect their own professional Instagram account to their " ~ APP_NAME ~ " profile. We read the account id, username and profile picture to confirm they own the account they registered for a campaign, and we read the list of their own reels (permalink, caption, thumbnail, date, likes and comments) to detect the clips they published for that campaign. To test: log in with the test credentials, open Campaigns, open a campaign, press “Connect Instagram”, accept the permissions and you will return to the campaign with the account verified; the reels appear in “My clips”.",
+        "Los clippers conectan su Instagram profesional. Leemos el identificador, el usuario y la foto para confirmar que la cuenta es suya, y la lista de sus reels para detectar los clips de la campaña. Para probar: entrar con la cuenta de prueba, Campañas, abrir una, «Conectar Instagram», aceptar y volver con la cuenta verificada; los reels salen en «Mis clips».") }}
+  <b class="small">instagram_business_manage_insights</b>
+  {{ en("We read the views and shares of each of the clipper's own reels to calculate what the campaign pays per 1,000 views, and the aggregated audience demographics of the account (country, age range and gender, in percentages) to show the campaign owner which audience the clips reached. We only read; we never publish or modify anything. To test: after connecting the account, open “My clips” to see the view count of each reel; the audience summary appears in the campaign statistics of the admin panel.",
+        "Leemos las vistas y los compartidos de cada reel del clipper para calcular el pago por 1.000 vistas, y los datos agregados de su audiencia (país, edad y sexo en porcentajes) para enseñar al creador de la campaña a qué público han llegado los clips. Solo leemos. Para probar: tras conectar, «Mis clips» enseña las vistas de cada reel; la audiencia sale en las estadísticas de la campaña del panel.") }}
+</details>
+
+<details class="card tight ag-net">
+  <summary><span class="acc-pl p-youtube">{{ icon("youtube") }}</span><b>YouTube</b><span class="small muted">· console.cloud.google.com · unos 10 días laborables</span></summary>
+  <ol class="ag-steps">
+    <li>Entra en <b>console.cloud.google.com</b>, en el mismo proyecto que ya usas para «Entrar con Google». En <b>APIs y servicios → Biblioteca</b> activa <b>YouTube Data API v3</b> y <b>YouTube Analytics API</b>.</li>
+    <li>En <b>Google Auth Platform → Clientes</b>, abre tu cliente web y añade este <b>URI de redireccionamiento autorizado</b>: {{ cp(api_info.apis[2].redirect) }} Las claves son las mismas que ya tienes en Railway (<code>GOOGLE_CLIENT_ID</code> y <code>GOOGLE_CLIENT_SECRET</code>).</li>
+    <li>En <b>Acceso a los datos</b> añade estos dos permisos: {{ cp("https://www.googleapis.com/auth/youtube.readonly") }}{{ cp("https://www.googleapis.com/auth/yt-analytics.readonly") }}</li>
+    <li>En <b>Información de la marca</b>: nombre <b>{{ APP_NAME }}</b>, logo, correo de asistencia, página principal, política de privacidad y términos (los enlaces del punto 3), y el dominio en «Dominios autorizados».</li>
+    <li><b>Verifica el dominio</b> en <b>search.google.com/search-console</b> con la misma cuenta de Google: añade la web, elige «Etiqueta HTML», pega la etiqueta en el punto 2 de esta página, guarda y pulsa «Verificar».</li>
+    <li>En <b>Público</b> pulsa <b>Publicar la app</b> y después, en <b>Centro de verificación</b>, <b>Preparar para la verificación</b>.</li>
+    <li><b>Vídeo de demostración:</b> súbelo a YouTube como «No listado». Tiene que verse, con la pantalla de permisos de Google <b>en inglés</b>: la dirección del navegador con el <code>client_id</code>, el nombre de la app en la pantalla de permisos, y qué hace la web con cada permiso (Mis clips con los vídeos y vistas; estadísticas de audiencia de la campaña en el panel).</li>
+    <li>En la justificación de cada permiso, pega:</li>
+  </ol>
+  <b class="small">youtube.readonly</b>
+  {{ en("Clippers connect their own YouTube channel to their " ~ APP_NAME ~ " profile. We use youtube.readonly to read the channel id, handle and avatar to confirm the clipper owns the channel registered for a campaign, and to list the channel's own Shorts with their public statistics (views, likes, comments) so we can detect the clips published for the campaign and calculate the payment per 1,000 views. A narrower scope does not exist for listing the authenticated user's own uploads. We only read data; we never upload, edit or delete content.",
+        "Los clippers conectan su canal. Usamos youtube.readonly para leer el identificador, el nombre y la foto del canal y confirmar que es suyo, y para listar sus Shorts con sus cifras, detectar los clips de la campaña y calcular el pago. No existe un permiso más pequeño para listar los vídeos del propio usuario. Solo leemos.") }}
+  <b class="small">yt-analytics.readonly</b>
+  {{ en("We use yt-analytics.readonly to read aggregated audience reports of the clipper's own videos submitted to a campaign: views by country and viewer percentage by age group and gender. These aggregated percentages are shown to the campaign owner in the campaign statistics so they know which audience the clips reached. This data is not available through the YouTube Data API. We do not read revenue data and we do not share the data with third parties.",
+        "Usamos yt-analytics.readonly para leer informes agregados de audiencia de los vídeos del clipper enviados a una campaña: vistas por país y porcentaje por edad y sexo. Se enseñan al creador de la campaña en sus estadísticas. Ese dato no está en la otra API. No leemos ingresos ni compartimos los datos con terceros.") }}
+  <p class="small muted">Mientras Google revisa, puedes dejar la app «En pruebas» y añadir hasta 100 cuentas de prueba para que funcione ya con ellas.</p>
+</details>

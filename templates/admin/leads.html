@@ -1,11 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Creadores interesados · Admin{% endblock %}
+{% import "admin/_ui.html" as ui %}
 {% block content %}
-<div>
-  
-  <h1>Creadores interesados</h1>
-  <p class="muted" style="margin-top:6px">Creadores que han rellenado «Lanzar una campaña». Respóndeles por correo y, cuando cerréis el trato, crea la campaña con sus datos ya puestos.</p>
-</div>
+{% call ui.head("Creadores interesados", "Creadores que han rellenado «Lanzar una campaña». Respóndeles por correo y, cuando cerréis el trato, crea la campaña con sus datos ya puestos.") %}{% endcall %}
 <div class="leads">
   {% for l in leads %}
   <article class="card lead{% if l.status == 'nueva' %} is-new{% endif %}">

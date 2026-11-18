@@ -6,7 +6,7 @@
 {% set rev_ep = 'admin_campaign_review' if in_camp else 'admin_clips' %}
 {% set base = {"tab": tab, "f": f if f != "todos" else None, "q": q or None} %}
 {% if in_camp %}{% set base = dict(base, cid=cid) %}{% else %}{% set base = dict(base, c=cid or None) %}{% endif %}
-{% if in_camp %}{% include "admin/_camp_nav.html" %}{% endif %}
+{% if in_camp %}{% include "admin/_camp_nav.html" %}{% else %}<div class="adm-head"><div><h1>Revisar clips</h1><p class="muted">Los clips de todas las campañas que han llegado al mínimo de vistas y esperan tu decisión.</p></div></div>{% endif %}
 <div class="cr" data-review>
   <nav class="cr-rail" aria-label="Filtros">
     {% for k, (label, ico) in filters.items() %}

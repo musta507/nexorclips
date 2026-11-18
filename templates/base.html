@@ -13,7 +13,7 @@
     <div class="wrap">
       <a class="home-link" href="{{ url_for('admin_home') if admin_page else url_for('index') }}" aria-label="Inicio">{{ logo() }}{% if admin_page %}<span class="admin-tag adm-badge">{{ "Admin" if (current_user.admin_role or "owner") == "owner" else ADMIN_ROLES[current_user.admin_role] }}</span>{% endif %}</a>
       {% if admin_page %}
-      <a class="adm-view" href="{{ url_for('index') }}">{{ icon("out") }} Ver la web como clipper</a>
+      {% if admin_can("admin_find") %}<form class="adm-find" method="get" action="{{ url_for('admin_find') }}" role="search">{{ icon("search") }}<input type="search" name="q" placeholder="Buscar clipper, @cuenta o campaña" aria-label="Buscar en el panel" value="{{ request.args.get('q', '') if ep == 'admin_find' else '' }}"></form>{% else %}<span></span>{% endif %}
       {% else %}
       <nav class="tabs" aria-label="Secciones">
         <a class="tab {% if ep in ['index', 'ranking_page'] %}on{% endif %}" href="{{ url_for('index') }}" {% if ep in ['index', 'ranking_page'] %}aria-current="page"{% endif %}>{{ icon("home") }}Inicio</a>
@@ -79,23 +79,41 @@
   <div class="adm">
     <aside class="adm-side" aria-label="Secciones del panel">
       <nav class="adm-nav">
-        {% for e, eps, label, ico, n in [
-          ("admin_home", ["admin_home"], "Resumen", "grid", 0),
-          ("admin_campaigns", ["admin_campaigns", "admin_campaign", "admin_campaign_form", "admin_campaign_review", "admin_campaign_requests", "admin_campaign_clippers", "admin_campaign_channels", "admin_clips", "admin_requests"], "Campañas", "flag", nc.camps),
-          ("admin_featured", ["admin_featured"], "Destacado de inicio", "megaphone", 0),
-          ("admin_dists", ["admin_dists", "admin_dist"], "Distribución", "stack", 0),
-          ("admin_creators", ["admin_creators", "admin_creator_form"], "Creadores", "card", nc.creators_alert),
-          ("admin_clippers", ["admin_clippers", "admin_clipper"], "Clippers", "users", 0),
-          ("admin_mods", ["admin_mods"], "Mods", "users", 0),
-          ("admin_payouts", ["admin_payouts"], "Retiros", "cash", nc.payouts),
-          ("admin_inbox", ["admin_inbox", "admin_chat"], "Mensajes", "chat", nc.messages),
-          ("admin_courses", ["admin_courses", "admin_course", "admin_lesson"], "Formación", "cap", 0),
-          ("admin_notify", ["admin_notify"], "Avisos", "bell", 0),
-          ("admin_leads", ["admin_leads"], "Creadores interesados", "megaphone", nc.leads),
-          ("admin_activity", ["admin_activity"], "Actividad", "pulse", 0),
-          ("admin_settings", ["admin_settings", "admin_probe"], "Panel técnico", "gear", nc.tech)] %}
-        {% if admin_can(e) %}<a class="adm-link{% if ep in eps %} on{% endif %}" href="{{ url_for(e) }}"{% if ep in eps %} aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span>{% if n %}<b class="adm-n">{{ n }}</b>{% endif %}</a>{% endif %}
+        {% set camp_eps = ["admin_campaigns", "admin_campaign", "admin_campaign_form", "admin_campaign_review", "admin_campaign_requests", "admin_campaign_clippers", "admin_campaign_channels", "admin_campaign_support", "admin_campaign_mods", "admin_campaign_invites", "admin_campaign_content"] %}
+        {% for group, links in [
+          ("", [
+            ("admin_home", ["admin_home"], "Resumen", "grid", 0)]),
+          ("Por hacer", [
+            ("admin_clips", ["admin_clips"], "Revisar clips", "film", nc.clips),
+            ("admin_requests", ["admin_requests"], "Solicitudes", "inbox", nc.requests + nc.accounts),
+            ("admin_payouts", ["admin_payouts"], "Retiros", "cash", nc.payouts),
+            ("admin_inbox", ["admin_inbox", "admin_chat"], "Mensajes", "chat", nc.messages)]),
+          ("Campañas", [
+            ("admin_campaigns", camp_eps, "Campañas", "flag", nc.support),
+            ("admin_featured", ["admin_featured"], "Destacado de inicio", "megaphone", 0),
+            ("admin_dists", ["admin_dists", "admin_dist"], "Distribución", "stack", 0),
+            ("admin_creators", ["admin_creators", "admin_creator_form"], "Creadores", "card", nc.creators_alert),
+            ("admin_leads", ["admin_leads"], "Creadores interesados", "trend", nc.leads)]),
+          ("Comunidad", [
+            ("admin_clippers", ["admin_clippers", "admin_clipper"], "Clippers", "users", 0),
+            ("admin_mods", ["admin_mods"], "Mods", "check", 0),
+            ("admin_notify", ["admin_notify"], "Avisos", "bell", 0),
+            ("admin_courses", ["admin_courses", "admin_course", "admin_lesson"], "Formación", "cap", 0)]),
+          ("Sistema", [
+            ("admin_activity", ["admin_activity"], "Actividad", "pulse", 0),
+            ("admin_settings", ["admin_settings", "admin_probe", "admin_vapid_keys"], "Panel técnico", "gear", nc.tech)])] %}
+        {% set shown = [] %}
+        {% for e, eps, label, ico, n in links %}{% if admin_can(e) %}{% if shown.append(e) %}{% endif %}{% endif %}{% endfor %}
+        {% if shown %}
+        <div class="adm-group">
+          {% if group %}<span class="adm-gt">{{ group }}</span>{% endif %}
+          {% for e, eps, label, ico, n in links %}
+          {% if admin_can(e) %}<a class="adm-link{% if ep in eps %} on{% endif %}" href="{{ url_for(e) }}"{% if ep in eps %} aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span>{% if n %}<b class="adm-n">{{ n }}</b>{% endif %}</a>{% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
         {% endfor %}
+        <div class="adm-group adm-foot"><a class="adm-link" href="{{ url_for('index') }}">{{ icon("out") }}<span>Ver la web como clipper</span></a></div>
       </nav>
     </aside>
     <main class="adm-main" id="contenido">

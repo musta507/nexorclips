@@ -2,6 +2,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="{{ APP_NAME }}: gana dinero haciendo clips de los creadores hispanos más grandes y cobra por cada 1.000 visitas.">
   <meta name="theme-color" content="#ffffff">
+  {% set sv = site_verify() %}{% if sv.google %}<meta name="google-site-verification" content="{{ sv.google }}">
+  {% endif %}{% if sv.meta %}<meta name="facebook-domain-verification" content="{{ sv.meta }}">
+  {% endif %}
   <meta property="og:title" content="{{ APP_NAME }} · Cobra por cada vista">
   <meta property="og:description" content="Elige una campaña, publica clips y cobra por las vistas que consigas.">
   <meta property="og:type" content="website">

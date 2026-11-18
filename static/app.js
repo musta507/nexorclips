@@ -177,6 +177,9 @@ function pagina() {
   // «Rellenar formulario» desde el destacado: la campaña se abre ya con la ventana de solicitud
   var auto = document.querySelector("dialog[data-auto-open]");
   if (auto && auto.showModal && !auto.open) { auto.removeAttribute("data-auto-open"); auto.showModal(); }
+  pestanasHash();
+  var navOn = document.querySelector(".adm-side .adm-link.on"), side = document.querySelector(".adm-side");
+  if (navOn && side && side.scrollWidth > side.clientWidth) side.scrollLeft = Math.max(0, navOn.offsetLeft - 16);
   iniciarChat();
   pastillaOrden();
   graficas();
@@ -1571,6 +1574,32 @@ document.addEventListener("click", function (e) {
     var p = document.getElementById(x.getAttribute("data-tab"));
     if (p) p.hidden = !on;
   });
+  if (box.hasAttribute("data-hash-tabs") && history.replaceState) history.replaceState(history.state, "", "#" + a.getAttribute("data-tab"));
+});
+// Pestañas que recuerdan dónde estabas (Panel técnico): al volver de un botón se abre la misma
+function pestanasHash() {
+  var box = document.querySelector("[data-hash-tabs]"), h = (location.hash || "").slice(1);
+  if (!box || !h) return;
+  var a = box.querySelector('[data-tab="' + h.replace(/[^a-z0-9_-]/gi, "") + '"]');
+  if (!a || a.classList.contains("on")) return;
+  box.querySelectorAll("[data-tab]").forEach(function (x) {
+    var on = x === a;
+    x.classList.toggle("on", on);
+    var p = document.getElementById(x.getAttribute("data-tab"));
+    if (p) p.hidden = !on;
+  });
+}
+
+window.addEventListener("hashchange", pestanasHash);
+
+// Filas de tabla que llevan a una ficha: se puede pulsar en cualquier parte de la fila
+document.addEventListener("click", function (e) {
+  var tr = e.target.closest("tr[data-row-link]");
+  if (!tr || e.target.closest("a, button, input, select, label, form")) return;
+  if (window.getSelection && String(window.getSelection())) return;
+  var url = tr.getAttribute("data-row-link");
+  if (e.metaKey || e.ctrlKey) { window.open(url, "_blank"); return; }
+  if (window.Turbo) window.Turbo.visit(url); else location.href = url;
 });
 
 // =============================================================== Avisos del panel: elegir clippers con filtros y vista previa

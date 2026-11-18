@@ -3,7 +3,7 @@
 {% block title %}Formación · Admin{% endblock %}
 {% block content %}
 {% call ui.head("Formación", "Cursos para los clippers. Los vídeos se suben aquí mismo y se ven dentro de la web.") %}{% endcall %}
-{% if not bunny %}<div class="flash info">Para subir vídeos desde aquí, añade en Railway <code>BUNNY_LIBRARY_ID</code> y <code>BUNNY_API_KEY</code> (Bunny Stream). Mientras tanto puedes pegar enlaces de YouTube (ocultos) o Vimeo.</div>{% endif %}
+{% if not bunny %}<div class="flash info"><span>Para subir vídeos desde aquí faltan las claves de Bunny en Railway (lo ves en Panel técnico → Vídeos). Mientras tanto puedes pegar enlaces de YouTube (ocultos) o Vimeo.</span></div>{% endif %}
 <form method="post" class="card tight inline" style="flex-wrap:wrap">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <input name="title" placeholder="Nombre del curso nuevo" required maxlength="160" style="flex:1;min-width:220px" aria-label="Nombre del curso">
