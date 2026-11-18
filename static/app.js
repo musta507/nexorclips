@@ -729,7 +729,7 @@ if (window.Turbo) {
     e.detail.visit(e.detail.response);
   });
   // Dentro de un marco, el fundido solo va en el contenido: las barras de pestañas, el buscador y los filtros no parpadean
-  var FR_FIJO = ".seg, .sortbar, form[data-autosubmit], .mc-tools";
+  var FR_FIJO = ".seg, .tl, .sortbar, form[data-autosubmit], .mc-tools";
   function contenidoMarco(fr) {
     var out = [];
     (function walk(el) {

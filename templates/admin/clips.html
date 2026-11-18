@@ -19,7 +19,7 @@
 
   <div class="cr-main">
     <div class="cr-top">
-      <nav class="seg" aria-label="Bandeja">
+      <nav class="tl" aria-label="Bandeja">
         {% for t, label in [("revisar", "Por revisar"), ("contando", "Contando vistas"), ("apelaciones", "Apelaciones"), ("aprobados", "Aprobados"), ("rechazados", "Rechazados")] %}
         <a class="{% if tab == t %}on{% endif %}" href="{{ url_for(rev_ep, **(dict(tab=t, cid=cid) if in_camp else dict(tab=t, c=cid or None))) }}">{{ label }} <b class="tnum">{{ n[t] }}</b></a>
         {% endfor %}

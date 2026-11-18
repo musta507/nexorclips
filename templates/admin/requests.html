@@ -43,7 +43,7 @@
     {% endfor %}</tbody></table></div>
 </section>
 {% endif %}
-<nav class="seg" aria-label="Filtrar">
+<nav class="tl" aria-label="Filtrar">
   {% for k, label in [("pendiente", "Por revisar"), ("aceptada", "Aceptadas"), ("rechazada", "Rechazadas")] %}
   <a class="{% if estado == k %}on{% endif %}" href="{{ url_for('admin_campaign_requests', cid=camp.id, estado=k) if camp else url_for('admin_requests', estado=k) }}">{{ label }}</a>
   {% endfor %}

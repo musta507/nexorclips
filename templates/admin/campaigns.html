@@ -6,7 +6,7 @@
 {% call ui.head("Campañas", "Todas las campañas, su presupuesto y cómo van.") %}
   <a class="btn" href="{{ url_for('admin_campaign_form') }}">{{ icon("plus") }} Nueva campaña</a>
 {% endcall %}
-<nav class="seg" aria-label="Filtrar por estado">
+<nav class="tl" aria-label="Filtrar por estado">
   {% for k, label in [("", "Todas"), ("activa", "Activas"), ("pausada", "Pausadas"), ("finalizada", "Finalizadas")] %}
   <a class="{% if filt == k %}on{% endif %}" href="{{ url_for('admin_campaigns', estado=k or None) }}">{{ label }}</a>
   {% endfor %}
