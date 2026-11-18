@@ -2438,3 +2438,14 @@ tr.row-link:hover{background:#fafafb}
   /* Chat: el texto de ayuda no se parte */
   .chat-form textarea::placeholder{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
+/* Barras de secciones (cambian de página): línea debajo de la activa, sin pastilla ni animación.
+   Las barras de filtros siguen con la pastilla negra (.seg). */
+.tl{display:flex;gap:26px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;align-self:stretch}
+.tl::-webkit-scrollbar{display:none}
+.tl > a{flex:none;display:inline-flex;align-items:center;gap:6px;padding:0 2px 12px;margin-bottom:-1px;border-bottom:2px solid transparent;
+  font:500 15px var(--display);color:var(--muted);white-space:nowrap;transition:color .15s}
+.tl > a:hover{color:var(--ink)}
+.tl > a.on{color:var(--ink);border-bottom-color:var(--ink)}
+.tl .cn-n{margin-left:0}
+.cn-tabs.tl{margin-bottom:18px}
+@media (max-width:640px){.tl{gap:20px}.tl > a{font-size:14px}}
