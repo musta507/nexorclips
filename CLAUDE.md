@@ -54,6 +54,8 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 - **Barras de pestañas con pastilla** (`.seg`, `.sortbar` en `app.js`): dos capas de texto y un recorte animado. Las pestañas que cambian de página no tocan la clase `.on`; la trae la página nueva.
 - **Avisos al móvil:** apagados para todos (`CLIPPER_PUSH`, `PHONE_ALERTS`). Los avisos van a la campanita y al Panel técnico.
 - **Bunny:** las copias de vídeo se hacen clip a clip y en segundo plano.
+- **Panel de admin:** menú por grupos en `base.html`; buscador en `/admin/buscar`; el Panel técnico va por pestañas (`data-hash-tabs`) y los botones vuelven a su pestaña con `_anchor`.
+- **APIs oficiales:** la guía de solicitud está en `templates/admin/_api_guide.html` (Panel técnico → APIs oficiales). Los códigos de verificación del dominio se guardan en el ajuste `site_verify` y se sirven en `_head.html`, `/tiktok….txt` y `/google….html`. Si cambian los permisos de `official.SCOPES`, hay que cambiar también los textos de la guía y la política de privacidad.
 
 ## Cosas que a Mustapha le gustan (no cambiarlas sin que lo pida)
 
@@ -68,8 +70,7 @@ Acordado y sin hacer:
 1. Aviso automático de errores (Sentry, plan gratuito): cada fallo con página, usuario y línea.
 2. Copia de seguridad diaria automática de la base de datos (ahora solo hay botón manual).
 3. Copia de pruebas de la web en Railway, para ver los cambios antes de pasarlos a la real.
-4. Panel de admin más intuitivo: menú lateral por grupos, «Revisar clips» con enlace propio, tabla de Clippers (última columna cortada), Panel técnico por pestañas, buscador, cabeceras iguales, Canales en móvil.
-5. Arquitectura modular: repartir `app.py` en carpetas por temas (dinero, clips, lectura, campañas, comunidad, admin), un tema cada vez, sin reescribir y sin cambiar la base de datos. Empezar por dinero y lectura.
+4. Arquitectura modular: repartir `app.py` en carpetas por temas (dinero, clips, lectura, campañas, comunidad, admin), un tema cada vez, sin reescribir y sin cambiar la base de datos. Empezar por dinero y lectura.
 
 Para el final:
 - Probar un retiro real por Whop de principio a fin.
@@ -77,11 +78,10 @@ Para el final:
 - Comprobar en producción que yt-dlp trae las vistas (Panel técnico → «Probar yt-dlp con una cuenta»).
 
 Sin decidir:
-- APIs oficiales de TikTok, Instagram y YouTube (el código está; faltan las apps y su revisión).
+- APIs oficiales de TikTok, Instagram y YouTube: el código, las páginas legales y la guía están hechos; falta que Mustapha cree las apps en cada red y pase su revisión (necesita antes el dominio propio).
 - Botón «Conectar con Whop» para identificar a los miembros del Whop.
 - Acceso del cliente en los planes de distribución.
 
 Flojo, sin urgencia:
 - Avisos del admin carga todos los clippers de golpe.
-- Clippers de una campaña hace demasiadas consultas.
 - La hoja de estilos arrastra parches; limpiarla al modularizar.

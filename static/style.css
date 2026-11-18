@@ -2415,3 +2415,26 @@ tr.row-link:hover{background:#fafafb}
   .cn-head .cn-title{flex:1 0 calc(100% - 72px)}
   .cn-head > .push{margin-left:70px}
 }
+/* ===== Repaso de móvil (clipper) ===== */
+@media (max-width:640px){
+  /* Clips de la semana: caben el puesto, el clipper, las visitas y lo ganado; la campaña y la red se quedan para pantallas grandes */
+  .hm-week th:nth-child(3),.hm-week td:nth-child(3),.hm-week th:nth-child(4),.hm-week td:nth-child(4){display:none}
+  .hm-week th,.hm-week td{padding-left:8px;padding-right:8px}
+  .hm-week th:first-child,.hm-week td:first-child{padding-left:14px;width:34px}
+  .hm-week th:last-child,.hm-week td:last-child{padding-right:14px}
+  .hm-week .hm-who b{max-width:120px;overflow:hidden;text-overflow:ellipsis}
+  /* Cuenta de campaña: usuario, estado y papelera en una sola línea */
+  .acc-top{flex-wrap:nowrap}
+  .acc-top .acc-h{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .acc-top .status{flex:none}
+  .acc-top .acc-del{flex:none}
+  /* Gráfica de Mis clips: las métricas pasan con el dedo en una línea */
+  .mc-chart .an-toggles{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;max-width:100%;margin-right:-4px}
+  .mc-chart .an-toggles::-webkit-scrollbar{display:none}
+  .mc-chart .an-tg{flex-wrap:nowrap;flex:none;max-width:none;overflow:visible}
+  /* Forma de cobro: el texto ocupa el ancho y el estado baja debajo */
+  .paym-top{flex-wrap:wrap}
+  .paym-txt{flex:1 1 60%}
+  /* Chat: el texto de ayuda no se parte */
+  .chat-form textarea::placeholder{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}

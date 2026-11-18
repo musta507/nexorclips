@@ -5162,17 +5162,17 @@ def admin_campaign_clippers(cid):
     camp = db.session.get(Campaign, cid) or abort(404)
     members = (CampaignMember.query.filter_by(campaign_id=cid, status="aceptada")
                .options(joinedload(CampaignMember.user)).all())
-    stats = {}
-    for s_ in Submission.query.filter_by(campaign_id=cid).all():
-        d = stats.setdefault(s_.user_id, {"clips": 0, "approved": 0, "views": 0, "earned": 0.0, "last": None})
-        d["clips"] += 1
-        if s_.status == "aprobado":
-            d["approved"] += 1
-            d["views"] += s_.views or 0
-            d["earned"] = cents(d["earned"] + (s_.earned or 0))
-        d["last"] = max(d["last"] or s_.created_at, s_.created_at)
+    ok = Submission.status == "aprobado"                        # todo en dos consultas, haya 10 clippers o 500
+    stats = {uid: {"clips": int(n), "approved": int(ap or 0), "views": int(v or 0), "earned": cents(float(e or 0)), "last": last}
+             for uid, n, ap, v, e, last in db.session.query(
+                 Submission.user_id, db.func.count(Submission.id), db.func.sum(db.case((ok, 1), else_=0)),
+                 db.func.sum(db.case((ok, Submission.views), else_=0)), db.func.sum(db.case((ok, Submission.earned), else_=0)),
+                 db.func.max(Submission.created_at)).filter(Submission.campaign_id == cid).group_by(Submission.user_id)}
+    accs = {}
+    for a_ in CampaignAccount.query.filter_by(campaign_id=cid).order_by(CampaignAccount.created_at).all():
+        accs.setdefault(a_.user_id, []).append(a_)
     rows = sorted(((m, stats.get(m.user_id, {"clips": 0, "approved": 0, "views": 0, "earned": 0.0, "last": None}),
-                    campaign_accounts(m.user_id, cid)) for m in members), key=lambda r: -r[1]["views"])
+                    accs.get(m.user_id, [])) for m in members), key=lambda r: -r[1]["views"])
     mods = CampaignMod.query.filter_by(campaign_id=cid).options(joinedload(CampaignMod.user)).all()
     return render_template("admin/camp_clippers.html", camp=camp, rows=rows, pend=pending_by_campaign().get(cid, {}),
                            sec="clippers", mods=mods, mod_ids={m_.user_id for m_ in mods})
