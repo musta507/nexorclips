@@ -18,7 +18,7 @@
 {% endif %}
 {% else %}
 <a class="back" href="{{ url_for('admin_campaigns') }}">← Volver</a>
-<div class="adm-head"><div><h1>Nueva campaña</h1><p class="muted">Cuatro pasos: lo básico, el pago, el contenido y publicar. Puedes guardarla y seguir luego.</p></div></div>
+<h1 class="sr-only">Nueva campaña</h1>
 {% endif %}
 {% if request.args.get('solicitud') and not editing %}<div class="flash ok">Creando la campaña a partir de una solicitud. Al guardarla, la solicitud quedará como «Campaña creada».</div>{% endif %}
 <form method="post" enctype="multipart/form-data">

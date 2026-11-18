@@ -1,10 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Soporte · {{ APP_NAME }}{% endblock %}
 {% block content %}
-<div class="section-head" style="margin:0">
-  <h1>Soporte</h1>
-  <p class="muted">Escríbenos aquí cualquier duda sobre campañas, clips o pagos. Te respondemos en este mismo chat.</p>
-</div>
+<h1 class="sr-only">Soporte</h1>
 <div class="chat-wrap card">
   <div class="chat-head">
     <span class="team-avs" aria-hidden="true">{% for t in team %}<span class="avatar">{% if t.avatar %}<img src="{{ t.avatar }}" alt="" referrerpolicy="no-referrer">{% else %}{{ t.initial }}{% endif %}</span>{% else %}<span class="avatar team"><span class="logo-mark"></span></span>{% endfor %}<i class="team-on"></i></span>

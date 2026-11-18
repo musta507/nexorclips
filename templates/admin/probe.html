@@ -2,7 +2,7 @@
 {% block title %}Probar Apify · Admin{% endblock %}
 {% block content %}
 <a class="back" href="{{ url_for('admin_settings', _anchor='lectura') }}">← Panel técnico</a>
-<div class="adm-head"><div><h1>Probar el conteo de vistas</h1><p class="muted">Pega el enlace de un vídeo real. La web se lo pide a Apify y te enseña qué vistas lee. No se guarda nada.</p></div></div>
+<h1 class="sr-only">Probar el conteo de vistas</h1><p class="muted small">Pega el enlace de un vídeo real y verás qué vistas lee Apify. No se guarda nada.</p>
 {% if not has_token %}<div class="flash error">Falta APIFY_TOKEN en las variables de Railway. Sin él no se puede probar.</div>{% endif %}
 <div class="card">
   <form method="post" class="form-grid" style="grid-template-columns:minmax(0,1fr) auto;align-items:end">

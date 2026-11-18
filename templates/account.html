@@ -2,10 +2,7 @@
 {% from "_icons.html" import icon %}
 {% block title %}Ajustes · {{ APP_NAME }}{% endblock %}
 {% block content %}
-<div class="section-head" style="margin:0">
-  <h1>Ajustes</h1>
-  <p class="muted">{{ current_user.email }} · en {{ APP_NAME }} desde {{ current_user.created_at|date }}</p>
-</div>
+<h1 class="sr-only">Ajustes</h1>
 <div class="set" data-set>
   <nav class="set-nav card tight" aria-label="Secciones de ajustes">
     <a href="#perfil" class="on">{{ icon("users") }} Perfil</a>

@@ -3,10 +3,7 @@
 {% from "_clip.html" import clip_cover, clip_title with context %}
 {% block title %}Mis clips · {{ APP_NAME }}{% endblock %}
 {% block content %}
-<div class="section-head" style="margin:0">
-  <h1>Mis clips</h1>
-  <p class="muted">Publica en tus cuentas de campaña y tus clips aparecen aquí solos. Sigue cómo va cada uno.</p>
-</div>
+<h1 class="sr-only">Mis clips</h1>
 
 {% set nxt = next_scan_utc() %}
 <div class="card auto-scan">

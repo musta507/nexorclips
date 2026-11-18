@@ -2607,3 +2607,5 @@ body.page-support .site-footer{display:none}
 body.page-support > main{flex:1 1 0}
 body.page-support > main > .page{padding-bottom:0;gap:16px}
 @media (max-width:640px){body.page-support > main > .page{padding-top:18px}body.page-support .chat-head{padding:12px 16px}}
+/* Cabeceras sin título: los botones (Nueva campaña, Descargar CSV…) quedan a la derecha */
+.adm-head-acts{justify-content:flex-end}

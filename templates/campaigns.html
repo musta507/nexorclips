@@ -55,10 +55,7 @@
 {% endif %}
 
 <section id="campanas">
-  <div class="section-head">
-    <h2>Campañas para ti</h2>
-    <p class="muted">Únete a campañas y empieza a ganar</p>
-  </div>
+  <h2 class="sr-only">Campañas para ti</h2>
   <div class="sortbar" role="group" aria-label="Ordenar"><button type="button" class="on" data-sort="new">Más nuevas</button><button type="button" data-sort="budget">Más presupuesto</button><button type="button" data-sort="rate">Mejor pago</button></div>
   {% if cards %}
     <div class="grid">{% for c, st in cards %}{% include "_camp_card.html" %}{% endfor %}</div>

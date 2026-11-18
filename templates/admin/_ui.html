@@ -1,9 +1,9 @@
 {# Piezas comunes del panel de admin #}
+{# Sin título ni frase a la vista (lo pidió Mustapha): solo los botones de la cabecera, si los hay #}
 {% macro head(title, sub="") -%}
-<div class="adm-head">
-  <div><h1>{{ title }}</h1>{% if sub %}<p class="muted">{{ sub }}</p>{% endif %}</div>
-  <div class="adm-actions">{{ caller() if caller else "" }}</div>
-</div>
+<h1 class="sr-only">{{ title }}</h1>
+{%- set acts = (caller() if caller else "")|trim %}
+{%- if acts %}<div class="adm-head adm-head-acts"><div class="adm-actions">{{ acts }}</div></div>{% endif %}
 {%- endmacro %}
 
 {# Gráfico de barras de los últimos 30 días, dibujado en el servidor (sin librerías) #}

@@ -62,6 +62,8 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 
 ## Cosas que a Mustapha le gustan (no cambiarlas sin que lo pida)
 
+- Pantallas sin título ni frase explicativa arriba (Mis clips, Ganancias, Ajustes, Soporte, Ranking, Formación y todo el panel). El título está solo para lectores de pantalla (`sr-only`); en el panel, `ui.head` ya no pinta título, solo los botones. No volver a ponerlos.
+
 - El Resumen del panel de admin, tal como está.
 - Los colores de las estadísticas de Mis clips (naranja, verde, morado, turquesa).
 - Pastillas negras, tarjetas blancas limpias, verde solo para el dinero.
