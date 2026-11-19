@@ -70,7 +70,7 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 - Estados con color fijo: verde bien, rojo mal, naranja te toca hacer algo, gris en marcha. Nada de azul ni morado.
 - Panel de admin con el estilo de la referencia «BentoFlow» (noviembre 2026): fondo gris suave, tarjetas blancas redondeadas con sombra ligera, cifras con icono y minigráfica. La referencia era solo de estilo: los colores son los de la web (negro `--ac`). Excepción pedida por Mustapha: el Resumen usa los colores de Mis clips (vistas naranja, dinero verde, enviados morado, clippers/aprobados turquesa; las clases `.k-views/.k-spent/.k-sent/.k-users` las comparten Mis clips y el Resumen). Reglas al final de `style.css`, bajo `body.admin-shell`. La parte de los clippers aún no se ha pasado a este estilo.
 - El Resumen del panel: cuatro cifras con minigráfica y cambio frente al mes anterior, clips por semana, actividad reciente, campañas activas y equipo (`overview_v2` en `app.py`).
-- Los colores de las estadísticas de Mis clips (naranja, verde, morado, turquesa). La tarjeta elegida: degradado suave de su color desde la esquina y la cifra en su tono (opción C), sin brillo.
+- Los colores de las estadísticas de Mis clips (naranja, verde, morado, turquesa). La tarjeta elegida: fondo suave de su color y borde fino del mismo color (opción A), sin brillo.
 - Pastillas negras, tarjetas blancas limpias, verde solo para el dinero.
 - Ajustes (`/cuenta`) sin índice lateral (Perfil, Cobros, Cuenta): una sola columna centrada. Mustapha lo quitó.
 - El ranking del inicio y el destacado de campañas, recién hechos a su gusto.
