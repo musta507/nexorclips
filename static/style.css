@@ -3,16 +3,12 @@
 
 /* =============================================================== letras */
 @font-face{font-family:"Inter";src:url("fonts/inter.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:block}
-@font-face{font-family:"Poppins";src:url("fonts/poppins-500.woff2") format("woff2");font-weight:500;font-style:normal;font-display:block}
-@font-face{font-family:"Poppins";src:url("fonts/poppins-600.woff2") format("woff2");font-weight:600;font-style:normal;font-display:block}
-@font-face{font-family:"Poppins";src:url("fonts/poppins-700.woff2") format("woff2");font-weight:700 800;font-style:normal;font-display:block}
-@font-face{font-family:"Poppins";src:url("fonts/poppins-800-italic.woff2") format("woff2");font-weight:800;font-style:italic;font-display:block}
 
 /* =============================================================== colores y medidas */
 :root{
   color-scheme:light;
   --font:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --display:"Poppins",system-ui,-apple-system,sans-serif;
+  --display:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
   --bg:#f6f7f9; --card:#fff; --soft:#f1f2f4; --soft-2:#e6e7ea; --line:#e9eaee; --field:rgba(118,118,128,.08);
   --ink:#0e0e0e; --ink-2:#3b3b40; --muted:#71727a; --dark:#0e0e0e;
   --money:#12b76a; --money-ink:#067647; --money-soft:#e3f8ec; --pop:#2ee88f;
@@ -2701,7 +2697,8 @@ table.rt tbody tr{transition:background-color .12s}
 :where(a,button,summary,[tabindex]):focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:10px}
 .small b,.muted b{font-weight:600}
 
-/* ===== Letras (opción A, elegida por Mustapha): una sola letra, Inter, en toda la web; Poppins solo en el nombre del logo ===== */
+/* ===== Letras (opción A, elegida por Mustapha): una sola letra, Inter, en toda la web, también en el logo ===== */
 :root{--display:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;--title:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif}
 h1,h2,h3,legend{font-family:var(--font);letter-spacing:-.025em}
-.cp-name{font-family:"Poppins",system-ui,sans-serif}
+.cp-name{font-family:var(--font);font-weight:700;letter-spacing:-.02em}
+button,input,select,textarea,optgroup{font-family:var(--font)}   /* los botones y campos no heredan la letra solos */
