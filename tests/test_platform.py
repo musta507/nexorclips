@@ -1740,16 +1740,13 @@ def test_facebook_is_off_by_default_but_works_when_enabled(monkeypatch):
     assert V.parse_item("facebook", {"viewsCount": 900, "likes": 12, "time": "2026-11-01T10:00:00Z"})["views"] == 900
 
 
-def test_home_feature_announcement_and_campaign():
+def test_home_feature_campaign():
+    """Campaña destacada: automático, una campaña o nada (el modo «anuncio» ya no existe)."""
     cid = make_campaign(song="Campaña Uno")
     admin = client_for("admin@test.com")
     a = client_for("a@test.com")
-    post(admin, "/admin/destacado", mode="announce", title="Nueva forma de cobrar", body="Ya puedes cobrar al momento.",
-         btn_text="Ver más", btn_url="/ganancias", notify="on")
-    home = a.get("/campanas").get_data(as_text=True)
-    assert "Nueva forma de cobrar" in home and 'class="featured home-ann"' in home
-    with A.app.app_context():
-        assert A.Notice.query.filter_by(kind="destacado").count() >= 1
+    assert post(admin, "/admin/destacado", mode="announce", title="X").status_code == 400
+    assert "Un anuncio" not in admin.get("/admin/destacado").get_data(as_text=True)
     post(admin, "/admin/destacado", mode="campaign", campaign_id=str(cid))
     home = a.get("/campanas").get_data(as_text=True)
     assert "home-ann" not in home and "featured fcar-slide" in home and "Plazas abiertas" in home

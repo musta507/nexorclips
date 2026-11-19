@@ -3821,9 +3821,9 @@ def campaigns_page():
     if hf["mode"] == "campaign":
         featured = next((x for x in all_cards if x[0].id == hf["campaign_id"]), None)
         slides = [(featured[0], featured[1], "")] if featured else []
-    elif hf["mode"] in ("announce", "none"):
+    elif hf["mode"] == "none":
         featured = None
-    else:                                          # automático ("auto" o sin elegir): carrusel de nuevas y con plazas recién abiertas
+    else:                                          # automático (también si quedó guardado el antiguo «anuncio») ("auto" o sin elegir): carrusel de nuevas y con plazas recién abiertas
         slides = auto_featured(all_cards)
         featured = (slides[0][0], slides[0][1]) if slides else None
     cat = request.args.get("cat", "")
@@ -3833,8 +3833,7 @@ def campaigns_page():
     cards.sort(key=lambda x: bool(x[0].full and x[0].id not in my_join))   # plazas completas (si no estás dentro) al final
     apply_schedule()
     return render_template("campaigns.html", cards=cards, featured=featured, slides=slides, cat=cat, counts=counts,
-                           total=len(all_cards), new_user=not current_user.submissions, my_join=my_join,
-                           announce=hf if hf["mode"] == "announce" else None)
+                           total=len(all_cards), new_user=not current_user.submissions, my_join=my_join)
 
 
 BEGINNER_DAYS = 14                 # pasado este tiempo, el banner deja de enseñar la guía para principiantes
@@ -6954,7 +6953,7 @@ def admin_featured():
         return redirect(url_for("admin_featured"))
     if request.method == "POST":
         mode = request.form.get("mode", "")
-        if mode not in ("auto", "campaign", "announce", "none", ""):
+        if mode not in ("auto", "campaign", "none", ""):
             abort(400)
         new = dict(hf, mode=mode)
         if mode == "campaign":
