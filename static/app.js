@@ -618,20 +618,35 @@ function iniciarChat(chat) {
 // Dos capas: abajo, las pestañas en gris; arriba, una copia en blanco sobre negro que solo se ve a través de un
 // recorte con forma de pastilla. Lo único que se anima es ese recorte, así que el texto se lee siempre
 // (blanco donde está la pastilla, gris donde no) y la barra de verdad no se toca.
-// Solo se anima en las pestañas de la misma página; las que llevan a otra página no se deslizan.
+// Las barras que cambian de página llevan data-pill-nav y data-turbo-permanent: la barra no se repinta al cambiar
+// de página (Turbo deja la misma), así que la pastilla se desliza como en las de la misma página. Al llegar, la
+// pestaña activa se comprueba con la dirección (sirve también para «atrás») y los números se copian de la página nueva.
 var PILL_MS = 320;
 function pillItems(box) { return box.querySelectorAll(":scope > a, :scope > button"); }
 function pillCambiaPagina(it) {
   var h = it.tagName === "A" ? (it.getAttribute("href") || "") : "";
   return h !== "" && h.charAt(0) !== "#" && !it.hasAttribute("data-tab");
 }
+// El recorrido se anima a mano, fotograma a fotograma (no con una transición CSS): así sigue suave aunque Turbo
+// saque y vuelva a meter la barra al cambiar de página, que es lo que antes cortaba la animación.
+function pillPaint(pill, q) {
+  pill.style.clipPath = "inset(" + q[0].toFixed(2) + "px " + q[1].toFixed(2) + "px " + q[2].toFixed(2) + "px " + q[3].toFixed(2) + "px round 999px)";
+  pill._q = q;
+}
 function pillClip(box, pill, l, t, w, h, animate) {
   var W = box.scrollWidth, H = box.clientHeight;
-  var v = "inset(" + t + "px " + Math.max(0, W - l - w) + "px " + Math.max(0, H - t - h) + "px " + l + "px round 999px)";
-  if (!animate) pill.style.transition = "none";
-  pill.style.clipPath = v;
-  if (!animate) { void pill.offsetWidth; pill.style.transition = ""; }
+  var to = [t, Math.max(0, W - l - w), Math.max(0, H - t - h), l];
+  pill.style.transition = "none";
+  if (pill._raf) { cancelAnimationFrame(pill._raf); pill._raf = 0; }
+  var from = pill._q, quieto = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   box._pillAt = { l: l, w: w, t: Date.now(), anim: !!animate };
+  if (!animate || !from || quieto) { pillPaint(pill, to); return; }
+  var t0 = performance.now();
+  (function paso(now) {
+    var p = Math.min(1, (now - t0) / PILL_MS), e = 1 - Math.pow(1 - p, 3.4);
+    pillPaint(pill, [0, 1, 2, 3].map(function (k) { return from[k] + (to[k] - from[k]) * e; }));
+    pill._raf = p < 1 ? requestAnimationFrame(paso) : 0;
+  })(t0);
 }
 function pillSync(box, target, animate) {
   var pill = box._pill;
@@ -663,8 +678,9 @@ function pillSync(box, target, animate) {
   pillClip(box, pill, target.offsetLeft, target.offsetTop, target.offsetWidth, target.offsetHeight, animate);
   box._pillTarget = target;
 }
+function pillAnimando(box) { var at = box._pillAt; return !!(at && at.anim && Date.now() - at.t < PILL_MS + 60); }
 function montarPastilla(box) {
-  if (box._pill && box._pill.isConnected) { pillSync(box, null, false); return; }
+  if (box._pill && box._pill.isConnected) { if (!pillAnimando(box)) pillSync(box, null, false); return; }
   // Una página restaurada (atrás) trae la copia vieja sin sus escuchas: se rehace
   box.querySelectorAll(":scope > .pill").forEach(function (old) { old.remove(); });
   var pill = document.createElement("span");
@@ -681,7 +697,7 @@ function montarPastilla(box) {
     if (!it || it.parentNode !== box || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
     // Si la pestaña cambia de página (cambia el enlace de arriba), no hay deslizamiento: la página nueva trae la
     // pastilla ya en su sitio. Solo se desliza en las pestañas que cambian dentro de la misma página.
-    if (pillCambiaPagina(it)) return;
+    if (pillCambiaPagina(it) && !box.hasAttribute("data-pill-nav")) return;
     pillItems(box).forEach(function (x) { if (x !== it) { x.classList.remove("on"); x.removeAttribute("aria-current"); } });
     it.classList.add("on");
     pillSync(box, it, true);
@@ -701,8 +717,41 @@ function pastillaOrden() {
 }
 // La copia que Turbo guarda para «atrás» queda como la manda el servidor
 document.addEventListener("turbo:before-cache", function () {
-  document.querySelectorAll(".seg.has-pill, .sortbar.has-pill").forEach(function (box) { if (box._pill) pillSync(box, null, false); });
+  document.querySelectorAll(".seg.has-pill, .sortbar.has-pill").forEach(function (box) { if (box._pill && !pillAnimando(box)) pillSync(box, null, false); });
 });
+// Barras que cambian de página: la de la página nueva se descarta y se queda la de ahora, con sus números al día.
+// Si la barra nueva es distinta (otras pestañas), se pinta la nueva sin más.
+function pillAdoptar(root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll("[data-pill-nav][id]").forEach(function (nw) {
+    var old = document.getElementById(nw.id);
+    if (!old || old === nw) return;
+    var a = pillItems(old), b = pillItems(nw), igual = a.length === b.length;
+    for (var i = 0; igual && i < a.length; i++) igual = a[i].getAttribute("href") === b[i].getAttribute("href");
+    if (!igual) { nw.removeAttribute("data-turbo-permanent"); return; }
+    for (var k = 0; k < a.length; k++) if (a[k].innerHTML !== b[k].innerHTML) a[k].innerHTML = b[k].innerHTML;
+  });
+}
+document.addEventListener("turbo:before-render", function (e) { pillAdoptar(e.detail && e.detail.newBody); });
+document.addEventListener("turbo:before-frame-render", function (e) { pillAdoptar(e.detail && e.detail.newFrame); });
+// La pestaña activa según la dirección: la que coincide en ruta y cuyos parámetros están todos en la dirección
+function pillSegunDireccion() {
+  var cur = new URL(location.href);
+  document.querySelectorAll("[data-pill-nav]").forEach(function (box) {
+    var best = null, score = -1;
+    pillItems(box).forEach(function (it) {
+      var h = it.getAttribute("href"); if (!h) return;
+      var u = new URL(h, location.href), ok = u.pathname === cur.pathname, n = 0;
+      u.searchParams.forEach(function (v, k) { if (cur.searchParams.get(k) === v) n++; else ok = false; });
+      if (ok && n > score) { best = it; score = n; }
+    });
+    if (!best || best.classList.contains("on")) { if (box._pill && !pillAnimando(box)) pillSync(box, null, false); return; }
+    pillItems(box).forEach(function (x) { var on = x === best; x.classList.toggle("on", on); if (on) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current"); });
+    if (box._pill) pillSync(box, best, true);
+  });
+}
+document.addEventListener("turbo:load", pillSegunDireccion);
+document.addEventListener("turbo:frame-load", pillSegunDireccion);
 document.addEventListener("turbo:render", pastillaOrden);          // antes de que se pinte: sin un fotograma sin pastilla
 document.addEventListener("turbo:frame-render", pastillaOrden);
 
