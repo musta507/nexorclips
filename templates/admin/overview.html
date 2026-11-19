@@ -1,71 +1,79 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon, budget %}
-{% import "admin/_ui.html" as ui %}
+{% from "_icons.html" import icon %}
 {% block title %}Resumen · Admin{% endblock %}
 {% block content %}
-{% call ui.head("Resumen", "Cómo va " ~ APP_NAME ~ " de un vistazo.") %}
-  <a class="btn" href="{{ url_for('admin_campaign_form') }}">{{ icon("plus") }} Nueva campaña</a>
-{% endcall %}
+{% macro spark(vals, cls) -%}
+{% set top = (vals|max) or 1 %}{% set n = vals|length %}
+<svg class="v2-spark {{ cls }}" viewBox="0 0 120 34" preserveAspectRatio="none" aria-hidden="true">
+  {% set pts = [] %}{% for v in vals %}{% set _ = pts.append(((loop.index0 / (n - 1) * 120)|round(1)) ~ "," ~ ((31 - v / top * 28)|round(1))) %}{% endfor %}
+  <polygon class="f" points="0,34 {{ pts|join(' ') }} 120,34"/>
+  <polyline points="{{ pts|join(' ') }}"/>
+</svg>
+{%- endmacro %}
 
-<div class="adm-kpis">
-  <div class="kpi"><span>Presupuesto en campañas activas</span><b class="tnum">{{ kpis.budget_live|money(0) }}</b><small class="muted">{{ kpis.live_camps }} {{ "campaña activa" if kpis.live_camps == 1 else "campañas activas" }}</small></div>
-  <div class="kpi"><span>Repartido a clips</span><b class="tnum">{{ kpis.spent|money(0) }}</b></div>
-  <div class="kpi"><span>Pagado a clippers</span><b class="tnum">{{ kpis.paid|money(0) }}</b></div>
-  <div class="kpi{% if kpis.open_payouts_n %} warn{% endif %}"><span>Retiros en curso</span><b class="tnum">{{ kpis.open_payouts|money(0) }}</b>{% if kpis.open_payouts_n %}<a href="{{ url_for('admin_payouts') }}">{{ kpis.open_payouts_n }} {{ "retiro" if kpis.open_payouts_n == 1 else "retiros" }} →</a>{% endif %}</div>
-  <div class="kpi"><span>Vistas aprobadas</span><b class="tnum">{{ kpis.views|short }}</b></div>
-  <div class="kpi"><span>Vistas últimos 7 días</span><b class="tnum">{{ kpis.week.views|short }}</b>{% if kpis.week.change is not none %}<small class="trend {{ 'up' if kpis.week.change >= 0 else 'down' }}">{{ "▲" if kpis.week.change >= 0 else "▼" }} {{ kpis.week.change|abs }} % frente a la semana pasada</small>{% else %}<small class="muted">Aún sin semana anterior para comparar</small>{% endif %}</div>
+<div class="v2-head">
+  <div><h1 class="v2-h1">Resumen</h1><p class="v2-sub">Así va {{ APP_NAME }} en los últimos 30 días</p></div>
+  <a class="v2-btn" href="{{ url_for('admin_campaign_form') }}">{{ icon("plus") }} Nueva campaña</a>
 </div>
 
-<div class="adm-grid">
-  <section class="card mc adm-stats" data-chart data-chart-smooth data-chart-start="views" data-chart-mode-start="daily" aria-label="Estadísticas de {{ APP_NAME }}">
-    <div class="adm-stats-top">
-      <div class="an-total mc-total"><b class="tnum" data-chart-total>{{ an.totals.views|int|short }}</b> <span data-chart-label>Visualizaciones</span></div>
-      <span class="small muted">últimos {{ dias }} días</span>
-    </div>
-    <div class="an-tg adm-stats-tabs" role="group" aria-label="Qué ver en la gráfica">
-      <button type="button" class="on" data-chart-metric="views">Vistas</button>
-      <button type="button" data-chart-metric="spent">Dinero</button>
-      <button type="button" data-chart-metric="sent">Clips</button>
-      <button type="button" data-chart-metric="users">Clippers</button>
-    </div>
-    <script type="application/json" data-chart-data>{{ {"series": an.series, "totals": an.totals}|tojson }}</script>
-    <div class="an-plot" data-chart-plot></div>
-    <div class="adm-stats-foot">
-      <div class="an-tg" role="group" aria-label="Forma de ver"><button type="button" class="on" data-chart-mode="daily">Por día</button><button type="button" data-chart-mode="cumulative">Acumulado</button></div>
-      {% set n_rev = todo|sum(attribute="1.clips") %}{% set n_req = todo|map(attribute="1")|map(attribute="requests")|sum + todo|map(attribute="1")|map(attribute="accounts")|sum %}
-      {% if n_rev or n_req or general %}
-      <span class="adm-pend small">
-        {% if n_rev %}<a href="{{ url_for('admin_campaigns') }}">{{ n_rev }} {{ "clip" if n_rev == 1 else "clips" }} por revisar</a>{% endif %}
-        {% if n_req %}<a href="{{ url_for('admin_campaigns') }}">{{ n_req }} {{ "solicitud" if n_req == 1 else "solicitudes" }}</a>{% endif %}
-        {% for ico, text, url in general %}<a href="{{ url }}">{{ text }}</a>{% endfor %}
-      </span>
-      {% endif %}
+<div class="v2-kpis">
+  {% for k in kc %}
+  <div class="v2-card v2-kpi k-{{ k.key }}">
+    <div class="v2-kpi-top"><span>{{ k.label }}</span><span class="v2-ico">{{ icon(k.icon) }}</span></div>
+    <b class="tnum">{% if k.money %}{{ k.value|money(0) }}{% else %}{{ k.value|int|short }}{% endif %}</b>
+    {% if k.change is not none %}<small class="v2-ch {{ 'up' if k.change >= 0 else 'down' }}">{{ "↑" if k.change >= 0 else "↓" }} {{ k.change|abs|string|replace('.', ',') }} %<span> vs. mes anterior</span></small>{% else %}<small class="v2-ch muted">Sin datos del mes anterior</small>{% endif %}
+    {{ spark(k.spark, "s-" ~ k.key) }}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="v2-row">
+  <section class="v2-card v2-chart">
+    <div class="v2-ch-head"><h3>Clips por semana</h3><span class="small muted">Últimas 6 semanas</span></div>
+    <div class="v2-legend"><span><i class="l1"></i>Enviados</span><span><i class="l2"></i>Aprobados</span><span><i class="l3"></i>Rechazados</span></div>
+    {% set top = (weeks|map(attribute="sent")|max) or 1 %}
+    <div class="v2-bars">
+      <div class="v2-yax">{% for i in range(4, -1, -1) %}<span>{{ ((top * i / 4)|round|int) }}</span>{% endfor %}</div>
+      <div class="v2-plot">
+        {% for i in range(5) %}<i class="g" style="bottom:{{ i * 25 }}%"></i>{% endfor %}
+        {% for w in weeks %}
+        <div class="v2-wk"><div class="v2-trio">
+          <span class="b1" style="height:{{ (w.sent / top * 100)|round(1) }}%" title="Enviados: {{ w.sent }}"></span>
+          <span class="b2" style="height:{{ (w.ok / top * 100)|round(1) }}%" title="Aprobados: {{ w.ok }}"></span>
+          <span class="b3" style="height:{{ (w.ko / top * 100)|round(1) }}%" title="Rechazados: {{ w.ko }}"></span>
+        </div><small>{{ w.label }}</small></div>
+        {% endfor %}
+      </div>
     </div>
   </section>
-  <div class="adm-charts">
-    {{ ui.bars(clips_day, "Clips enviados") }}
-    {{ ui.bars(paid_day, "Pagado a clippers", "money") }}
-    {{ ui.bars(users_day, "Clippers nuevos") }}
-  </div>
+  <section class="v2-card v2-act">
+    <div class="v2-ch-head"><h3>Actividad reciente</h3><a class="v2-pill" href="{{ url_for('admin_activity') }}">Ver todo</a></div>
+    <ul>
+      {% for when, ico, col, text in ev %}
+      <li><span class="v2-aico c-{{ col }}">{{ icon(ico) }}</span><span><b>{{ text }}</b><small>{{ when|ago }}</small></span></li>
+      {% endfor %}
+    </ul>
+    {% if n_rev or n_req %}<a class="v2-todo" href="{{ url_for('admin_campaigns') }}">{{ icon("bell") }} {% if n_rev %}{{ n_rev }} {{ "clip" if n_rev == 1 else "clips" }} por revisar{% endif %}{% if n_rev and n_req %} · {% endif %}{% if n_req %}{{ n_req }} {{ "solicitud" if n_req == 1 else "solicitudes" }}{% endif %}</a>{% endif %}
+    {% for ico, text, url in general %}<a class="v2-todo" href="{{ url }}">{{ icon(ico) }} {{ text }}</a>{% endfor %}
+  </section>
 </div>
 
-<section>
-  <div class="adm-subhead"><h2>Campañas activas</h2><a class="link small" href="{{ url_for('admin_campaigns') }}">Ver todas</a></div>
-  {% if live %}
-  <div class="adm-camps">
-    {% for c, st in live[:6] %}
-    <a class="card adm-camp" href="{{ url_for('admin_campaign', cid=c.id) }}">
-      <div class="adm-camp-top">
-        {% set _t, lqip = cover_meta(c) %}<span class="dthumb sm"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="44" height="44" loading="lazy">{% endif %}</span>
-        <div class="adm-camp-name"><b>{{ c.song }}</b><span class="small muted">{{ c.artist }}</span></div>
-        <span class="small muted tnum">{{ st.views|short }} vistas · {{ st.clips }} clips{% if st.pending %} · <b>{{ st.pending }} por revisar</b>{% endif %}</span>
-      </div>
-      {{ budget(c, st) }}
+<div class="v2-row">
+  <section class="v2-card v2-camps">
+    <div class="v2-ch-head"><h3>Campañas activas</h3><a class="v2-pill" href="{{ url_for('admin_campaigns') }}">Ver todas</a></div>
+    {% for c, st in live[:5] %}
+    <a class="v2-camp" href="{{ url_for('admin_campaign', cid=c.id) }}">
+      <span class="v2-cico">{{ icon("flag") }}</span>
+      <span class="v2-cname"><b>{{ c.song }}</b><span class="v2-track"><i style="width:{{ 100 - st.left_pct }}%"></i></span></span>
+      <span class="v2-cpct tnum">{{ 100 - st.left_pct }} %</span>
     </a>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="card empty"><h3>No hay campañas activas</h3><p class="muted">Crea una con «Nueva campaña».</p></div>
-  {% endif %}
-</section>
+    {% else %}<p class="muted">No hay campañas activas.</p>{% endfor %}
+  </section>
+  <section class="v2-card v2-team">
+    <div class="v2-ch-head"><h3>Equipo</h3><a class="v2-pill" href="{{ url_for('admin_mods') }}">Añadir mod</a></div>
+    {% for m in mods %}
+    <div class="v2-mem"><span class="v2-av">{{ (m.u.name or m.u.email)[:1]|upper }}</span><span><b>{{ m.u.name }}</b><small>{{ "Administrador" if m.camps is none else ("Mod de " ~ m.camps ~ (" campaña" if m.camps == 1 else " campañas")) }}</small></span>{% set lv = m.u.last_seen_at|seen_level %}<span class="v2-seen s-{{ lv }}">● {{ "En línea" if lv == "on" else (m.u.last_seen_at|ago if m.u.last_seen_at else "Nunca") }}</span></div>
+    {% else %}<p class="muted">Aún no hay mods.</p>{% endfor %}
+  </section>
+</div>
 {% endblock %}

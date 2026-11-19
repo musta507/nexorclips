@@ -3109,5 +3109,5 @@ def test_admin_summary_stats_chart():
         an = A.admin_analytics(30)
         assert an["totals"]["views"] == 800 and an["totals"]["spent"] == 1.5
     html = admin.get("/admin").get_data(as_text=True)
-    assert 'data-chart-metric="views"' in html and 'data-chart-metric="spent"' in html and 'data-chart-metric="users"' in html
+    assert "Dinero repartido" in html and "Clips por semana" in html and "Actividad reciente" in html and "Clip aprobado" in html
     assert "Para hacer" not in html

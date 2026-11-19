@@ -5065,12 +5065,6 @@ def admin_kpis(camps):
 def admin_home():
     camps = Campaign.query.filter(Campaign.status != DIST_STATUS).order_by(Campaign.created_at.desc()).all()
     cards = [(c, campaign_stats(c)) for c in camps]
-    since = datetime.utcnow() - timedelta(days=31)
-    clips_day = daily_series([(s.created_at, 1) for s in Submission.query.filter(Submission.created_at >= since)
-                              .with_entities(Submission.created_at)])
-    paid_day = daily_series(Payout.query.filter(Payout.status == "pagado", Payout.paid_at >= since)
-                            .with_entities(Payout.paid_at, Payout.amount).all())
-    users_day = daily_series([(u.created_at, 1) for u in User.query.filter(User.created_at >= since).with_entities(User.created_at)])
     nc = admin_counts()
     alerts = []
     names = {c.id: c.song for c in camps}
@@ -5099,14 +5093,10 @@ def admin_home():
     if not viewcounter.APIFY_TOKEN:
         alerts.append(("gear", "Falta APIFY_TOKEN: las vistas no se están contando", url_for("admin_settings")))
     live = [(c, st) for c, st in cards if c.status == "activa"]
-    dias = request.args.get("dias", 30, type=int)
-    dias = dias if dias in (7, 30, 90) else 30
     pend = pending_by_campaign()
     todo = [(c, pend[c.id]) for c, _st in cards if c.id in pend and any(pend[c.id].get(k) for k in ("clips", "requests", "accounts", "support"))]
     general = [al for al in alerts if not al[1].startswith("«") or "agotarse" in al[1]]
-    return render_template("admin/overview.html", kpis=admin_kpis(camps), alerts=alerts, live=live,
-                           clips_day=clips_day, paid_day=paid_day, users_day=users_day, an=admin_analytics(dias), dias=dias,
-                           todo=todo, general=general)
+    return render_template("admin/overview.html", **overview_v2(camps, cards, live, todo, general))
 
 
 ADMIN_METRICS = ("views", "sent", "approved", "spent", "paid", "users")
@@ -5136,6 +5126,48 @@ def views_daily(start, days):
                 out[i] += cur - prev
                 prev = cur
     return [float(v) for v in out]
+
+
+def overview_v2(camps, cards, live, todo, general):
+    """Datos del Resumen: cuatro cifras con su minigráfica y su cambio frente al mes anterior, clips por semana,
+    actividad reciente, campañas activas y equipo."""
+    an = admin_analytics(60)
+    cards_k = []
+    for key, label, ico, money_ in (("views", "Vistas", "eye", False), ("spent", "Dinero repartido", "cash", True),
+                                    ("sent", "Clips enviados", "film", False), ("users", "Clippers nuevos", "users", False)):
+        d = an["series"]["daily"][key]
+        now_, prev = sum(d[30:]), sum(d[:30])
+        cards_k.append({"key": key, "label": label, "icon": ico, "money": money_, "value": now_, "spark": d[30:],
+                        "change": round((now_ - prev) / prev * 100, 1) if prev else None})
+    # semanas: enviados, aprobados, rechazados
+    today = datetime.utcnow().date()
+    weeks = []
+    for w in range(5, -1, -1):
+        a0 = datetime.combine(today - timedelta(days=7 * w + 6), datetime.min.time()); a1 = a0 + timedelta(days=7)
+        q = Submission.query.filter(Submission.created_at >= a0, Submission.created_at < a1)
+        weeks.append({"label": f"{a0.day}/{a0.month:02d}", "sent": q.count(), "ok": q.filter(Submission.status == "aprobado").count(),
+                      "ko": q.filter(Submission.status == "rechazado").count()})
+    ev = []
+    for s_ in Submission.query.filter(Submission.status == "aprobado", Submission.reviewed_at.isnot(None)).order_by(Submission.reviewed_at.desc()).limit(4):
+        ev.append((s_.reviewed_at, "ok", "green", f"Clip aprobado · {s_.views:,} vistas".replace(",", ".")))
+    for u in User.query.filter(User.is_admin.is_(False)).order_by(User.created_at.desc()).limit(3):
+        ev.append((u.created_at, "users", "violet", f"Nuevo clipper: {u.name}"))
+    for p_ in Payout.query.filter(Payout.status == "pagado").order_by(Payout.paid_at.desc()).limit(2):
+        ev.append((p_.paid_at, "cash", "green", f"Retiro pagado: {cents(p_.amount):.2f} $".replace(".", ",")))
+    for c in Campaign.query.order_by(Campaign.created_at.desc()).limit(2):
+        ev.append((c.created_at, "flag", "amber", f"Campaña creada: «{c.song}»"))
+    ev = sorted([e for e in ev if e[0]], key=lambda e: e[0], reverse=True)[:5]
+    mods = []
+    for m in CampaignMod.query.all():
+        u = db.session.get(User, m.user_id)
+        if u and all(x["u"].id != u.id for x in mods):
+            mods.append({"u": u, "camps": CampaignMod.query.filter_by(user_id=u.id).count()})
+    for u in User.query.filter_by(is_admin=True).all():
+        if all(x["u"].id != u.id for x in mods):
+            mods.append({"u": u, "camps": None})
+    n_rev = sum(pd.get("clips", 0) for _c, pd in todo)
+    n_req = sum(pd.get("requests", 0) + pd.get("accounts", 0) for _c, pd in todo)
+    return dict(kc=cards_k, weeks=weeks, ev=ev, live=live, mods=mods[:4], n_rev=n_rev, n_req=n_req, general=general)
 
 
 def admin_analytics(days=30):

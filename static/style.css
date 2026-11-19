@@ -2721,3 +2721,101 @@ button,input,select,textarea,optgroup{font-family:var(--font)}   /* los botones 
 .drate span,.hub-sec-title,.hm-eb,.vv-eb,.mods-group,.pm-label,.hm-lbl,.adm-gt{text-transform:none!important;letter-spacing:0!important}
 .drate span{font-size:12px;font-weight:500}
 .hm-lbl,.hm-eb,.vv-eb,.pm-label,.adm-gt{font-size:12px}
+
+/* ================================================== panel de admin: estilo nuevo (referencia «BentoFlow», noviembre 2026, elegido por Mustapha) */
+body.admin-shell{--ac:#7c5cfc;--ac-soft:#efeafe;--ac-2:#a993fd;--ac-3:#d9cffe;--bg:#f4f4f8;background:var(--bg)}
+
+/* barra de arriba y menú lateral */
+body.admin-shell .topbar{background:#fff;border-bottom:1px solid #ececf2;box-shadow:none}
+body.admin-shell .adm-find{background:#f4f4f8;border:1px solid #ececf2;border-radius:12px}
+body.admin-shell .adm-badge{background:var(--ac)!important;color:#fff!important}
+body.admin-shell .adm-side{background:#fff;border-right:1px solid #ececf2}
+body.admin-shell .adm-link{border-radius:10px;color:#4b4b57;font-weight:500}
+body.admin-shell .adm-link svg{color:#8a8a99}
+body.admin-shell .adm-link:hover{background:#f6f6fa}
+body.admin-shell .adm-link.on{background:var(--ac-soft);color:var(--ac);font-weight:600}
+body.admin-shell .adm-link.on svg{color:var(--ac)}
+body.admin-shell .adm-gt{text-transform:none;letter-spacing:0;font-size:12px;color:#9a9aa8}
+body.admin-shell .adm-n{background:var(--ac)}
+
+/* cabecera */
+.v2-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:18px}
+.v2-h1{font-size:24px;letter-spacing:-.02em}
+.v2-sub{color:#8a8a99;font-size:14px;margin-top:2px}
+.v2-btn{display:inline-flex;align-items:center;gap:8px;background:var(--ac);color:#fff;font-weight:600;font-size:14px;padding:10px 16px;border-radius:12px;box-shadow:0 6px 16px color-mix(in srgb,var(--ac) 30%,transparent)}
+.v2-btn svg{width:16px;height:16px}
+
+/* tarjetas */
+.v2-card{background:#fff;border:1px solid #ececf2;border-radius:18px;box-shadow:0 1px 2px rgba(20,20,43,.03),0 8px 24px rgba(20,20,43,.04);padding:18px}
+.v2-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:16px}
+.v2-kpi{display:flex;flex-direction:column;gap:4px;padding:16px 18px 10px}
+.v2-kpi-top{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:600;color:#2b2b36}
+.v2-ico{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--k-soft);color:var(--k)}
+.v2-ico svg{width:17px;height:17px}
+.v2-kpi b{font:700 26px/1.15 var(--font);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.v2-ch{font-size:12.5px;font-weight:600}.v2-ch span{color:#8a8a99;font-weight:500}
+.v2-ch.up{color:#12b76a}.v2-ch.down{color:#e5484d}
+.v2-spark{width:100%;height:40px;margin-top:6px}
+.v2-spark polyline{fill:none;stroke:var(--k);stroke-width:1.8;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.v2-spark .f{fill:var(--k);opacity:.1}
+.k-views{--k:var(--ac);--k-soft:var(--ac-soft)}
+.k-spent{--k:#12b76a;--k-soft:#e3f8ec}
+.k-sent{--k:#f59e0b;--k-soft:#fef3c7}
+.k-users{--k:#e5484d;--k-soft:#ffe4e6}
+
+.v2-row{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px;margin-bottom:16px}
+.v2-row:last-child{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}
+.v2-ch-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.v2-ch-head h3{font-size:15px}
+.v2-pill{font-size:12px;font-weight:600;color:#4b4b57;border:1px solid #ececf2;border-radius:8px;padding:5px 10px;background:#fff}
+
+/* barras agrupadas */
+.v2-legend{display:flex;gap:14px;font-size:12px;color:#6b6b78;margin-bottom:8px}
+.v2-legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.v2-legend .l1,.v2-trio .b1{background:var(--ac)}
+.v2-legend .l2,.v2-trio .b2{background:var(--ac-2)}
+.v2-legend .l3,.v2-trio .b3{background:var(--ac-3)}
+.v2-chart{display:flex;flex-direction:column}
+.v2-bars{display:grid;grid-template-columns:auto 1fr;gap:10px;flex:1;min-height:230px}
+.v2-yax{display:flex;flex-direction:column;justify-content:space-between;font-size:11px;color:#9a9aa8;text-align:right;padding-bottom:22px}
+.v2-plot{position:relative;display:flex;align-items:stretch;justify-content:space-around;padding-bottom:22px}
+.v2-plot .g{position:absolute;left:0;right:0;border-top:1px dashed #ececf2;margin-bottom:22px}
+.v2-wk{position:relative;display:flex;flex-direction:column;align-items:center;flex:1}
+.v2-trio{flex:1;display:flex;align-items:flex-end;gap:4px;width:100%;justify-content:center}
+.v2-trio span{width:min(16px,22%);border-radius:5px 5px 2px 2px;min-height:2px}
+.v2-wk small{position:absolute;bottom:-20px;font-size:11px;color:#9a9aa8}
+
+/* actividad */
+.v2-act ul{list-style:none;margin:0;padding:0;display:grid}
+.v2-act li{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid #f1f1f5}
+.v2-act li:last-child{border-bottom:0}
+.v2-act li b{display:block;font-size:13.5px;font-weight:600}
+.v2-act li small{color:#8a8a99;font-size:12px}
+.v2-aico{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none}
+.v2-aico svg{width:16px;height:16px}
+.c-green{background:#e3f8ec;color:#12b76a}.c-violet{background:var(--ac-soft);color:var(--ac)}.c-amber{background:#fef3c7;color:#d97706}
+.v2-todo{display:flex;align-items:center;gap:8px;margin-top:10px;padding:10px 12px;border-radius:12px;background:#fff7ed;color:#c2410c;font-size:13px;font-weight:600}
+.v2-todo svg{width:16px;height:16px}
+
+/* campañas y equipo */
+.v2-camp{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:9px 0}
+.v2-cico{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:var(--ac-soft);color:var(--ac)}
+.v2-cico svg{width:15px;height:15px}
+.v2-cname b{display:block;font-size:13.5px;font-weight:600;margin-bottom:6px}
+.v2-track{display:block;height:6px;border-radius:99px;background:#f0f0f5;overflow:hidden}
+.v2-track i{display:block;height:100%;border-radius:99px;background:var(--ac)}
+.v2-cpct{font-size:13px;font-weight:600;color:#4b4b57}
+.v2-mem{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:9px 0}
+.v2-av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--ac-soft);color:var(--ac);font-weight:700}
+.v2-mem b{display:block;font-size:13.5px}.v2-mem small{color:#8a8a99;font-size:12px}
+.v2-seen{font-size:12px;font-weight:600;color:#9a9aa8;white-space:nowrap}.v2-seen.s-on{color:#12b76a}.v2-seen.s-week{color:#d97706}
+
+@media (max-width:1100px){.v2-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.v2-row,.v2-row:last-child{grid-template-columns:1fr}}
+@media (max-width:560px){.v2-kpis{gap:10px}.v2-kpi{padding:12px 12px 8px}.v2-kpi b{font-size:20px}.v2-ch span{display:none}.v2-head{align-items:center}.v2-sub{display:none}.v2-btn{padding:9px 12px}}
+
+/* botones, pestañas y tarjetas del panel con el mismo estilo */
+body.admin-shell .btn:not(.soft):not(.red):not(.green):not(.ghost):not(.link){background:var(--ac);border-radius:12px}
+body.admin-shell .btn:not(.soft):not(.red):not(.green):not(.ghost):not(.link):hover{background:color-mix(in srgb,var(--ac) 88%,#000)}
+body.admin-shell .btn.soft{border-radius:12px}
+body.admin-shell .card,body.admin-shell .kpi{border:1px solid #ececf2;border-radius:18px;box-shadow:0 1px 2px rgba(20,20,43,.03),0 8px 24px rgba(20,20,43,.04)}
+body.admin-shell .adm-link.on .adm-n{background:var(--ac);color:#fff}
