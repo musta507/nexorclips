@@ -3111,3 +3111,13 @@ def test_admin_summary_stats_chart():
     html = admin.get("/admin").get_data(as_text=True)
     assert "Dinero repartido" in html and "Clips por semana" in html and "Actividad reciente" in html and "Clip aprobado" in html
     assert "Para hacer" not in html
+
+
+def test_admin_campaigns_filter_in_page():
+    """Campañas del panel: llegan todas y la barra filtra en la página (la pastilla se desliza); ?estado marca la pestaña."""
+    make_campaign(budget=5000)
+    admin = client_for("admin@test.com")
+    page = admin.get("/admin/campanas").get_data(as_text=True)
+    assert 'data-row-filter="#camp-rows"' in page and 'class="seg"' in page and 'data-f="activa"' in page
+    page = admin.get("/admin/campanas?estado=finalizada").get_data(as_text=True)
+    assert 'class="f-out"' in page and 'class="on" data-tab data-f="finalizada"' in page

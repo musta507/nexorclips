@@ -5212,8 +5212,7 @@ def admin_analytics(days=30):
 def admin_campaigns():
     camps = Campaign.query.filter(Campaign.status != DIST_STATUS).order_by(Campaign.created_at.desc()).all()
     filt = request.args.get("estado", "")
-    if filt in ("activa", "pausada", "finalizada"):
-        camps = [c for c in camps if c.status == filt]
+    filt = filt if filt in ("activa", "pausada", "finalizada") else ""   # se filtra en la página: llegan todas
     return render_template("admin/campaigns.html", cards=[(c, campaign_stats(c)) for c in camps], filt=filt,
                            pend=pending_by_campaign())
 

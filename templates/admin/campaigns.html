@@ -6,9 +6,10 @@
 {% call ui.head("Campañas", "Todas las campañas, su presupuesto y cómo van.") %}
   <a class="btn" href="{{ url_for('admin_campaign_form') }}">{{ icon("plus") }} Nueva campaña</a>
 {% endcall %}
-<nav class="tl" aria-label="Filtrar por estado">
+{# Filtro dentro de la página (sin recargar): así la pastilla negra se desliza (lo pidió Mustapha) #}
+<nav class="seg" aria-label="Filtrar por estado" data-row-filter="#camp-rows" data-param="estado">
   {% for k, label in [("", "Todas"), ("activa", "Activas"), ("pausada", "Pausadas"), ("finalizada", "Finalizadas")] %}
-  <a class="{% if filt == k %}on{% endif %}" href="{{ url_for('admin_campaigns', estado=k or None) }}">{{ label }}</a>
+  <a href="{{ url_for('admin_campaigns', estado=k or None) }}" class="{% if filt == k %}on{% endif %}" data-tab data-f="{{ k }}"{% if filt == k %} aria-current="true"{% endif %}>{{ label }}</a>
   {% endfor %}
 </nav>
 {% if cards|length > 6 %}<div class="mc-tools"><label class="cr-q mc-q">{{ icon("search") }}<input type="search" placeholder="Buscar campaña o creador" aria-label="Buscar campaña" data-live-search="#camp-rows"></label></div>{% endif %}
@@ -17,7 +18,7 @@
     <thead><tr><th>Campaña</th><th>Estado</th><th class="r">Pago / 1.000</th><th>Repartido</th><th class="r">Vistas</th><th class="r">Clips</th><th></th></tr></thead>
     <tbody id="camp-rows">
     {% for c, st in cards %}
-    <tr data-search="{{ c.song }} {{ c.artist }}">
+    <tr data-search="{{ c.song }} {{ c.artist }}" data-f="{{ c.status }}"{% if filt and c.status != filt %} class="f-out"{% endif %}>
       <td data-label="Campaña"><a class="adm-camp-cell" href="{{ url_for('admin_campaign', cid=c.id) }}">{% set _t, lqip = cover_meta(c) %}<span class="dthumb sm"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="44" height="44" loading="lazy">{% endif %}</span><span><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<span class="small muted" style="display:block">{{ c.artist }}</span></span></a></td>
       <td data-label="Estado"><span class="status {{ c.status }}">{{ c.status|capitalize }}</span>{% if c.full %} <span class="small muted">· Plazas completas</span>{% endif %}
         {% set pd = pend.get(c.id, {}) %}{% if pd.get("clips") or pd.get("requests") or pd.get("accounts") %}<div class="cn-pend">
@@ -30,9 +31,8 @@
       <td data-label="Clips" class="r tnum">{{ st.clips }}</td>
       <td data-label="" class="r"><a class="btn sm soft" href="{{ url_for('admin_campaign', cid=c.id) }}">Abrir</a></td>
     </tr>
-    {% else %}
-    <tr><td colspan="7"><div class="empty"><h3>No hay campañas aquí</h3><p class="muted">Crea la primera con «Nueva campaña».</p></div></td></tr>
     {% endfor %}
+    <tr data-f-empty{% if cards|selectattr("0.status", "equalto", filt)|list or (not filt and cards) %} hidden{% endif %}><td colspan="7"><div class="empty"><h3>No hay campañas aquí</h3><p class="muted">Crea una con «Nueva campaña».</p></div></td></tr>
     </tbody>
   </table></div>
 </div>

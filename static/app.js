@@ -1853,3 +1853,27 @@ function listas() {
     guardar();
   });
 }
+
+// =============================================================== Filtros de tabla dentro de la página (Campañas del panel)
+// La barra no cambia de página: esconde las filas que no tocan y deja la pastilla deslizarse.
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-row-filter] [data-f]");
+  if (!b) return;
+  var nav = b.closest("[data-row-filter]"), body = document.querySelector(nav.getAttribute("data-row-filter"));
+  if (!body) return;
+  e.preventDefault();
+  var f = b.getAttribute("data-f"), shown = 0;
+  nav.querySelectorAll("[data-f]").forEach(function (x) { var on = x === b; x.classList.toggle("on", on); if (on) x.setAttribute("aria-current", "true"); else x.removeAttribute("aria-current"); });
+  body.querySelectorAll("tr[data-f]").forEach(function (tr) {
+    var out = !!f && tr.getAttribute("data-f") !== f;
+    tr.classList.toggle("f-out", out);
+    if (!out) shown++;
+  });
+  var empty = body.querySelector("[data-f-empty]"); if (empty) empty.hidden = shown > 0;
+  var p = nav.getAttribute("data-param");
+  if (p && history.replaceState) {
+    var u = new URL(location.href);
+    if (f) u.searchParams.set(p, f); else u.searchParams.delete(p);
+    history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+  }
+});
