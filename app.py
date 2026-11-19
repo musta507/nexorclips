@@ -5127,6 +5127,38 @@ def views_daily(start, days):
     return [float(v) for v in out]
 
 
+def views_split(start, days, from_i=0):
+    """Como views_daily, pero repartido: vistas por red y día, y vistas por campaña desde el día from_i (para el ranking)."""
+    since = datetime.combine(start, datetime.min.time())
+    base = dict(db.session.query(ViewSnapshot.submission_id, db.func.max(ViewSnapshot.views))
+                .join(Submission, Submission.id == ViewSnapshot.submission_id)
+                .filter(Submission.status == "aprobado", ViewSnapshot.taken_at < since)
+                .group_by(ViewSnapshot.submission_id).all())
+    level, meta = {}, {}
+    for sid, when, v, pl, cid in (ViewSnapshot.query.join(Submission, Submission.id == ViewSnapshot.submission_id)
+                                  .filter(Submission.status == "aprobado", ViewSnapshot.taken_at >= since)
+                                  .with_entities(ViewSnapshot.submission_id, ViewSnapshot.taken_at, ViewSnapshot.views,
+                                                 Submission.platform, Submission.campaign_id)):
+        i = (when.date() - start).days
+        if 0 <= i < days:
+            d = level.setdefault(sid, {})
+            d[i] = max(d.get(i, 0), v or 0)
+            meta[sid] = (pl, cid)
+    plat, camp = {}, {}
+    for sid, by_day in level.items():
+        pl, cid = meta[sid]
+        row = plat.setdefault(pl, [0.0] * days)
+        prev = base.get(sid) or 0
+        for i in range(days):
+            if i in by_day:
+                cur = max(prev, by_day[i])
+                row[i] += cur - prev
+                if i >= from_i:
+                    camp[cid] = camp.get(cid, 0) + cur - prev
+                prev = cur
+    return {"plat": plat, "camp": camp}
+
+
 OVERVIEW_PERIODS = {"7": "Últimos 7 días", "30": "Últimos 30 días", "todo": "Desde siempre"}
 
 
@@ -5174,6 +5206,27 @@ def overview_v2(camps, cards, live, todo, general, p="30"):
         label = MES[a0.month - 1] if unit == "month" else f"{a0.day}/{a0.month:02d}"
         weeks.append({"label": label, "sent": q.count(), "ok": q.filter(Submission.status == "aprobado").count(),
                       "ko": q.filter(Submission.status == "rechazado").count()})
+    # gráficas del Resumen (Mustapha quiere probarlas todas): vistas y dinero, coste por 1.000, por red, campañas y clippers activos
+    dates = [datetime.fromisoformat(x).date() for x in an["series"]["labels"]]
+    dv, ds = an["series"]["daily"]["views"], an["series"]["daily"]["spent"]
+    span = len(dates)
+    split = ttl_cache(f"views_split_{p}_{dates[0]}", 900, lambda: views_split(dates[0], span, 0 if allt else span - days))
+    def bsum(arr, a0, a1):
+        return sum(v for d_, v in zip(dates, arr) if a0 <= d_ < a1)
+    ch_vm, ch_cpm, ch_net, ch_act = [], [], [], []
+    for (a0, a1), w in zip(buckets, weeks):
+        v_, m_ = bsum(dv, a0, a1), bsum(ds, a0, a1)
+        ch_vm.append({"label": w["label"], "views": v_, "money": m_})
+        ch_cpm.append({"label": w["label"], "v": round(m_ / v_ * 1000, 2) if v_ >= 1000 else None})
+        ch_net.append({"label": w["label"], **{k: bsum(split["plat"].get(k, []), a0, a1) for k in PLATFORMS}})
+        ch_act.append({"label": w["label"], "n": db.session.query(db.func.count(db.distinct(Submission.user_id))).filter(
+            Submission.created_at >= datetime.combine(a0, datetime.min.time()),
+            Submission.created_at < datetime.combine(a1, datetime.min.time())).scalar() or 0})
+    rates = [c.rate for c, _st in live if c.rate]
+    names = {c.id: c.song for c in Campaign.query.filter(Campaign.id.in_(list(split["camp"]) or [0])).all()}
+    top = sorted(((names.get(cid, "?"), v_) for cid, v_ in split["camp"].items() if v_ > 0), key=lambda x: -x[1])[:5]
+    charts = {"vm": ch_vm, "cpm": ch_cpm, "cpm_ref": round(sum(rates) / len(rates) / 1000, 2) if rates else None,
+              "net": ch_net, "nets": [k for k in PLATFORMS if any(r[k] for r in ch_net)], "top": top, "act": ch_act}
     ev = []
     for s_ in Submission.query.filter(Submission.status == "aprobado", Submission.reviewed_at.isnot(None)).order_by(Submission.reviewed_at.desc()).limit(4):
         ev.append((s_.reviewed_at, "ok", "green", f"Clip aprobado · {s_.views:,} vistas".replace(",", ".")))
@@ -5195,7 +5248,7 @@ def overview_v2(camps, cards, live, todo, general, p="30"):
     n_rev = sum(pd.get("clips", 0) for _c, pd in todo)
     n_req = sum(pd.get("requests", 0) + pd.get("accounts", 0) for _c, pd in todo)
     return dict(kc=cards_k, weeks=weeks, ev=ev, live=live, mods=mods[:4], n_rev=n_rev, n_req=n_req, general=general,
-                period=p, periods=OVERVIEW_PERIODS, unit=unit)
+                period=p, periods=OVERVIEW_PERIODS, unit=unit, charts=charts)
 
 
 def admin_analytics(days=30):

@@ -2029,3 +2029,27 @@ document.addEventListener("click", function (e) {
   var f = document.querySelector("[data-whop-change]");
   if (f) { f.hidden = false; b.hidden = true; var i = f.querySelector("input[name=whop_username]"); if (i) i.focus(); }
 });
+
+// Resumen: pestañas de la tarjeta de gráficas (cambia sin recargar y repite la animación de entrada)
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-ov-tab]");
+  if (!b) return;
+  var box = b.closest("[data-ov-charts]"), k = b.getAttribute("data-ov-tab");
+  box.querySelectorAll("[data-ov-tab]").forEach(function (x) { x.classList.toggle("on", x === b); x.setAttribute("aria-selected", x === b ? "true" : "false"); });
+  box.querySelectorAll("[data-ov-pane]").forEach(function (p) {
+    var on = p.getAttribute("data-ov-pane") === k;
+    p.hidden = !on;
+    if (on) { var c = p.cloneNode(true); p.parentNode.replaceChild(c, p); }   // copia nueva: las animaciones vuelven a empezar
+  });
+  var t = box.querySelector("[data-ov-title]"); if (t) t.textContent = b.textContent.trim();
+  try { sessionStorage.setItem("ov-tab", k); } catch (_) {}
+});
+document.addEventListener("turbo:load", function () {
+  var k; try { k = sessionStorage.getItem("ov-tab"); } catch (_) {}
+  var b = k && document.querySelector("[data-ov-charts] [data-ov-tab='" + k + "']");
+  if (!b || b.classList.contains("on")) return;
+  var box = b.closest("[data-ov-charts]");
+  box.querySelectorAll("[data-ov-tab]").forEach(function (x) { x.classList.toggle("on", x === b); x.setAttribute("aria-selected", x === b ? "true" : "false"); });
+  box.querySelectorAll("[data-ov-pane]").forEach(function (p) { p.hidden = p.getAttribute("data-ov-pane") !== k; });
+  var t = box.querySelector("[data-ov-title]"); if (t) t.textContent = b.textContent.trim();
+});

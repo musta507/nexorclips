@@ -3127,3 +3127,12 @@ def test_resumen_periodos():
     for p, t in textos.items():
         r = c.get("/admin" + p)
         assert r.status_code == 200 and t in r.get_data(as_text=True)
+
+
+def test_resumen_graficas_para_probar():
+    """La tarjeta de gráficas del Resumen trae las seis pestañas y sus datos se calculan sin fallar."""
+    c = client_for("admin@test.com")
+    for p in ("", "?p=7", "?p=todo"):
+        page = c.get("/admin" + p).get_data(as_text=True)
+        for k in ("vm", "cpm", "net", "top", "act", "clips"):
+            assert f'data-ov-pane="{k}"' in page

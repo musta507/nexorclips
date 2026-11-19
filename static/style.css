@@ -3012,3 +3012,32 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):
 .card,.v2-card,body.admin-shell .card{border:1px solid var(--line);box-shadow:0 1px 2px rgba(16,24,40,.04),0 4px 16px rgba(16,24,40,.04)}
 /* Avisos dentro de tarjetas («14 clips por revisar»...): misma esquina que los campos */
 .v2-todo{border-radius:var(--r-field)}
+
+/* Resumen: tarjeta de gráficas con pestañas (para probar las cinco) */
+.ov-tg{flex-wrap:wrap}
+.v2-chart .v2-ch-head{gap:12px;flex-wrap:wrap}
+.ov-pane[hidden]{display:none}
+.ov-svg{width:100%;height:250px;display:block;overflow:visible}
+.ov-svg .g{stroke:#eef0f2;stroke-dasharray:3 4}
+.ov-svg .yl{font:11px var(--font);fill:#9a9a9e;text-anchor:end}
+.ov-svg .xl{font:11px var(--font);fill:#9a9a9e;text-anchor:middle}
+.ov-foot{margin:6px 0 0;font-size:12.5px;color:var(--muted)}
+.v2-legend i.dash{background:none;border-top:2px dashed #0e0e0e;height:0;width:14px;border-radius:0;opacity:.5;vertical-align:3px}
+.ov-top{display:flex;flex-direction:column;gap:14px;padding:8px 0}
+.ov-trow{display:grid;grid-template-columns:minmax(0,190px) 1fr auto;gap:14px;align-items:center}
+.ov-tname{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-ttrack{height:16px;border-radius:999px;background:var(--soft);overflow:hidden}
+.ov-ttrack i{display:block;height:100%;border-radius:999px;background:#f08a24;animation:v2wide .8s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--d,0ms)}
+.ov-trow b{font-size:13px}
+/* animación al entrar, al cambiar de pestaña y de periodo */
+@keyframes ovIn{from{opacity:0}}
+.ov-svg .ovb{transform-box:fill-box;transform-origin:bottom;animation:v2grow .7s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--d,0ms)}
+.ov-svg .ovl{animation:v2draw .9s cubic-bezier(.3,.7,.2,1) both .2s}
+.ov-svg circle.ovl{animation:ovIn .3s both .8s}
+@media (prefers-reduced-motion:reduce){.ov-svg .ovb,.ov-svg .ovl,.ov-ttrack i{animation:none}}
+@media (max-width:640px){.ov-svg{height:200px}.ov-trow{grid-template-columns:minmax(0,120px) 1fr auto}}
+.v2-av{overflow:hidden}.v2-av img{width:100%;height:100%;object-fit:cover;display:block}
+.ov-tg{flex-wrap:nowrap;max-width:100%}
+.ov-tg button{font-size:12.5px;padding:6px 11px;white-space:nowrap}
+@media (max-width:640px){.ov-tg{flex-wrap:wrap}}
+@media (min-width:1101px){.ov-svg{height:340px}}

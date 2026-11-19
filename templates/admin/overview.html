@@ -30,8 +30,86 @@
 </div>
 
 <div class="v2-row">
-  <section class="v2-card v2-chart">
-    <div class="v2-ch-head"><h3>Clips por {{ {"day": "día", "week": "semana", "month": "mes"}[unit] }}</h3><span class="small muted">{{ {"day": "Últimos 7 días", "week": "Últimas 6 semanas", "month": "Último año"}[unit] }}</span></div>
+  <section class="v2-card v2-chart" data-ov-charts>
+    <div class="v2-ch-head"><h3 class="sr-only" data-ov-title>Vistas y dinero</h3>
+      <div class="an-tg ov-tg" role="tablist" aria-label="Qué gráfica ver">
+        {% for k, label in [("vm", "Vistas y dinero"), ("cpm", "Coste por 1.000"), ("net", "Por red"), ("top", "Campañas"), ("act", "Clippers activos"), ("clips", "Clips")] %}
+        <button type="button" role="tab" class="{{ 'on' if loop.first }}" data-ov-tab="{{ k }}" aria-selected="{{ 'true' if loop.first else 'false' }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+    </div>
+    {% set W, H = 600, 240 %}
+    {% macro xb(i, n) %}{{ (40 + (i + 0.5) * (W - 50) / n)|round(1) }}{% endmacro %}
+
+    {# 1 · Vistas (barras) y dinero (línea) #}
+    <div class="ov-pane" data-ov-pane="vm">
+      <div class="v2-legend"><span><i style="background:#f08a24"></i>Vistas</span><span><i style="background:#12b76a"></i>Dinero repartido</span></div>
+      {% set rows = charts.vm %}{% set n = rows|length %}{% set mv = (rows|map(attribute="views")|max) or 1 %}{% set mm = (rows|map(attribute="money")|max) or 1 %}
+      <svg class="ov-svg" viewBox="0 0 {{ W }} {{ H }}" preserveAspectRatio="none" role="img" aria-label="Vistas y dinero repartido">
+        {% for i in range(5) %}<line class="g" x1="40" x2="{{ W - 10 }}" y1="{{ 12 + i * (H - 42) / 4 }}" y2="{{ 12 + i * (H - 42) / 4 }}"/><text class="yl" x="34" y="{{ 16 + i * (H - 42) / 4 }}">{{ (mv * (4 - i) / 4)|int|short }}</text>{% endfor %}
+        {% for r in rows %}{% set h = (r.views / mv * (H - 42))|round(1) %}<rect class="ovb" style="--d:{{ loop.index0 * 60 }}ms" x="{{ xb(loop.index0, n)|float - 15 }}" y="{{ H - 30 - h }}" width="30" height="{{ h }}" rx="6" fill="#f08a24"><title>{{ r.label }}: {{ r.views|int|short }} vistas · {{ r.money|money(0) }}</title></rect>
+        <text class="xl" x="{{ xb(loop.index0, n) }}" y="{{ H - 10 }}">{{ r.label }}</text>{% endfor %}
+        {% set pts = [] %}{% for r in rows %}{% set _ = pts.append(xb(loop.index0, n) ~ "," ~ ((H - 30 - r.money / mm * (H - 42) * 0.92)|round(1))) %}{% endfor %}
+        <polyline class="ovl" points="{{ pts|join(' ') }}" fill="none" stroke="#12b76a" stroke-width="2.5" stroke-linejoin="round"/>
+        {% for pt in pts %}<circle class="ovl" cx="{{ pt.split(',')[0] }}" cy="{{ pt.split(',')[1] }}" r="3.5" fill="#fff" stroke="#12b76a" stroke-width="2"/>{% endfor %}
+      </svg>
+      <p class="ov-foot">{{ rows|map(attribute="views")|sum|int|short }} vistas · {{ rows|map(attribute="money")|sum|money(0) }} repartidos en el periodo</p>
+    </div>
+
+    {# 2 · Coste por 1.000 vistas #}
+    <div class="ov-pane" data-ov-pane="cpm" hidden>
+      <div class="v2-legend"><span><i style="background:#8b6cf0"></i>Coste real por 1.000 vistas</span>{% if charts.cpm_ref %}<span><i class="dash"></i>Tarifa media de las campañas activas</span>{% endif %}</div>
+      {% set rows = charts.cpm %}{% set n = rows|length %}{% set vals = rows|selectattr("v")|map(attribute="v")|list %}
+      {% set mx = ([vals|max if vals else 0, charts.cpm_ref or 0]|max * 1.25) or 1 %}
+      <svg class="ov-svg" viewBox="0 0 {{ W }} {{ H }}" preserveAspectRatio="none" role="img" aria-label="Coste por 1.000 vistas">
+        {% for i in range(5) %}<line class="g" x1="40" x2="{{ W - 10 }}" y1="{{ 12 + i * (H - 42) / 4 }}" y2="{{ 12 + i * (H - 42) / 4 }}"/><text class="yl" x="34" y="{{ 16 + i * (H - 42) / 4 }}">{{ "%.2f"|format(mx * (4 - i) / 4)|replace('.', ',') }}</text>{% endfor %}
+        {% set pts = [] %}{% for r in rows %}{% if r.v is not none %}{% set _ = pts.append(xb(loop.index0, n) ~ "," ~ ((H - 30 - r.v / mx * (H - 42))|round(1))) %}{% endif %}<text class="xl" x="{{ xb(loop.index0, n) }}" y="{{ H - 10 }}">{{ r.label }}</text>{% endfor %}
+        {% if pts|length > 1 %}<polygon class="ovl" points="{{ pts[0].split(',')[0] }},{{ H - 30 }} {{ pts|join(' ') }} {{ pts[-1].split(',')[0] }},{{ H - 30 }}" fill="#8b6cf0" opacity=".12"/>{% endif %}
+        <polyline class="ovl" points="{{ pts|join(' ') }}" fill="none" stroke="#8b6cf0" stroke-width="2.5" stroke-linejoin="round"/>
+        {% for pt in pts %}<circle class="ovl" cx="{{ pt.split(',')[0] }}" cy="{{ pt.split(',')[1] }}" r="3.5" fill="#fff" stroke="#8b6cf0" stroke-width="2"/>{% endfor %}
+        {% if charts.cpm_ref %}{% set ry = (H - 30 - charts.cpm_ref / mx * (H - 42))|round(1) %}<line x1="40" x2="{{ W - 10 }}" y1="{{ ry }}" y2="{{ ry }}" stroke="#0e0e0e" stroke-dasharray="5 4" opacity=".45"/>{% endif %}
+      </svg>
+      <p class="ov-foot">{% if vals %}Media del periodo: {{ "%.2f"|format(vals|sum / vals|length)|replace('.', ',') }} $ por 1.000 vistas{% if charts.cpm_ref %} · tarifa media {{ "%.2f"|format(charts.cpm_ref)|replace('.', ',') }} ${% endif %}{% else %}Aún no hay vistas suficientes en este periodo.{% endif %}</p>
+    </div>
+
+    {# 3 · Vistas por red #}
+    <div class="ov-pane" data-ov-pane="net" hidden>
+      {% set colors = {"tiktok": "#0e0e0e", "instagram": "#e1306c", "youtube": "#ff0033", "facebook": "#1877f2"} %}
+      <div class="v2-legend">{% for k in charts.nets %}<span><i style="background:{{ colors[k] }}"></i>{{ PLATFORMS[k] }}</span>{% endfor %}</div>
+      {% set rows = charts.net %}{% set n = rows|length %}{% set tots = [] %}{% for r in rows %}{% set t = namespace(v=0) %}{% for k in charts.nets %}{% set t.v = t.v + r[k] %}{% endfor %}{% set _ = tots.append(t.v) %}{% endfor %}{% set mx = (tots|max) or 1 %}
+      <svg class="ov-svg" viewBox="0 0 {{ W }} {{ H }}" preserveAspectRatio="none" role="img" aria-label="Vistas por red">
+        {% for i in range(5) %}<line class="g" x1="40" x2="{{ W - 10 }}" y1="{{ 12 + i * (H - 42) / 4 }}" y2="{{ 12 + i * (H - 42) / 4 }}"/><text class="yl" x="34" y="{{ 16 + i * (H - 42) / 4 }}">{{ (mx * (4 - i) / 4)|int|short }}</text>{% endfor %}
+        {% for r in rows %}{% set i = loop.index0 %}<g class="ovb" style="--d:{{ i * 60 }}ms">{% set ns = namespace(y=H - 30) %}{% for k in charts.nets %}{% set h = (r[k] / mx * (H - 42))|round(1) %}<rect x="{{ xb(i, n)|float - 15 }}" y="{{ ns.y - h }}" width="30" height="{{ h }}" fill="{{ colors[k] }}"><title>{{ r.label }} · {{ PLATFORMS[k] }}: {{ r[k]|int|short }}</title></rect>{% set ns.y = ns.y - h %}{% endfor %}</g>
+        <text class="xl" x="{{ xb(i, n) }}" y="{{ H - 10 }}">{{ r.label }}</text>{% endfor %}
+      </svg>
+      {% set tot_all = tots|sum %}<p class="ov-foot">{% for k in charts.nets %}{{ PLATFORMS[k] }} {{ ((rows|map(attribute=k)|sum) / tot_all * 100)|round|int if tot_all else 0 }} %{% if not loop.last %} · {% endif %}{% else %}Aún no hay vistas en este periodo.{% endfor %}</p>
+    </div>
+
+    {# 4 · Campañas que más vistas traen #}
+    <div class="ov-pane" data-ov-pane="top" hidden>
+      <div class="v2-legend"><span><i style="background:#f08a24"></i>Vistas en el periodo</span></div>
+      {% set mx = (charts.top|map(attribute=1)|max) if charts.top else 1 %}
+      <div class="ov-top">
+        {% for name, v in charts.top %}
+        <div class="ov-trow"><span class="ov-tname">{{ name }}</span><span class="ov-ttrack"><i style="width:{{ (v / mx * 100)|round(1) }}%;--d:{{ loop.index0 * 70 }}ms"></i></span><b class="tnum">{{ v|int|short }}</b></div>
+        {% else %}<p class="muted">Aún no hay vistas en este periodo.</p>{% endfor %}
+      </div>
+    </div>
+
+    {# 5 · Clippers activos #}
+    <div class="ov-pane" data-ov-pane="act" hidden>
+      <div class="v2-legend"><span><i style="background:#14b8a6"></i>Clippers que subieron algún clip</span></div>
+      {% set rows = charts.act %}{% set n = rows|length %}{% set mx = (rows|map(attribute="n")|max) or 1 %}
+      <svg class="ov-svg" viewBox="0 0 {{ W }} {{ H }}" preserveAspectRatio="none" role="img" aria-label="Clippers activos">
+        {% for i in range(5) %}<line class="g" x1="40" x2="{{ W - 10 }}" y1="{{ 12 + i * (H - 42) / 4 }}" y2="{{ 12 + i * (H - 42) / 4 }}"/><text class="yl" x="34" y="{{ 16 + i * (H - 42) / 4 }}">{{ (mx * (4 - i) / 4)|round|int }}</text>{% endfor %}
+        {% for r in rows %}{% set h = (r.n / mx * (H - 42))|round(1) %}<rect class="ovb" style="--d:{{ loop.index0 * 60 }}ms" x="{{ xb(loop.index0, n)|float - 15 }}" y="{{ H - 30 - h }}" width="30" height="{{ h }}" rx="6" fill="#14b8a6"><title>{{ r.label }}: {{ r.n }} clippers</title></rect>
+        <text class="xl" x="{{ xb(loop.index0, n) }}" y="{{ H - 10 }}">{{ r.label }}</text>{% endfor %}
+      </svg>
+    </div>
+
+    {# 6 · Clips (la de antes) #}
+    <div class="ov-pane" data-ov-pane="clips" hidden>
+    <div class="v2-ch-head" hidden><h3>Clips por {{ {"day": "día", "week": "semana", "month": "mes"}[unit] }}</h3><span class="small muted">{{ {"day": "Últimos 7 días", "week": "Últimas 6 semanas", "month": "Último año"}[unit] }}</span></div>
     <div class="v2-legend"><span><i class="l1"></i>Enviados</span><span><i class="l2"></i>Aprobados</span><span><i class="l3"></i>Rechazados</span></div>
     {% set top = (weeks|map(attribute="sent")|max) or 1 %}
     <div class="v2-bars">
@@ -46,6 +124,7 @@
         </div><small>{{ w.label }}</small></div>
         {% endfor %}
       </div>
+    </div>
     </div>
   </section>
   <section class="v2-card v2-act">
@@ -74,7 +153,7 @@
   <section class="v2-card v2-team">
     <div class="v2-ch-head"><h3>Equipo</h3><a class="btn soft sm" href="{{ url_for('admin_mods') }}">Añadir mod</a></div>
     {% for m in mods %}
-    <div class="v2-mem"><span class="v2-av">{{ (m.u.name or m.u.email)[:1]|upper }}</span><span><b>{{ m.u.name }}</b><small>{{ "Administrador" if m.camps is none else ("Mod de " ~ m.camps ~ (" campaña" if m.camps == 1 else " campañas")) }}</small></span>{% set lv = m.u.last_seen_at|seen_level %}<span class="v2-seen s-{{ lv }}"><i></i>{{ "En línea" if lv == "on" else (m.u.last_seen_at|ago if m.u.last_seen_at else "Nunca") }}</span></div>
+    <div class="v2-mem"><span class="v2-av">{% if m.u.avatar_url %}<img src="{{ m.u.avatar_url }}" alt="" referrerpolicy="no-referrer" loading="lazy">{% else %}{{ (m.u.name or m.u.email)[:1]|upper }}{% endif %}</span><span><b>{{ m.u.name }}</b><small>{{ "Administrador" if m.camps is none else ("Mod de " ~ m.camps ~ (" campaña" if m.camps == 1 else " campañas")) }}</small></span>{% set lv = m.u.last_seen_at|seen_level %}<span class="v2-seen s-{{ lv }}"><i></i>{{ "En línea" if lv == "on" else (m.u.last_seen_at|ago if m.u.last_seen_at else "Nunca") }}</span></div>
     {% else %}<p class="muted">Aún no hay mods.</p>{% endfor %}
   </section>
 </div>
