@@ -64,6 +64,8 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 
 - Pantallas sin título ni frase explicativa arriba (Mis clips, Ganancias, Ajustes, Soporte, Ranking, Formación y todo el panel). El título está solo para lectores de pantalla (`sr-only`); en el panel, `ui.head` ya no pinta título, solo los botones. No volver a ponerlos.
 
+- Cifras (dinero, vistas, porcentajes) en Inter seminegrita con números de ancho fijo, no en Poppins gruesa (salvo el Resumen del admin, el destacado y el ranking del inicio). Ganancias mantiene sus cuatro tarjetas iguales: no cambiar su estructura.
+- Estados con color fijo: verde bien, rojo mal, naranja te toca hacer algo, gris en marcha. Nada de azul ni morado.
 - El Resumen del panel de admin, tal como está.
 - Los colores de las estadísticas de Mis clips (naranja, verde, morado, turquesa).
 - Pastillas negras, tarjetas blancas limpias, verde solo para el dinero.

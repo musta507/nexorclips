@@ -2670,3 +2670,33 @@ details > summary.link:hover{color:var(--ink-2)}
 .auto-line{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:13px;color:var(--muted)}
 .auto-line i{width:7px;height:7px;border-radius:50%;background:var(--money);box-shadow:0 0 0 0 rgba(18,183,106,.5);animation:eb-live 2.4s ease-out infinite}
 @media (prefers-reduced-motion:reduce){.auto-line i{animation:none}}
+
+/* =====================================================================================================
+   Línea de diseño de la plataforma (skill «clipping-platform-design»)
+   ===================================================================================================== */
+:root{--num:600 1em/1.1 var(--font)}
+/* 1. Cifras: Inter seminegrita con números de ancho fijo (se leen igual y se alinean) */
+.stat .v,.kpi b,.mc-kpi b,.an-kpis b,.fact b,.drate b,.pay-panel .big,.lead-budget b,.pay-cells b,.bud-big,.an-kpi b,.an-total b,.an-mini b,
+.wz-pv-cpm,.camp-budget-top b,.cr-tile b,.mod-act b,.ov-k b{font-family:var(--font)!important;font-weight:600!important;letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+.adm-kpis .kpi b{font-family:var(--display)!important;font-weight:700}      /* el Resumen del admin se queda como está */
+/* 2. Un solo estilo de tarjeta de cifra: etiqueta pequeña, cifra y una línea de contexto */
+.kpi{border:0;box-shadow:var(--shadow);border-radius:16px;padding:16px 18px;gap:6px}
+.kpi span{font-size:12px;font-weight:500;color:var(--muted)}
+.kpi b{font-size:24px;line-height:1.15}
+/* 3. Estados con significado fijo: verde bien · rojo mal · naranja te toca hacer algo · gris en marcha */
+.status{font-weight:500}
+.status.pendiente,.status.solicitado,.status.procesando,.status.contando,.status.nueva,.status.enviado,.status.revisar{color:var(--ink-2);background:var(--soft);border-color:var(--line)}
+.status.estadisticas{color:#b54708;background:#fff6ed;border-color:#fddcab}
+/* 4. Mis clips: la acción que toca, como botón */
+.btn.warn{background:#fff1e3;color:#b54708}
+.btn.warn:hover{background:#ffe6cc}
+.mc-av-link{border:0;background:none;padding:0;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(168,40,44,.35)}
+.mc-acts{white-space:nowrap}
+.mc-acts .btn{margin-right:4px}
+/* 6. Tablas: misma altura de fila, gris al pasar el ratón, cabecera discreta */
+table th{font-size:12px;font-weight:500;letter-spacing:.01em}
+table.rt tbody tr{transition:background-color .12s}
+@media (min-width:641px){table.rt tbody tr:not(.mc-more):hover td{background:#fafafb}}
+/* 7. Detalles: foco visible igual en toda la web, menos negritas sueltas */
+:where(a,button,summary,[tabindex]):focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:10px}
+.small b,.muted b{font-weight:600}
