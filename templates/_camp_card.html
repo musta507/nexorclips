@@ -4,7 +4,7 @@
     {% set _t, lqip = cover_meta(c) %}<span class="dthumb"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="62" height="62" loading="lazy" decoding="async">{% endif %}</span>
     <div class="dhead">
       <h3><span>{{ c.artist }}</span> {{ icon("check") }}</h3>
-      <span class="dmeta">{{ c.created_at|ago }} · Por 1.000 vistas{% if my_join is defined and my_join.get(c.id) == 'aceptada' %}<b class="dj ok">Ya participas</b>{% elif my_join is defined and my_join.get(c.id) == 'pendiente' %}<b class="dj">Pendiente</b>{% elif c.full %}<b class="dj full">Plazas completas</b>{% endif %}</span>
+      <span class="dmeta">{{ c.created_at|ago }} · Por 1.000 vistas{% if my_join is defined and my_join.get(c.id) == 'aceptada' %}<span class="dj ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Ya participas</span>{% elif my_join is defined and my_join.get(c.id) == 'pendiente' %}<span class="dj"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Solicitud enviada</span>{% elif c.full %}<span class="dj full"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Plazas completas</span>{% endif %}</span>
     </div>
   </div>
   <p class="ddesc">{{ c.song }}</p>
@@ -15,6 +15,6 @@
   </div>
   <div class="dfoot">
     <div class="dplats">{% for p in c.platform_list %}<span title="{{ PLATFORMS[p] }}">{{ icon(p) }}</span>{% endfor %}</div>
-    <div class="drate"><b>{{ c.rate|rate_k }}</b><span>POR 1.000 VISTAS</span></div>
+    <div class="drate"><b>{{ c.rate|rate_k }}</b><span>por 1.000 vistas</span></div>
   </div>
 </a>

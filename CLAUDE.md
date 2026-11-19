@@ -65,6 +65,8 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 - Pantallas sin título ni frase explicativa arriba (Mis clips, Ganancias, Ajustes, Soporte, Ranking, Formación y todo el panel). El título está solo para lectores de pantalla (`sr-only`); en el panel, `ui.head` ya no pinta título, solo los botones. No volver a ponerlos.
 
 - Una sola letra en toda la web, también en el logo: Inter (opción A, elegida por Mustapha). Poppins ya no se carga. No meter otra letra en ningún sitio. Cifras en Inter seminegrita con números de ancho fijo. Ganancias mantiene sus cuatro tarjetas iguales: no cambiar su estructura.
+- Nada de rótulos en MAYÚSCULAS con letras separadas («POR 1.000 VISTAS»): en minúscula normal.
+- Tarjeta de campaña: el estado va con icono y texto debajo de la fecha (Ya participas, Solicitud enviada, Plazas completas).
 - Estados con color fijo: verde bien, rojo mal, naranja te toca hacer algo, gris en marcha. Nada de azul ni morado.
 - El Resumen del panel de admin, tal como está.
 - Los colores de las estadísticas de Mis clips (naranja, verde, morado, turquesa).

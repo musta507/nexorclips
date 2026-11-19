@@ -784,7 +784,7 @@ def test_campaign_form_per_thousand_and_min_pay():
         camp = A.Campaign.query.filter_by(song="Directo").one()
         assert camp.rate == 1200 and camp.min_views == 5000 and A.min_pay(camp) == 6.0
     html = client_for("c@test.com").get("/campanas").get_data(as_text=True)
-    assert "1,20 $" in html and "POR 1.000 VISTAS" in html and "Mín. 6,00 $ por clip" in html
+    assert "1,20 $" in html and "por 1.000 vistas" in html and "Mín. 6,00 $ por clip" in html
 
 
 def test_admin_wipe_all_test_data(monkeypatch):
