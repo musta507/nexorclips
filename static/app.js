@@ -1958,3 +1958,66 @@ document.addEventListener("click", function (e) {
     history.replaceState(history.state, "", u.pathname + u.search + u.hash);
   }
 });
+
+// =============================================================== Resumen del panel: al cambiar de periodo, las gráficas
+// pasan de los valores de antes a los nuevos (las barras se estiran o encogen y las líneas se transforman),
+// en vez de volver a crecer desde cero como al entrar.
+(function () {
+  var prev = null;
+  function pts(el) { return (el.getAttribute("points") || "").trim().split(/\s+/).map(function (p) { return p.split(",").map(Number); }); }
+  function resample(a, n) {                         // misma forma con n puntos, para poder mezclar dos líneas
+    if (!a.length) return [];
+    var out = [];
+    for (var i = 0; i < n; i++) {
+      var t = n === 1 ? 0 : i / (n - 1) * (a.length - 1), j = Math.floor(t), f = t - j, b = a[Math.min(j + 1, a.length - 1)];
+      out.push([a[j][0] + (b[0] - a[j][0]) * f, a[j][1] + (b[1] - a[j][1]) * f]);
+    }
+    return out;
+  }
+  document.addEventListener("turbo:before-render", function (ev) {
+    var plot = document.querySelector(".v2-plot"), nb = ev.detail && ev.detail.newBody;
+    if (!plot || !nb || !nb.querySelector(".v2-plot")) { prev = null; document.documentElement.classList.remove("v2-morph"); return; }
+    document.documentElement.classList.add("v2-morph");   // sin la animación de entrada: se pasa de lo de antes a lo nuevo
+    prev = {
+      bars: Array.prototype.map.call(plot.querySelectorAll(".v2-trio"), function (t) {
+        return Array.prototype.map.call(t.children, function (s) { return s.style.height; });
+      }),
+      sparks: Array.prototype.map.call(document.querySelectorAll(".v2-spark polyline"), pts)
+    };
+  });
+  document.addEventListener("turbo:load", function () {
+    var p = prev; prev = null;
+    var plot = document.querySelector(".v2-plot");
+    if (!p || !plot) return;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    Array.prototype.forEach.call(plot.querySelectorAll(".v2-trio"), function (t, i) {
+      Array.prototype.forEach.call(t.children, function (s, k) {
+        var to = s.style.height;
+        s.style.transition = "none";
+        s.style.height = (p.bars[i] && p.bars[i][k]) || "0%";
+        void s.offsetHeight;
+        s.style.transition = "height .6s cubic-bezier(.3,.7,.2,1) " + (i * 35) + "ms";
+        s.style.height = to;
+      });
+    });
+    var lines = document.querySelectorAll(".v2-spark polyline");
+    var jobs = [];
+    Array.prototype.forEach.call(lines, function (pl, i) {
+      var to = pts(pl), from = resample(p.sparks[i] || [], to.length), poly = pl.parentNode.querySelector("polygon");
+      if (from.length !== to.length || !to.length) return;
+      jobs.push({ pl: pl, poly: poly, from: from, to: to });
+    });
+    var t0 = performance.now(), D = 600;
+    function paint(now) {
+      var k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
+      jobs.forEach(function (j) {
+        var s = j.to.map(function (q, n) { return (j.from[n][0] + (q[0] - j.from[n][0]) * e).toFixed(1) + "," + (j.from[n][1] + (q[1] - j.from[n][1]) * e).toFixed(1); }).join(" ");
+        j.pl.setAttribute("points", s);
+        if (j.poly) j.poly.setAttribute("points", "0,34 " + s + " 120,34");
+      });
+      if (k < 1) requestAnimationFrame(paint);
+    }
+    if (jobs.length) requestAnimationFrame(paint);
+  });
+  document.addEventListener("turbo:before-cache", function () { document.documentElement.classList.remove("v2-morph"); });
+})();

@@ -2972,3 +2972,5 @@ a.lr:hover{background:var(--soft)}
 .adm-n{margin-left:auto}
 /* Etiqueta «Admin» junto al logo: discreta, gris claro con borde fino */
 .admin-tag,.adm-badge,body.admin-shell .adm-badge{background:var(--soft)!important;color:var(--ink-2)!important;border:1px solid var(--line);font:600 11.5px/1 var(--font);padding:5px 9px;border-radius:999px;letter-spacing:0}
+/* Al cambiar de periodo en el Resumen: sin animación de entrada (la hace app.js pasando de los valores de antes a los nuevos) */
+.v2-morph .v2-trio span,.v2-morph .v2-spark,.v2-morph .v2-track i{animation:none}
