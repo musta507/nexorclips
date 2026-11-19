@@ -95,7 +95,7 @@
         <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b></td>
         <td data-label="Estado"><span class="status {{ stg }}">{{ STAGE_LABELS[stg] }}</span>{% if s.reject_reason %}<div class="small muted" title="{{ s.reject_reason }}">{{ s.reject_reason|truncate(40, True, '…') }}</div>{% endif %}</td>
         <td data-label="Gana" class="r tnum">{{ (s.earned if s.status == 'aprobado' else 0)|earn }}</td>
-        <td data-label="">{% if s.status == 'pendiente' %}{% include "admin/_review_buttons.html" %}{% endif %}</td>
+        <td data-label="">{% if s.status == 'pendiente' %}{% set no_approve = True %}{% include "admin/_review_buttons.html" %}{% endif %}</td>
       </tr>
       {% endfor %}
       </tbody>
