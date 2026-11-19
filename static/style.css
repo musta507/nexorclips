@@ -2653,3 +2653,16 @@ select:not([multiple])::-ms-expand{display:none}
 @media (prefers-reduced-motion:reduce){.chat-fab,.chat-fab *{transition:none!important}.chat-pop.closing{animation:none}}
 @media (max-width:1519px){.chat-fab,.chat-fab.open{width:50px;height:50px;padding:0;gap:0;justify-content:center}}
 @media (max-width:640px){.chat-fab,.chat-fab.open{width:52px;height:52px}}
+/* ===== Enlaces que despliegan (Añadir cuentas, Ajustes del plan, Editar texto…): sin el triángulo del navegador ===== */
+details > summary.link,details > summary.small{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:7px;text-decoration:none;font-weight:600;color:var(--ink)}
+details > summary.link::-webkit-details-marker,details > summary.small::-webkit-details-marker{display:none}
+details > summary.link::after,details > summary.small:not(.btn)::after{content:"";width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:translateY(-2px) rotate(45deg);transition:transform .2s;flex:none}
+details[open] > summary.link::after,details[open] > summary.small:not(.btn)::after{transform:translateY(1px) rotate(-135deg)}
+details > summary.link:hover{color:var(--ink-2)}
+/* «Añadir cuentas» del plan de distribución: botón suave; el + gira a × al abrir */
+.ds-add > summary.link{background:var(--soft);border-radius:12px;padding:10px 16px;font-size:14px;transition:background-color .15s}
+.ds-add > summary.link:hover{background:var(--soft-2);color:var(--ink)}
+.ds-add > summary.link::after{display:none}
+.ds-add > summary svg{width:16px;height:16px;transition:transform .25s}
+.ds-add[open] > summary svg{transform:rotate(45deg)}
+.ds-add[open] > summary{margin-bottom:4px}
