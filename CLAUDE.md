@@ -74,6 +74,7 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 - Pastillas negras, tarjetas blancas limpias, verde solo para el dinero.
 - Desplegables de filtro (Mis clips, Revisar clips): pastilla blanca redonda con icono delante (`data-ico`: flag, cal, sort) y lista propia con ✓ negro sobre gris (opción A). En el móvil es el selector del teléfono, con el mismo aspecto cerrado.
 - Barras «Visualizaciones por plataforma» de Mis clips en gris, como en las estadísticas de la campaña.
+- Campana de avisos: solo un punto rojo cuando hay algo sin leer, sin número (opción C).
 - Ajustes (`/cuenta`) sin índice lateral (Perfil, Cobros, Cuenta): una sola columna centrada. Mustapha lo quitó.
 - El ranking del inicio y el destacado de campañas, recién hechos a su gusto.
 
