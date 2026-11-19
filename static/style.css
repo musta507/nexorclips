@@ -2701,7 +2701,7 @@ table.rt tbody tr{transition:background-color .12s}
 :where(a,button,summary,[tabindex]):focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:10px}
 .small b,.muted b{font-weight:600}
 
-/* ===== Letras (opción B, elegida por Mustapha) ===== */
-/* Poppins solo para títulos (h1, h2, h3) y el nombre del logo; todo lo demás (pestañas, botones, cifras, etiquetas, textos) en Inter */
-:root{--display:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;--title:"Poppins",system-ui,-apple-system,sans-serif}
-h1,h2,h3,legend,.cp-name,.ttl,.hm-h,.sr-h{font-family:var(--title)}
+/* ===== Letras (opción A, elegida por Mustapha): una sola letra, Inter, en toda la web; Poppins solo en el nombre del logo ===== */
+:root{--display:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;--title:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif}
+h1,h2,h3,legend{font-family:var(--font);letter-spacing:-.025em}
+.cp-name{font-family:"Poppins",system-ui,sans-serif}

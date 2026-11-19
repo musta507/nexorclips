@@ -64,7 +64,7 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 
 - Pantallas sin título ni frase explicativa arriba (Mis clips, Ganancias, Ajustes, Soporte, Ranking, Formación y todo el panel). El título está solo para lectores de pantalla (`sr-only`); en el panel, `ui.head` ya no pinta título, solo los botones. No volver a ponerlos.
 
-- Solo dos letras, cada una con su papel: Poppins para los títulos (h1, h2, h3) y el nombre del logo; Inter para todo lo demás (pestañas, botones, cifras, etiquetas, textos). `--display` ya es Inter; para un título nuevo usar h2/h3 o `var(--title)`. Cifras en Inter seminegrita con números de ancho fijo. Ganancias mantiene sus cuatro tarjetas iguales: no cambiar su estructura.
+- Una sola letra en toda la web: Inter (opción A, elegida por Mustapha). Poppins solo queda en el nombre del logo (`.cp-name`). `--display` y `--title` ya son Inter: no volver a meter Poppins en títulos, botones ni cifras. Cifras en Inter seminegrita con números de ancho fijo. Ganancias mantiene sus cuatro tarjetas iguales: no cambiar su estructura.
 - Estados con color fijo: verde bien, rojo mal, naranja te toca hacer algo, gris en marcha. Nada de azul ni morado.
 - El Resumen del panel de admin, tal como está.
 - Los colores de las estadísticas de Mis clips (naranja, verde, morado, turquesa).
