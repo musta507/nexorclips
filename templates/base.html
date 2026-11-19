@@ -83,19 +83,16 @@
         {% for group, links in [
           ("", [
             ("admin_home", ["admin_home"], "Resumen", "grid", 0)]),
-          ("Por hacer", [
-            ("admin_clips", ["admin_clips"], "Revisar clips", "film", nc.clips),
-            ("admin_requests", ["admin_requests"], "Solicitudes", "inbox", nc.requests + nc.accounts),
-            ("admin_payouts", ["admin_payouts"], "Retiros", "cash", nc.payouts),
-            ("admin_inbox", ["admin_inbox", "admin_chat"], "Mensajes", "chat", nc.messages)]),
           ("Campañas", [
-            ("admin_campaigns", camp_eps, "Campañas", "flag", nc.support),
+            ("admin_campaigns", camp_eps + ["admin_clips", "admin_requests"], "Campañas", "flag", 0),
+            ("admin_payouts", ["admin_payouts"], "Retiros", "cash", nc.payouts),
             ("admin_featured", ["admin_featured"], "Destacado de inicio", "megaphone", 0),
             ("admin_dists", ["admin_dists", "admin_dist"], "Distribución", "stack", 0),
             ("admin_creators", ["admin_creators", "admin_creator_form"], "Creadores", "card", nc.creators_alert),
             ("admin_leads", ["admin_leads"], "Creadores interesados", "trend", nc.leads)]),
           ("Comunidad", [
             ("admin_clippers", ["admin_clippers", "admin_clipper"], "Clippers", "users", 0),
+            ("admin_inbox", ["admin_inbox", "admin_chat"], "Mensajes", "chat", nc.messages),
             ("admin_mods", ["admin_mods"], "Mods", "check", 0),
             ("admin_notify", ["admin_notify"], "Avisos", "bell", 0),
             ("admin_courses", ["admin_courses", "admin_course", "admin_lesson"], "Formación", "cap", 0)]),

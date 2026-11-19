@@ -2951,8 +2951,9 @@ def test_admin_menu_groups_and_search():
     admin = client_for("admin@test.com")
     post(admin, "/admin/ajustes/demo", accion="cargar")
     page = admin.get("/admin").get_data(as_text=True)
-    for txt in ("Por hacer", "Comunidad", "Sistema", "Revisar clips", 'action="/admin/buscar"'):
+    for txt in ("Comunidad", "Sistema", 'action="/admin/buscar"'):
         assert txt in page
+    assert '<span class="adm-gt">Por hacer</span>' not in page     # lo de los mods (revisar, solicitudes) no va en el menú
     with A.app.app_context():
         u = A.User.query.filter(A.User.is_admin.is_(False)).first()
         uid, name = u.id, u.name
