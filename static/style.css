@@ -2888,3 +2888,12 @@ turbo-frame#camp-body > *{margin-top:0;margin-bottom:0}
 
 /* Campana: solo un punto rojo cuando hay avisos sin leer, sin número (opción C de Mustapha). El número sigue en el texto para lectores de pantalla. */
 .bell-n{top:6px;right:6px;min-width:0;width:9px;height:9px;padding:0;border:0;box-shadow:0 0 0 2px #fff;font-size:0;line-height:0;color:transparent;overflow:hidden;box-sizing:border-box}
+
+/* Menú de arriba: el icono de la sección en la que estás va relleno en negro (como la casita de la referencia) */
+.tabs-ico .tab .ico-f{display:none}
+@media (min-width:641px){
+  .tabs-ico:not(.has-pill) .tab.on svg:not(.ico-f){display:none}
+  .tabs-ico:not(.has-pill) .tab.on .ico-f{display:block}
+  .tabs-ico.has-pill .pill > .tab svg:not(.ico-f){display:none}
+  .tabs-ico.has-pill .pill > .tab .ico-f{display:block;stroke-width:2}
+}
