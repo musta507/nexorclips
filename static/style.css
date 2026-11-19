@@ -2821,3 +2821,13 @@ body.admin-shell .card,body.admin-shell .kpi{border:1px solid #ebebeb;border-rad
 body.admin-shell .adm-link.on .adm-n{background:#ff3b30;color:#fff}
 tr.f-out{display:none!important}
 .cn-tabs.seg{margin-bottom:18px}
+/* Menú de arriba con la pastilla que se desliza: la copia blanca lleva su icono al lado del texto */
+.tabs.has-pill .tab.on{background:transparent;color:var(--muted);font-weight:500}
+.tabs.has-pill .pill > .tab{display:flex;align-items:center;gap:8px;color:#fff}
+.tabs.has-pill .pill > .tab svg{color:#fff}
+/* Barras de las gráficas (Visualizaciones, Me gusta… / Acumulado, Diario): pastilla blanca que se desliza */
+.an-tg.has-pill{position:relative}
+.an-tg.has-pill > button.on{background:transparent;box-shadow:none;color:var(--muted);font-weight:500}
+.has-pill.pill-light .pill{background:var(--card)}
+.has-pill.pill-light .pill > *{color:var(--ink)!important;font-weight:600!important}
+.pill-sh{position:absolute;left:0;top:0;width:0;height:0;border-radius:999px;background:var(--card);box-shadow:0 1px 3px rgba(16,24,40,.12);pointer-events:none}

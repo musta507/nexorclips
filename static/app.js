@@ -632,10 +632,16 @@ function pillCambiaPagina(it) {
 function pillPaint(pill, q) {
   pill.style.clipPath = "inset(" + q[0].toFixed(2) + "px " + q[1].toFixed(2) + "px " + q[2].toFixed(2) + "px " + q[3].toFixed(2) + "px round 999px)";
   pill._q = q;
+  if (pill._sh) {                                  // barras claras: la sombra de la pastilla blanca va por debajo, a la par
+    var s = pill._sh.style;
+    s.left = q[3] + "px"; s.top = q[0] + "px";
+    s.width = Math.max(0, pill._W - q[1] - q[3]) + "px"; s.height = Math.max(0, pill._H - q[0] - q[2]) + "px";
+  }
 }
 function pillClip(box, pill, l, t, w, h, animate) {
   var W = box.scrollWidth, H = box.clientHeight;
   var to = [t, Math.max(0, W - l - w), Math.max(0, H - t - h), l];
+  pill._W = W; pill._H = H;
   pill.style.transition = "none";
   if (pill._raf) { cancelAnimationFrame(pill._raf); pill._raf = 0; }
   var from = pill._q, quieto = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -680,12 +686,20 @@ function pillSync(box, target, animate) {
 }
 function pillAnimando(box) { var at = box._pillAt; return !!(at && at.anim && Date.now() - at.t < PILL_MS + 60); }
 function montarPastilla(box) {
+  if (box.classList.contains("tabs") && window.matchMedia("(max-width: 640px)").matches) return;   // en el móvil es el menú de abajo
+  if (box._srv === undefined) box._srv = pillIdx(box, box.querySelector(":scope > .on"));
   if (box._pill && box._pill.isConnected) { if (!pillAnimando(box)) pillSync(box, null, false); return; }
   // Una página restaurada (atrás) trae la copia vieja sin sus escuchas: se rehace
   box.querySelectorAll(":scope > .pill").forEach(function (old) { old.remove(); });
   var pill = document.createElement("span");
   pill.className = "pill";
   pill.setAttribute("aria-hidden", "true");
+  if (box.classList.contains("an-tg")) {          // las de las gráficas: pastilla blanca sobre gris, con su sombra
+    box.classList.add("pill-light");
+    box.querySelectorAll(":scope > .pill-sh").forEach(function (o) { o.remove(); });
+    var sh = document.createElement("span"); sh.className = "pill-sh"; sh.setAttribute("aria-hidden", "true");
+    box.appendChild(sh); pill._sh = sh;
+  }
   box.appendChild(pill);
   box._pill = pill;
   box.classList.add("has-pill");
@@ -712,11 +726,17 @@ function montarPastilla(box) {
     ro.observe(box);
   }
 }
+function pillIdx(box, el) { return el ? Array.prototype.indexOf.call(pillItems(box), el) : -1; }
 function pastillaOrden() {
-  document.querySelectorAll(".seg, .sortbar").forEach(montarPastilla);
+  document.querySelectorAll(".seg, .sortbar, #pn-top, .an-tg").forEach(montarPastilla);
 }
 // La copia que Turbo guarda para «atrás» queda como la manda el servidor
 document.addEventListener("turbo:before-cache", function () {
+  // La copia guardada para «atrás» lleva marcada la pestaña de esa página (no la que se acaba de pulsar)
+  document.querySelectorAll("[data-pill-nav]").forEach(function (box) {
+    var its = pillItems(box);
+    if (box._srv >= 0 && its[box._srv]) its.forEach(function (x, i) { x.classList.toggle("on", i === box._srv); });
+  });
   document.querySelectorAll(".seg.has-pill, .sortbar.has-pill").forEach(function (box) { if (box._pill && !pillAnimando(box)) pillSync(box, null, false); });
 });
 // Barras que cambian de página: la de la página nueva se descarta y se queda la de ahora, con sus números al día.
@@ -730,24 +750,30 @@ function pillAdoptar(root) {
     for (var i = 0; igual && i < a.length; i++) igual = a[i].getAttribute("href") === b[i].getAttribute("href");
     if (!igual) { nw.removeAttribute("data-turbo-permanent"); return; }
     for (var k = 0; k < a.length; k++) if (a[k].innerHTML !== b[k].innerHTML) a[k].innerHTML = b[k].innerHTML;
+    old._srvNext = pillIdx(nw, nw.querySelector(":scope > .on"));     // la pestaña que marca la página nueva
   });
 }
 document.addEventListener("turbo:before-render", function (e) { pillAdoptar(e.detail && e.detail.newBody); });
 document.addEventListener("turbo:before-frame-render", function (e) { pillAdoptar(e.detail && e.detail.newFrame); });
-// La pestaña activa según la dirección: la que coincide en ruta y cuyos parámetros están todos en la dirección
+// La pestaña activa al llegar: la que coincide con la dirección (ruta igual y sus parámetros en la dirección);
+// si ninguna coincide, la que marca la página nueva. Si la pastilla no está ya ahí, se desliza hasta ella.
 function pillSegunDireccion() {
   var cur = new URL(location.href);
   document.querySelectorAll("[data-pill-nav]").forEach(function (box) {
-    var best = null, score = -1;
-    pillItems(box).forEach(function (it) {
+    var its = pillItems(box), best = null, score = -1;
+    its.forEach(function (it) {
       var h = it.getAttribute("href"); if (!h) return;
       var u = new URL(h, location.href), ok = u.pathname === cur.pathname, n = 0;
       u.searchParams.forEach(function (v, k) { if (cur.searchParams.get(k) === v) n++; else ok = false; });
       if (ok && n > score) { best = it; score = n; }
     });
-    if (!best || best.classList.contains("on")) { if (box._pill && !pillAnimando(box)) pillSync(box, null, false); return; }
-    pillItems(box).forEach(function (x) { var on = x === best; x.classList.toggle("on", on); if (on) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current"); });
-    if (box._pill) pillSync(box, best, true);
+    if (!best && box._srvNext >= 0) best = its[box._srvNext];
+    box._srvNext = undefined;
+    if (!best) best = box.querySelector(":scope > .on");
+    if (!best) return;
+    box._srv = pillIdx(box, best);
+    its.forEach(function (x) { var on = x === best; x.classList.toggle("on", on); if (on) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current"); });
+    if (box._pill && box._pillTarget !== best) pillSync(box, best, true);
   });
 }
 document.addEventListener("turbo:load", pillSegunDireccion);
