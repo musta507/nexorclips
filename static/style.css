@@ -2840,3 +2840,15 @@ tr.f-out{display:none!important}
 .v2-legend .l3,.v2-trio .b3{background:#d6d7db}
 .v2-track i{background:#12b76a}
 .v2-cico{background:#e3f8ec;color:#12b76a}
+
+/* Menú de arriba en el PC: icono encima del nombre; la elegida lleva un recuadro gris tras el icono que se desliza */
+@media (min-width:641px){
+  .tabs.tabs-ico{background:none;border:0;padding:0;gap:4px;border-radius:0}
+  .tabs-ico .tab{position:relative;z-index:1;flex-direction:column;gap:6px;padding:7px 14px 4px;border-radius:0;font:500 12px/1.2 var(--font);color:var(--muted)}
+  .tabs-ico .tab svg{width:19px;height:19px}
+  .tabs-ico .tab:not(.on):hover{background:none;color:var(--ink)}
+  .tabs-ico .tab.on,.tabs.tabs-ico.has-pill .tab.on{background:none;color:var(--ink);font-weight:600}
+  .tabs-ico:not(.has-pill) .tab.on svg{background:#ececee;border-radius:9px;box-shadow:0 0 0 5px #ececee}
+  .tabs-ico.has-pill .pill{visibility:hidden}
+  .tabs-ico .pill-sh{z-index:0;background:#ececee;border-radius:11px;box-shadow:none}
+}

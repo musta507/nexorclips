@@ -15,7 +15,7 @@
       {% if admin_page %}
       {% if admin_can("admin_find") %}<form class="adm-find" method="get" action="{{ url_for('admin_find') }}" role="search">{{ icon("search") }}<input type="search" name="q" placeholder="Buscar clipper, @cuenta o campaña" aria-label="Buscar en el panel" value="{{ request.args.get('q', '') if ep == 'admin_find' else '' }}"></form>{% else %}<span></span>{% endif %}
       {% else %}
-      <nav class="tabs" id="pn-top" data-pill-nav data-turbo-permanent aria-label="Secciones">
+      <nav class="tabs tabs-ico" id="pn-top" data-pill-nav data-turbo-permanent aria-label="Secciones">
         <a class="tab {% if ep in ['index', 'ranking_page'] %}on{% endif %}" href="{{ url_for('index') }}" {% if ep in ['index', 'ranking_page'] %}aria-current="page"{% endif %}>{{ icon("home") }}Inicio</a>
         <a class="tab {% if ep in ['campaigns_page', 'campaign'] %}on{% endif %}" href="{{ url_for('campaigns_page') }}" {% if ep in ['campaigns_page', 'campaign'] %}aria-current="page"{% endif %}>{{ icon("flag") }}Campañas</a>
         <a class="tab {% if ep == 'my_clips' %}on{% endif %}" href="{{ url_for('my_clips') }}" {% if ep == 'my_clips' %}aria-current="page"{% endif %}>{{ icon("film") }}Mis clips</a>

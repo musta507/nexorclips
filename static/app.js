@@ -681,7 +681,11 @@ function pillSync(box, target, animate) {
   target = target || box.querySelector(":scope > .on");
   if (!target) { pill.style.opacity = 0; return; }
   pill.style.opacity = 1;
-  pillClip(box, pill, target.offsetLeft, target.offsetTop, target.offsetWidth, target.offsetHeight, animate);
+  var ic = box.classList.contains("tabs-ico") && target.querySelector("svg");
+  if (ic) {                                        // menú de arriba: el recuadro gris va solo detrás del icono
+    var b = box.getBoundingClientRect(), r = ic.getBoundingClientRect();
+    pillClip(box, pill, r.left - b.left + box.scrollLeft - 11, r.top - b.top - 5, r.width + 22, r.height + 10, animate);
+  } else pillClip(box, pill, target.offsetLeft, target.offsetTop, target.offsetWidth, target.offsetHeight, animate);
   box._pillTarget = target;
 }
 function pillAnimando(box) { var at = box._pillAt; return !!(at && at.anim && Date.now() - at.t < PILL_MS + 60); }
@@ -694,8 +698,9 @@ function montarPastilla(box) {
   var pill = document.createElement("span");
   pill.className = "pill";
   pill.setAttribute("aria-hidden", "true");
-  if (box.classList.contains("an-tg")) {          // las de las gráficas: pastilla blanca sobre gris, con su sombra
-    box.classList.add("pill-light");
+  var ico = box.classList.contains("tabs-ico");
+  if (ico || box.classList.contains("an-tg")) {   // gráficas: pastilla blanca con sombra; menú de arriba: recuadro gris tras el icono
+    if (!ico) box.classList.add("pill-light");
     box.querySelectorAll(":scope > .pill-sh").forEach(function (o) { o.remove(); });
     var sh = document.createElement("span"); sh.className = "pill-sh"; sh.setAttribute("aria-hidden", "true");
     box.appendChild(sh); pill._sh = sh;
