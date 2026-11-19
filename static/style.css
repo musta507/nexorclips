@@ -2966,3 +2966,9 @@ a.lr:hover{background:var(--soft)}
 .v2-track i{animation:v2wide .9s cubic-bezier(.2,.8,.2,1) both .15s}
 @media (prefers-reduced-motion:reduce){.v2-trio span,.v2-spark,.v2-track i{animation:none}}
 @media (max-width:560px){.v2-head .seg{order:2;width:100%}.v2-kpi-top b{font-size:18px}.v2-kpi-top .v2-ico{width:34px;height:34px}}
+
+/* Contadores (mensajes, menú del panel, chat): todos iguales, rojos, pequeños y redondos */
+.count,.adm-n,body.admin-shell .adm-n,body.admin-shell .adm-link.on .adm-n{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#f04438;color:#fff;font:600 11px/1 var(--font);font-variant-numeric:tabular-nums;letter-spacing:0;box-shadow:0 1px 2px rgba(240,68,56,.35)}
+.adm-n{margin-left:auto}
+/* Etiqueta «Admin» junto al logo: discreta, gris claro con borde fino */
+.admin-tag,.adm-badge,body.admin-shell .adm-badge{background:var(--soft)!important;color:var(--ink-2)!important;border:1px solid var(--line);font:600 11.5px/1 var(--font);padding:5px 9px;border-radius:999px;letter-spacing:0}

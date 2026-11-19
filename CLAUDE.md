@@ -75,6 +75,7 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 - Desplegables de filtro (Mis clips, Revisar clips): pastilla blanca redonda con icono delante (`data-ico`: flag, cal, sort) y lista propia con ✓ negro sobre gris (opción A). En el móvil es el selector del teléfono, con el mismo aspecto cerrado.
 - Barras «Visualizaciones por plataforma» de Mis clips en gris, como en las estadísticas de la campaña.
 - Campana de avisos: solo un punto rojo cuando hay algo sin leer, sin número (opción C).
+- Contadores (mensajes, menú del panel, chat): todos rojos, pequeños y redondos (`.count`, `.adm-n`). Etiqueta «Admin» junto al logo en gris claro con borde fino.
 - Ajustes (`/cuenta`) en lista, sin índice lateral y sin iconos (opción A): foto y nombre arriba con «Cambiar foto», luego grupos Perfil, Cobros y Cuenta con filas (`.lst`, `.lr`) y «Cerrar sesión» en rojo al final.
 - El ranking del inicio y el destacado de campañas, recién hechos a su gusto.
 
