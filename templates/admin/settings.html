@@ -79,7 +79,7 @@
     <div class="small" style="display:grid;gap:3px;margin-top:8px">
       {% if search.apify.by %}<span><b>Últimos 7 días:</b> {% for k, v in search.apify.by.items() %}{{ k }}: {{ v.calls }} llamadas · {{ v.items }} resultados{{ " · " if not loop.last }}{% endfor %}</span>{% endif %}
       <span class="muted">Apify cobra sobre todo por resultado devuelto. «perfiles» = buscar clips en cuentas · «vistas» = leer cifras · «descarga» = vídeo para Bunny (lo más caro) · «bio» = verificar cuenta.</span>
-      {% for at, kind, pl, n_in, n_out, code in search.apify.rows %}<span><time data-local data-local-full datetime="{{ at }}Z">{{ at }}</time> · <b>{{ kind }}</b> {{ pl }} · {{ n_in }} pedidos → {{ n_out }} resultados{% if code >= 400 %} · <b style="color:var(--red-ink)">error {{ code }}</b>{% endif %}</span>
+      {% for at, kind, pl, n_in, n_out, code in search.apify.rows %}<span><time data-local data-local-full datetime="{{ at }}Z">{{ at }}</time> · <b>{{ kind }}</b> {{ pl }} · {{ n_in }} pedidos → {{ n_out }} resultados{% if code >= 400 %} · <b style="color:var(--red-ink)">error {{ code }}</b>{% if code == 401 %} (clave de Apify no válida){% elif code == 402 %} (sin saldo en Apify){% elif code == 403 %} (Apify no deja: límite o permiso){% endif %}{% endif %}</span>
       {% else %}<span class="muted">Aún no hay llamadas apuntadas (se apuntan desde ahora).</span>{% endfor %}
       {% if search.apify.rows %}<form method="post" action="{{ url_for('admin_search', accion='borrar_registro') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Vaciar registro</button></form>{% endif %}
     </div>

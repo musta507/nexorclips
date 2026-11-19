@@ -5096,7 +5096,7 @@ def admin_home():
     pend = pending_by_campaign()
     todo = [(c, pend[c.id]) for c, _st in cards if c.id in pend and any(pend[c.id].get(k) for k in ("clips", "requests", "accounts", "support"))]
     general = [al for al in alerts if not al[1].startswith("«") or "agotarse" in al[1]]
-    return render_template("admin/overview.html", **overview_v2(camps, cards, live, todo, general))
+    return render_template("admin/overview.html", **overview_v2(camps, cards, live, todo, general, request.args.get("p", "30")))
 
 
 ADMIN_METRICS = ("views", "sent", "approved", "spent", "paid", "users")
@@ -5128,24 +5128,52 @@ def views_daily(start, days):
     return [float(v) for v in out]
 
 
-def overview_v2(camps, cards, live, todo, general):
-    """Datos del Resumen: cuatro cifras con su minigráfica y su cambio frente al mes anterior, clips por semana,
-    actividad reciente, campañas activas y equipo."""
-    an = admin_analytics(60)
+OVERVIEW_PERIODS = {"7": "Últimos 7 días", "30": "Últimos 30 días", "todo": "Desde siempre"}
+
+
+def overview_periods(p):
+    """Periodo del Resumen: días que se miran y tramos de la gráfica de clips (por días, semanas o meses)."""
+    today = datetime.utcnow().date()
+    if p == "7":
+        days, buckets = 7, [(today - timedelta(days=i), today - timedelta(days=i - 1)) for i in range(6, -1, -1)]
+        return days, buckets, "day"
+    if p == "todo":
+        first = db.session.query(db.func.min(Submission.created_at)).scalar() or datetime.utcnow()
+        days = max(30, min(730, (today - first.date()).days + 1))
+        months, y, m = [], today.year, today.month
+        for _ in range(min(12, days // 28 + 1)):
+            a0 = datetime(y, m, 1).date()
+            a1 = datetime(y + (m == 12), m % 12 + 1, 1).date()
+            months.append((a0, a1))
+            y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+        return days, months[::-1], "month"
+    return 30, [(today - timedelta(days=7 * w + 6), today - timedelta(days=7 * w - 1)) for w in range(5, -1, -1)], "week"
+
+
+def overview_v2(camps, cards, live, todo, general, p="30"):
+    """Datos del Resumen: cuatro cifras con su minigráfica y su cambio frente al periodo anterior, clips por tramo,
+    actividad reciente, campañas activas y equipo. Periodo: 7 días, 30 días o desde siempre."""
+    p = p if p in OVERVIEW_PERIODS else "30"
+    days, buckets, unit = overview_periods(p)
+    allt = p == "todo"
+    an = admin_analytics(days if allt else days * 2)
     cards_k = []
     for key, label, ico, money_ in (("views", "Vistas", "eye", False), ("spent", "Dinero repartido", "cash", True),
                                     ("sent", "Clips enviados", "film", False), ("users", "Clippers nuevos", "users", False)):
         d = an["series"]["daily"][key]
-        now_, prev = sum(d[30:]), sum(d[:30])
-        cards_k.append({"key": key, "label": label, "icon": ico, "money": money_, "value": now_, "spark": d[30:],
+        cur = d if allt else d[days:]
+        now_, prev = sum(cur), (0 if allt else sum(d[:days]))
+        if len(cur) > 60:                                   # minigráfica: como mucho 60 puntos
+            k_ = -(-len(cur) // 60); cur = [sum(cur[i:i + k_]) for i in range(0, len(cur), k_)]
+        cards_k.append({"key": key, "label": label, "icon": ico, "money": money_, "value": now_, "spark": cur if len(cur) > 1 else [0] + cur,
                         "change": round((now_ - prev) / prev * 100, 1) if prev else None})
-    # semanas: enviados, aprobados, rechazados
-    today = datetime.utcnow().date()
+    MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
     weeks = []
-    for w in range(5, -1, -1):
-        a0 = datetime.combine(today - timedelta(days=7 * w + 6), datetime.min.time()); a1 = a0 + timedelta(days=7)
-        q = Submission.query.filter(Submission.created_at >= a0, Submission.created_at < a1)
-        weeks.append({"label": f"{a0.day}/{a0.month:02d}", "sent": q.count(), "ok": q.filter(Submission.status == "aprobado").count(),
+    for a0, a1 in buckets:
+        q = Submission.query.filter(Submission.created_at >= datetime.combine(a0, datetime.min.time()),
+                                    Submission.created_at < datetime.combine(a1, datetime.min.time()))
+        label = MES[a0.month - 1] if unit == "month" else f"{a0.day}/{a0.month:02d}"
+        weeks.append({"label": label, "sent": q.count(), "ok": q.filter(Submission.status == "aprobado").count(),
                       "ko": q.filter(Submission.status == "rechazado").count()})
     ev = []
     for s_ in Submission.query.filter(Submission.status == "aprobado", Submission.reviewed_at.isnot(None)).order_by(Submission.reviewed_at.desc()).limit(4):
@@ -5167,7 +5195,8 @@ def overview_v2(camps, cards, live, todo, general):
             mods.append({"u": u, "camps": None})
     n_rev = sum(pd.get("clips", 0) for _c, pd in todo)
     n_req = sum(pd.get("requests", 0) + pd.get("accounts", 0) for _c, pd in todo)
-    return dict(kc=cards_k, weeks=weeks, ev=ev, live=live, mods=mods[:4], n_rev=n_rev, n_req=n_req, general=general)
+    return dict(kc=cards_k, weeks=weeks, ev=ev, live=live, mods=mods[:4], n_rev=n_rev, n_req=n_req, general=general,
+                period=p, periods=OVERVIEW_PERIODS, unit=unit)
 
 
 def admin_analytics(days=30):

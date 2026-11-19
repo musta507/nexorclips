@@ -9,7 +9,7 @@ import requests
 
 log = logging.getLogger("clipprofit.views")
 
-APIFY_TOKEN = os.environ.get("APIFY_TOKEN", "")
+APIFY_TOKEN = os.environ.get("APIFY_TOKEN", "").strip()   # sin espacios ni saltos de línea pegados por error
 
 # Actores de Apify que se usan para cada red (se pueden cambiar desde Railway sin tocar código)
 ACTORS = {

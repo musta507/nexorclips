@@ -3121,3 +3121,12 @@ def test_admin_campaigns_filter_in_page():
     assert 'data-row-filter="#camp-rows"' in page and 'class="seg"' in page and 'data-f="activa"' in page
     page = admin.get("/admin/campanas?estado=finalizada").get_data(as_text=True)
     assert 'class="f-out"' in page and 'class="on" data-tab data-f="finalizada"' in page
+
+
+def test_resumen_periodos():
+    """El Resumen del panel se puede ver por 7 días, 30 días o desde siempre."""
+    c = client_for("admin@test.com")
+    textos = {"": "Últimas 6 semanas", "?p=7": "Últimos 7 días", "?p=todo": "Último año", "?p=raro": "Últimas 6 semanas"}
+    for p, t in textos.items():
+        r = c.get("/admin" + p)
+        assert r.status_code == 200 and t in r.get_data(as_text=True)

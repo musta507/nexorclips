@@ -2936,3 +2936,33 @@ a.lr:hover{background:var(--soft)}
 .lst > a.lr:first-child:last-child{border-radius:var(--r-card,20px)}
 .lr-out .lr-k{color:var(--red,#d92d20)}
 @media (max-width:640px){.lst-hero{padding:16px}.avatar.xl{width:54px;height:54px}.lr{padding:8px 16px}}
+
+/* ===== Resumen del panel adaptado al resto de la web (Mustapha, nov 2026) ===== */
+.v2-head{align-items:center;flex-wrap:wrap}
+.v2-kpi{gap:6px;padding:14px 16px 8px}
+.v2-kpi-top{justify-content:flex-start;gap:12px;font-weight:400}
+.v2-kpi-top .v2-ico{width:42px;height:42px;border-radius:12px;background:var(--k-soft);color:var(--k);flex:none}
+.v2-kpi-top .v2-ico svg{width:20px;height:20px}
+.v2-kpi-top b{display:block;font:600 22px/1.15 var(--font);letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.v2-kl{display:block;font-size:13px;color:var(--muted)}
+.v2-ch{margin-top:2px}
+.v2-ch-head h3{font-size:16px;font-weight:600}
+.v2-aico{background:var(--soft)!important;color:var(--ink-2)!important}
+.v2-cov{width:36px;height:36px;border-radius:10px;overflow:hidden;background:var(--soft);display:grid;place-items:center;color:var(--muted);flex:none}
+.v2-cov img{width:100%;height:100%;object-fit:cover;display:block}
+.v2-cov svg{width:16px;height:16px}
+.v2-mem{grid-template-columns:auto 1fr auto}
+.v2-seen{display:inline-flex;align-items:center;gap:6px;justify-self:end;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px 10px;box-shadow:0 1px 3px rgba(16,24,40,.08);color:var(--muted)}
+.v2-seen i{width:7px;height:7px;border-radius:50%;background:#c4c5cb}
+.v2-seen.s-on{color:#067647}.v2-seen.s-on i{background:#12b76a;box-shadow:0 0 0 3px #dcfae6}
+.v2-seen.s-week i{background:#f79009}
+/* Animaciones de entrada: al entrar en el panel y al cambiar de periodo */
+@keyframes v2grow{from{transform:scaleY(0)}}
+@keyframes v2wide{from{width:0}}
+@keyframes v2draw{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.v2-trio span{transform-origin:bottom;animation:v2grow .7s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--d,0ms)}
+.v2-trio span.b2{animation-delay:calc(var(--d,0ms) + 60ms)}.v2-trio span.b3{animation-delay:calc(var(--d,0ms) + 120ms)}
+.v2-spark{animation:v2draw 1s cubic-bezier(.3,.7,.2,1) both .1s}
+.v2-track i{animation:v2wide .9s cubic-bezier(.2,.8,.2,1) both .15s}
+@media (prefers-reduced-motion:reduce){.v2-trio span,.v2-spark,.v2-track i{animation:none}}
+@media (max-width:560px){.v2-head .seg{order:2;width:100%}.v2-kpi-top b{font-size:18px}.v2-kpi-top .v2-ico{width:34px;height:34px}}

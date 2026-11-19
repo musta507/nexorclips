@@ -11,17 +11,19 @@
 </svg>
 {%- endmacro %}
 
+<h1 class="sr-only">Resumen</h1>
 <div class="v2-head">
-  <div><h1 class="v2-h1">Resumen</h1><p class="v2-sub">Así va {{ APP_NAME }} en los últimos 30 días</p></div>
-  <a class="v2-btn" href="{{ url_for('admin_campaign_form') }}">{{ icon("plus") }} Nueva campaña</a>
+  <nav class="seg" id="pn-ov-per" data-pill-nav data-turbo-permanent aria-label="Periodo">
+    {% for k, label in periods.items() %}<a class="{{ 'on' if period == k }}" href="{{ url_for('admin_home', p=None if k == '30' else k) }}">{{ label }}</a>{% endfor %}
+  </nav>
+  <a class="btn accent" href="{{ url_for('admin_campaign_form') }}">{{ icon("plus") }} Nueva campaña</a>
 </div>
 
 <div class="v2-kpis">
   {% for k in kc %}
   <div class="v2-card v2-kpi k-{{ k.key }}">
-    <div class="v2-kpi-top"><span>{{ k.label }}</span><span class="v2-ico">{{ icon(k.icon) }}</span></div>
-    <b class="tnum">{% if k.money %}{{ k.value|money(0) }}{% else %}{{ k.value|int|short }}{% endif %}</b>
-    {% if k.change is not none %}<small class="v2-ch {{ 'up' if k.change >= 0 else 'down' }}">{{ "↑" if k.change >= 0 else "↓" }} {{ k.change|abs|string|replace('.', ',') }} %<span> vs. mes anterior</span></small>{% else %}<small class="v2-ch muted">Sin datos del mes anterior</small>{% endif %}
+    <div class="v2-kpi-top"><span class="v2-ico">{{ icon(k.icon) }}</span><span><b class="tnum">{% if k.money %}{{ k.value|money(0) }}{% else %}{{ k.value|int|short }}{% endif %}</b><small class="v2-kl">{{ k.label }}</small></span></div>
+    {% if k.change is not none %}<small class="v2-ch {{ 'up' if k.change >= 0 else 'down' }}">{{ "↑" if k.change >= 0 else "↓" }} {{ k.change|abs|string|replace('.', ',') }} %<span> vs. {{ "semana" if period == "7" else "mes" }} anterior</span></small>{% else %}<small class="v2-ch muted">{{ "Desde el principio" if period == "todo" else ("Sin datos de la semana anterior" if period == "7" else "Sin datos del mes anterior") }}</small>{% endif %}
     {{ spark(k.spark, "s-" ~ k.key) }}
   </div>
   {% endfor %}
@@ -29,7 +31,7 @@
 
 <div class="v2-row">
   <section class="v2-card v2-chart">
-    <div class="v2-ch-head"><h3>Clips por semana</h3><span class="small muted">Últimas 6 semanas</span></div>
+    <div class="v2-ch-head"><h3>Clips por {{ {"day": "día", "week": "semana", "month": "mes"}[unit] }}</h3><span class="small muted">{{ {"day": "Últimos 7 días", "week": "Últimas 6 semanas", "month": "Último año"}[unit] }}</span></div>
     <div class="v2-legend"><span><i class="l1"></i>Enviados</span><span><i class="l2"></i>Aprobados</span><span><i class="l3"></i>Rechazados</span></div>
     {% set top = (weeks|map(attribute="sent")|max) or 1 %}
     <div class="v2-bars">
@@ -37,7 +39,7 @@
       <div class="v2-plot">
         {% for i in range(5) %}<i class="g" style="bottom:{{ i * 25 }}%"></i>{% endfor %}
         {% for w in weeks %}
-        <div class="v2-wk"><div class="v2-trio">
+        <div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms"><div class="v2-trio">
           <span class="b1" style="height:{{ (w.sent / top * 100)|round(1) }}%" title="Enviados: {{ w.sent }}"></span>
           <span class="b2" style="height:{{ (w.ok / top * 100)|round(1) }}%" title="Aprobados: {{ w.ok }}"></span>
           <span class="b3" style="height:{{ (w.ko / top * 100)|round(1) }}%" title="Rechazados: {{ w.ko }}"></span>
@@ -47,7 +49,7 @@
     </div>
   </section>
   <section class="v2-card v2-act">
-    <div class="v2-ch-head"><h3>Actividad reciente</h3><a class="v2-pill" href="{{ url_for('admin_activity') }}">Ver todo</a></div>
+    <div class="v2-ch-head"><h3>Actividad reciente</h3><a class="btn soft sm" href="{{ url_for('admin_activity') }}">Ver todo</a></div>
     <ul>
       {% for when, ico, col, text in ev %}
       <li><span class="v2-aico c-{{ col }}">{{ icon(ico) }}</span><span><b>{{ text }}</b><small>{{ when|ago }}</small></span></li>
@@ -60,19 +62,19 @@
 
 <div class="v2-row">
   <section class="v2-card v2-camps">
-    <div class="v2-ch-head"><h3>Campañas activas</h3><a class="v2-pill" href="{{ url_for('admin_campaigns') }}">Ver todas</a></div>
+    <div class="v2-ch-head"><h3>Campañas activas</h3><a class="btn soft sm" href="{{ url_for('admin_campaigns') }}">Ver todas</a></div>
     {% for c, st in live[:5] %}
     <a class="v2-camp" href="{{ url_for('admin_campaign', cid=c.id) }}">
-      <span class="v2-cico">{{ icon("flag") }}</span>
+      <span class="v2-cov">{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" loading="lazy">{% else %}{{ icon("flag") }}{% endif %}</span>
       <span class="v2-cname"><b>{{ c.song }}</b><span class="v2-track"><i style="width:{{ 100 - st.left_pct }}%"></i></span></span>
       <span class="v2-cpct tnum">{{ 100 - st.left_pct }} %</span>
     </a>
     {% else %}<p class="muted">No hay campañas activas.</p>{% endfor %}
   </section>
   <section class="v2-card v2-team">
-    <div class="v2-ch-head"><h3>Equipo</h3><a class="v2-pill" href="{{ url_for('admin_mods') }}">Añadir mod</a></div>
+    <div class="v2-ch-head"><h3>Equipo</h3><a class="btn soft sm" href="{{ url_for('admin_mods') }}">Añadir mod</a></div>
     {% for m in mods %}
-    <div class="v2-mem"><span class="v2-av">{{ (m.u.name or m.u.email)[:1]|upper }}</span><span><b>{{ m.u.name }}</b><small>{{ "Administrador" if m.camps is none else ("Mod de " ~ m.camps ~ (" campaña" if m.camps == 1 else " campañas")) }}</small></span>{% set lv = m.u.last_seen_at|seen_level %}<span class="v2-seen s-{{ lv }}">● {{ "En línea" if lv == "on" else (m.u.last_seen_at|ago if m.u.last_seen_at else "Nunca") }}</span></div>
+    <div class="v2-mem"><span class="v2-av">{{ (m.u.name or m.u.email)[:1]|upper }}</span><span><b>{{ m.u.name }}</b><small>{{ "Administrador" if m.camps is none else ("Mod de " ~ m.camps ~ (" campaña" if m.camps == 1 else " campañas")) }}</small></span>{% set lv = m.u.last_seen_at|seen_level %}<span class="v2-seen s-{{ lv }}"><i></i>{{ "En línea" if lv == "on" else (m.u.last_seen_at|ago if m.u.last_seen_at else "Nunca") }}</span></div>
     {% else %}<p class="muted">Aún no hay mods.</p>{% endfor %}
   </section>
 </div>
