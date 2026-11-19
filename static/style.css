@@ -2859,3 +2859,7 @@ tr.f-out{display:none!important}
 .fchips.has-pill .pill{border-radius:999px}
 .fchips.has-pill .pill > a{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;color:#fff}
 .fchips.has-pill .pill > a svg{color:#fff}
+
+/* Dentro de una campaña del panel: los bloques llevan el mismo espacio entre sí (el marco de Turbo cortaba el hueco de la página) */
+turbo-frame#camp-body{display:flex;flex-direction:column;gap:16px}
+turbo-frame#camp-body > *{margin-top:0;margin-bottom:0}
