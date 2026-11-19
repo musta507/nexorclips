@@ -79,6 +79,12 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 - Ajustes (`/cuenta`) en lista, sin índice lateral y sin iconos (opción A): foto y nombre arriba con «Cambiar foto», luego grupos Perfil, Cobros (Whop también en filas: usuario en la fila y botón Conectar) y Cuenta con filas (`.lst`, `.lr`) y «Cerrar sesión» en rojo al final.
 - El ranking del inicio y el destacado de campañas, recién hechos a su gusto.
 
+## Skills de diseño (en `.claude/skills/`, sirven en Claude Code y en el chat)
+
+- `design-audit` (Bencium, licencia MIT): revisa la web pantalla a pantalla y propone un plan por fases (crítico, refinamiento, pulido) sin tocar el funcionamiento. Sus «DESIGN_SYSTEM», «APP_FLOW» y demás documentos son, aquí, este `CLAUDE.md`. Presenta el plan y espera el visto bueno, como ya pide Mustapha.
+- `web-design-guidelines` (Vercel): repasa un archivo contra las reglas de interfaz de Vercel (accesibilidad, foco, textos de botones, formularios) y da los fallos por archivo y línea. Necesita poder abrir la web de las reglas.
+- Lo que le gusta a Mustapha (sección de arriba) manda sobre lo que diga cualquier skill.
+
 ## Pendiente
 
 Acordado y sin hacer:
