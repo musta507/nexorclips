@@ -1,0 +1,34 @@
+{% extends "_plain.html" %}
+{% block title %}Aviso legal · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<article class="legal-doc">
+  <h1>Aviso legal</h1>
+  <p class="muted">Última actualización: {{ YEAR }}</p>
+
+  <h2>Quién está detrás de {{ APP_NAME }}</h2>
+  <p>En cumplimiento de la Ley 34/2002 de Servicios de la Sociedad de la Información y de Comercio Electrónico (LSSI-CE), estos son los datos del titular de esta web:</p>
+  <ul>
+    <li><b>Titular:</b> {{ li.owner or "—" }}</li>
+    <li><b>NIF / CIF:</b> {{ li.nif or "—" }}</li>
+    <li><b>Domicilio:</b> {{ li.address or "—" }}</li>
+    {% if li.email %}<li><b>Correo:</b> <span class="selectable">{{ li.email }}</span></li>{% endif %}
+    {% if li.registry %}<li><b>Datos registrales:</b> {{ li.registry }}</li>{% endif %}
+    <li><b>Web:</b> {{ (BASE_URL or request.host_url)|replace("https://", "")|replace("http://", "")|trim("/") }}</li>
+  </ul>
+
+  <h2>Qué es {{ APP_NAME }}</h2>
+  <p>Una plataforma que conecta a creadores de contenido que lanzan campañas con personas que publican clips de esas campañas en sus propias redes y cobran por las vistas que consiguen. Las condiciones de uso están en los <a class="link" href="{{ url_for('terms') }}">términos del servicio</a>.</p>
+
+  <h2>Propiedad intelectual</h2>
+  <p>El diseño, los textos, el logotipo y el código de la web pertenecen a su titular o se usan con permiso. Los vídeos, portadas y marcas de cada campaña pertenecen a sus creadores, y los de TikTok, Instagram y YouTube a sus dueños. No se pueden copiar ni usar con otros fines sin permiso.</p>
+
+  <h2>Responsabilidad</h2>
+  <p>Intentamos que la web funcione siempre y que la información sea correcta, pero puede haber cortes o errores puntuales, sobre todo en las cifras que dan las redes sociales. No respondemos del contenido que publican los usuarios en sus redes ni de las webs de terceros a las que enlazamos.</p>
+
+  <h2>Datos personales y cookies</h2>
+  <p>Cómo tratamos tus datos está en la <a class="link" href="{{ url_for('privacy') }}">política de privacidad</a>, y qué cookies usamos, en la <a class="link" href="{{ url_for('cookies_page') }}">política de cookies</a>.</p>
+
+  <h2>Ley aplicable</h2>
+  <p>Este aviso se rige por la ley española. Para cualquier conflicto, si eres consumidor, son competentes los juzgados de tu domicilio.</p>
+</article>
+{% endblock %}

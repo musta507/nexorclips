@@ -51,7 +51,13 @@
   <h2>Tus derechos</h2>
   <p>Puedes pedir acceder a tus datos, corregirlos, llevártelos o borrar tu cuenta.{% if SUPPORT_EMAIL %} Escríbenos a <span class="selectable">{{ SUPPORT_EMAIL }}</span>.{% endif %} Si estás en la Unión Europea, también puedes reclamar ante la autoridad de protección de datos de tu país.</p>
 
+  <h2>Responsable</h2>
+  <p>{% set li = legal_info() %}{% if li.owner %}{{ li.owner }}{% if li.nif %} (NIF {{ li.nif }}){% endif %}{% if li.address %}, {{ li.address }}{% endif %}.{% else %}El titular de {{ APP_NAME }}, con los datos que figuran en el <a class="link" href="{{ url_for('legal_notice') }}">aviso legal</a>.{% endif %}{% if li.email %} Contacto: <span class="selectable">{{ li.email }}</span>.{% endif %}</p>
+
+  <h2>Base legal</h2>
+  <p>Tratamos tus datos para cumplir el contrato que aceptas al registrarte (gestionar tu cuenta, contar tus vistas y pagarte), por interés legítimo para prevenir el fraude y mantener la seguridad, por obligación legal en lo relativo a pagos e impuestos y, en lo que es opcional (como conectar una red con su API), con tu consentimiento, que puedes retirar cuando quieras.</p>
+
   <h2>Cookies</h2>
-  <p>Usamos solo las cookies necesarias para mantener tu sesión iniciada y proteger los formularios, y el almacenamiento del navegador para recordar detalles de la pantalla. No usamos cookies de publicidad ni de seguimiento.</p>
+  <p>Todo lo relativo a cookies está en la <a class="link" href="{{ url_for('cookies_page') }}">política de cookies</a>. En resumen: usamos solo las cookies necesarias para mantener tu sesión iniciada y proteger los formularios, y el almacenamiento del navegador para recordar detalles de la pantalla. No usamos cookies de publicidad ni de seguimiento.</p>
 </article>
 {% endblock %}

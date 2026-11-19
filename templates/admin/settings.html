@@ -166,6 +166,16 @@
 </div>
 
 <div class="tp" id="datos" hidden>
+<div class="card tight form-stack" id="legal">
+  <h3>Datos del aviso legal</h3>
+  <p class="small muted">En España la web tiene que decir quién es su titular. Salen en <a class="link" href="{{ url_for('legal_notice') }}" target="_blank">Aviso legal</a> y en la política de privacidad. Si es Felipe como autónomo, su nombre, su NIF y su domicilio fiscal.</p>
+  {% set li = legal_info() %}
+  <form method="post" action="{{ url_for('admin_legal') }}" class="form-stack"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="form-grid">{% for k, label in LEGAL_FIELDS.items() %}<div class="field"><label for="lg-{{ k }}">{{ label }}</label><input id="lg-{{ k }}" name="{{ k }}" value="{{ li[k] }}" maxlength="300" autocomplete="off"></div>{% endfor %}</div>
+    <div><button class="btn sm soft">Guardar</button></div>
+  </form>
+</div>
+
 <div class="card tight">
   <h3>Copia de seguridad</h3>
   <p class="small muted" style="margin:6px 0 12px">Descarga todos los datos (campañas, clips, clippers, retiros, mensajes, actividad) en un archivo. Las imágenes no van incluidas. Guárdala en tu ordenador o en Drive de vez en cuando, además de las copias de Railway.</p>

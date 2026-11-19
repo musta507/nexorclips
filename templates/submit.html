@@ -5,19 +5,16 @@
 {% block content %}
 <h1 class="sr-only">Mis clips</h1>
 
-{% set nxt = next_scan_utc() %}
+{% if camps %}
+<p class="auto-line"><i aria-hidden="true"></i>Tus clips se añaden solos cada día</p>
+{% else %}
 <div class="card auto-scan">
   <span class="auto-ico" aria-hidden="true">{{ icon("pulse") }}</span>
-  <div>
-    <b>Detección automática de clips</b>
-    {% if camps %}
-    <p class="small muted">Cada día{% if nxt %} a las <time datetime="{{ nxt|iso }}" data-local data-local-hm>{{ REFRESH_AT }}</time> <span data-local-zone>(hora de España)</span>{% endif %} miramos tus cuentas de campaña: los vídeos nuevos aparecen aquí solos y se actualizan sus vistas. ¿Falta alguno después de esa hora? <a class="link" href="{{ url_for('support') }}">Escríbenos</a>.</p>
-    {% else %}
-    <p class="small muted">Aún no estás en ninguna campaña. Entra en una, pulsa <b>Solicitar entrar</b> y, cuando te acepten, añade y verifica tu cuenta: tus clips aparecerán aquí solos.</p>
-    {% endif %}
-  </div>
-  {% if not camps %}<a class="btn sm accent" href="{{ url_for('campaigns_page') }}">Ver campañas</a>{% endif %}
+  <div><b>Aún no estás en ninguna campaña</b>
+    <p class="small muted">Entra en una y verifica tu cuenta: tus clips aparecerán aquí solos.</p></div>
+  <a class="btn sm accent" href="{{ url_for('campaigns_page') }}">Ver campañas</a>
 </div>
+{% endif %}
 
 {% set qs = {'campana': fc or None, 'red': fp or None, 'dias': dias if dias != 30 else None} %}
 <section class="mc" data-chart data-chart-smooth data-metric="views">

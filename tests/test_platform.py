@@ -3059,3 +3059,27 @@ def test_account_rows_widgets():
     cid = make_campaign(budget=5000)
     form = admin.get(f"/admin/campana/{cid}/editar").get_data(as_text=True)
     assert 'data-rows="txt"' in form and 'name="join_questions"' in form
+
+
+def test_legal_pages_complete():
+    """Aviso legal, cookies y privacidad: enlazados en el pie y con los datos del titular que se ponen en el panel."""
+    c = A.app.test_client()
+    home = c.get("/").get_data(as_text=True)
+    for href in ('href="/terminos"', 'href="/privacidad"', 'href="/cookies"', 'href="/aviso-legal"'):
+        assert href in home
+    assert "remember_token" in c.get("/cookies").get_data(as_text=True)
+    assert "LSSI" in c.get("/aviso-legal").get_data(as_text=True)
+    admin = client_for("admin@test.com")
+    assert "Faltan los datos del aviso legal" in admin.get("/admin/ajustes").get_data(as_text=True)
+    post(admin, "/admin/ajustes/legal", owner="Felipe Prueba", nif="12345678Z", address="Calle Mayor 1, Madrid", email="legal@ejemplo.com", registry="")
+    notice = c.get("/aviso-legal").get_data(as_text=True)
+    assert "Felipe Prueba" in notice and "12345678Z" in notice and "Calle Mayor 1, Madrid" in notice
+    assert "Felipe Prueba" in c.get("/privacidad").get_data(as_text=True)
+    assert "Faltan los datos del aviso legal" not in admin.get("/admin/ajustes").get_data(as_text=True)
+
+
+def test_admin_profile_menu_shows_balance():
+    """El admin también puede clipear: su menú de perfil enseña su saldo, como el de cualquier clipper."""
+    make_campaign(budget=5000)
+    page = client_for("admin@test.com").get("/campanas").get_data(as_text=True)
+    assert "Saldo disponible" in page

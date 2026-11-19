@@ -3348,7 +3348,7 @@ def static_url(filename):
 
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": csrf_token, "admin_can": admin_can, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
+    return {"csrf_token": csrf_token, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
@@ -3678,6 +3678,47 @@ def terms():
 @app.route("/privacidad")
 def privacy():
     return render_template("legal_privacy.html")
+
+
+LEGAL_FIELDS = {"owner": "Titular (nombre y apellidos o empresa)", "nif": "NIF / CIF", "address": "Domicilio",
+                "email": "Correo de contacto legal", "registry": "Datos registrales (solo si es empresa)"}
+
+
+def legal_info():
+    """Datos del titular de la web para el aviso legal (los pone Mustapha en el Panel técnico)."""
+    def read():
+        try:
+            d = json.loads(get_setting("legal_info", "") or "{}")
+        except ValueError:
+            d = {}
+        d = {k: (d.get(k) or "").strip() for k in LEGAL_FIELDS}
+        d["email"] = d["email"] or SUPPORT_EMAIL
+        return d
+    return ttl_cache("legal_info", 60, read)
+
+
+@app.route("/aviso-legal")
+def legal_notice():
+    return render_template("legal_notice.html", li=legal_info())
+
+
+@app.route("/cookies")
+def cookies_page():
+    return render_template("legal_cookies.html")
+
+
+@app.route("/admin/ajustes/legal", methods=["POST"])
+@admin_required
+def admin_legal():
+    if not is_tech():
+        abort(403)
+    data = {k: " ".join((request.form.get(k) or "").split())[:300] for k in LEGAL_FIELDS}
+    set_setting("legal_info", json.dumps(data))
+    _ttl.pop("legal_info", None)
+    audit("datos_legales", ", ".join(k for k, v in data.items() if v) or "vacío")
+    db.session.commit()
+    flash("Datos del aviso legal guardados.", "ok")
+    return redirect(url_for("admin_settings", _anchor="datos"))
 
 
 @app.route("/informe/<token>")
@@ -6506,6 +6547,9 @@ def tech_alerts():
     out = []
     if not viewcounter.APIFY_TOKEN:
         out.append(("error", "Falta la clave de Apify", "Sin APIFY_TOKEN no se leen las vistas de los clips."))
+    li_ = legal_info()
+    if not (li_["owner"] and li_["nif"] and li_["address"]):
+        out.append(("aviso", "Faltan los datos del aviso legal", "En España la web tiene que decir quién es el titular (nombre, NIF y domicilio). Ponlos en Panel técnico → Datos."))
     if not WHOP_API_KEY:
         out.append(("error", "Falta la clave de Whop", "Sin WHOP_API_KEY los clippers no pueden cobrar."))
     elif whop_company_id():

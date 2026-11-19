@@ -1,0 +1,30 @@
+{% extends "_plain.html" %}
+{% block title %}Política de cookies · {{ APP_NAME }}{% endblock %}
+{% block content %}
+<article class="legal-doc">
+  <h1>Política de cookies</h1>
+  <p class="muted">Última actualización: {{ YEAR }}</p>
+
+  <h2>Qué son</h2>
+  <p>Las cookies son pequeños archivos que una web guarda en tu navegador. {{ APP_NAME }} usa solo las imprescindibles para funcionar: no usamos cookies de publicidad, ni de análisis, ni para seguirte por otras webs.</p>
+
+  <h2>Cookies propias (necesarias)</h2>
+  <div class="table-card"><div class="table-scroll"><table class="rt">
+    <thead><tr><th>Nombre</th><th>Para qué</th><th>Duración</th></tr></thead>
+    <tbody>
+      <tr><td data-label="Nombre"><code>session</code></td><td data-label="Para qué">Mantener tu sesión abierta y proteger los formularios (evita que otra web envíe cosas en tu nombre).</td><td data-label="Duración">Hasta que cierras el navegador</td></tr>
+      <tr><td data-label="Nombre"><code>remember_token</code></td><td data-label="Para qué">Recordar que has iniciado sesión para no tener que entrar cada vez.</td><td data-label="Duración">30 días</td></tr>
+    </tbody>
+  </table></div></div>
+  <p>Al ser técnicas y necesarias, la ley no exige pedirte permiso para usarlas. Si las bloqueas, no podrás iniciar sesión.</p>
+
+  <h2>Almacenamiento del navegador</h2>
+  <p>Guardamos en tu navegador (no en cookies) pequeños detalles de la pantalla, como si dejaste abierto el chat de soporte o plegado el índice de un curso. No se envían a ningún sitio y se borran al limpiar los datos del navegador.</p>
+
+  <h2>Contenido de otras webs</h2>
+  <p>Cuando ves un clip, la web muestra el reproductor de TikTok, Instagram o YouTube (este último en su modo de privacidad mejorada). Esos reproductores pueden usar sus propias cookies, según sus políticas: <a class="link" href="https://www.tiktok.com/legal/page/eea/cookie-policy/es" target="_blank" rel="noopener">TikTok</a>, <a class="link" href="https://privacycenter.instagram.com/policies/cookies/" target="_blank" rel="noopener">Instagram</a> y <a class="link" href="https://policies.google.com/technologies/cookies?hl=es" target="_blank" rel="noopener">Google (YouTube)</a>. Los vídeos de la formación y las copias de los clips en revisión se ven con Bunny.net, que no usa cookies de seguimiento.</p>
+
+  <h2>Cómo quitarlas</h2>
+  <p>Puedes borrar o bloquear las cookies desde la configuración de tu navegador (Chrome, Safari, Firefox o Edge, en el apartado de privacidad). Si tienes dudas, escríbenos{% if SUPPORT_EMAIL %} a <span class="selectable">{{ SUPPORT_EMAIL }}</span>{% else %} por el chat de soporte{% endif %}.</p>
+</article>
+{% endblock %}

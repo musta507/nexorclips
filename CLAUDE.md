@@ -35,7 +35,7 @@ Repositorio `musta507/nexorclips`, rama `main`. Cada push a `main` se despliega 
 ## Probar antes de subir
 
 ```bash
-python -m pytest tests -q                 # 151 tests, en SQLite
+python -m pytest tests -q                 # 153 tests, en SQLite
 TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en Postgres
 ```
 
@@ -78,6 +78,7 @@ Acordado y sin hacer:
 4. Arquitectura modular: repartir `app.py` en carpetas por temas (dinero, clips, lectura, campañas, comunidad, admin), un tema cada vez, sin reescribir y sin cambiar la base de datos. Empezar por dinero y lectura.
 
 Para el final:
+- Poner los datos del titular (nombre, NIF y domicilio de Felipe) en Panel técnico → Datos → «Datos del aviso legal». Salen en /aviso-legal y en la privacidad. Mientras falten, hay un aviso en el Panel técnico.
 - Probar un retiro real por Whop de principio a fin.
 - Conectar el dominio clipprofit.es y poner la región de Railway en Europa.
 - Comprobar en producción que yt-dlp trae las vistas (Panel técnico → «Probar yt-dlp con una cuenta»).

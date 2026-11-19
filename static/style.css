@@ -2666,3 +2666,7 @@ details > summary.link:hover{color:var(--ink-2)}
 .ds-add > summary svg{width:16px;height:16px;transition:transform .25s}
 .ds-add[open] > summary svg{transform:rotate(45deg)}
 .ds-add[open] > summary{margin-bottom:4px}
+/* Mis clips: aviso fino de que los clips llegan solos */
+.auto-line{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:13px;color:var(--muted)}
+.auto-line i{width:7px;height:7px;border-radius:50%;background:var(--money);box-shadow:0 0 0 0 rgba(18,183,106,.5);animation:eb-live 2.4s ease-out infinite}
+@media (prefers-reduced-motion:reduce){.auto-line i{animation:none}}
