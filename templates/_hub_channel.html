@@ -12,9 +12,9 @@
 {% elif chan.kind == 'winners' %}
 <turbo-frame id="viral" target="_top" data-turbo-action="advance">
 <div class="vr-bar fchips-row">
-  <nav class="fchips" aria-label="Red">{% for k, label in [("", "Todas")] + viral.nets|map('pair_platform')|list %}<a class="{% if viral.red == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, canal=chan.id, hub=hubq, red=k or None, periodo=viral.periodo if viral.periodo != '30' else None) }}" data-turbo-frame="viral">{% if k %}{{ icon(k) }} {% endif %}{{ label }}</a>{% endfor %}</nav>
+  <nav class="fchips" id="pn-vr-red-{{ camp.id }}" data-pill-nav data-turbo-permanent aria-label="Red">{% for k, label in [("", "Todas")] + viral.nets|map('pair_platform')|list %}<a class="{% if viral.red == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, canal=chan.id, hub=hubq, red=k or None, periodo=viral.periodo if viral.periodo != '30' else None) }}" data-turbo-frame="viral">{% if k %}{{ icon(k) }} {% endif %}{{ label }}</a>{% endfor %}</nav>
   <span class="fchips-sep" aria-hidden="true"></span>
-  <nav class="fchips" aria-label="Periodo">{% for k, v in viral.periods.items() %}<a class="{% if viral.periodo == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, canal=chan.id, hub=hubq, red=viral.red or None, periodo=k if k != '30' else None) }}" data-turbo-frame="viral">{{ v[0] }}</a>{% endfor %}</nav>
+  <nav class="fchips" id="pn-vr-per-{{ camp.id }}" data-pill-nav data-turbo-permanent aria-label="Periodo">{% for k, v in viral.periods.items() %}<a class="{% if viral.periodo == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, canal=chan.id, hub=hubq, red=viral.red or None, periodo=k if k != '30' else None) }}" data-turbo-frame="viral">{{ v[0] }}</a>{% endfor %}</nav>
 </div>
 {% if viral.clips %}
 <div class="vr-grid">{% for s in viral.clips %}{% set th = clip_thumb(s) %}{% set _t, lqip = cover_meta(s.campaign) %}
@@ -28,7 +28,7 @@
 </turbo-frame>
 {% elif chan.kind == 'top' %}
 <turbo-frame id="topacc" target="_top" data-turbo-action="advance">
-{% if top.nets|length > 1 %}<nav class="fchips vr-bar" aria-label="Red">{% for k, label in [("", "Todas")] + top.nets|map('pair_platform')|list %}<a class="{% if top.red == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, canal=chan.id, hub=hubq, red=k or None) }}" data-turbo-frame="topacc">{% if k %}{{ icon(k) }} {% endif %}{{ label }}</a>{% endfor %}</nav>{% endif %}
+{% if top.nets|length > 1 %}<nav class="fchips vr-bar" id="pn-ta-red-{{ camp.id }}" data-pill-nav data-turbo-permanent aria-label="Red">{% for k, label in [("", "Todas")] + top.nets|map('pair_platform')|list %}<a class="{% if top.red == k %}on{% endif %}" href="{{ url_for('campaign', cid=camp.id, canal=chan.id, hub=hubq, red=k or None) }}" data-turbo-frame="topacc">{% if k %}{{ icon(k) }} {% endif %}{{ label }}</a>{% endfor %}</nav>{% endif %}
 {% if top.rows %}
 <div class="card ta-list">{% for r in top.rows %}
   <a class="ta-row" href="{{ profile_url(r.platform, r.handle) }}" target="_blank" rel="noopener">

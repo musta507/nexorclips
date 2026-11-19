@@ -733,7 +733,7 @@ function montarPastilla(box) {
 }
 function pillIdx(box, el) { return el ? Array.prototype.indexOf.call(pillItems(box), el) : -1; }
 function pastillaOrden() {
-  document.querySelectorAll(".seg, .sortbar, #pn-top, .an-tg").forEach(montarPastilla);
+  document.querySelectorAll(".seg, .sortbar, #pn-top, .an-tg, .fchips").forEach(montarPastilla);
 }
 // La copia que Turbo guarda para «atrás» queda como la manda el servidor
 document.addEventListener("turbo:before-cache", function () {
@@ -810,7 +810,7 @@ if (window.Turbo) {
     e.detail.visit(e.detail.response);
   });
   // Dentro de un marco, el fundido solo va en el contenido: las barras de pestañas, el buscador y los filtros no parpadean
-  var FR_FIJO = ".seg, .tl, .sortbar, form[data-autosubmit], .mc-tools";
+  var FR_FIJO = ".seg, .tl, .sortbar, .fchips, .vr-bar, form[data-autosubmit], .mc-tools";
   function contenidoMarco(fr) {
     var out = [];
     (function walk(el) {

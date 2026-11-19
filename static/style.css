@@ -2853,3 +2853,9 @@ tr.f-out{display:none!important}
   .tabs-ico.has-pill .pill{visibility:hidden}
   .tabs-ico .pill-sh{z-index:0;background:#ececee;border-radius:11px;box-shadow:none}
 }
+
+/* Filtros del hub (Vídeos virales, Cuentas TOP): la pastilla negra se desliza entre los chips */
+.fchips.has-pill > a.on{background:#fff;border-color:var(--line);color:var(--ink-2,#3b3b40)}
+.fchips.has-pill .pill{border-radius:999px}
+.fchips.has-pill .pill > a{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;color:#fff}
+.fchips.has-pill .pill > a svg{color:#fff}
