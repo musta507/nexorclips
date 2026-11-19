@@ -2758,9 +2758,9 @@ body.admin-shell .adm-n{background:#ff3b30;color:#fff}
 .v2-spark{width:100%;height:40px;margin-top:6px}
 .v2-spark polyline{fill:none;stroke:var(--k);stroke-width:1.8;vector-effect:non-scaling-stroke;stroke-linejoin:round}
 .v2-spark .f{fill:var(--k);opacity:.1}
-.k-views{--k:var(--ac);--k-soft:var(--ac-soft)}
+.k-views{--k:#f08a24;--k-soft:#fdeedd}
 .k-spent{--k:#12b76a;--k-soft:#e3f8ec}
-.k-sent{--k:#f08a24;--k-soft:#fdeedd}
+.k-sent{--k:#8b6cf0;--k-soft:#efeafd}
 .k-users{--k:#14b8a6;--k-soft:#d9f6f2}
 
 .v2-row{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px;margin-bottom:16px}
@@ -2833,3 +2833,10 @@ tr.f-out{display:none!important}
 .pill-sh{position:absolute;left:0;top:0;width:0;height:0;border-radius:999px;background:var(--card);box-shadow:0 1px 3px rgba(16,24,40,.12);pointer-events:none}
 /* Tarjetas de cifras de Mis clips: la elegida, sin brillo ni fondo teñido; solo un borde limpio de su color */
 .mc-kpi.on{background:var(--card);border-color:var(--k);box-shadow:inset 0 0 0 1px var(--k)}
+
+/* Resumen del panel con los colores de Mis clips: enviados morado, aprobados turquesa, rechazados gris */
+.v2-legend .l1,.v2-trio .b1{background:#8b6cf0}
+.v2-legend .l2,.v2-trio .b2{background:#14b8a6}
+.v2-legend .l3,.v2-trio .b3{background:#d6d7db}
+.v2-track i{background:#12b76a}
+.v2-cico{background:#e3f8ec;color:#12b76a}
