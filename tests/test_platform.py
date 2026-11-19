@@ -560,7 +560,7 @@ def test_join_campaign_and_admin_accepts(monkeypatch):
         mb = A.CampaignMember.query.one()
         assert mb.status == "pendiente" and not A.CampaignAccount.query.first()
         mid = mb.id
-    assert "Pendiente" in a.get("/campanas").get_data(as_text=True)
+    assert "Solicitud enviada" in a.get("/campanas").get_data(as_text=True)
     assert "en revisión" in post(a, f"/campana/{cid}", url=tt("ana", 1)).get_data(as_text=True)
     assert "no se puede añadir" not in post(a, f"/campana/{cid}/cuentas", platform="tiktok", handle="ana").get_data(as_text=True)
     with A.app.app_context():
