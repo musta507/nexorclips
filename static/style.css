@@ -552,7 +552,7 @@ details.answers[open] summary::before{content:"▾ "}
   body.has-tabs{padding-bottom:84px}
 
   .chat-fab{right:14px;bottom:calc(84px + env(safe-area-inset-bottom,0px));padding:14px;box-shadow:0 8px 22px rgba(0,0,0,.4)}
-  .chat-fab span:not(.count){display:none}
+  .chat-fab .fab-lbl{display:none}
   .chat-fab .count{position:absolute;top:-4px;right:-4px;border:2px solid var(--bg)}
 
   .stats,.stats.four,.form-grid{grid-template-columns:1fr}
@@ -2261,7 +2261,7 @@ b>.m-earn,b>.m-zero{font-size:inherit!important;line-height:inherit}
 .field .dd .dd-btn,.form-grid .dd .dd-btn,.nt-msg .dd .dd-btn{min-width:0}
 .nt-msg .dd{display:block;width:100%}
 /* Botón de chat: con texto solo si cabe en el margen; si no, redondo (no tapa el contenido) */
-@media (max-width:1519px){.chat-fab{padding:14px}.chat-fab span:not(.count){display:none}.chat-fab .count{position:absolute;top:-4px;right:-4px;border:2px solid var(--bg)}}
+@media (max-width:1519px){.chat-fab{padding:14px}.chat-fab .fab-lbl{display:none}.chat-fab .count{position:absolute;top:-4px;right:-4px;border:2px solid var(--bg)}}
 
 /* Inicio: «Clips de la semana» y «Clasificación», dos tarjetas iguales (ninguna destaca sobre la otra) */
 .hm-two{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px;align-items:stretch}
@@ -2460,9 +2460,9 @@ tr.row-link:hover{background:#fafafb}
 /* ===== Chat de soporte en ventanita ===== */
 .chat-pop{position:fixed;right:max(20px,env(safe-area-inset-right,0px));bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:41;
   width:380px;height:min(600px,calc(100dvh - 160px));display:flex;flex-direction:column;background:#fff;border-radius:22px;overflow:hidden;
-  box-shadow:0 1px 2px rgba(16,24,40,.06),0 18px 50px rgba(16,24,40,.18);border:1px solid var(--line);transform-origin:bottom right;animation:cp-in .18s ease-out}
+  box-shadow:0 1px 2px rgba(16,24,40,.06),0 18px 50px rgba(16,24,40,.18);border:1px solid var(--line);transform-origin:bottom right;animation:cp-in .32s cubic-bezier(.2,.9,.25,1.15)}
 .chat-pop[hidden]{display:none}
-@keyframes cp-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes cp-in{from{opacity:0;transform:translateY(14px) scale(.92)}to{opacity:1;transform:none}}
 .cp-bar{display:grid;grid-template-columns:36px 1fr 36px;align-items:center;padding:10px 10px 8px;border-bottom:1px solid var(--line)}
 .cp-title{text-align:center;font:600 15px var(--display)}
 .cp-ic{width:34px;height:34px;display:grid;place-items:center;border:0;background:transparent;border-radius:10px;color:var(--muted);cursor:pointer;transition:background-color .15s,color .15s}
@@ -2482,10 +2482,7 @@ tr.row-link:hover{background:#fafafb}
 .cp-load span:nth-child(2){animation-delay:.15s}.cp-load span:nth-child(3){animation-delay:.3s}
 @keyframes cp-dot{0%,80%,100%{opacity:.4;transform:scale(.8)}40%{opacity:1;transform:none}}
 .cp-err{margin:auto;padding:20px;text-align:center;color:var(--muted);font-size:14px}
-.chat-fab .fab-down{display:none;width:20px;height:20px}
-.chat-fab.open{padding:14px;animation:none}
-.chat-fab.open > svg:first-child,.chat-fab.open > span{display:none!important}
-.chat-fab.open .fab-down{display:block}
+
 @media (max-width:640px){
   .chat-pop{left:10px;right:10px;width:auto;top:calc(70px + env(safe-area-inset-top,0px));bottom:calc(146px + env(safe-area-inset-bottom,0px));height:auto}
 }
@@ -2634,3 +2631,25 @@ select:not([multiple])::-ms-expand{display:none}
 .ri-row select{padding-right:38px;background-position:right 13px center}
 @media (max-width:640px){.mc-bar select{min-width:150px}}
 @media (max-width:640px){.mc-bar select{flex:1 1 100%}}
+/* ===== Botón del chat: se vuelve círculo al abrir (el texto se recoge y el icono gira a una flecha) ===== */
+.chat-fab{height:50px;padding:0 20px 0 16px;gap:9px;transition:padding .38s cubic-bezier(.2,.8,.2,1),gap .38s cubic-bezier(.2,.8,.2,1),background-color .15s,transform .2s}
+.chat-fab:active{transform:scale(.96)}
+.chat-fab .fab-ic{position:relative;width:20px;height:20px;flex:none;display:grid;place-items:center}
+.chat-fab .fab-ic svg{position:absolute;inset:0;width:20px;height:20px;transition:transform .38s cubic-bezier(.2,.8,.2,1),opacity .25s}
+.chat-fab .fab-down{display:block;opacity:0;transform:rotate(-90deg) scale(.6)}
+.chat-fab .fab-lbl{display:inline-block;max-width:160px;overflow:hidden;white-space:nowrap;opacity:1;transition:max-width .38s cubic-bezier(.2,.8,.2,1),opacity .2s}
+.chat-fab.open{padding:0 15px;gap:0;animation:none}
+.chat-fab.open .fab-lbl{max-width:0;opacity:0}
+.chat-fab.open .fab-ic svg:first-child{opacity:0;transform:rotate(90deg) scale(.6)}
+.chat-fab.open .fab-down{opacity:1;transform:none}
+.chat-fab.open .count{display:none}
+.chat-pop.closing{animation:cp-out .19s ease-in forwards}
+@keyframes cp-out{to{opacity:0;transform:translateY(10px) scale(.95)}}
+@media (max-width:640px){
+  .chat-fab{width:52px;height:52px;padding:0;justify-content:center}
+  .chat-fab .fab-lbl{display:none}
+  .chat-fab.open{padding:0}
+}
+@media (prefers-reduced-motion:reduce){.chat-fab,.chat-fab *{transition:none!important}.chat-pop.closing{animation:none}}
+@media (max-width:1519px){.chat-fab,.chat-fab.open{width:50px;height:50px;padding:0;gap:0;justify-content:center}}
+@media (max-width:640px){.chat-fab,.chat-fab.open{width:52px;height:52px}}

@@ -149,8 +149,7 @@
   {% endif %}
   <a class="chat-fab{% if fab_n %} has-unread{% endif %}" id="chat-fab" href="{{ url_for('support') }}" aria-controls="chat-pop" aria-expanded="false"
      aria-label="Chat de soporte{% if fab_n %} · {{ fab_n }} sin leer{% endif %}">
-    {{ icon("chat") }}<span>Chat de soporte</span><span class="count" id="fab-count"{% if not fab_n %} hidden{% endif %}>{{ fab_n }}</span>
-    <svg class="fab-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    <span class="fab-ic">{{ icon("chat") }}<svg class="fab-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span><span class="fab-lbl">Chat de soporte</span><span class="count" id="fab-count"{% if not fab_n %} hidden{% endif %}>{{ fab_n }}</span>
   </a>
   {% endif %}
 </body>

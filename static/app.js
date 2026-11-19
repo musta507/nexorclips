@@ -1725,7 +1725,13 @@ function carruseles() {
   function abrir(on) {
     var p = pop(), f = fab();
     if (!p) return false;
-    p.hidden = !on;
+    clearTimeout(p._cierre);
+    if (on) { p.classList.remove("closing"); p.hidden = false; }
+    else if (!p.hidden) {                         // se cierra con una animación corta y luego se esconde
+      var quieto = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (quieto) p.hidden = true;
+      else { p.classList.add("closing"); p._cierre = setTimeout(function () { p.hidden = true; p.classList.remove("closing"); }, 190); }
+    }
     if (f) { f.classList.toggle("open", on); f.setAttribute("aria-expanded", on ? "true" : "false"); }
     if (on) {
       cargar(p);
