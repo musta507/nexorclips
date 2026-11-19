@@ -2831,3 +2831,5 @@ tr.f-out{display:none!important}
 .has-pill.pill-light .pill{background:var(--card)}
 .has-pill.pill-light .pill > *{color:var(--ink)!important;font-weight:600!important}
 .pill-sh{position:absolute;left:0;top:0;width:0;height:0;border-radius:999px;background:var(--card);box-shadow:0 1px 3px rgba(16,24,40,.12);pointer-events:none}
+/* Tarjetas de cifras de Mis clips: la elegida, sin brillo ni fondo teñido; solo un borde limpio de su color */
+.mc-kpi.on{background:var(--card);border-color:var(--k);box-shadow:inset 0 0 0 1px var(--k)}
