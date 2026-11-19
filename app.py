@@ -5109,7 +5109,33 @@ def admin_home():
                            todo=todo, general=general)
 
 
-ADMIN_METRICS = ("sent", "approved", "spent", "paid", "users")
+ADMIN_METRICS = ("views", "sent", "approved", "spent", "paid", "users")
+
+
+def views_daily(start, days):
+    """Vistas que ganaron los clips aprobados cada día (diferencia entre la última lectura de un día y la del anterior)."""
+    since = datetime.combine(start, datetime.min.time())
+    base = dict(db.session.query(ViewSnapshot.submission_id, db.func.max(ViewSnapshot.views))
+                .join(Submission, Submission.id == ViewSnapshot.submission_id)
+                .filter(Submission.status == "aprobado", ViewSnapshot.taken_at < since)
+                .group_by(ViewSnapshot.submission_id).all())
+    level = {}                                   # clip → {día: vistas más altas leídas ese día}
+    for sid, when, v in (ViewSnapshot.query.join(Submission, Submission.id == ViewSnapshot.submission_id)
+                         .filter(Submission.status == "aprobado", ViewSnapshot.taken_at >= since)
+                         .with_entities(ViewSnapshot.submission_id, ViewSnapshot.taken_at, ViewSnapshot.views)):
+        i = (when.date() - start).days
+        if 0 <= i < days:
+            d = level.setdefault(sid, {})
+            d[i] = max(d.get(i, 0), v or 0)
+    out = [0.0] * days
+    for sid, by_day in level.items():
+        prev = base.get(sid) or 0
+        for i in range(days):
+            if i in by_day:
+                cur = max(prev, by_day[i])       # las vistas no bajan: una lectura más baja no resta
+                out[i] += cur - prev
+                prev = cur
+    return [float(v) for v in out]
 
 
 def admin_analytics(days=30):
@@ -5136,6 +5162,7 @@ def admin_analytics(days=30):
         add("paid", when, amount)
     for (when,) in User.query.filter(User.created_at >= since, User.is_admin.is_(False)).with_entities(User.created_at):
         add("users", when)
+    daily["views"] = list(ttl_cache(f"views_daily_{days}", 900, lambda: views_daily(start, days)))
     cum = {}
     for m in ADMIN_METRICS:
         run, out = 0.0, []

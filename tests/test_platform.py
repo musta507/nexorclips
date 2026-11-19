@@ -3086,3 +3086,28 @@ def test_admin_profile_menu_shows_balance():
     make_campaign(budget=5000)
     page = client_for("admin@test.com").get("/campanas").get_data(as_text=True)
     assert "Saldo disponible" in page
+
+
+def test_admin_summary_stats_chart():
+    """Resumen del panel: la gráfica general (vistas por día, dinero, clips, clippers) en lugar de «Para hacer»."""
+    admin = client_for("admin@test.com")
+    cid = make_campaign()
+    now = datetime.utcnow()
+    today = now.date()
+    with A.app.app_context():
+        u = A.User(email="v@test.com", name="V")
+        A.db.session.add(u); A.db.session.commit()
+        s = A.Submission(user_id=u.id, campaign_id=cid, platform="tiktok", url=tt("v", 1), video_key="tiktok:7300000000000000001", status="aprobado", views=900, earned=1.5,
+                         created_at=now - timedelta(days=40), reviewed_at=now - timedelta(days=1))
+        A.db.session.add(s); A.db.session.commit()
+        for days_ago, v in ((40, 100), (3, 300), (3, 350), (2, 340), (0, 900)):   # una lectura más baja no resta
+            A.db.session.add(A.ViewSnapshot(submission_id=s.id, views=v, taken_at=now - timedelta(days=days_ago)))
+        A.db.session.commit()
+        start = today - timedelta(days=29)
+        out = A.views_daily(start, 30)
+        assert len(out) == 30 and out[-4] == 250 and out[-3] == 0 and out[-1] == 550 and sum(out) == 800
+        an = A.admin_analytics(30)
+        assert an["totals"]["views"] == 800 and an["totals"]["spent"] == 1.5
+    html = admin.get("/admin").get_data(as_text=True)
+    assert 'data-chart-metric="views"' in html and 'data-chart-metric="spent"' in html and 'data-chart-metric="users"' in html
+    assert "Para hacer" not in html

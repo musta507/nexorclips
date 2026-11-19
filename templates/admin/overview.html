@@ -17,17 +17,30 @@
 </div>
 
 <div class="adm-grid">
-  <section class="card adm-todo">
-    <h3>Para hacer</h3>
-    {% if alerts %}
-    <ul class="adm-alerts">
-      {% for ico, text, url in alerts %}
-      <li><a href="{{ url }}"><span class="adm-alert-ico">{{ icon(ico) }}</span><span>{{ text }}</span>{{ icon("arrow") }}</a></li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="muted">Todo al día. No hay nada pendiente.</p>
-    {% endif %}
+  <section class="card mc adm-stats" data-chart data-chart-smooth data-chart-start="views" data-chart-mode-start="daily" aria-label="Estadísticas de {{ APP_NAME }}">
+    <div class="adm-stats-top">
+      <div class="an-total mc-total"><b class="tnum" data-chart-total>{{ an.totals.views|int|short }}</b> <span data-chart-label>Visualizaciones</span></div>
+      <span class="small muted">últimos {{ dias }} días</span>
+    </div>
+    <div class="an-tg adm-stats-tabs" role="group" aria-label="Qué ver en la gráfica">
+      <button type="button" class="on" data-chart-metric="views">Vistas</button>
+      <button type="button" data-chart-metric="spent">Dinero</button>
+      <button type="button" data-chart-metric="sent">Clips</button>
+      <button type="button" data-chart-metric="users">Clippers</button>
+    </div>
+    <script type="application/json" data-chart-data>{{ {"series": an.series, "totals": an.totals}|tojson }}</script>
+    <div class="an-plot" data-chart-plot></div>
+    <div class="adm-stats-foot">
+      <div class="an-tg" role="group" aria-label="Forma de ver"><button type="button" class="on" data-chart-mode="daily">Por día</button><button type="button" data-chart-mode="cumulative">Acumulado</button></div>
+      {% set n_rev = todo|sum(attribute="1.clips") %}{% set n_req = todo|map(attribute="1")|map(attribute="requests")|sum + todo|map(attribute="1")|map(attribute="accounts")|sum %}
+      {% if n_rev or n_req or general %}
+      <span class="adm-pend small">
+        {% if n_rev %}<a href="{{ url_for('admin_campaigns') }}">{{ n_rev }} {{ "clip" if n_rev == 1 else "clips" }} por revisar</a>{% endif %}
+        {% if n_req %}<a href="{{ url_for('admin_campaigns') }}">{{ n_req }} {{ "solicitud" if n_req == 1 else "solicitudes" }}</a>{% endif %}
+        {% for ico, text, url in general %}<a href="{{ url }}">{{ text }}</a>{% endfor %}
+      </span>
+      {% endif %}
+    </div>
   </section>
   <div class="adm-charts">
     {{ ui.bars(clips_day, "Clips enviados") }}

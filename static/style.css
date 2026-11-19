@@ -674,6 +674,16 @@ details.answers[open] summary::before{content:"▾ "}
 .adm-kpis .kpi small{font-size:12px}
 .adm-grid{display:grid;gap:16px;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);align-items:start}
 .adm-todo h3{margin-bottom:10px}
+.adm-stats{padding:18px 18px 14px;gap:10px}
+.adm-stats-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.adm-stats .mc-total b{font-size:26px}.adm-stats .mc-total span{font-size:14px;color:var(--muted)}
+.adm-stats-tabs{align-self:flex-start;flex-wrap:nowrap}
+.adm-stats-tabs button{padding:7px 12px;font-size:13px}
+.adm-stats-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.adm-stats-foot .an-tg button{padding:6px 11px;font-size:12.5px}
+.adm-pend{display:flex;flex-wrap:wrap;gap:4px 12px}
+.adm-pend a{color:#c2410c;font-weight:600;text-decoration:none}
+.adm-pend a:hover{text-decoration:underline}
 .adm-alerts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .adm-alerts a{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;background:var(--soft);font-weight:500;transition:background-color .15s}
 .adm-alerts a:hover{background:var(--soft-2)}
