@@ -2842,15 +2842,18 @@ tr.f-out{display:none!important}
 .v2-track i{background:#12b76a}
 .v2-cico{background:#e3f8ec;color:#12b76a}
 
-/* Menú de arriba en el PC: icono encima del nombre; la elegida lleva un recuadro gris tras el icono que se desliza */
+/* Menú de arriba en el PC: icono encima del nombre; la elegida lleva un recuadro gris tras el icono, con el icono en negro y más grueso, y se desliza */
 @media (min-width:641px){
   .tabs.tabs-ico{background:none;border:0;padding:0;gap:4px;border-radius:0}
   .tabs-ico .tab{position:relative;z-index:1;flex-direction:column;gap:6px;padding:7px 14px 4px;border-radius:0;font:500 12px/1.2 var(--font);color:var(--muted)}
   .tabs-ico .tab svg{width:19px;height:19px}
   .tabs-ico .tab:not(.on):hover{background:none;color:var(--ink)}
   .tabs-ico .tab.on,.tabs.tabs-ico.has-pill .tab.on{background:none;color:var(--ink);font-weight:600}
-  .tabs-ico:not(.has-pill) .tab.on svg{background:#ececee;border-radius:9px;box-shadow:0 0 0 5px #ececee}
-  .tabs-ico.has-pill .pill{visibility:hidden}
+  .tabs-ico:not(.has-pill) .tab.on svg{background:#ececee;border-radius:9px;box-shadow:0 0 0 5px #ececee;color:var(--ink);stroke-width:2.3}
+  .tabs-ico.has-pill .pill{background:transparent;border-radius:11px;z-index:2}
+  .tabs-ico.has-pill .pill > .tab{position:absolute;z-index:auto;flex-direction:column;gap:6px;color:transparent}
+  .tabs-ico.has-pill .pill > .tab svg{color:var(--ink);stroke-width:2.3}
+  .tabs-ico.has-pill > .tab.on svg{color:var(--muted)}
   .tabs-ico .pill-sh{z-index:0;background:#ececee;border-radius:11px;box-shadow:none}
 }
 
@@ -2863,3 +2866,6 @@ tr.f-out{display:none!important}
 /* Dentro de una campaña del panel: los bloques llevan el mismo espacio entre sí (el marco de Turbo cortaba el hueco de la página) */
 turbo-frame#camp-body{display:flex;flex-direction:column;gap:16px}
 turbo-frame#camp-body > *{margin-top:0;margin-bottom:0}
+
+/* Ajustes sin índice lateral (Mustapha lo quitó): una sola columna centrada */
+.set{grid-template-columns:minmax(0,1fr);max-width:820px;margin-left:auto;margin-right:auto}

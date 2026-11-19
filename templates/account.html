@@ -4,13 +4,6 @@
 {% block content %}
 <h1 class="sr-only">Ajustes</h1>
 <div class="set" data-set>
-  <nav class="set-nav card tight" aria-label="Secciones de ajustes">
-    <a href="#perfil" class="on">{{ icon("users") }} Perfil</a>
-    <a href="#cobro">{{ icon("wallet") }} Cobros</a>
-    {% if api_mode() != 'off' %}<a href="#redes">{{ icon("link") }} Redes conectadas</a>{% endif %}
-    {% if clipper_push %}<a href="#notificaciones">{{ icon("bell") }} Notificaciones</a>{% endif %}
-    <a href="#cuenta">{{ icon("gear") }} Cuenta</a>
-  </nav>
   <div class="set-main">
     <section id="perfil" class="card set-sec">
       <header><h2>Perfil</h2><p class="small muted">Así te ven el equipo y los demás clippers.</p></header>
