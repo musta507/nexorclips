@@ -2625,3 +2625,12 @@ body.page-support > main > .page{padding-bottom:0;gap:16px}
 .ri-add{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--ink);font:600 14px var(--font);padding:6px 2px;cursor:pointer}
 .ri-add:hover{text-decoration:underline}
 @media (max-width:640px){.ri-row select{width:116px}}
+/* ===== Desplegables nativos (móvil y los marcados data-native): la flecha con el mismo margen que el texto ===== */
+select:not([multiple]){-webkit-appearance:none;appearance:none;padding-right:42px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2371727a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 15px center;background-size:16px 16px;text-overflow:ellipsis}
+select:not([multiple])::-ms-expand{display:none}
+.rv-bulk select,.cr-search select{padding-right:34px;background-position:right 10px center;background-size:14px 14px}
+.ri-row select{padding-right:38px;background-position:right 13px center}
+@media (max-width:640px){.mc-bar select{min-width:150px}}
+@media (max-width:640px){.mc-bar select{flex:1 1 100%}}
