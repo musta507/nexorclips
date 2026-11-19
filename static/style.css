@@ -2989,3 +2989,26 @@ a.lr:hover{background:var(--soft)}
 .lst > .lr-btn:last-child{border-radius:0 0 var(--r-card,20px) var(--r-card,20px)}
 .lr-in::placeholder{color:#a0a1a8}
 @media (max-width:640px){.lr-pay .status{font-size:11.5px}.lr-note{flex-direction:column;align-items:stretch}.lr-note .btn{align-self:flex-end}}
+/* ===== Sistema único de botones, campos y tarjetas (una sola forma en toda la web) ===== */
+:root{--b-h:40px;--b-h-sm:32px;--r-field:12px;--r-card:20px}
+/* Botones: siempre redondos (pastilla), dos tamaños, mismas letras, sin sombras */
+.btn,body.admin-shell .btn,body.admin-shell .btn.soft,body.admin-shell .btn:not(.soft):not(.red):not(.green):not(.ghost):not(.link){border-radius:999px;min-height:var(--b-h);padding:6px 18px;font:600 14px/1 var(--font);box-shadow:none;border:0;gap:8px}
+.btn.sm,body.admin-shell .btn.sm{border-radius:999px;min-height:var(--b-h-sm);padding:4px 14px;font-size:13px}
+.btn svg{width:16px;height:16px}.btn.sm svg{width:14px;height:14px}
+.btn.block{width:100%}
+/* Tres estilos: negro (lo principal), gris (lo secundario), blanco con borde (lo de al lado); rojo suave para borrar */
+.btn.white,.btn.hm-cta:not(.dark){background:#fff;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.btn.white:hover,.btn.hm-cta:not(.dark):hover{background:var(--soft)}
+.btn.soft:hover{background:var(--soft-2,#e6e7ea)}
+.btn.red{background:#fee4e2;color:#b42318}.btn.red:hover{background:#fecdca}
+.btn.ic-only{width:var(--b-h);padding:0}.btn.sm.ic-only{width:var(--b-h-sm)}
+/* Botones de texto pequeños del panel («Ver todo», «Añadir mod»...): gris en pastilla, como el resto */
+.v2-pill{border-radius:999px;border:0;background:var(--soft);height:var(--b-h-sm);display:inline-flex;align-items:center;padding:0 14px}
+/* Campos de formulario: misma altura y esquina en todos */
+input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not(.lr-in),select:not(.lr-sel),.dd-btn{border-radius:var(--r-field)}
+.cr-search .dd-btn,.cr-search select,.btn.sm~.dd .dd-btn,.inline .dd-btn,.rv-bulk .dd-btn{border-radius:var(--r-field)}
+/* Tarjetas: una sola forma (esquina 20, borde fino y sombra suave) en clipper y panel */
+.card,.v2-card,body.admin-shell .card,body.admin-shell .kpi,.mc-kpi,.an-kpi,.stat{border-radius:var(--r-card)}
+.card,.v2-card,body.admin-shell .card{border:1px solid var(--line);box-shadow:0 1px 2px rgba(16,24,40,.04),0 4px 16px rgba(16,24,40,.04)}
+/* Avisos dentro de tarjetas («14 clips por revisar»...): misma esquina que los campos */
+.v2-todo{border-radius:var(--r-field)}
