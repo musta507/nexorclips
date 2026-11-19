@@ -28,47 +28,38 @@
 
     <section id="cobro" class="set-sec lst-sec">
       <h2 class="lst-h">Cobros</h2>
-      <div class="card lst lst-pad">
   {% set whop_on = whop_enabled() %}
   {% set whop_linked = current_user.whop_user_id and whop_on %}
   {% set active = current_user.payout_method if current_user.payout_ready else "" %}
 
-  {# ---- Whop #}
-  <div class="paym{% if active == WHOP_METHOD %} on{% endif %}">
-    <div class="paym-top">
-      <span class="paym-logo whop" aria-hidden="true"></span>
-      <div class="paym-txt">
-        <div class="paym-title">Whop </div>
-        <div class="small muted">Al instante · el dinero llega a tu saldo de Whop</div>
-      </div>
-      {% if active == WHOP_METHOD %}<span class="paym-state ok">Activo</span>
-      {% elif whop_linked %}<span class="paym-state">Conectado</span>
-      {% elif whop_on %}<span class="paym-state">Sin conectar</span>
-      {% else %}<span class="paym-state off">Próximamente</span>{% endif %}
-    </div>
-    {% if whop_on %}
-      {% if whop_linked %}
-      <div class="paym-row">
-        <span class="small">Cuenta: <b>@{{ current_user.whop_username }}</b></span>
-        {% if active != WHOP_METHOD %}
-        <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="section" value="cobro_usar">
-          <input type="hidden" name="payout_method" value="{{ WHOP_METHOD }}"><button class="btn sm"><span class="whop-ico" aria-hidden="true"></span>Cobrar por Whop</button></form>
+  {# ---- Whop, en filas como el resto de Ajustes #}
+      <div class="card lst">
+        <div class="lr lr-pay">
+          <span class="paym-logo whop" aria-hidden="true"></span>
+          <span class="lr-pay-t"><b>Whop</b><small class="muted">Al instante · el dinero llega a tu saldo de Whop</small></span>
+          {% if active == WHOP_METHOD %}<span class="status aprobado">Activo</span>
+          {% elif whop_linked %}<span class="status">Conectado</span>
+          {% elif whop_on %}<span class="status">Sin conectar</span>
+          {% else %}<span class="status">Próximamente</span>{% endif %}
+        </div>
+        {% if whop_on %}
+          {% if whop_linked %}
+          <div class="lr"><span class="lr-k">Cuenta</span><span class="lr-v">@{{ current_user.whop_username }}</span></div>
+          {% if active != WHOP_METHOD %}
+          <form method="post" class="lr lr-end"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="section" value="cobro_usar">
+            <input type="hidden" name="payout_method" value="{{ WHOP_METHOD }}"><button class="btn accent sm">Cobrar por Whop</button></form>
+          {% endif %}
+          {% endif %}
+          <form method="post" class="lst-sub"{% if whop_linked %} hidden data-whop-change{% endif %}>
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="section" value="cobro">
+            <input type="hidden" name="payout_method" value="{{ WHOP_METHOD }}">
+            <label class="lr" for="whop_username"><span class="lr-k">Usuario de Whop</span>
+              <input id="whop_username" class="lr-in" name="whop_username" placeholder="@tu_usuario" autocomplete="off" autocapitalize="none" spellcheck="false" required></label>
+            <div class="lr lr-end lr-note"><small class="muted">Lo ves en tu perfil de whop.com. El dinero va a esa cuenta: comprueba que es la tuya.</small><button class="btn accent sm">Conectar</button></div>
+          </form>
+          {% if whop_linked %}<button type="button" class="lr lr-go lr-btn" data-show-whop><span class="lr-k">Cambiar de cuenta de Whop</span></button>{% endif %}
         {% endif %}
-      </div>
-      {% endif %}
-      <details class="paym-form" {% if not whop_linked %}open{% endif %}>
-        <summary class="small">{{ "Cambiar de cuenta de Whop" if whop_linked else "Conectar mi Whop" }}</summary>
-        <form method="post" class="paym-inline">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <input type="hidden" name="section" value="cobro">
-          <input type="hidden" name="payout_method" value="{{ WHOP_METHOD }}">
-          <input name="whop_username" placeholder="@tu_usuario_de_whop" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Usuario de Whop" required>
-          <button class="btn"><span class="whop-ico" aria-hidden="true"></span>Conectar Whop</button>
-        </form>
-        <span class="hint">Lo ves en tu perfil de whop.com. Comprueba que es el tuyo: el dinero va a esa cuenta.</span>
-      </details>
-    {% endif %}
-  </div>
       </div>
     </section>
 

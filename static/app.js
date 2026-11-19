@@ -2021,3 +2021,11 @@ document.addEventListener("click", function (e) {
   });
   document.addEventListener("turbo:before-cache", function () { document.documentElement.classList.remove("v2-morph"); });
 })();
+
+// Ajustes: «Cambiar de cuenta de Whop» enseña las filas para poner otro usuario
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-show-whop]");
+  if (!b) return;
+  var f = document.querySelector("[data-whop-change]");
+  if (f) { f.hidden = false; b.hidden = true; var i = f.querySelector("input[name=whop_username]"); if (i) i.focus(); }
+});
