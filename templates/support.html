@@ -9,7 +9,7 @@
       <div class="small muted">{% if team %}{{ team[0].role }} de {{ APP_NAME }} · {% endif %}Solemos responder en menos de 24 horas</div></div>
   </div>
   {% with viewer_admin=false, post_url=url_for('support'), poll_url=url_for('support_poll'),
-          empty_text="Aún no hay mensajes. Cuéntanos en qué podemos ayudarte o elige una pregunta." %}
+          empty_text="Aún no hay mensajes. Cuéntanos en qué podemos ayudarte." %}
     {% include "_chat.html" %}
   {% endwith %}
 </div>

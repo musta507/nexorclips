@@ -5,6 +5,6 @@
     <span class="small muted">Solemos responder en menos de 24 horas</span></div>
 </div>
 {% with viewer_admin=false, post_url=url_for('support'), poll_url=url_for('support_poll'),
-        empty_text="¿En qué podemos ayudarte? Escríbenos o elige una pregunta." %}
+        empty_text="¿En qué podemos ayudarte?" %}
   {% include "_chat.html" %}
 {% endwith %}

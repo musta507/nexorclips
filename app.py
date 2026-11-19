@@ -9002,8 +9002,7 @@ def support():
     msgs = conversation(current_user.id)
     mark_read(current_user.id, by_admin=False)
     prefill = ""
-    return render_template("support.html", msgs=msgs, prefill=prefill, team=support_team(), agent_info=agent_info,
-                           suggestions=SUPPORT_SUGGESTIONS)
+    return render_template("support.html", msgs=msgs, prefill=prefill, team=support_team(), agent_info=agent_info)
 
 
 @app.route("/soporte/mini")
@@ -9012,12 +9011,8 @@ def support_mini():
     """La conversación de soporte sola, para la ventanita del botón flotante."""
     msgs = conversation(current_user.id)
     mark_read(current_user.id, by_admin=False)
-    return render_template("_support_mini.html", msgs=msgs, prefill="", team=support_team(), agent_info=agent_info,
-                           suggestions=SUPPORT_SUGGESTIONS)
+    return render_template("_support_mini.html", msgs=msgs, prefill="", team=support_team(), agent_info=agent_info)
 
-
-SUPPORT_SUGGESTIONS = ["¿Cuándo puedo retirar mi dinero?", "¿Por qué han rechazado mi clip?", "No me aparece un clip que he subido",
-                       "¿Cómo verifico mi cuenta con el código?", "Tengo un problema con Whop"]
 
 
 @app.route("/chat/foto/<int:mid>")
