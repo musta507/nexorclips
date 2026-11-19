@@ -25,8 +25,8 @@
       <a class="mc-plat{{ ' on' if fp == k }}" href="{{ url_for('my_clips', tab=tab, campana=fc or None, dias=qs.dias, red=None if fp == k else k) }}" title="{{ label }}" aria-label="{{ label }}"{% if fp == k %} aria-current="true"{% endif %}>{{ icon(k) }}</a>
       {% endfor %}
     </div>
-    {% if my_camps %}<select name="campana" aria-label="Campaña"><option value="">Todas las campañas</option>{% for c in my_camps %}<option value="{{ c.id }}"{% if fc == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}</select>{% endif %}
-    <select name="dias" aria-label="Periodo">{% for d, label in ranges.items() %}<option value="{{ d }}"{% if dias == d %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    {% if my_camps %}<select name="campana" aria-label="Campaña" data-ico="flag"><option value="">Todas las campañas</option>{% for c in my_camps %}<option value="{{ c.id }}"{% if fc == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}</select>{% endif %}
+    <select name="dias" aria-label="Periodo" data-ico="cal">{% for d, label in ranges.items() %}<option value="{{ d }}"{% if dias == d %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
     <noscript><button class="btn sm soft">Filtrar</button></noscript>
   </form>
 
@@ -72,7 +72,7 @@
   <form method="get" class="mc-tools" data-autosubmit data-turbo-frame="mc-list">
     <input type="hidden" name="tab" value="{{ tab }}">{% if fc %}<input type="hidden" name="campana" value="{{ fc }}">{% endif %}{% if fp %}<input type="hidden" name="red" value="{{ fp }}">{% endif %}{% if dias != 30 %}<input type="hidden" name="dias" value="{{ dias }}">{% endif %}
     <label class="cr-q mc-q">{{ icon("search") }}<input type="search" name="q" value="{{ q }}" placeholder="Buscar por campaña, cuenta, enlace o #ID" aria-label="Buscar clip"></label>
-    <select name="orden" aria-label="Ordenar">{% for k, label in [("recientes", "Más recientes"), ("vistas", "Más vistas"), ("ganado", "Más ganado")] %}<option value="{{ k }}"{% if orden == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <select name="orden" aria-label="Ordenar" data-ico="sort">{% for k, label in [("recientes", "Más recientes"), ("vistas", "Más vistas"), ("ganado", "Más ganado")] %}<option value="{{ k }}"{% if orden == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
   </form>
   <div class="table-card">
     {% if subs %}

@@ -1420,6 +1420,7 @@ function desplegables() {
     box.className = "dd";
     var btn = document.createElement("button");
     btn.type = "button"; btn.className = "dd-btn";
+    if (sel.dataset.ico) btn.dataset.ico = sel.dataset.ico;   // icono delante (filtros)
     btn.setAttribute("aria-haspopup", "listbox"); btn.setAttribute("aria-expanded", "false");
     var lab = sel.getAttribute("aria-label") || (sel.id && document.querySelector("label[for='" + sel.id + "']") || {}).textContent || "";
     if (lab) btn.setAttribute("aria-label", lab.trim());

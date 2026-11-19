@@ -26,7 +26,7 @@
       </nav>
       <form method="get" class="cr-search" data-autosubmit{% if in_camp %} action="{{ url_for('admin_campaign_review', cid=cid) }}"{% endif %}>
         <input type="hidden" name="tab" value="{{ tab }}">{% if f != "todos" %}<input type="hidden" name="f" value="{{ f }}">{% endif %}
-        {% if not in_camp %}<select name="c" aria-label="Campaña"><option value="">Todas las campañas</option>{% for c in camps %}<option value="{{ c.id }}"{% if cid == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}</select>{% endif %}
+        {% if not in_camp %}<select name="c" aria-label="Campaña" data-ico="flag"><option value="">Todas las campañas</option>{% for c in camps %}<option value="{{ c.id }}"{% if cid == c.id %} selected{% endif %}>{{ c.song }}</option>{% endfor %}</select>{% endif %}
         <label class="cr-q">{{ icon("eye") }}<input type="search" name="q" value="{{ q }}" placeholder="Buscar" aria-label="Buscar"></label>
       </form>
     </div>

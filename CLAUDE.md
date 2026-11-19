@@ -72,6 +72,8 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 - El Resumen del panel: cuatro cifras con minigráfica y cambio frente al mes anterior, clips por semana, actividad reciente, campañas activas y equipo (`overview_v2` en `app.py`).
 - Los colores de las estadísticas de Mis clips (naranja, verde, morado, turquesa). La tarjeta elegida: fondo suave de su color y borde fino del mismo color (opción A), sin brillo.
 - Pastillas negras, tarjetas blancas limpias, verde solo para el dinero.
+- Desplegables de filtro (Mis clips, Revisar clips): pastilla blanca redonda con icono delante (`data-ico`: flag, cal, sort) y lista propia con ✓ negro sobre gris (opción A). En el móvil es el selector del teléfono, con el mismo aspecto cerrado.
+- Barras «Visualizaciones por plataforma» de Mis clips en gris, como en las estadísticas de la campaña.
 - Ajustes (`/cuenta`) sin índice lateral (Perfil, Cobros, Cuenta): una sola columna centrada. Mustapha lo quitó.
 - El ranking del inicio y el destacado de campañas, recién hechos a su gusto.
 
