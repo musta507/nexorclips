@@ -3149,3 +3149,20 @@ def test_lectura_de_vistas_guarda_la_foto_de_la_cuenta():
         A.db.session.commit()
         acc = A.CampaignAccount.query.filter_by(campaign_id=cid, handle="ana").first()
         assert acc and acc.avatar_url == "https://p16.tiktokcdn.com/ana.jpg"
+
+
+def test_portada_de_tiktok_fresca(monkeypatch):
+    """Las portadas de TikTok caducan: la web las pide frescas con el oEmbed y, si falla, usa la guardada."""
+    cid = make_campaign()
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        s = A.Submission.query.filter_by(campaign_id=cid).first()
+        sid = s.id
+        s.thumb_url = "https://vieja.example/portada.jpg"
+        A.db.session.commit()
+    monkeypatch.setattr(A, "tiktok_cover", lambda url: "https://p16.tiktokcdn.com/fresca.jpg")
+    r = a.get(f"/clip/{sid}/portada")
+    assert r.status_code == 302 and r.location == "https://p16.tiktokcdn.com/fresca.jpg"
+    monkeypatch.setattr(A, "tiktok_cover", lambda url: "")
+    assert a.get(f"/clip/{sid}/portada").location == "https://vieja.example/portada.jpg"

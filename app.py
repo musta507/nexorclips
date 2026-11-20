@@ -8391,7 +8391,46 @@ def clip_thumb(s):
         vid = (s.video_key or "").split(":", 1)[-1]
         if vid:
             return f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg"
+    if s.platform == "tiktok" and s.id:                # las portadas de TikTok caducan a los pocos días: se piden frescas
+        return url_for("clip_cover", sid=s.id)
     return s.thumb_url or ""
+
+
+_cover_cache, _cover_lock = {}, threading.Lock()
+
+
+def tiktok_cover(url):
+    """Portada actual de un vídeo de TikTok con su oEmbed público (gratis, sin clave). Se guarda 6 horas."""
+    now = time.time()
+    hit = _cover_cache.get(url)
+    if hit and hit[0] > now:
+        return hit[1]
+    thumb = ""
+    try:
+        r = requests.get("https://www.tiktok.com/oembed", params={"url": url}, timeout=6)
+        if r.ok:
+            thumb = (r.json() or {}).get("thumbnail_url") or ""
+    except Exception:  # noqa: BLE001
+        thumb = ""
+    with _cover_lock:
+        _cover_cache[url] = (now + (6 * 3600 if thumb else 900), thumb)
+        if len(_cover_cache) > 4000:
+            for k in [k for k, v in _cover_cache.items() if v[0] <= now] or list(_cover_cache)[:1000]:
+                _cover_cache.pop(k, None)
+    return thumb
+
+
+@app.route("/clip/<int:sid>/portada")
+@login_required
+def clip_cover(sid):
+    """Lleva a la portada fresca del clip (TikTok); si no se puede, a la que dio Apify, o nada."""
+    s = db.session.get(Submission, sid) or abort(404)
+    th = (tiktok_cover(s.url) if s.platform == "tiktok" else "") or s.thumb_url
+    if not th:
+        abort(404)
+    resp = redirect(th)
+    resp.headers["Cache-Control"] = "private, max-age=3600"
+    return resp
 
 
 def dur_label(secs):
