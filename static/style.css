@@ -3055,3 +3055,6 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):
 .ovc-ref{position:absolute;left:0;right:0;border-top:2px dashed #0e0e0e;opacity:.4;margin:0}
 .ov-pane .v2-yax{padding-bottom:16px}
 @media (prefers-reduced-motion:reduce){.ov-pane .v2-trio span.ovb,.ovc-line svg,.ovc-dot{animation:none}}
+
+/* Barras con pastilla que se desliza: al pasar el ratón solo se oscurece el texto (sin fondo gris que choque con la pastilla) */
+.has-pill > a:not(.on):hover,.has-pill > button:not(.on):hover{background:transparent}
