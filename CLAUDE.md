@@ -74,7 +74,7 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 - Pastillas negras, tarjetas blancas limpias, verde solo para el dinero.
 - Sistema único (al final de `style.css`, «Sistema único»): todos los botones son pastillas redondas, en dos tamaños (40 px y 32 px `.sm`), letra 600, sin sombra; estilos: negro (principal), gris `.soft` (secundario), blanco con borde `.white`, rojo suave `.red` (borrar). Campos y desplegables de formulario con esquina 12 px; tarjetas con esquina 20 px, borde fino y sombra suave. No meter botones con otras esquinas o tamaños.
 - Desplegables de filtro (Mis clips, Revisar clips): pastilla blanca redonda con icono delante (`data-ico`: flag, cal, sort) y lista propia con ✓ negro sobre gris (opción A). En el móvil es el selector del teléfono, con el mismo aspecto cerrado.
-- Barras «Visualizaciones por plataforma» de Mis clips en gris, como en las estadísticas de la campaña.
+- Barras «Visualizaciones por plataforma» de Mis clips en gris, como en las estadísticas de la campaña. En las dos, cada barra es su parte del total y como mucho llega al 60 % de la línea: nunca casi llenas.
 - Campana de avisos: solo un punto rojo cuando hay algo sin leer, sin número (opción C).
 - Contadores (mensajes, menú del panel, chat): todos rojos, pequeños y redondos (`.count`, `.adm-n`). Etiqueta «Admin» junto al logo en gris claro con borde fino.
 - Ajustes (`/cuenta`) en lista, sin índice lateral y sin iconos (opción A): foto y nombre arriba con «Cambiar foto», luego grupos Perfil, Cobros (Whop también en filas: usuario en la fila y botón Conectar) y Cuenta con filas (`.lst`, `.lr`) y «Cerrar sesión» en rojo al final.

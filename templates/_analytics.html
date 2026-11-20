@@ -41,18 +41,19 @@
   </div>
 
   <div class="an-split-cards">
-    {% set maxv = an.by_platform|map(attribute="views")|max if an.by_platform else 0 %}
-    {% set maxp = an.by_platform|map(attribute="posts")|max if an.by_platform else 0 %}
+    {# cada barra es su parte del total y como mucho llega al 60 % de la línea (Mustapha no quiere barras casi llenas) #}
+    {% set totv = an.by_platform|map(attribute="views")|sum if an.by_platform else 0 %}
+    {% set totp = an.by_platform|map(attribute="posts")|sum if an.by_platform else 0 %}
     <div class="card an-bars">
       <h3>Visualizaciones</h3>
       {% for p in an.by_platform %}
-      <div class="an-bar"><span class="an-fill" style="width:{{ (p.views / maxv * 100)|round(1) if maxv else 0 }}%"></span><span class="an-name">{{ icon(p.key) }} {{ p.name }}</span><b class="tnum">{{ p.views|short }}</b></div>
+      <div class="an-bar"><span class="an-fill" style="width:{{ (p.views / totv * 60)|round(1) if totv else 0 }}%"></span><span class="an-name">{{ icon(p.key) }} {{ p.name }}</span><b class="tnum">{{ p.views|short }}</b></div>
       {% endfor %}
     </div>
     <div class="card an-bars">
       <h3>Publicaciones</h3>
       {% for p in an.by_platform %}
-      <div class="an-bar"><span class="an-fill" style="width:{{ (p.posts / maxp * 100)|round(1) if maxp else 0 }}%"></span><span class="an-name">{{ icon(p.key) }} {{ p.name }}</span><b class="tnum">{{ p.posts|num }}</b></div>
+      <div class="an-bar"><span class="an-fill" style="width:{{ (p.posts / totp * 60)|round(1) if totp else 0 }}%"></span><span class="an-name">{{ icon(p.key) }} {{ p.name }}</span><b class="tnum">{{ p.posts|num }}</b></div>
       {% endfor %}
     </div>
   </div>
