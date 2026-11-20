@@ -8922,17 +8922,13 @@ def admin_notify():
         if not ids:
             flash("Elige al menos un clipper de la lista.", "error")
             return redirect(url_for("admin_notify"))
-        dest = request.form.get("go", "")
-        path = {"inicio": "/", "clips": "/mis-clips", "ganancias": "/ganancias", "soporte": "/soporte"}.get(dest, "")
-        if dest.startswith("c:") and dest[2:].isdigit():
-            path = f"/campana/{int(dest[2:])}"
         users = User.query.filter(User.id.in_(ids), User.is_admin.is_(False), User.is_banned.is_(False)).all()
-        for u in users:
+        for u in users:                            # solo al chat de soporte (la campanita lo enseña sola como mensaje)
             text_ = render_for(body, u)
             db.session.add(Message(user_id=u.id, from_admin=True, sender_id=current_user.id, body=text_,
                                    read_by_admin=True, read_by_user=False))
-            notify_user(u.id, "mensaje", render_for(title, u), text_, path or "/soporte", bell=bool(path))
-        audit("aviso_enviado", f"{len(users)} clippers · {title}")
+            notify_user(u.id, "mensaje", title, text_, "/soporte", bell=False)
+        audit("aviso_enviado", f"{len(users)} clippers · {body[:60]}")
         db.session.commit()
         flash(f"Mensaje enviado a {len(users)} {'clipper' if len(users) == 1 else 'clippers'}.", "ok" if users else "error")
         return redirect(url_for("admin_notify"))

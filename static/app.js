@@ -1657,14 +1657,14 @@ document.addEventListener("click", function (e) {
   if (window.Turbo) window.Turbo.visit(url); else location.href = url;
 });
 
-// =============================================================== Avisos del panel: filtros, título y mensaje, y vista previa del destino
+// =============================================================== Avisos del panel: filtros y mensaje al chat de soporte, con vista previa
 function avisosPanel() {
   var f = document.querySelector("[data-notify]");
   if (!f || f.dataset.ready) return;
   f.dataset.ready = "1";
   var rows = Array.prototype.slice.call(f.querySelectorAll(".nt-row"));
   var q = f.querySelector("[data-nt-q]"), all = f.querySelector("[data-nt-all]"), clear = f.querySelector("[data-nt-clear]");
-  var sels = Array.prototype.slice.call(f.querySelectorAll("[data-nt-f]")), go = f.querySelector("[data-nt-go]");
+  var sels = Array.prototype.slice.call(f.querySelectorAll("[data-nt-f]"));
   function val(k) { var s = f.querySelector('[data-nt-f="' + k + '"]'); return s ? s.value : ""; }
   function visibles() { return rows.filter(function (r) { return !r.hidden; }); }
   function cuenta() {
@@ -1696,38 +1696,17 @@ function avisosPanel() {
   function previa() {
     var first = f.querySelector('input[name="uids"]:checked');
     var nom = (first && first.closest(".nt-row").getAttribute("data-first")) || "Ana";
-    var b = f.querySelector("[data-nt-body]").value.trim().replace(/\{nombre\}/gi, nom);
-    var t = f.querySelector("[data-nt-title]").value.trim().replace(/\{nombre\}/gi, nom) || "Mensaje del equipo";
-    f.querySelector("[data-nt-pbody]").textContent = b || " ";
-    f.querySelector("[data-nt-pbody2]").textContent = b;
-    f.querySelector("[data-nt-ptitle]").textContent = t;
-  }
-  function destino() {
-    var v = go.value, kind = v.indexOf("c:") === 0 ? "camp" : v;
-    var opt = go.options[go.selectedIndex];
-    f.querySelectorAll("[data-nt-dest]").forEach(function (d) {
-      var on = d.getAttribute("data-nt-dest") === kind;
-      if (on && d.hidden) { d.hidden = false; d.classList.remove("nt-in"); void d.offsetWidth; d.classList.add("nt-in"); } else if (!on) d.hidden = true;
-    });
-    var names = { "": "su chat de soporte", inicio: "el Inicio", clips: "Mis clips", ganancias: "Ganancias" };
-    f.querySelector("[data-nt-dest-name]").textContent = kind === "camp" ? "la campaña" : names[kind];
-    if (kind === "camp") {
-      f.querySelector("[data-nt-cname]").textContent = opt.text.replace(/^Campaña «|»$/g, "");
-      var cov = opt.getAttribute("data-cover"), box = f.querySelector("[data-nt-cov]");
-      box.style.backgroundImage = cov ? "url('" + cov + "')" : "";
-    }
+    f.querySelector("[data-nt-pbody]").textContent = f.querySelector("[data-nt-body]").value.trim().replace(/\{nombre\}/gi, nom) || " ";
   }
   q.addEventListener("input", aplica);
   sels.forEach(function (s) { s.addEventListener("change", aplica); });
   clear.addEventListener("click", function () {
     q.value = ""; sels.forEach(function (s) { s.selectedIndex = 0; s.dispatchEvent(new Event("change", { bubbles: true })); }); aplica();
   });
-  go.addEventListener("change", destino);
   all.addEventListener("change", function () { visibles().forEach(function (r) { r.querySelector("input").checked = all.checked; }); cuenta(); });
   f.addEventListener("change", function (e) { if (e.target.name === "uids") cuenta(); });
   f.querySelector("[data-nt-body]").addEventListener("input", previa);
-  f.querySelector("[data-nt-title]").addEventListener("input", previa);
-  aplica(); destino();
+  aplica();
 }
 
 // =============================================================== carrusel de campañas destacadas (pasa solo cada 6 s)

@@ -32,23 +32,11 @@
 
   <section class="card nt-msg">
     <div class="nt-h"><h3>Mensaje</h3></div>
-    <div class="field"><label for="title">Título</label><input id="title" name="title" maxlength="80" data-nt-title></div>
-    <div class="field"><label for="body">Mensaje</label><textarea id="body" name="body" rows="5" maxlength="1000" required data-nt-body></textarea></div>
-    <div class="field"><label for="go">Al pulsar el aviso, abrir</label>
-      <select id="go" name="go" data-nt-go><option value="">Su chat de soporte</option><option value="inicio">Inicio</option><option value="clips">Mis clips</option><option value="ganancias">Ganancias</option>{% for c in camps if c.status == 'activa' %}<option value="c:{{ c.id }}" data-cover="{{ cover_src(c, 160) }}">Campaña «{{ c.song }}»</option>{% endfor %}</select></div>
-
+    <div class="field"><label for="body" class="sr-only">Mensaje</label><textarea id="body" name="body" rows="6" maxlength="1000" required data-nt-body></textarea></div>
     <div class="nt-prev" aria-label="Vista previa">
-      <span class="nt-prev-l">En la campanita</span>
-      <div class="nt-bell"><span class="bell-ico">{{ icon("chat") }}</span><span><b data-nt-ptitle>Mensaje del equipo</b><small data-nt-pbody2></small></span></div>
-      <span class="nt-prev-l">Al pulsarlo se abre <b data-nt-dest-name>su chat de soporte</b></span>
+      <span class="nt-prev-l">Así le llega a su chat de soporte</span>
       <div class="nt-screen">
-        <div class="nt-dest" data-nt-dest="">
-          <div class="msg theirs agent nt-chat"><span class="avatar msg-av">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}</span><div class="bubble" data-nt-pbody></div><div class="meta"><b>{{ (current_user.name or '').split()[0] }}</b> · ahora</div></div>
-        </div>
-        <div class="nt-dest" data-nt-dest="inicio" hidden><div class="sk sk-hero"><i></i><i class="w60"></i><i class="w40"></i></div><div class="sk-row"><span class="sk"></span><span class="sk"></span><span class="sk"></span></div><small class="muted">Inicio</small></div>
-        <div class="nt-dest" data-nt-dest="clips" hidden><div class="sk-row"><span class="sk k1"></span><span class="sk"></span><span class="sk"></span><span class="sk"></span></div><div class="sk sk-chart"></div><small class="muted">Mis clips</small></div>
-        <div class="nt-dest" data-nt-dest="ganancias" hidden><div class="sk-row"><span class="sk sk-big"><i></i></span><span class="sk"></span></div><div class="sk sk-list"><i></i><i></i></div><small class="muted">Ganancias</small></div>
-        <div class="nt-dest" data-nt-dest="camp" hidden><div class="nt-camp"><span class="nt-cov" data-nt-cov></span><span><b data-nt-cname></b><small class="muted">Página de la campaña</small></span></div><div class="sk sk-list"><i></i><i></i></div></div>
+        <div class="msg theirs agent nt-chat"><span class="avatar msg-av">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}</span><div class="bubble" data-nt-pbody></div><div class="meta"><b>{{ (current_user.name or '').split()[0] }}</b> · ahora</div></div>
       </div>
     </div>
     <button class="btn accent" data-nt-send data-confirm="¿Enviar este mensaje a los clippers elegidos?" disabled>Enviar a <span data-nt-count2>0</span> <span data-nt-word>clippers</span></button>
