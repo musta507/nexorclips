@@ -144,9 +144,9 @@
   {% if an.by_platform %}
   <div class="card mc-plat-list">
     <span class="small muted">Visualizaciones por plataforma</span>
-    {% set maxv = an.by_platform|map(attribute="views")|max %}
+    {% set totv = an.by_platform|map(attribute="views")|sum %}{# la barra es la parte de las vistas totales, no frente a la red que más tiene #}
     {% for p in an.by_platform %}
-    <div class="mc-prow p-{{ p.key }}"><span class="mc-pfill" style="width:{{ (p.views / maxv * 100)|round(1) if maxv else 0 }}%"></span><span class="mc-pname">{{ icon(p.key) }} {{ p.name }}</span><span class="mc-pnum"><span class="muted">{{ p.posts }} clip{{ 's' if p.posts != 1 }} ·</span> <b class="tnum">{{ p.views|short }}</b></span></div>
+    <div class="mc-prow p-{{ p.key }}"><span class="mc-pfill" style="width:{{ (p.views / totv * 100)|round(1) if totv else 0 }}%"></span><span class="mc-pname">{{ icon(p.key) }} {{ p.name }}</span><span class="mc-pnum"><span class="muted">{{ p.posts }} clip{{ 's' if p.posts != 1 }} ·</span> <b class="tnum">{{ p.views|short }}</b></span></div>
     {% endfor %}
   </div>
   {% endif %}
