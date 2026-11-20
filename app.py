@@ -1892,6 +1892,11 @@ def apply_reading(sub, info, now):
         sub.thumb_url = str(info["thumb"])[:1000]
     if isinstance(info, dict) and info.get("caption") and not sub.caption:
         sub.caption = str(info["caption"])[:300]
+    if isinstance(info, dict) and info.get("avatar") and (author or sub.author):   # foto de la cuenta, también al leer vistas
+        h = viewcounter.clean_handle(author or sub.author)
+        acc = CampaignAccount.query.filter_by(campaign_id=sub.campaign_id, platform=sub.platform, handle=h).first()
+        if acc and acc.avatar_url != info["avatar"]:
+            acc.avatar_url = str(info["avatar"])[:1000]
     sub.checked_at = now
     sub.views_error = ""
     if posted and not sub.posted_at:

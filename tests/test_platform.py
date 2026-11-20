@@ -3136,3 +3136,16 @@ def test_resumen_graficas_para_probar():
         page = c.get("/admin" + p).get_data(as_text=True)
         for k in ("vm", "cpm", "net", "top", "act", "clips"):
             assert f'data-ov-pane="{k}"' in page
+
+
+def test_lectura_de_vistas_guarda_la_foto_de_la_cuenta():
+    """Al leer las vistas de un clip, si Apify trae la foto de perfil, se guarda en la cuenta (sale en «Cuentas»)."""
+    cid = make_campaign()
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        s = A.Submission.query.filter_by(campaign_id=cid).first()
+        A.apply_reading(s, {"views": 10, "author": "ana", "avatar": "https://p16.tiktokcdn.com/ana.jpg"}, datetime.utcnow())
+        A.db.session.commit()
+        acc = A.CampaignAccount.query.filter_by(campaign_id=cid, handle="ana").first()
+        assert acc and acc.avatar_url == "https://p16.tiktokcdn.com/ana.jpg"

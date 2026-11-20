@@ -3058,3 +3058,5 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):
 
 /* Barras con pastilla que se desliza: al pasar el ratón solo se oscurece el texto (sin fondo gris que choque con la pastilla) */
 .has-pill > a:not(.on):hover,.has-pill > button:not(.on):hover{background:transparent}
+/* Foto de perfil de arriba sin punto rojo (Mustapha lo quitó; los mensajes sin leer siguen en el menú y en el chat) */
+#avatar-dot{display:none!important}
