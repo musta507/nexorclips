@@ -1779,7 +1779,7 @@ function carruseles() {
 
 // =============================================================== Chat de soporte en una ventanita (como los asistentes de otras webs)
 // El botón flotante abre un panel pequeño con la conversación; arriba hay un botón discreto para verla a pantalla completa.
-// El panel se queda abierto al cambiar de página (data-turbo-permanent).
+// Al cambiar de sección se cierra solo; al recargar la misma página, vuelve a abrirse si estaba abierto.
 (function () {
   function pop() { return document.getElementById("chat-pop"); }
   function fab() { return document.getElementById("chat-fab"); }
@@ -1827,6 +1827,11 @@ function carruseles() {
   });
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && pop() && !pop().hidden) { abrir(false); if (fab()) fab().focus(); }
+  });
+  // Al cambiar de sección, la ventanita se cierra sola (lo pidió Mustapha)
+  document.addEventListener("turbo:visit", function () {
+    var p = pop();
+    if (p && !p.hidden) abrir(false);
   });
   // Al recargar la página, si estaba abierto, se vuelve a abrir
   document.addEventListener("turbo:load", function () {
