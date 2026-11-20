@@ -599,8 +599,8 @@ def test_join_campaign_and_admin_accepts(monkeypatch):
     with A.app.app_context():
         sid = A.Submission.query.one().id
         owner = A.Submission.query.one().user_id
-    prof = admin.get(f"/admin/clipper/{owner}").get_data(as_text=True)   # en el perfil del clipper no se puede aprobar, sí rechazar
-    assert f"/admin/envio/{sid}/aprobar" not in prof and f"/admin/envio/{sid}/rechazar" in prof
+    prof = admin.get(f"/admin/clipper/{owner}").get_data(as_text=True)   # en el perfil del clipper no se revisan clips
+    assert f"/admin/envio/{sid}/aprobar" not in prof and f"/admin/envio/{sid}/rechazar" not in prof
     post(admin, f"/admin/envio/{sid}/aprobar")
     with A.app.app_context():
         assert get(A.Submission, sid).status == "aprobado"
