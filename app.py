@@ -9015,8 +9015,7 @@ def bell_data():
                               "img": _bell_img(camps_.get(cid_)), "group": "Por hacer"})
         for n, ico, one, many, ep in [
                 (nc["payouts"], "cash", "retiro en curso", "retiros en curso", "admin_payouts"),
-                (nc["messages"], "chat", "mensaje sin leer", "mensajes sin leer", "admin_inbox"),
-                (nc["leads"], "megaphone", "creador interesado", "creadores interesados", "admin_leads")]:
+                (nc["messages"], "chat", "mensaje sin leer", "mensajes sin leer", "admin_inbox")]:
             if n > 0 and admin_can(ep):
                 items.append({"id": None, "icon": ico, "title": f"{n} {one if n == 1 else many}", "body": "", "url": url_for(ep),
                               "ago": "", "unread": True, "img": "", "group": "Por hacer"})
