@@ -921,11 +921,11 @@ MOD_PERMS = {"revisar": "Revisar clips", "verificar": "Pedir otra verificación 
              "estadisticas": "Ver estadísticas", "clippers": "Ver clippers y lo que gana cada uno",
              "gestionar_canales": "Gestionar canales y grupo de WhatsApp", "informe": "Informe del creador",
              "csv": "Descargar CSV de clips", "editar": "Editar la campaña (normas, materiales, plazas…)",
-             "vistas": "Corregir vistas a mano", "dinero": "Presupuesto y tarifas",
+             "dinero": "Presupuesto y tarifas",
              "estado": "Pausar, abrir/cerrar plazas y finalizar"}
 MOD_DEFAULT = ("revisar", "verificar", "solicitudes", "canales", "comentarios", "soporte")
-MOD_RISKY = {"vistas": "cambia lo que se paga", "dinero": "toca el dinero de la campaña", "estado": "puede cerrar la campaña"}
-ENDPOINT_PERM = {"admin_campaign_review": "revisar", "admin_review": ("revisar", "verificar", "vistas"), "admin_review_bulk": "revisar",
+MOD_RISKY = {"dinero": "toca el dinero de la campaña", "estado": "puede cerrar la campaña"}
+ENDPOINT_PERM = {"admin_campaign_review": "revisar", "admin_review": ("revisar", "verificar"), "admin_review_bulk": "revisar",
                  "admin_campaign_requests": "solicitudes", "admin_invites": "solicitudes", "admin_campaign_member": "solicitudes",
                  "admin_campaign_account": "solicitudes", "admin_campaign_channels": ("canales", "gestionar_canales"),
                  "admin_campaign_support": "soporte", "admin_campaign": ("estadisticas", "informe"),
@@ -7484,13 +7484,15 @@ def tell_clipper(user_id, body):
 @app.route("/admin/envio/<int:sid>/<accion>", methods=["POST"])
 @staff_required(_sub_camp)
 def admin_review(sid, accion):
+    if accion == "visitas":                       # corregir vistas a mano: ya no existe (Mustapha no lo quiere en ninguna parte)
+        abort(404)
     sub = db.session.get(Submission, sid) or abort(404)
     camp = sub.campaign
     if acting_as_mod():
         if sub.user_id == current_user.id:
             flash("No puedes revisar tus propios clips: los revisa otra persona del equipo.", "error")
             return _back()
-        need = "vistas" if accion == "visitas" else "verificar" if accion == "pedir_estadisticas" else "revisar"
+        need = "verificar" if accion == "pedir_estadisticas" else "revisar"
         if not mod_can(current_user, sub.campaign_id, need):
             abort(403)
     nxt = request.form.get("next", "")
@@ -7517,13 +7519,6 @@ def admin_review(sid, accion):
         removed = reject_sub(sub, code, message)
         if removed:
             flash(f"Clip rechazado. Se han retirado {money(removed)} de sus ganancias.", "ok")
-    elif accion == "visitas":
-        new_views = max(int(parse_float(request.form.get("views"), sub.views) or 0), 0)
-        old = sub.views or 0
-        sub.views, sub.views_updated_at = new_views, datetime.utcnow()
-        db.session.add(ViewSnapshot(submission_id=sub.id, views=new_views))
-        delta = accrue(sub, allow_decrease=True)
-        audit("vistas_corregidas", f"#{sub.id}: {old} → {new_views}" + (f" · {money(delta)}" if delta else ""))
     elif accion == "quitar_avisos":
         sub.flags = ""
         audit("avisos_quitados", f"#{sub.id}")

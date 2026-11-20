@@ -292,7 +292,8 @@ def test_reject_after_approval_claws_back(monkeypatch):
         assert A.AuditLog.query.filter_by(action="clip_rechazado").count() == 1
 
 
-def test_manual_view_correction_can_lower():
+def test_no_se_pueden_corregir_vistas_a_mano():
+    """Mustapha no quiere corregir vistas a mano en ninguna parte: ni botón, ni permiso de mod, ni ruta."""
     cid = make_campaign(rate=100, budget=1000)
     admin = client_for("admin@test.com")
     a = client_for("a@test.com", tiktok="ana")
@@ -300,11 +301,12 @@ def test_manual_view_correction_can_lower():
     approve_all(admin)
     with A.app.app_context():
         sid = A.Submission.query.one().id
-    post(admin, f"/admin/envio/{sid}/visitas", views="2000000")
-    post(admin, f"/admin/envio/{sid}/visitas", views="500000")
+        before = get(A.Submission, sid).views
+    assert admin.post(f"/admin/envio/{sid}/visitas", data={"_csrf": "t", "views": "2000000"}).status_code == 404
     with A.app.app_context():
-        s = get(A.Submission, sid)
-        assert s.earned == 50.0 and s.campaign.spent == 50.0
+        assert get(A.Submission, sid).views == before
+    assert "vistas" not in A.MOD_PERMS
+    assert "Corregir vistas" not in admin.get(f"/admin/campana/{cid}/revisar?tab=aprobados").get_data(as_text=True)
 
 
 def test_withdrawals(monkeypatch):
@@ -1905,7 +1907,7 @@ def test_campaign_mods_permissions():
     assert mod.get(f"/admin/campana/{cid}/editar").status_code == 403
     assert mod.get("/admin/retiros").status_code == 403
     assert "propios clips" in flashes(post(mod, f"/admin/envio/{mine}/aprobar"))[0][1]
-    assert mod.post(f"/admin/envio/{other}/visitas", data={"_csrf": "t", "views": "999999"}).status_code == 403
+    assert mod.post(f"/admin/envio/{other}/visitas", data={"_csrf": "t", "views": "999999"}).status_code == 404
     post(mod, f"/admin/envio/{other}/aprobar")
     with A.app.app_context():
         assert A.db.session.get(A.Submission, other).status == "aprobado"
