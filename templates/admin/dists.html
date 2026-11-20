@@ -28,7 +28,6 @@
       <div><b class="tnum">{{ sm.recent_clips }}</b><small>vídeos · 30 d</small></div>
       <div><b class="tnum">{{ sm.recent_views|short }}</b><small>vistas · 30 d</small></div>
     </div>
-    <span class="small {{ 'muted' if sm.posting == sm.n_accounts else 'ds-warn' }}">{{ sm.posting }} de {{ sm.n_accounts }} cuentas han publicado este mes</span>
   </a>
   {% endfor %}
 </div>
