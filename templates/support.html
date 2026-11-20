@@ -6,7 +6,7 @@
   <div class="chat-head">
     <span class="team-avs" aria-hidden="true">{% for t in team %}<span class="avatar">{% if t.avatar %}<img src="{{ t.avatar }}" alt="" referrerpolicy="no-referrer">{% else %}{{ t.initial }}{% endif %}</span>{% else %}<span class="avatar team"><span class="logo-mark"></span></span>{% endfor %}<i class="team-on"></i></span>
     <div><b>{% if team %}{% for t in team %}{{ t.name }}{{ " y " if loop.revindex == 2 else (", " if not loop.last) }}{% endfor %}{% else %}Equipo de {{ APP_NAME }}{% endif %}</b>
-      <div class="small muted">{% if team %}{{ team[0].role }} de {{ APP_NAME }} · {% endif %}Solemos responder en menos de 24 horas</div></div>
+      <div class="small muted">Equipo de {{ APP_NAME }} · Solemos responder en menos de 24 horas</div></div>
   </div>
   {% with viewer_admin=false, post_url=url_for('support'), poll_url=url_for('support_poll'),
           empty_text="Aún no hay mensajes. Cuéntanos en qué podemos ayudarte." %}
