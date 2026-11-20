@@ -3168,3 +3168,18 @@ def test_portada_de_tiktok_fresca(monkeypatch):
     assert r.status_code == 302 and r.location == "https://p16.tiktokcdn.com/fresca.jpg"
     monkeypatch.setattr(A, "tiktok_cover", lambda url: "")
     assert a.get(f"/clip/{sid}/portada").location == "https://vieja.example/portada.jpg"
+
+
+def test_anadir_mod_por_usuario():
+    """Al añadir un mod se elige el usuario por su nombre (de la lista), no hace falta su correo."""
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    client_for("mod@test.com")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="mod@test.com").one()
+        name, uid = u.name, u.id
+    page = admin.get("/admin/mods").get_data(as_text=True)
+    assert 'list="mod-users"' in page and f'data-uid="{uid}"' in page and "Correo del usuario" not in page
+    post(admin, "/admin/mods", act="anadir", user=name, uid=str(uid), campaigns=[str(cid)], perms=["soporte"])
+    with A.app.app_context():
+        assert A.CampaignMod.query.filter_by(user_id=uid, campaign_id=cid).count() == 1

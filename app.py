@@ -5363,6 +5363,21 @@ def admin_campaign_clippers(cid):
                            sec="clippers", mods=mods, mod_ids={m_.user_id for m_ in mods})
 
 
+def mod_pick_user(uid, text):
+    """Usuario elegido para hacerlo mod: por la lista (id), o escribiendo su nombre exacto o su correo."""
+    if uid:
+        u = db.session.get(User, uid)
+        if u:
+            return u
+    t = (text or "").strip()
+    if not t:
+        return None
+    if "@" in t and "." in t.split("@")[-1]:
+        return User.query.filter(db.func.lower(User.email) == t.lower()).first()
+    rows = User.query.filter(db.func.lower(User.name) == t.lower()).limit(2).all()
+    return rows[0] if len(rows) == 1 else None
+
+
 @app.route("/admin/mods", methods=["GET", "POST"])
 @admin_required
 def admin_mods():
@@ -5373,11 +5388,10 @@ def admin_mods():
         perms = [p_ for p_ in MOD_PERMS if p_ in chosen]
         perm_str = ",".join(perms)
         if act == "anadir":
-            email = (request.form.get("email") or "").strip().lower()
-            u = User.query.filter(db.func.lower(User.email) == email).first() if email else None
+            u = mod_pick_user(request.form.get("uid", type=int), request.form.get("user") or request.form.get("email") or "")
             cids = [int(x) for x in request.form.getlist("campaigns") if x.isdigit()]
             if not u:
-                flash("No hay ningún usuario con ese correo. Tiene que haberse registrado antes.", "error")
+                flash("No encontramos a ese usuario. Elígelo de la lista mientras escribes su nombre.", "error")
             elif u.is_admin:
                 flash(f"{u.name} ya es del equipo: puede hacerlo todo.", "info")
             elif u.is_banned:
@@ -5446,7 +5460,12 @@ def admin_mods():
         m["last"] = m["recent"][0].created_at if m["recent"] else None
         m["total"] = sum(m["activity"].values())
     camps = Campaign.query.filter(Campaign.status.notin_(("finalizada", DIST_STATUS))).order_by(Campaign.created_at.desc()).all()
-    return render_template("admin/mods.html", mods=sorted(mods.values(), key=lambda m: m["user"].name.lower()),
+    pick = User.query.filter(User.is_admin.is_(False), User.is_banned.is_(False)).with_entities(User.id, User.name).order_by(User.name).all()
+    seen = {}
+    for _id, nm in pick:
+        seen[(nm or "").lower()] = seen.get((nm or "").lower(), 0) + 1
+    pick = [(i, n if seen[(n or "").lower()] == 1 else f"{n} #{i}") for i, n in pick if n]
+    return render_template("admin/mods.html", pick=pick, mods=sorted(mods.values(), key=lambda m: m["user"].name.lower()),
                            camps=camps, perms=MOD_PERMS, defaults=MOD_DEFAULT, risky=MOD_RISKY)
 
 

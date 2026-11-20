@@ -17,9 +17,10 @@
   <summary class="mods-add-sum">{{ icon("plus") }} <b>Añadir mod</b></summary>
   <form method="post" class="form-stack" style="margin-top:14px">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="anadir">
-    <div class="field"><label for="mod-email">Correo del usuario</label>
-      <input id="mod-email" type="email" name="email" required placeholder="correo@ejemplo.com">
-      <span class="hint">Tiene que haberse registrado antes en la web con ese correo.</span></div>
+    <div class="field"><label for="mod-user">Usuario</label>
+      <input id="mod-user" name="user" list="mod-users" required autocomplete="off" placeholder="Escribe su nombre" data-mod-pick>
+      <input type="hidden" name="uid" data-mod-uid>
+      <datalist id="mod-users">{% for i, n in pick %}<option value="{{ n }}" data-uid="{{ i }}"></option>{% endfor %}</datalist></div>
     <div class="field"><span class="label">Campañas</span>
       <div class="mods-checks">{% for c in camps %}<label class="check"><input type="checkbox" name="campaigns" value="{{ c.id }}"> {{ c.song }}</label>{% else %}<span class="small muted">No hay campañas activas.</span>{% endfor %}</div></div>
     <div class="field"><span class="label">Permisos</span>

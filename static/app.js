@@ -2053,3 +2053,12 @@ document.addEventListener("turbo:load", function () {
   box.querySelectorAll("[data-ov-pane]").forEach(function (p) { p.hidden = p.getAttribute("data-ov-pane") !== k; });
   var t = box.querySelector("[data-ov-title]"); if (t) t.textContent = b.textContent.trim();
 });
+
+// Mods: al elegir un usuario de la lista se guarda quién es (por si hay dos con el mismo nombre)
+document.addEventListener("input", function (e) {
+  var i = e.target.closest && e.target.closest("[data-mod-pick]");
+  if (!i) return;
+  var uid = i.parentNode.querySelector("[data-mod-uid]"), o = null;
+  Array.prototype.some.call(document.querySelectorAll("#" + i.getAttribute("list") + " option"), function (x) { if (x.value === i.value) { o = x; return true; } return false; });
+  uid.value = o ? o.getAttribute("data-uid") : "";
+});
