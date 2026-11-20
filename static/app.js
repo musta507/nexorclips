@@ -1657,61 +1657,77 @@ document.addEventListener("click", function (e) {
   if (window.Turbo) window.Turbo.visit(url); else location.href = url;
 });
 
-// =============================================================== Avisos del panel: elegir clippers con filtros y vista previa
+// =============================================================== Avisos del panel: filtros, título y mensaje, y vista previa del destino
 function avisosPanel() {
   var f = document.querySelector("[data-notify]");
   if (!f || f.dataset.ready) return;
   f.dataset.ready = "1";
-  var rows = Array.prototype.slice.call(f.querySelectorAll(".nt-row")), filt = "todos";
-  var q = f.querySelector("[data-nt-q]"), camp = f.querySelector("[data-nt-camp]"), all = f.querySelector("[data-nt-all]");
+  var rows = Array.prototype.slice.call(f.querySelectorAll(".nt-row"));
+  var q = f.querySelector("[data-nt-q]"), all = f.querySelector("[data-nt-all]"), clear = f.querySelector("[data-nt-clear]");
+  var sels = Array.prototype.slice.call(f.querySelectorAll("[data-nt-f]")), go = f.querySelector("[data-nt-go]");
+  function val(k) { var s = f.querySelector('[data-nt-f="' + k + '"]'); return s ? s.value : ""; }
   function visibles() { return rows.filter(function (r) { return !r.hidden; }); }
   function cuenta() {
     var n = f.querySelectorAll('input[name="uids"]:checked').length;
     f.querySelector("[data-nt-count]").textContent = n;
     f.querySelector("[data-nt-count2]").textContent = n;
+    f.querySelector("[data-nt-word]").textContent = n === 1 ? "clipper" : "clippers";
     f.querySelector("[data-nt-send]").disabled = !n;
     var v = visibles();
     all.checked = v.length > 0 && v.every(function (r) { return r.querySelector("input").checked; });
-    var first = f.querySelector('input[name="uids"]:checked');
-    var name = first ? first.closest(".nt-row").getAttribute("data-first") : "";
-    f.querySelector("[data-nt-pname]").textContent = name || "el clipper";
-    previa(name);
+    previa();
   }
   function aplica() {
-    var t = quitarAcentos(q.value.trim()), c = camp.value, shown = 0;
+    var t = quitarAcentos(q.value.trim()), c = val("camp"), ac = val("act"), pf = val("perf"), ag = val("age"), shown = 0;
     rows.forEach(function (r) {
-      var ok = (filt === "todos" || (" " + r.getAttribute("data-tags") + " ").indexOf(" " + filt + " ") >= 0)
-        && (!c || r.getAttribute("data-camps").indexOf("," + c + ",") >= 0)
+      var cs = r.getAttribute("data-camps");
+      var ok = (!c || (c === "none" ? cs === ",," : cs.indexOf("," + c + ",") >= 0))
+        && (!ac || r.getAttribute("data-act") === ac)
+        && (!pf || r.getAttribute("data-perf") === pf)
+        && (!ag || r.getAttribute("data-age") === ag)
         && (!t || quitarAcentos(r.getAttribute("data-name")).indexOf(t) >= 0);
       r.hidden = !ok; if (ok) shown++;
     });
     f.querySelector("[data-nt-visible]").textContent = shown;
     f.querySelector("[data-nt-none]").hidden = !!shown;
+    clear.hidden = !(t || c || ac || pf || ag);
     cuenta();
   }
-  function previa(name) {
-    var nom = name || "Ana";
-    var b = f.querySelector("[data-nt-body]").value.trim().replace(/\{nombre\}/gi, nom) || "Escribe el mensaje…";
+  function previa() {
+    var first = f.querySelector('input[name="uids"]:checked');
+    var nom = (first && first.closest(".nt-row").getAttribute("data-first")) || "Ana";
+    var b = f.querySelector("[data-nt-body]").value.trim().replace(/\{nombre\}/gi, nom);
     var t = f.querySelector("[data-nt-title]").value.trim().replace(/\{nombre\}/gi, nom) || "Mensaje del equipo";
-    f.querySelector("[data-nt-pbody]").textContent = b;
+    f.querySelector("[data-nt-pbody]").textContent = b || " ";
     f.querySelector("[data-nt-pbody2]").textContent = b;
     f.querySelector("[data-nt-ptitle]").textContent = t;
   }
-  f.addEventListener("click", function (e) {
-    var a = e.target.closest("[data-nt-filter]");
-    if (!a) return;
-    e.preventDefault();
-    filt = a.getAttribute("data-nt-filter");
-    f.querySelectorAll("[data-nt-filter]").forEach(function (x) { x.classList.toggle("on", x === a); });
-    aplica();
-  });
+  function destino() {
+    var v = go.value, kind = v.indexOf("c:") === 0 ? "camp" : v;
+    var opt = go.options[go.selectedIndex];
+    f.querySelectorAll("[data-nt-dest]").forEach(function (d) {
+      var on = d.getAttribute("data-nt-dest") === kind;
+      if (on && d.hidden) { d.hidden = false; d.classList.remove("nt-in"); void d.offsetWidth; d.classList.add("nt-in"); } else if (!on) d.hidden = true;
+    });
+    var names = { "": "su chat de soporte", inicio: "el Inicio", clips: "Mis clips", ganancias: "Ganancias" };
+    f.querySelector("[data-nt-dest-name]").textContent = kind === "camp" ? "la campaña" : names[kind];
+    if (kind === "camp") {
+      f.querySelector("[data-nt-cname]").textContent = opt.text.replace(/^Campaña «|»$/g, "");
+      var cov = opt.getAttribute("data-cover"), box = f.querySelector("[data-nt-cov]");
+      box.style.backgroundImage = cov ? "url('" + cov + "')" : "";
+    }
+  }
   q.addEventListener("input", aplica);
-  camp.addEventListener("change", aplica);
+  sels.forEach(function (s) { s.addEventListener("change", aplica); });
+  clear.addEventListener("click", function () {
+    q.value = ""; sels.forEach(function (s) { s.selectedIndex = 0; s.dispatchEvent(new Event("change", { bubbles: true })); }); aplica();
+  });
+  go.addEventListener("change", destino);
   all.addEventListener("change", function () { visibles().forEach(function (r) { r.querySelector("input").checked = all.checked; }); cuenta(); });
   f.addEventListener("change", function (e) { if (e.target.name === "uids") cuenta(); });
-  f.querySelector("[data-nt-body]").addEventListener("input", cuenta);
-  f.querySelector("[data-nt-title]").addEventListener("input", cuenta);
-  aplica();
+  f.querySelector("[data-nt-body]").addEventListener("input", previa);
+  f.querySelector("[data-nt-title]").addEventListener("input", previa);
+  aplica(); destino();
 }
 
 // =============================================================== carrusel de campañas destacadas (pasa solo cada 6 s)

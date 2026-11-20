@@ -8968,8 +8968,10 @@ def notify_people():
     for p in sorted(active, key=lambda p: (p["views"], p["clips"]))[:max(5, len(active) // 5)]:
         if not p.get("best"):
             p["worst"] = True
-    for p in active:
-        p["inactive"] = p["idle"] is None or p["idle"] >= 7
+    for p in out:                                              # actividad: para los filtros de la lista
+        i = p["idle"]
+        p["act"] = "never" if i is None else "week" if i < 7 else "idle30" if i >= 30 else "idle7"
+        p["inactive"] = bool(p["camps"]) and (i is None or i >= 7)
     return sorted(out, key=lambda p: (-p["earned"], -p["views"]))
 
 

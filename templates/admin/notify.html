@@ -3,47 +3,55 @@
 {% from "_icons.html" import icon, av %}
 {% block title %}Avisos · Admin{% endblock %}
 {% block content %}
-{% call ui.head("Avisos a clippers", "Elige a quién, escribe el mensaje y míralo antes de enviarlo. Les llega como mensaje en su chat de soporte y en la campanita.") %}{% endcall %}
+<h1 class="sr-only">Avisos a clippers</h1>
 <form method="post" class="nt" data-notify>
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <section class="card nt-people">
-    <div class="nt-h"><h3>1. Para quién</h3><span class="small muted"><b data-nt-count>0</b> elegidos</span></div>
-    <nav class="seg nt-seg" aria-label="Filtro">
-      {% for k, label in [("todos", "Todos"), ("best", "Mejores"), ("worst", "Peores"), ("inactive", "Sin publicar 7 días"), ("new", "Nuevos")] %}<a href="#" class="{% if loop.first %}on{% endif %}" data-nt-filter="{{ k }}">{{ label }}</a>{% endfor %}
-    </nav>
-    <div class="nt-tools">
-      <label class="cr-q mc-q">{{ icon("search") }}<input type="search" placeholder="Buscar por nombre o correo" data-nt-q aria-label="Buscar clipper"></label>
-      <select data-nt-camp aria-label="Campaña" data-native><option value="">Todas las campañas</option>{% for c in camps %}<option value="{{ c.id }}">{{ c.song }}</option>{% endfor %}</select>
+    <div class="nt-h"><h3>Para quién</h3><span class="nt-chosen"><b data-nt-count>0</b> elegidos</span></div>
+    <div class="mc-tools nt-filters">
+      <label class="cr-q mc-q nt-q">{{ icon("search") }}<input type="search" placeholder="Buscar por nombre o correo" data-nt-q aria-label="Buscar clipper"></label>
+      <select data-nt-f="camp" aria-label="Campaña" data-ico="flag"><option value="">Todas las campañas</option>{% for c in camps %}<option value="{{ c.id }}">{{ c.song }}</option>{% endfor %}<option value="none">Sin campaña</option></select>
+      <select data-nt-f="act" aria-label="Actividad" data-ico="cal"><option value="">Cualquier actividad</option><option value="week">Han publicado esta semana</option><option value="idle7">Sin publicar 7 días</option><option value="idle30">Sin publicar 30 días</option><option value="never">Nunca han publicado</option></select>
+      <select data-nt-f="perf" aria-label="Rendimiento" data-ico="sort"><option value="">Cualquier rendimiento</option><option value="best">Los que más ganan</option><option value="worst">Los que menos rinden</option></select>
+      <select data-nt-f="age" aria-label="Antigüedad" data-ico="users"><option value="">Nuevos y antiguos</option><option value="new">Solo nuevos (14 días)</option><option value="old">Solo antiguos</option></select>
+      <button type="button" class="btn soft sm" data-nt-clear hidden>Quitar filtros</button>
     </div>
-    <div class="nt-bulk"><label class="check small"><input type="checkbox" data-nt-all> Elegir todos los que se ven (<span data-nt-visible>{{ people|length }}</span>)</label></div>
+    <div class="nt-bulk"><label class="check small"><input type="checkbox" data-nt-all> Elegir los <span data-nt-visible>{{ people|length }}</span> que se ven</label></div>
     <div class="nt-list">
       {% for p in people %}{% set u = p.u %}
-      <label class="nt-row" data-name="{{ u.name }} {{ u.email }}" data-first="{{ (u.name or '').split()[0] if u.name else '' }}" data-camps=",{{ p.camps|join(',') }}," data-tags="{{ 'best ' if p.best }}{{ 'worst ' if p.worst }}{{ 'inactive ' if p.inactive }}{{ 'new' if p.new }}">
+      <label class="nt-row" data-name="{{ u.name }} {{ u.email }}" data-first="{{ (u.name or '').split()[0] if u.name else '' }}" data-camps=",{{ p.camps|join(',') }}," data-act="{{ p.act }}" data-perf="{{ 'best' if p.best else ('worst' if p.worst else '') }}" data-age="{{ 'new' if p.new else 'old' }}">
         <input type="checkbox" name="uids" value="{{ u.id }}">
         {{ av(u) }}
-        <span class="nt-who"><b>{{ u.name }}</b><small class="muted">{{ u.email }}</small></span>
+        <span class="nt-who"><b>{{ u.name }}</b><small class="muted">{% if p.last %}último clip {{ p.last|ago }}{% else %}sin clips{% endif %}</small></span>
         <span class="nt-stat"><b class="tnum">{{ p.earned|earn(0) }}</b><small class="muted">{{ p.views|short }} vistas · 30 d</small></span>
-        <span class="nt-last small muted">{% if p.last %}último clip {{ p.last|ago }}{% else %}sin clips{% endif %}</span>
       </label>
-      {% else %}<p class="small muted">Aún no hay clippers.</p>{% endfor %}
-      <p class="small muted nt-none" hidden data-nt-none>Nadie coincide con ese filtro.</p>
+      {% else %}<p class="small muted nt-none">Aún no hay clippers.</p>{% endfor %}
+      <p class="small muted nt-none" hidden data-nt-none>Nadie coincide con estos filtros.</p>
     </div>
   </section>
 
   <section class="card nt-msg">
-    <div class="nt-h"><h3>2. El mensaje</h3></div>
-    <div class="field"><label for="title">Título (lo ven en la campanita)</label><input id="title" name="title" maxlength="80" placeholder="¡{nombre}, nueva campaña!" data-nt-title></div>
-    <div class="field"><label for="body">Mensaje</label><textarea id="body" name="body" rows="5" maxlength="1000" required placeholder="Hola {nombre}, ya puedes unirte a…" data-nt-body></textarea>
-      <span class="hint"><code>{nombre}</code> se cambia por el nombre de cada clipper.</span></div>
-    <div class="field"><label for="go">Cuando pulse el aviso de la campanita, ir a…</label>
-      <select id="go" name="go"><option value="">Su chat de soporte (donde está el mensaje)</option><option value="inicio">Inicio</option><option value="clips">Mis clips</option><option value="ganancias">Ganancias</option>{% for c in camps if c.status == 'activa' %}<option value="c:{{ c.id }}">Campaña «{{ c.song }}»</option>{% endfor %}</select>
-      <span class="hint">El mensaje siempre queda en su chat de soporte. Esto solo decide adónde lleva el aviso de la campanita{% if push_ready %} y del móvil{% endif %}.</span></div>
-    <div class="nt-prev">
-      <span class="small muted">Vista previa · así lo verá <b data-nt-pname>el clipper</b></span>
-      <div class="nt-bell"><span class="bell-ico">{{ icon("chat") }}</span><span><b data-nt-ptitle>Mensaje del equipo</b><small data-nt-pbody2>Escribe el mensaje…</small></span></div>
-      <div class="msg theirs agent nt-chat"><span class="avatar msg-av">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}</span><div class="bubble" data-nt-pbody>Escribe el mensaje…</div><div class="meta"><b>{{ (current_user.name or '').split()[0] }}</b> · Responsable · ahora</div></div>
+    <div class="nt-h"><h3>Mensaje</h3></div>
+    <div class="field"><label for="title">Título</label><input id="title" name="title" maxlength="80" data-nt-title></div>
+    <div class="field"><label for="body">Mensaje</label><textarea id="body" name="body" rows="5" maxlength="1000" required data-nt-body></textarea></div>
+    <div class="field"><label for="go">Al pulsar el aviso, abrir</label>
+      <select id="go" name="go" data-nt-go><option value="">Su chat de soporte</option><option value="inicio">Inicio</option><option value="clips">Mis clips</option><option value="ganancias">Ganancias</option>{% for c in camps if c.status == 'activa' %}<option value="c:{{ c.id }}" data-cover="{{ cover_src(c, 160) }}">Campaña «{{ c.song }}»</option>{% endfor %}</select></div>
+
+    <div class="nt-prev" aria-label="Vista previa">
+      <span class="nt-prev-l">En la campanita</span>
+      <div class="nt-bell"><span class="bell-ico">{{ icon("chat") }}</span><span><b data-nt-ptitle>Mensaje del equipo</b><small data-nt-pbody2></small></span></div>
+      <span class="nt-prev-l">Al pulsarlo se abre <b data-nt-dest-name>su chat de soporte</b></span>
+      <div class="nt-screen">
+        <div class="nt-dest" data-nt-dest="">
+          <div class="msg theirs agent nt-chat"><span class="avatar msg-av">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}</span><div class="bubble" data-nt-pbody></div><div class="meta"><b>{{ (current_user.name or '').split()[0] }}</b> · ahora</div></div>
+        </div>
+        <div class="nt-dest" data-nt-dest="inicio" hidden><div class="sk sk-hero"><i></i><i class="w60"></i><i class="w40"></i></div><div class="sk-row"><span class="sk"></span><span class="sk"></span><span class="sk"></span></div><small class="muted">Inicio</small></div>
+        <div class="nt-dest" data-nt-dest="clips" hidden><div class="sk-row"><span class="sk k1"></span><span class="sk"></span><span class="sk"></span><span class="sk"></span></div><div class="sk sk-chart"></div><small class="muted">Mis clips</small></div>
+        <div class="nt-dest" data-nt-dest="ganancias" hidden><div class="sk-row"><span class="sk sk-big"><i></i></span><span class="sk"></span></div><div class="sk sk-list"><i></i><i></i></div><small class="muted">Ganancias</small></div>
+        <div class="nt-dest" data-nt-dest="camp" hidden><div class="nt-camp"><span class="nt-cov" data-nt-cov></span><span><b data-nt-cname></b><small class="muted">Página de la campaña</small></span></div><div class="sk sk-list"><i></i><i></i></div></div>
+      </div>
     </div>
-    <button class="btn accent" data-nt-send data-confirm="¿Enviar este mensaje a los clippers elegidos?" disabled>Enviar a <span data-nt-count2>0</span> clippers</button>
+    <button class="btn accent" data-nt-send data-confirm="¿Enviar este mensaje a los clippers elegidos?" disabled>Enviar a <span data-nt-count2>0</span> <span data-nt-word>clippers</span></button>
   </section>
 </form>
 {% endblock %}
