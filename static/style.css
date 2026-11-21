@@ -3106,20 +3106,20 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):
 /* Resumen: datos al pasar el ratón por las gráficas */
 .v2-chart{position:relative}
 .v2-chart [data-tip]{cursor:default}
-.v2-plot .v2-wk{border-radius:10px;transition:background .15s}
-.v2-plot .v2-wk.is-h{background:rgba(16,24,40,.045)}
-.v2-plot.hov .v2-wk:not(.is-h) .v2-trio{opacity:.4;transition:opacity .15s}
-.v2-plot .v2-trio{transition:opacity .15s}
-.ov-top.hov .ov-trow:not(.is-h){opacity:.45;transition:opacity .15s}
-.ovc-dot{transition:transform .15s}
-.ovc-dot.is-h{transform:scale(1.5);background:var(--c)}
-.ov-tip{position:absolute;z-index:5;pointer-events:none;display:flex;flex-direction:column;gap:5px;min-width:160px;padding:10px 12px;border-radius:12px;background:#0e0e0e;color:#fff;font-size:12.5px;box-shadow:0 10px 24px -8px rgba(16,24,40,.35);opacity:0;transform:translateY(4px);transition:opacity .15s,transform .15s}
-.ov-tip.on{opacity:1;transform:none}
-.ov-tip b{font-weight:600;font-size:12px;color:#c9cacf}
+.v2-plot .v2-trio{transition:opacity .2s}
+.v2-plot.hov .v2-wk:not(.is-h) .v2-trio{opacity:.5}
+.ov-trow{transition:opacity .2s}
+.ov-top.hov .ov-trow:not(.is-h){opacity:.5}
+.ovc-dot{transition:box-shadow .2s,background .2s}
+.ovc-dot.is-h{background:var(--c);box-shadow:0 0 0 5px color-mix(in srgb,var(--c) 18%,transparent)}
+.ov-tip{position:absolute;left:0;top:0;z-index:5;pointer-events:none;display:flex;flex-direction:column;gap:6px;min-width:172px;padding:12px 14px;border-radius:14px;background:#fff;color:#0e0e0e;border:1px solid var(--line,#e9eaed);font-size:13px;box-shadow:0 14px 34px -14px rgba(16,24,40,.28),0 2px 6px rgba(16,24,40,.05);opacity:0;transition:opacity .16s,transform .22s cubic-bezier(.2,.8,.2,1)}
+.ov-tip.on{opacity:1}
+.ov-tip b{font-weight:500;font-size:12px;color:#8a8b91;margin-bottom:1px}
 .ov-tip span{display:flex;align-items:center;gap:8px}
-.ov-tip i{width:8px;height:8px;border-radius:3px;flex:none}
-.ov-tip em{font-style:normal;flex:1;color:#e6e7ea}
-.ov-tip strong{font-weight:600;font-variant-numeric:tabular-nums}
+.ov-tip i{width:8px;height:8px;border-radius:999px;flex:none}
+.ov-tip em{font-style:normal;flex:1;color:#55565c;white-space:nowrap}
+.ov-tip strong{font-weight:600;font-variant-numeric:tabular-nums;padding-left:14px}
+@media (prefers-reduced-motion:reduce){.ov-tip{transition:opacity .01s}}
 
 /* Dos formas de verificar una cuenta: conectarla o código en la bio */
 .way-h{margin:12px 0 6px}

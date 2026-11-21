@@ -2100,12 +2100,22 @@ document.addEventListener("input", function (e) {
       line.appendChild(dot); line.appendChild(k); line.appendChild(v); tip.appendChild(line);
     });
     var bb = box.getBoundingClientRect(), eb = el.getBoundingClientRect();
+    var nueva = !tip.classList.contains("on");
+    var w = tip.offsetWidth, h = tip.offsetHeight, x, y;
+    if (el.classList.contains("ov-trow")) {               // filas: encima de la barra de esa fila
+      var bar = el.querySelector(".ov-ttrack") || el, rb = bar.getBoundingClientRect();
+      x = rb.left - bb.left; y = eb.top - bb.top - h - 8;
+      if (y < 4) y = eb.bottom - bb.top + 8;
+    } else {                                              // columnas: al lado, sin tapar la barra
+      var pb = (pl || el).getBoundingClientRect();
+      x = eb.right - bb.left + 10;
+      if (x + w > bb.width - 8) x = eb.left - bb.left - w - 10;
+      y = pb.top - bb.top + 6;
+    }
+    x = Math.max(8, Math.min(bb.width - w - 8, x)); y = Math.max(4, y);
+    if (nueva) { tip.style.transition = "opacity .16s"; tip.style.transform = "translate(" + x + "px," + y + "px)"; tip.offsetWidth; tip.style.transition = ""; }
+    else tip.style.transform = "translate(" + x + "px," + y + "px)";   // de una columna a otra, se desliza
     tip.classList.add("on");
-    var w = tip.offsetWidth, h = tip.offsetHeight;
-    var x = eb.left - bb.left + eb.width / 2 - w / 2, y = eb.top - bb.top + 8;
-    if (el.classList.contains("ov-trow")) y = eb.top - bb.top - h - 6;
-    tip.style.left = Math.max(8, Math.min(bb.width - w - 8, x)) + "px";
-    tip.style.top = Math.max(8, y) + "px";
   }
   document.addEventListener("mouseover", function (e) {
     var el = e.target.closest && e.target.closest(".v2-chart [data-tip]");
