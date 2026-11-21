@@ -2404,7 +2404,7 @@ def test_auto_featured_new_and_reopened():
         get(A.Campaign, new).created_at = datetime.utcnow() - timedelta(days=1)
         A.db.session.commit()
         cards = [(c, A.campaign_stats(c)) for c in A.active_campaigns()]
-        assert [(c.song, why) for c, _s, why in A.auto_featured(cards)] == [("Nueva", "nueva")]
+        assert [(c.song, why) for c, _s, why in A.auto_featured(cards)] == [("Nueva", "nueva"), ("Vieja", "")]   # todas las abiertas, las nuevas primero
         get(A.Campaign, old).spots_opened_at = datetime.utcnow()
         A.db.session.commit()
         cards = [(c, A.campaign_stats(c)) for c in A.active_campaigns()]

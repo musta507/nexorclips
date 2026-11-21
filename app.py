@@ -3807,8 +3807,9 @@ AUTO_FEATURE_DAYS = 10
 
 
 def auto_featured(cards, now=None):
-    """Destacado automático: las campañas nuevas y las que acaban de abrir plazas (de los últimos días), en carrusel.
-    [(campaña, stats, motivo)]. Si no hay ninguna, la más nueva."""
+    """Destacado automático: todas las campañas abiertas con plazas, en carrusel (lo pidió Mustapha: da igual su antigüedad).
+    Primero las nuevas y las que acaban de abrir plazas (últimos días, con su etiqueta) y luego el resto, de más nueva a más antigua.
+    [(campaña, stats, motivo)]. Si no hay ninguna con plazas, la más nueva."""
     now = now or datetime.utcnow()
     since = now - timedelta(days=AUTO_FEATURE_DAYS)
     out = []
@@ -3817,14 +3818,16 @@ def auto_featured(cards, now=None):
             continue
         opened = c.spots_opened_at if c.spots_opened_at and c.spots_opened_at >= since else None
         new = c.created_at and c.created_at >= since
+        why = ""
         if opened or new:
-            out.append((c, st, "plazas" if opened and (not new or opened > c.created_at + timedelta(hours=1)) else "nueva",
-                        max(d for d in (opened, c.created_at if new else None) if d)))
-    out.sort(key=lambda x: x[3], reverse=True)
+            why = "plazas" if opened and (not new or opened > c.created_at + timedelta(hours=1)) else "nueva"
+        fresh = max((d for d in (opened, c.created_at if new else None) if d), default=None)
+        out.append((c, st, why, bool(why), fresh or c.created_at or datetime.min))
+    out.sort(key=lambda x: (x[3], x[4]), reverse=True)
     if not out and cards:
-        c, st = next(((c, st) for c, st in cards if not c.full), cards[0])
-        out = [(c, st, "", c.created_at)]
-    return [(c, st, why) for c, st, why, _d in out[:5]]
+        c, st = cards[0]
+        return [(c, st, "")]
+    return [(c, st, why) for c, st, why, _f, _d in out]
 
 
 @app.route("/campanas")
