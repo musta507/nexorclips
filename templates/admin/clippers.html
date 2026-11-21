@@ -37,7 +37,7 @@
         <td data-label="Ganado" class="r tnum">{{ m.earned|earn }}</td>
         <td data-label="Pagado" class="r tnum">{{ m.paid|money }}</td>
         <td data-label="Disponible" class="r tnum"><b>{{ m.available|money }}</b>{% if m.debt %}<div class="small" style="color:var(--red)">Debe {{ m.debt|money }}</div>{% endif %}</td>
-        <td data-label="" class="r">
+        <td data-label="" class="r td-ic">
           {% if not u.is_admin %}
             <a class="btn sm soft ic-only" href="{{ url_for('admin_chat', uid=u.id) }}" title="Escribir a {{ u.name }}" aria-label="Escribir a {{ u.name }}">{{ icon("chat") }}<span>Escribir</span></a>
           {% endif %}
