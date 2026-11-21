@@ -3145,3 +3145,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):
 .acc-opt-t small{font-size:13px;line-height:1.35}
 .acc-opt-go{flex:none;font-size:22px;line-height:1;color:#9a9a9e}
 .acc-net b{flex:1}
+
+/* Pestañas de la campaña en el panel: el nombre a la misma altura lleve o no contador */
+.cn-tabs.seg a{display:inline-flex;align-items:center;gap:6px;line-height:1}
+.cn-tabs.seg .cn-n{flex:none}
