@@ -774,6 +774,21 @@ function pillAdoptar(root) {
   });
 }
 document.addEventListener("turbo:before-render", function (e) { pillAdoptar(e.detail && e.detail.newBody); });
+// Fluidez: pintar la pantalla nueva ocupa al navegador unas decenas de milésimas y, si pilla a la pastilla a medio
+// camino, la deja congelada un instante (se ve como un tirón). Se espera a que la pastilla casi haya llegado
+// (va muy rápida al principio: al 62 % del tiempo ya ha recorrido el 95 %) y entonces se pinta. Como mucho son 0,2 s.
+var PILL_HOLD = 0.62;
+document.addEventListener("turbo:before-render", function (e) {
+  if (!e.detail || typeof e.detail.resume !== "function" || e.defaultPrevented) return;
+  var falta = 0, ahora = Date.now();
+  document.querySelectorAll("[data-pill-nav]").forEach(function (box) {
+    var a = box._pillAt;
+    if (a && a.anim) falta = Math.max(falta, PILL_MS * PILL_HOLD - (ahora - a.t));
+  });
+  if (falta < 12) return;
+  e.preventDefault();
+  setTimeout(function () { e.detail.resume(); }, Math.min(falta, 220));
+});
 document.addEventListener("turbo:before-frame-render", function (e) { pillAdoptar(e.detail && e.detail.newFrame); });
 // La pestaña activa al llegar: la que coincide con la dirección (ruta igual y sus parámetros en la dirección);
 // si ninguna coincide, la que marca la página nueva. Si la pastilla no está ya ahí, se desliza hasta ella.
