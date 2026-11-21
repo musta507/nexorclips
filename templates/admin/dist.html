@@ -25,7 +25,7 @@
   <div class="ov-h"><h3>Cuentas</h3></div>
   {% for r in sm.accounts %}{% set a = r.a %}
   <div class="ds-arow">
-    <span class="ta-av">{% if a.avatar_url %}<img src="{{ a.avatar_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" data-hide-broken>{% endif %}<span class="ta-ini">{{ a.handle[:1]|upper }}</span><span class="ta-pl">{{ icon(a.platform) }}</span></span>
+    <span class="ta-av">{% if a.avatar_url %}<img src="{{ url_for('account_photo', aid=a.id) }}" alt="" loading="lazy" referrerpolicy="no-referrer" data-hide-broken>{% endif %}<span class="ta-ini">{{ a.handle[:1]|upper }}</span><span class="ta-pl">{{ icon(a.platform) }}</span></span>
     <a class="ds-h" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener"><b>@{{ a.handle }}</b><small class="muted">{{ PLATFORMS[a.platform] }}{% if a.last_post_at %} · último vídeo {{ a.last_post_at|ago }}{% elif a.last_scan_at %} · sin vídeos nuevos{% else %} · aún sin leer{% endif %}</small></a>
     <span class="cl-n tnum"><b>{{ r.clips }}</b><small>vídeos</small></span>
     <span class="cl-n tnum"><b>{{ r.views|short }}</b><small>vistas</small></span>

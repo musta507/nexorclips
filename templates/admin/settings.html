@@ -36,6 +36,7 @@
   <div class="inline" style="flex-wrap:wrap">
     <form method="post" action="{{ url_for('admin_refresh') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">↻ Actualizar vistas ahora</button></form>
     <a class="btn soft" href="{{ url_for('admin_probe') }}">Probar Apify con un enlace</a>
+    <a class="btn soft" href="{{ url_for('admin_probe_covers') }}">Probar portadas y fotos</a>
   </div>
 </div>
 

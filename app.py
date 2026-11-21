@@ -8411,6 +8411,10 @@ def clip_thumb(s):
 
 
 _cover_cache, _cover_lock = {}, threading.Lock()
+_img_cache = {}                                    # url -> (caduca, bytes, tipo): imágenes de redes servidas desde aquí
+COVER_DIAG = {}                                    # último intento, para la prueba del Panel técnico
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/124.0 Safari/537.36")
 
 
 def tiktok_cover(url):
@@ -8421,11 +8425,13 @@ def tiktok_cover(url):
         return hit[1]
     thumb = ""
     try:
-        r = requests.get("https://www.tiktok.com/oembed", params={"url": url}, timeout=6)
+        r = requests.get("https://www.tiktok.com/oembed", params={"url": url}, timeout=6,
+                         headers={"User-Agent": BROWSER_UA, "Accept": "application/json"})
+        COVER_DIAG["oembed"] = r.status_code
         if r.ok:
             thumb = (r.json() or {}).get("thumbnail_url") or ""
-    except Exception:  # noqa: BLE001
-        thumb = ""
+    except Exception as e:  # noqa: BLE001
+        COVER_DIAG["oembed"] = type(e).__name__
     with _cover_lock:
         _cover_cache[url] = (now + (6 * 3600 if thumb else 900), thumb)
         if len(_cover_cache) > 4000:
@@ -8434,17 +8440,83 @@ def tiktok_cover(url):
     return thumb
 
 
+def fetch_image(url):
+    """Descarga una imagen de una red (sin decir desde qué web se pide) y la guarda 6 horas. Así no la bloquean ni caduca a medias."""
+    if not url or not url.startswith("http"):
+        return None
+    now = time.time()
+    hit = _img_cache.get(url)
+    if hit and hit[0] > now:
+        return hit[1:] if hit[1] else None
+    data = None
+    try:
+        r = requests.get(url, timeout=8, headers={"User-Agent": BROWSER_UA, "Accept": "image/*"})
+        COVER_DIAG["img"] = r.status_code
+        ct = (r.headers.get("Content-Type") or "").split(";")[0]
+        if r.ok and ct.startswith("image/") and len(r.content) < 3_000_000:
+            data = (r.content, ct)
+    except Exception as e:  # noqa: BLE001
+        COVER_DIAG["img"] = type(e).__name__
+    with _cover_lock:
+        _img_cache[url] = (now + (6 * 3600 if data else 900),) + (data or (None, None))
+        if len(_img_cache) > 600:                  # como mucho unas 600 imágenes en memoria por proceso
+            for k in sorted(_img_cache, key=lambda k: _img_cache[k][0])[:200]:
+                _img_cache.pop(k, None)
+    return data
+
+
+def image_response(data):
+    body, ct = data
+    resp = Response(body, mimetype=ct)
+    resp.headers["Cache-Control"] = "private, max-age=21600"
+    return resp
+
+
 @app.route("/clip/<int:sid>/portada")
 @login_required
 def clip_cover(sid):
-    """Lleva a la portada fresca del clip (TikTok); si no se puede, a la que dio Apify, o nada."""
+    """Portada del clip servida desde la web: la fresca de TikTok y, si no, la que dio Apify. Si no hay, 404 (sale la de la campaña)."""
     s = db.session.get(Submission, sid) or abort(404)
-    th = (tiktok_cover(s.url) if s.platform == "tiktok" else "") or s.thumb_url
-    if not th:
+    for u in ((tiktok_cover(s.url) if s.platform == "tiktok" else ""), s.thumb_url):
+        data = fetch_image(u)
+        if data:
+            return image_response(data)
+    abort(404)
+
+
+@app.route("/cuenta-red/<int:aid>/foto")
+@login_required
+def account_photo(aid):
+    """Foto de perfil de una cuenta de red, servida desde la web (las de TikTok e Instagram no se dejan enlazar y caducan)."""
+    acc = db.session.get(CampaignAccount, aid) or abort(404)
+    data = fetch_image(acc.avatar_url)
+    if not data:
         abort(404)
-    resp = redirect(th)
-    resp.headers["Cache-Control"] = "private, max-age=3600"
-    return resp
+    return image_response(data)
+
+
+@app.route("/admin/probar-portadas")
+@admin_required
+def admin_probe_covers():
+    """Panel técnico: prueba con el último clip de TikTok si llegan la portada y la foto de la cuenta."""
+    if not is_tech():
+        abort(403)
+    s = Submission.query.filter_by(platform="tiktok").order_by(Submission.id.desc()).first()
+    if not s:
+        flash("No hay clips de TikTok para probar.", "error")
+        return redirect(url_for("admin_settings", _anchor="lectura"))
+    COVER_DIAG.clear()
+    _cover_cache.pop(s.url, None)
+    th = tiktok_cover(s.url)
+    if th:
+        _img_cache.pop(th, None)
+    img = fetch_image(th) if th else None
+    accs = CampaignAccount.query.filter_by(campaign_id=s.campaign_id, platform="tiktok").all()
+    with_photo = sum(1 for a in accs if a.avatar_url)
+    flash(f"Clip #{s.id}: TikTok respondió {COVER_DIAG.get('oembed', '—')} · portada {'sí' if th else 'no'}"
+          f" · imagen {'descargada' if img else 'no descargada'} ({COVER_DIAG.get('img', '—')})"
+          f" · cuentas de TikTok con foto guardada: {with_photo} de {len(accs)}.", "success" if img else "error")
+    return redirect(url_for("admin_settings", _anchor="lectura"))
 
 
 def dur_label(secs):

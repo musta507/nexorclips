@@ -3154,7 +3154,7 @@ def test_lectura_de_vistas_guarda_la_foto_de_la_cuenta():
 
 
 def test_portada_de_tiktok_fresca(monkeypatch):
-    """Las portadas de TikTok caducan: la web las pide frescas con el oEmbed y, si falla, usa la guardada."""
+    """Las portadas de TikTok caducan y no se dejan enlazar: la web las pide frescas y las sirve ella misma."""
     cid = make_campaign()
     a = client_for("a@test.com", tiktok="ana")
     post(a, f"/campana/{cid}", url=tt("ana", 1))
@@ -3162,12 +3162,18 @@ def test_portada_de_tiktok_fresca(monkeypatch):
         s = A.Submission.query.filter_by(campaign_id=cid).first()
         sid = s.id
         s.thumb_url = "https://vieja.example/portada.jpg"
+        acc = A.CampaignAccount.query.filter_by(campaign_id=cid).first()
+        acc.avatar_url = "https://p16.tiktokcdn.com/ana.jpg"
+        aid = acc.id
         A.db.session.commit()
+    got = []
     monkeypatch.setattr(A, "tiktok_cover", lambda url: "https://p16.tiktokcdn.com/fresca.jpg")
+    monkeypatch.setattr(A, "fetch_image", lambda url: got.append(url) or (b"JPG", "image/jpeg"))
     r = a.get(f"/clip/{sid}/portada")
-    assert r.status_code == 302 and r.location == "https://p16.tiktokcdn.com/fresca.jpg"
-    monkeypatch.setattr(A, "tiktok_cover", lambda url: "")
-    assert a.get(f"/clip/{sid}/portada").location == "https://vieja.example/portada.jpg"
+    assert r.status_code == 200 and r.data == b"JPG" and got[-1] == "https://p16.tiktokcdn.com/fresca.jpg"
+    assert a.get(f"/cuenta-red/{aid}/foto").data == b"JPG" and got[-1] == "https://p16.tiktokcdn.com/ana.jpg"
+    monkeypatch.setattr(A, "fetch_image", lambda url: None)
+    assert a.get(f"/clip/{sid}/portada").status_code == 404
 
 
 def test_anadir_mod_por_usuario():

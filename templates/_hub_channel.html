@@ -33,7 +33,7 @@
 <div class="card ta-list">{% for r in top.rows %}
   <a class="ta-row" href="{{ profile_url(r.platform, r.handle) }}" target="_blank" rel="noopener">
     <span class="ta-pos p{{ loop.index }}">{{ loop.index }}</span>
-    <span class="ta-av">{% if r.acc and r.acc.avatar_url %}<img src="{{ r.acc.avatar_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" data-hide-broken>{% endif %}<span class="ta-ini">{{ r.handle[:1]|upper }}</span><span class="ta-pl">{{ icon(r.platform) }}</span></span>
+    <span class="ta-av">{% if r.acc and r.acc.avatar_url %}<img src="{{ url_for('account_photo', aid=r.acc.id) }}" alt="" loading="lazy" referrerpolicy="no-referrer" data-hide-broken>{% endif %}<span class="ta-ini">{{ r.handle[:1]|upper }}</span><span class="ta-pl">{{ icon(r.platform) }}</span></span>
     <span class="ta-who"><b>@{{ r.handle }}</b><small class="muted">{{ r.clips }} clip{{ 's' if r.clips != 1 }} · mejor vídeo {{ r.best|short }}</small></span>
     <span class="ta-views tnum"><b>{{ r.views|short }}</b><small class="muted">vistas</small></span>
   </a>{% endfor %}</div>
