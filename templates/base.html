@@ -65,9 +65,10 @@
             {% endif %}
           </div>
           {% set mcs = mod_campaigns(current_user) %}{% if mcs %}<div class="pm-group"><a href="{{ url_for('modero') }}"><span class="mod-tag">MOD</span> Modero <small class="muted push">{{ mcs|length }} {{ "campaña" if mcs|length == 1 else "campañas" }}</small></a></div>{% endif %}
-          <div class="pm-group">
-            <a href="{{ url_for('terms') }}">{{ icon("doc") }} Términos</a>
-          </div>
+          <nav class="pm-legal" aria-label="Legal">
+            <a href="{{ url_for('terms') }}">Términos</a><a href="{{ url_for('privacy') }}">Privacidad</a><a href="{{ url_for('cookies_page') }}">Cookies</a><a href="{{ url_for('legal_notice') }}">Aviso legal</a>
+            <span>© {{ YEAR }} {{ APP_NAME }}</span>
+          </nav>
         </div>
       </details>
       </div>
@@ -138,7 +139,8 @@
     <div class="page">{% block content %}{% endblock %}</div>
   </main>
   {% endif %}
-  {% if not admin_page %}{% include "_footer.html" %}{% endif %}
+  {# Con sesión iniciada, lo legal va en el menú del perfil (lo pidió Mustapha); el pie solo sale en las páginas públicas #}
+  {% if not current_user.is_authenticated %}{% include "_footer.html" %}{% endif %}
   {% if ep not in ["support", "admin_chat", "admin_inbox"] and not admin_page %}
   {# En la web de clipper, el equipo ve el soporte igual que un clipper (sus mensajes del panel siguen en «Mensajes») #}
   {% set fab_n = 0 if current_user.is_admin else unread %}

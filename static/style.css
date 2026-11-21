@@ -3266,3 +3266,11 @@ table.cl-clips .mc-ct b,table.cl-clips .mc-ct small{max-width:100%}
 .hm-fire{display:inline-grid;vertical-align:-2px;margin-left:3px}.hm-fire svg{width:12px;height:12px}
 @media (max-width:640px){body.admin-shell .cr-bar{gap:6px;padding:8px 10px}body.admin-shell .cr-bar .btn{padding:0 12px;flex:none}body.admin-shell .cr-bar-name{display:none}}
 @media (max-width:640px){.ov-tg{display:flex;flex-wrap:nowrap;width:100%}.ov-tg > button{flex:1;padding:0 6px;font-size:12px;white-space:nowrap;justify-content:center}}
+
+/* Menú del perfil: enlaces legales al final (con sesión iniciada ya no hay pie de página) */
+.pm-legal{display:flex;flex-wrap:wrap;gap:4px 12px;padding:12px 14px 4px;border-top:1px solid var(--line);margin-top:6px;font-size:12px}
+.pm-legal a{color:var(--muted);text-decoration:none;padding:2px 0}
+.pm-legal a:hover{color:var(--ink);text-decoration:underline}
+.pm-legal span{flex-basis:100%;color:var(--muted)}
+/* Botón de chat: por debajo de 1520 px va solo el icono (una regla posterior volvía a enseñar el texto y salía cortado) */
+@media (max-width:1519px){.chat-fab .fab-lbl{display:none}}
