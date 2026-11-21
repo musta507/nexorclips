@@ -7,7 +7,8 @@
 <nav class="seg" id="pn-ranking" data-pill-nav data-turbo-permanent aria-label="Periodo">
   {% for k, v in periods.items() %}<a class="{% if period == k %}on{% endif %}" href="{{ url_for('ranking_page', p=k) }}">{{ v[0] }}</a>{% endfor %}
 </nav>
-{% if me %}<div class="card tight rank-me">Vas <b>#{{ me.pos }}</b> con <b class="tnum">{{ me.views|short }}</b> vistas y <b class="tnum">{{ me.earned|earn }}</b> ganados.</div>{% endif %}
+{% set lapso = "esta semana" if period == "semana" else "este mes" %}
+{% if me %}<div class="card tight rank-me">Vas <b>#{{ me.pos }}</b> con <b class="tnum">{{ me.views|short }}</b> vistas{% if me.earned is not none %} y <b class="tnum">{{ me.earned|earn }}</b> ganados{% else %} conseguidas {{ lapso }}{% endif %}.</div>{% endif %}
 <div class="table-card">
   {% if rows %}
   <ol class="rank">
@@ -16,12 +17,12 @@
       <span class="rank-pos{% if r.pos <= 3 %} top{{ r.pos }}{% endif %}">{{ r.pos }}</span>
       <span class="avatar sm">{% if r.user.avatar_url %}<img src="{{ r.user.avatar_url }}" alt="" referrerpolicy="no-referrer" loading="lazy">{% else %}{{ r.name[:1] }}{% endif %}</span>
       <span class="rank-name"><b>{{ r.name }}</b>{% if r.user.id == current_user.id %} <span class="small muted">(tú)</span>{% endif %}<span class="small muted">{{ r.clips }} clip{{ 's' if r.clips != 1 }}</span></span>
-      <span class="rank-val tnum"><b>{{ r.earned|earn }}</b><span class="small muted">{{ r.views|short }} vistas</span></span>
+      <span class="rank-val tnum">{% if r.earned is not none %}<b>{{ r.earned|earn }}</b><span class="small muted">{{ r.views|short }} vistas</span>{% else %}<b>{{ r.views|short }}</b><span class="small muted">vistas {{ lapso }}</span>{% endif %}</span>
     </li>
     {% endfor %}
   </ol>
   {% else %}
-  <div class="empty"><h3>Aún no hay nadie</h3><p class="muted">Cuando se aprueben clips en este periodo, saldrán aquí.</p></div>
+  <div class="empty"><h3>Aún no hay nadie</h3><p class="muted">{% if period == 'global' %}Cuando se aprueben clips, saldrán aquí.{% else %}Nadie ha sumado vistas {{ lapso }} todavía.{% endif %}</p></div>
   {% endif %}
 </div>
 {% endblock %}

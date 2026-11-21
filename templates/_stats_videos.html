@@ -3,7 +3,7 @@
 <div class="stats-help card tight">
   <div class="stats-help-top">
     <div><b>Verificar vistas</b><p class="small muted" style="margin:2px 0 0">Cuando un clip llega al mínimo, graba sus estadísticas y súbela aquí. Tienes {{ STATS_HOURS }} h o el clip no cobra.</p></div>
-    <button type="button" class="btn sm soft" data-open="stats-guide">📖 Cómo hacer la prueba</button>
+    <button type="button" class="btn sm soft" data-open="stats-guide">Cómo hacer la prueba</button>
   </div>
 </div>
 <dialog class="wd-dialog stats-guide" id="stats-guide" aria-labelledby="sg-title">
@@ -54,9 +54,9 @@
         <i><em style="width:{{ pct_left }}%"></em></i>
       </div>
     </header>
-    {% if s.stats_reason %}<p class="vv-note redo">⚠️ <b>Te pedimos otra grabación:</b> {{ s.stats_reason }}</p>{% endif %}
+    {% if s.stats_reason %}<p class="vv-note redo"><b>Te pedimos otra grabación:</b> {{ s.stats_reason }}</p>{% endif %}
     {% if s.stats_status == 'subiendo' %}<p class="vv-note redo">La subida anterior no terminó. Vuelve a subir el vídeo.</p>{% endif %}
-    {% if s.campaign.stats_note %}<p class="vv-note">🎯 <b>Qué se pide:</b> {{ s.campaign.stats_note }}</p>{% endif %}
+    {% if s.campaign.stats_note %}<p class="vv-note"><b>Qué se pide:</b> {{ s.campaign.stats_note }}</p>{% endif %}
     <div class="vv-up" data-bunny-upload data-csrf="{{ csrf_token() }}" data-prepare="{{ url_for('stats_video_prepare', sid=s.id) }}" data-done="{{ url_for('stats_video_done', sid=s.id) }}" data-title="Estadísticas clip {{ s.id }}" data-max="{{ 100 * 1024 * 1024 }}">
       <label class="vv-drop" data-drop>
         <input type="file" accept="video/*" data-file hidden>

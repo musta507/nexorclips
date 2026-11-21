@@ -39,7 +39,7 @@
     {% for l in ch.lessons %}
     <li>
       <a class="link" href="{{ url_for('admin_lesson', lid=l.id) }}"><b>{{ l.title }}</b></a>
-      <span class="small muted">{% if l.video_guid %}🎬 {{ l.video_status or 'vídeo' }}{% elif l.video_url %}🎬 enlace{% endif %}{% if l.file_name %} · 📎{% endif %}{% if not l.published %} · oculta{% endif %} · {{ stats[l.id] }} la vieron</span>
+      <span class="small muted">{% if l.video_guid %}Vídeo: {{ l.video_status or 'subido' }}{% elif l.video_url %}Vídeo por enlace{% endif %}{% if l.file_name %} · con archivo{% endif %}{% if not l.published %} · oculta{% endif %} · {{ stats[l.id] }} la vieron</span>
       <span class="inline push">
         {% for act, label in [("les_subir", "↑"), ("les_bajar", "↓")] %}
         <form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="{{ act }}"><input type="hidden" name="lesson" value="{{ l.id }}"><button class="btn sm soft" aria-label="{{ 'Subir' if act == 'les_subir' else 'Bajar' }} lección">{{ label }}</button></form>

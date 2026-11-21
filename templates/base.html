@@ -76,7 +76,7 @@
   {% if admin_page %}
   {% set nc = admin_counts() %}
   <div class="adm">
-    <aside class="adm-side" aria-label="Secciones del panel">
+    <aside class="adm-side" id="adm-side" aria-label="Secciones del panel">
       <nav class="adm-nav">
         {% set camp_eps = ["admin_campaigns", "admin_campaign", "admin_campaign_form", "admin_campaign_review", "admin_campaign_requests", "admin_campaign_clippers", "admin_campaign_channels", "admin_campaign_support", "admin_campaign_mods", "admin_campaign_invites", "admin_campaign_content"] %}
         {% for group, links in [
@@ -111,6 +111,16 @@
         <div class="adm-group adm-foot"><a class="adm-link" href="{{ url_for('index') }}">{{ icon("out") }}<span>Ver la web como clipper</span></a></div>
       </nav>
     </aside>
+    {# En el móvil: barra de abajo con lo principal y «Más», que abre el menú completo #}
+    <nav class="adm-bar" aria-label="Menú del panel">
+      {% set bar_eps = [] %}
+      {% for e, eps, label, ico, n in [("admin_home", ["admin_home"], "Resumen", "grid", 0), ("admin_campaigns", camp_eps + ["admin_clips", "admin_requests"], "Campañas", "flag", 0), ("admin_inbox", ["admin_inbox", "admin_chat"], "Mensajes", "chat", nc.messages)] %}
+      {% if admin_can(e) %}{% if bar_eps.extend(eps) %}{% endif %}<a class="adm-bi{% if ep in eps %} on{% endif %}" href="{{ url_for(e) }}"{% if ep in eps %} aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span>{% if n %}<b class="adm-n">{{ n }}</b>{% endif %}</a>{% endif %}
+      {% endfor %}
+      {% set more_n = (nc.payouts or 0) + (nc.tech or 0) + (nc.creators_alert or 0) %}
+      <button type="button" class="adm-bi{% if ep not in bar_eps %} on{% endif %}" data-adm-more aria-expanded="false" aria-controls="adm-side">{{ icon("menu") }}<span>Más</span>{% if more_n %}<b class="adm-n">{{ more_n }}</b>{% endif %}</button>
+    </nav>
+    <div class="adm-shade" data-adm-shade hidden></div>
     <main class="adm-main" id="contenido">
     {% with msgs = get_flashed_messages(with_categories=true) %}
       {% set undo = pop_undo() %}{% if msgs or undo %}<div class="toasts" aria-live="polite">{% for cat, m in msgs %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}" data-toast>{{ m }}<button type="button" class="toast-x" aria-label="Cerrar aviso" data-toast-x>×</button></div>{% endfor %}

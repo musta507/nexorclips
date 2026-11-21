@@ -1,6 +1,6 @@
 {# Contenido de un canal de la campaña #}
 {% from "_icons.html" import icon, av %}
-<div class="hub-title"><span class="hub-emo big">{{ chan.emoji or "#" }}</span><h2>{{ chan.name }}</h2></div>
+<div class="hub-title"><span class="hub-emo big">{{ icon(chan_icon(chan)) }}</span><h2>{{ chan.name }}</h2></div>
 {% if chan.kind == 'rules' and camp.rules_text %}
 <article class="card post pinned-sys"><header class="post-head"><span class="avatar sm team"><span class="logo-mark"></span></span><div><b>Reglas de la campaña</b><span class="small muted">Léelas antes de publicar</span></div></header>
   <div class="post-body">{{ camp.rules_text|linkify }}</div></article>
@@ -48,7 +48,7 @@
     <h3>{{ c.title }}</h3>
     <p class="small muted">En tu país: <time datetime="{{ c.starts_at|iso }}" data-local data-local-show data-local-full>{{ when_madrid(c.starts_at) }}</time> · {{ c.minutes }} min</p>
     {% if c.notes %}<p class="small">{{ c.notes }}</p>{% endif %}
-    <p class="small muted">🔔 Te avisamos 30 min antes por la campanita (y en el móvil si tienes los avisos activados).</p>
+    <p class="small muted">Te avisamos 30 min antes por la campanita (y en el móvil si tienes los avisos activados).</p>
   </div>
   {% if c.link %}<a class="btn {{ 'accent' if live else 'soft' }} sm call-join" href="{{ c.link }}" target="_blank" rel="noopener">{{ "Entrar ahora" if live else "Enlace de la llamada" }}</a>{% endif %}
 </article>

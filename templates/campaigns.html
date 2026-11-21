@@ -2,6 +2,7 @@
 {% from "_icons.html" import icon, budget %}
 {% block title %}Campañas · {{ APP_NAME }}{% endblock %}
 {% block content %}
+<h1 class="sr-only">Campañas</h1>
 {% if slides %}
 <div class="fcar" data-carousel{% if slides|length > 1 %} data-autoplay{% endif %} aria-roledescription="carrusel" aria-label="Campañas destacadas">
   <div class="fcar-track" data-car-track>

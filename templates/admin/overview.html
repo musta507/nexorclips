@@ -33,7 +33,7 @@
   <section class="v2-card v2-chart" data-ov-charts>
     <div class="v2-ch-head"><h3 class="sr-only" data-ov-title>Vistas y dinero</h3>
       <div class="an-tg ov-tg" role="tablist" aria-label="Qué gráfica ver">
-        {% for k, label in [("vm", "Vistas y dinero"), ("cpm", "Coste por 1.000"), ("net", "Por red"), ("top", "Campañas"), ("act", "Clippers activos"), ("clips", "Clips")] %}
+        {% for k, label in [("vm", "Vistas y dinero"), ("cpm", "Coste por 1.000"), ("top", "Campañas")] %}
         <button type="button" role="tab" class="{{ 'on' if loop.first }}" data-ov-tab="{{ k }}" aria-selected="{{ 'true' if loop.first else 'false' }}">{{ label }}</button>
         {% endfor %}
       </div>
@@ -76,19 +76,6 @@
     </div>
 
     {# 3 · Vistas por red #}
-    <div class="ov-pane" data-ov-pane="net" hidden>
-      {% set colors = {"tiktok": "#0e0e0e", "instagram": "#e1306c", "youtube": "#ff0033", "facebook": "#1877f2"} %}
-      <div class="v2-legend">{% for k in charts.nets %}<span><i style="background:{{ colors[k] }}"></i>{{ PLATFORMS[k] }}</span>{% endfor %}</div>
-      {% set rows = charts.net %}{% set tots = [] %}{% for r in rows %}{% set t = namespace(v=0) %}{% for k in charts.nets %}{% set t.v = t.v + r[k] %}{% endfor %}{% set _ = tots.append(t.v) %}{% endfor %}{% set mx = (tots|max) or 1 %}
-      <div class="v2-bars">{{ ylabels(mx, "short") }}
-        <div class="v2-plot">{{ grid() }}
-          {% for r in rows %}{% set tl = [] %}{% for k in charts.nets %}{% set _ = tl.append([PLATFORMS[k], r[k]|int|short, colors[k]]) %}{% endfor %}<div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms" data-tip-t="{{ r.label }}" data-tip='{{ tl|tojson }}'><div class="v2-trio"><span class="ovb ovs" style="height:{{ (tots[loop.index0] / mx * 100)|round(1) }}%">{% for k in charts.nets|reverse %}{% if r[k] %}<b style="flex:{{ r[k] }};background:{{ colors[k] }}"></b>{% endif %}{% endfor %}</span></div><small>{{ r.label }}</small></div>{% endfor %}
-        </div>
-      </div>
-      {% set tot_all = tots|sum %}<p class="ov-foot">{% for k in charts.nets %}{{ PLATFORMS[k] }} {{ ((rows|map(attribute=k)|sum) / tot_all * 100)|round|int if tot_all else 0 }} %{% if not loop.last %} · {% endif %}{% else %}Aún no hay vistas en este periodo.{% endfor %}</p>
-    </div>
-
-    {# 4 · Campañas que más vistas traen #}
     <div class="ov-pane" data-ov-pane="top" hidden>
       <div class="v2-legend"><span><i style="background:#f08a24"></i>Vistas en el periodo</span></div>
       {% set mx = (charts.top|map(attribute=1)|max) if charts.top else 1 %}
@@ -99,37 +86,6 @@
       </div>
     </div>
 
-    {# 5 · Clippers activos #}
-    <div class="ov-pane" data-ov-pane="act" hidden>
-      <div class="v2-legend"><span><i style="background:#14b8a6"></i>Clippers que subieron algún clip</span></div>
-      {% set rows = charts.act %}{% set mx = (rows|map(attribute="n")|max) or 1 %}
-      <div class="v2-bars">{{ ylabels(mx, "int") }}
-        <div class="v2-plot">{{ grid() }}
-          {% for r in rows %}<div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms" data-tip-t="{{ r.label }}" data-tip='{{ [["Clippers activos", r.n, "#14b8a6"]]|tojson }}'><div class="v2-trio"><span class="ovb" style="height:{{ (r.n / mx * 100)|round(1) }}%;background:#14b8a6"></span></div><small>{{ r.label }}</small></div>{% endfor %}
-        </div>
-      </div>
-      <p class="ov-foot">{{ rows|map(attribute="n")|max }} clippers en la mejor {{ {"day": "jornada", "week": "semana", "month": "mes"}[unit] }} del periodo</p>
-    </div>
-
-    {# 6 · Clips (la de antes) #}
-    <div class="ov-pane" data-ov-pane="clips" hidden>
-    <div class="v2-ch-head" hidden><h3>Clips por {{ {"day": "día", "week": "semana", "month": "mes"}[unit] }}</h3><span class="small muted">{{ {"day": "Últimos 7 días", "week": "Últimas 6 semanas", "month": "Último año"}[unit] }}</span></div>
-    <div class="v2-legend"><span><i class="l1"></i>Enviados</span><span><i class="l2"></i>Aprobados</span><span><i class="l3"></i>Rechazados</span></div>
-    {% set top = (weeks|map(attribute="sent")|max) or 1 %}
-    <div class="v2-bars">
-      <div class="v2-yax">{% for i in range(4, -1, -1) %}<span>{{ ((top * i / 4)|round|int) }}</span>{% endfor %}</div>
-      <div class="v2-plot">
-        {% for i in range(5) %}<i class="g" style="bottom:{{ i * 25 }}%"></i>{% endfor %}
-        {% for w in weeks %}
-        <div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms" data-tip-t="{{ w.label }}" data-tip='{{ [["Enviados", w.sent, "#8b6cf0"], ["Aprobados", w.ok, "#14b8a6"], ["Rechazados", w.ko, "#c4c5cb"]]|tojson }}'><div class="v2-trio">
-          <span class="b1" style="height:{{ (w.sent / top * 100)|round(1) }}%"></span>
-          <span class="b2" style="height:{{ (w.ok / top * 100)|round(1) }}%"></span>
-          <span class="b3" style="height:{{ (w.ko / top * 100)|round(1) }}%"></span>
-        </div><small>{{ w.label }}</small></div>
-        {% endfor %}
-      </div>
-    </div>
-    </div>
   </section>
   <section class="v2-card v2-act">
     <div class="v2-ch-head"><h3>Actividad reciente</h3><a class="btn soft sm" href="{{ url_for('admin_activity') }}">Ver todo</a></div>

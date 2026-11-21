@@ -541,7 +541,7 @@ function iniciarChat(chat) {
   function showFile() {
     var f = fileIn && fileIn.files && fileIn.files[0];
     if (fileBadge) fileBadge.hidden = !f;
-    if (fileName) { fileName.hidden = !f; fileName.textContent = f ? "📷 " + f.name + " · pulsa Enviar" : ""; }
+    if (fileName) { fileName.hidden = !f; fileName.textContent = f ? f.name + " · pulsa Enviar" : ""; }
   }
   function scrollDown() { log.scrollTop = log.scrollHeight; }
   function add(m) {
@@ -2145,3 +2145,23 @@ document.addEventListener("close", function (e) {           // al cerrar, la pr�
   if (!dlg.matches || !dlg.matches("[data-acc-steps]")) return;
   dlg.querySelectorAll("[data-acc-step]").forEach(function (s) { s.hidden = s.getAttribute("data-acc-step") !== "elegir"; });
 }, true);
+
+// Panel en el móvil: «Más» abre el menú completo en una hoja desde abajo; se cierra al tocar fuera, con Esc o al cambiar de página
+(function () {
+  function set(open) {
+    var side = document.getElementById("adm-side"), shade = document.querySelector("[data-adm-shade]"), btn = document.querySelector("[data-adm-more]");
+    if (!side) return;
+    side.classList.toggle("open", open);
+    if (shade) shade.hidden = !open;
+    if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) { var a = side.querySelector(".adm-link.on, .adm-link"); if (a) a.focus({ preventScroll: true }); }
+  }
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest) return;
+    if (e.target.closest("[data-adm-more]")) { var s = document.getElementById("adm-side"); set(!(s && s.classList.contains("open"))); }
+    else if (e.target.closest("[data-adm-shade]")) set(false);
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") set(false); });
+  document.addEventListener("turbo:before-visit", function () { set(false); });
+  document.addEventListener("turbo:before-cache", function () { set(false); });
+})();

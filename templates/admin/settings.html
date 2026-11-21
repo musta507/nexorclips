@@ -73,7 +73,7 @@
   </div>
   {% if search.check.at %}<div class="small" style="display:grid;gap:3px">
     <span>Última: <time data-local data-local-full datetime="{{ search.check.at }}Z">{{ search.check.at }}</time> · {{ search.check.ok }} de {{ search.check.accounts }} cuentas leídas · {% if search.check.issues %}<b style="color:var(--red-ink)">{{ search.check.issues|length }} cosas raras</b>{% else %}<b style="color:var(--green-ink)">todo cuadra</b>{% endif %}</span>
-    {% for kind, who, what, url in search.check.issues %}<span>{{ {'falta': '⚠️', 'borrado': '🗑️', 'cuenta': '❌'}.get(kind, '•') }} <b>{{ who }}</b> · {{ what }}{% if url %} · <a class="link" href="{{ url }}" target="_blank" rel="noopener">ver</a>{% endif %}</span>{% endfor %}
+    {% for kind, who, what, url in search.check.issues %}<span>{{ {'falta': 'Falta', 'borrado': 'Borrado', 'cuenta': 'Cuenta'}.get(kind, '•') }} · <b>{{ who }}</b> · {{ what }}{% if url %} · <a class="link" href="{{ url }}" target="_blank" rel="noopener">ver</a>{% endif %}</span>{% endfor %}
   </div>{% endif %}
 
   <details{% if search.apify.rows %} open{% endif %}><summary class="small link">Qué ha gastado Apify (últimas llamadas)</summary>

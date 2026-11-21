@@ -82,7 +82,7 @@
 
 <div class="hm-two">
   <section>
-    <h2 class="hm-h">🔥 Clips de la semana</h2>
+    <h2 class="hm-h">{{ icon("flame") }} Clips de la semana</h2>
     <div class="card hm-card">
       {% if week_clips %}
       <table class="hm-week">
@@ -106,11 +106,11 @@
     </div>
   </section>
   <section>
-    <h2 class="hm-h">🏆 Clasificación <a class="hm-all" href="{{ url_for('ranking_page', p='global') }}">Ver completa →</a></h2>
+    <h2 class="hm-h">{{ icon("trophy") }} Clasificación <a class="hm-all" href="{{ url_for('ranking_page', p='global') }}">Ver completa →</a></h2>
     <div class="card hm-card hm-rank">
       <div class="hm-me">
         <div class="hm-me-top"><span class="hm-lbl">Tu puesto</span><span class="hm-me-val tnum"><b>{{ rank.earned|money }}</b><small>ganado</small></span></div>
-        <div class="hm-me-pos"><b class="tnum">#{{ rank.pos|num }}</b>{% if rank.total > 1 %}<span class="hm-top">top {{ rank.pct }} %</span>{% endif %}{% if rank.up %}<span class="hm-up" title="Puestos que has subido desde la última lectura">▲ {{ rank.up|num }}{% if rank.fire %} 🔥{% endif %}</span>{% endif %}</div>
+        <div class="hm-me-pos"><b class="tnum">#{{ rank.pos|num }}</b>{% if rank.total > 1 %}<span class="hm-top">top {{ rank.pct }} %</span>{% endif %}{% if rank.up %}<span class="hm-up" title="Puestos que has subido desde la última lectura">▲ {{ rank.up|num }}{% if rank.fire %}<span class="hm-fire">{{ icon("flame") }}</span>{% endif %}</span>{% endif %}</div>
         <div class="hm-bar"><span style="width:{{ rank.bar }}%"></span></div>
         <span class="small muted">{% if rank.goal %}Te faltan <b>{{ rank.need|money }}</b> para el {{ "top " ~ rank.goal if rank.goal_top else "#" ~ rank.goal }}{% elif rank.pos == 1 %}¡Vas primero!{% else %}Consigue tu primer clip aprobado para empezar a subir.{% endif %}</span>
       </div>

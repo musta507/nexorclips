@@ -987,6 +987,18 @@ DEFAULT_CHANNELS = [
     ("Contenido y herramientas", [("🏆", "Cuentas TOP", "top"), ("💡", "Ideas virales", "posts"),
                                   ("📁", "Recursos", "resources"), ("🔥", "Vídeos virales", "winners")]),
 ]
+CHANNEL_ICONS = {"rules": "doc", "calls": "phone", "top": "trophy", "resources": "folder", "winners": "trend"}
+
+
+def chan_icon(chan):
+    """Icono de línea de un canal del hub (ya no se pintan emojis): según su tipo y, en los de publicaciones, su nombre."""
+    kind = getattr(chan, "kind", "") or ""
+    if kind in CHANNEL_ICONS:
+        return CHANNEL_ICONS[kind]
+    name = (getattr(chan, "name", "") or "").lower()
+    return "bulb" if "idea" in name else "megaphone"
+
+
 CHANNEL_KINDS = {"posts": "Publicaciones", "calls": "Llamadas", "top": "Cuentas TOP (automático)",
                  "winners": "Vídeos virales (automático)"}   # los que se pueden crear a mano (normas y recursos ya vienen)
 
@@ -2905,7 +2917,7 @@ def call_reminders(now=None):
         call.reminded = True
         ch = Channel.query.filter_by(campaign_id=call.campaign_id, kind="calls", deleted_at=None).first()
         for m in CampaignMember.query.filter_by(campaign_id=call.campaign_id, status="aceptada").all():
-            notify_user(m.user_id, "llamada", f"📞 La llamada empieza en 30 min",
+            notify_user(m.user_id, "llamada", "La llamada empieza en 30 min",
                         f"{call.title} · {call.campaign.song}. Entra desde el canal de llamadas.",
                         f"/campana/{call.campaign_id}" + (f"?canal={ch.id}" if ch else ""), camp_id=call.campaign_id)
             n += 1
@@ -3364,7 +3376,7 @@ def static_url(filename):
 @app.context_processor
 def inject_globals():
     return {"csrf_token": csrf_token, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
-            "PLATFORMS": PLATFORMS, "cover_src": cover_src, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
+            "PLATFORMS": PLATFORMS, "cover_src": cover_src, "chan_icon": chan_icon, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year, "now_utc": datetime.utcnow(),
@@ -4478,7 +4490,7 @@ def delete_clip(sid):
 
 
 # ---------------------------------------------------------------- ranking
-RANK_PERIODS = {"semana": ("Esta semana", 7), "mes": ("Este mes", 30), "global": ("Siempre", 0)}
+RANK_PERIODS = {"global": ("Siempre", 0), "mes": ("Este mes", 30), "semana": ("Esta semana", 7)}
 
 
 def mask_name(name):
@@ -4487,22 +4499,32 @@ def mask_name(name):
     return parts[0][:16] + (f" {parts[1][0].upper()}." if len(parts) > 1 and parts[1] else "")
 
 
-def ranking(period="semana", limit=50):
-    days = RANK_PERIODS.get(period, RANK_PERIODS["semana"])[1]
-    q = (db.session.query(Submission.user_id, db.func.sum(Submission.views), db.func.sum(Submission.earned),
-                          db.func.count(Submission.id))
-         .join(User, User.id == Submission.user_id)
-         .filter(Submission.status == "aprobado", User.is_banned.is_(False), User.is_admin.is_(False)))
+def ranking(period="global", limit=50):
+    """Clasificación. «Siempre»: por dinero ganado (la misma del Inicio). «Esta semana» y «Este mes»: por las vistas
+    conseguidas DENTRO del periodo (vistas de ahora menos la última lectura anterior al periodo), no por clips enviados."""
+    days = RANK_PERIODS.get(period, RANK_PERIODS["global"])[1]
+    base_q = (db.session.query(Submission.user_id).join(User, User.id == Submission.user_id)
+              .filter(Submission.status == "aprobado", User.is_banned.is_(False), User.is_admin.is_(False)))
     if days:
-        q = q.filter(Submission.created_at >= datetime.utcnow() - timedelta(days=days))
+        since = datetime.utcnow() - timedelta(days=days)
+        before = (db.session.query(ViewSnapshot.submission_id.label("sid"), db.func.max(ViewSnapshot.views).label("v0"))
+                  .filter(ViewSnapshot.taken_at < since).group_by(ViewSnapshot.submission_id).subquery())
+        gained = db.func.sum(db.case((Submission.views > db.func.coalesce(before.c.v0, 0),
+                                      Submission.views - db.func.coalesce(before.c.v0, 0)), else_=0))
+        q = (base_q.outerjoin(before, before.c.sid == Submission.id)
+             .with_entities(Submission.user_id, gained, db.literal(None), db.func.count(Submission.id))
+             .group_by(Submission.user_id).having(gained > 0).order_by(gained.desc(), Submission.user_id))
+    else:
+        q = (base_q.with_entities(Submission.user_id, db.func.sum(Submission.views), db.func.sum(Submission.earned),
+                                  db.func.count(Submission.id))
+             .group_by(Submission.user_id)                  # por dinero ganado; a igualdad, por vistas
+             .order_by(db.func.sum(Submission.earned).desc(), db.func.sum(Submission.views).desc()))
     def load():
-        return [tuple(r) for r in
-                q.group_by(Submission.user_id)             # por dinero ganado; a igualdad, por vistas
-                .order_by(db.func.sum(Submission.earned).desc(), db.func.sum(Submission.views).desc()).limit(limit).all()]
+        return [tuple(r) for r in q.limit(limit).all()]
     rows = ttl_cache(f"ranking:{period}:{limit}", 120, load)
     users = {u.id: u for u in User.query.filter(User.id.in_([r[0] for r in rows])).all()} if rows else {}
     return [{"pos": i + 1, "user": users[r[0]], "name": mask_name(users[r[0]].name), "views": int(r[1] or 0),
-             "earned": cents(r[2]), "clips": r[3]} for i, r in enumerate(rows) if r[0] in users]
+             "earned": cents(r[2]) if r[2] is not None else None, "clips": r[3]} for i, r in enumerate(rows) if r[0] in users]
 
 
 RANK_GOALS = (1000, 500, 250, 100, 50, 25, 10)      # «te faltan X para el top N»
@@ -4575,8 +4597,8 @@ def snapshot_ranks():
 @app.route("/ranking")
 @login_required
 def ranking_page():
-    period = request.args.get("p", "semana")
-    period = period if period in RANK_PERIODS else "semana"
+    period = request.args.get("p", "global")             # por defecto, la misma clasificación que enseña el Inicio
+    period = period if period in RANK_PERIODS else "global"
     rows = ranking(period)
     me = next((r for r in rows if r["user"].id == current_user.id), None)
     return render_template("ranking.html", rows=rows, period=period, me=me, periods=RANK_PERIODS)
@@ -5217,7 +5239,7 @@ def overview_v2(camps, cards, live, todo, general, p="30"):
         if len(cur) > 60:                                   # minigráfica: como mucho 60 puntos
             k_ = -(-len(cur) // 60); cur = [sum(cur[i:i + k_]) for i in range(0, len(cur), k_)]
         cards_k.append({"key": key, "label": label, "icon": ico, "money": money_, "value": now_, "spark": cur if len(cur) > 1 else [0] + cur,
-                        "change": round((now_ - prev) / prev * 100, 1) if prev else None})
+                        "change": round((now_ - prev) / prev * 100, 1) if prev and max(now_, prev) >= 10 else None})   # con menos de 10, el % engaña
     MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
     weeks = []
     for a0, a1 in buckets:
@@ -7345,7 +7367,7 @@ def admin_campaign_channels(cid):
                 n = 0
                 if act == "llamada_nueva" and request.form.get("notify"):
                     for m in CampaignMember.query.filter_by(campaign_id=cid, status="aceptada").all():
-                        notify_user(m.user_id, "llamada", f"📞 Nueva llamada en {camp.song}",
+                        notify_user(m.user_id, "llamada", f"Nueva llamada en {camp.song}",
                                     f"{title} · {when_madrid(when)} (hora de España). Te avisamos 30 min antes.",
                                     url_for("campaign", cid=cid, canal=ch.id))
                         n += 1
@@ -7371,7 +7393,7 @@ def admin_campaign_channels(cid):
             n = 0
             if request.form.get("notify"):
                 for m in CampaignMember.query.filter_by(campaign_id=cid, status="aceptada").all():
-                    notify_user(m.user_id, "anuncio", f"{ch.emoji} {ch.name} · {camp.song}".strip(), body[:200] or "Nueva imagen",
+                    notify_user(m.user_id, "anuncio", f"{ch.name} · {camp.song}", body[:200] or "Nueva imagen",
                                 url_for("campaign", cid=cid, canal=ch.id))
                     n += 1
             audit("publicacion_canal", f"«{camp.song}» · {ch.name}")
@@ -8385,7 +8407,7 @@ def notice_data():
                 .order_by(Message.id.desc()).first())
         who, url = f"Equipo {APP_NAME}", url_for("support")
         title = f"Equipo {APP_NAME} te ha escrito" if n == 1 else f"Tienes {n} mensajes del equipo {APP_NAME}"
-    text_ = last.body or ("📷 Foto" if last.image_mime else "")
+    text_ = last.body or ("Foto" if last.image_mime else "")
     body = text_ if len(text_) <= 140 else text_[:137].rstrip() + "…"
     return {"unread": n, "id": last.id, "title": title, "who": who, "body": body, "url": url,
             "ago": ago(last.created_at)}

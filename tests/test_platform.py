@@ -1,3 +1,4 @@
+import re
 """Pruebas automáticas de ClipProfit Hispano. Ejecutar con:  python -m pytest -q"""
 import io
 import os
@@ -2921,7 +2922,7 @@ def test_home_shows_global_rank_even_without_earnings():
         r2 = A.my_rank(u)
         assert r2["up"] == 25 and r2["fire"]
     page = nuevo.get("/").get_data(as_text=True)
-    assert "▲ 25" in page and "🔥" in page and f"#{r['pos']}" in page
+    assert "▲ 25" in page and "hm-fire" in page and f"#{r['pos']}" in page
 
 
 def test_week_table_is_filled_with_older_clips_when_the_week_is_short():
@@ -3108,7 +3109,7 @@ def test_admin_summary_stats_chart():
         an = A.admin_analytics(30)
         assert an["totals"]["views"] == 800 and an["totals"]["spent"] == 1.5
     html = admin.get("/admin").get_data(as_text=True)
-    assert "Dinero repartido" in html and "Clips por semana" in html and "Actividad reciente" in html and "Clip aprobado" in html
+    assert "Dinero repartido" in html and "Actividad reciente" in html and "Clip aprobado" in html
     assert "Para hacer" not in html
 
 
@@ -3125,19 +3126,20 @@ def test_admin_campaigns_filter_in_page():
 def test_resumen_periodos():
     """El Resumen del panel se puede ver por 7 días, 30 días o desde siempre."""
     c = client_for("admin@test.com")
-    textos = {"": "Últimas 6 semanas", "?p=7": "Últimos 7 días", "?p=todo": "Último año", "?p=raro": "Últimas 6 semanas"}
-    for p, t in textos.items():
+    marcado = {"": "Últimos 30 días", "?p=7": "Últimos 7 días", "?p=todo": "Desde siempre", "?p=raro": "Últimos 30 días"}
+    for p, t in marcado.items():
         r = c.get("/admin" + p)
-        assert r.status_code == 200 and t in r.get_data(as_text=True)
+        assert r.status_code == 200 and re.search(r'<a class="on" href="[^"]*">' + t + "</a>", r.get_data(as_text=True))
 
 
 def test_resumen_graficas_para_probar():
-    """La tarjeta de gráficas del Resumen trae las seis pestañas y sus datos se calculan sin fallar."""
+    """La tarjeta de gráficas del Resumen trae sus tres pestañas y sus datos se calculan sin fallar."""
     c = client_for("admin@test.com")
     for p in ("", "?p=7", "?p=todo"):
         page = c.get("/admin" + p).get_data(as_text=True)
-        for k in ("vm", "cpm", "net", "top", "act", "clips"):
+        for k in ("vm", "cpm", "top"):
             assert f'data-ov-pane="{k}"' in page
+        assert 'data-ov-pane="clips"' not in page
 
 
 def test_lectura_de_vistas_guarda_la_foto_de_la_cuenta():
@@ -3350,3 +3352,33 @@ def test_delete_all_real_test_users_keeps_demo_and_admins():
     post(c, "/admin/ajustes/borrar-usuarios", confirm="ELIMINAR")
     with A.app.app_context():
         assert A.User.query.filter_by(email="c@test.com").first()
+
+
+def test_ranking_periods_count_views_gained_in_the_period():
+    """«Esta semana» ordena por las vistas conseguidas en los últimos 7 días, no por los clips enviados esa semana."""
+    from datetime import datetime, timedelta
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a, b = client_for("a@test.com", tiktok="ana"), client_for("b@test.com", tiktok="beto")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    post(b, f"/campana/{cid}", url=tt("beto", 2))
+    with A.app.app_context():
+        sa = A.Submission.query.filter_by(author="ana").one()
+        sb = A.Submission.query.filter_by(author="beto").one()
+        ids = (sa.id, sb.id)
+    for sid in ids:
+        post(admin, f"/admin/envio/{sid}/aprobar")
+    with A.app.app_context():
+        old = datetime.utcnow() - timedelta(days=20)
+        sa, sb = A.db.session.get(A.Submission, ids[0]), A.db.session.get(A.Submission, ids[1])
+        sa.created_at = sb.created_at = old                       # los dos clips son de hace 20 días
+        sa.views, sb.views = 5000, 9000
+        A.db.session.add(A.ViewSnapshot(submission_id=sa.id, views=1000, taken_at=datetime.utcnow() - timedelta(days=10)))   # Ana: +4.000 esta semana
+        A.db.session.add(A.ViewSnapshot(submission_id=sb.id, views=8900, taken_at=datetime.utcnow() - timedelta(days=10)))   # Beto: +100
+        A.db.session.commit()
+        A._ttl.clear() if hasattr(A, "_ttl") else None
+        week = A.ranking("semana", limit=49)
+        assert [(r["user"].email, r["views"], r["earned"]) for r in week] == [("a@test.com", 4000, None), ("b@test.com", 100, None)]
+    page = a.get("/ranking?p=semana").get_data(as_text=True)
+    assert "vistas esta semana" in page
+    assert 'class="on" href="/ranking?p=global"' in a.get("/ranking").get_data(as_text=True)

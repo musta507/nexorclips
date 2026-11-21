@@ -68,7 +68,7 @@
             <form method="post" action="{{ url_for('remove_account', cid=camp.id, aid=a.id) }}" class="acc-del" data-confirm="¿Quitar @{{ a.handle }} de esta campaña? Ya no se buscarán clips nuevos en esa cuenta. Los clips ya aprobados no se tocan."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="mc-btn" aria-label="Quitar @{{ a.handle }} de la campaña" title="Quitar de la campaña">{{ icon("trash") }}</button></form></div>
           {% if a.status == 'aceptada' %}{% set age_h = ((now_utc - (a.decided_at or a.created_at)).total_seconds() / 3600)|int %}{% if age_h < 72 %}{% set day = age_h // 24 + 1 %}
           <div class="warm" role="status">
-            <span class="warm-ico" aria-hidden="true">🔥</span>
+            <span class="warm-ico" aria-hidden="true">{{ icon("flame") }}</span>
             <div class="warm-txt"><b>Calentando la cuenta · día {{ day }} de 3</b><span class="small">Los primeros 3 días usa la cuenta como un usuario normal: mira vídeos del tema, da likes y comenta. Así TikTok, Instagram y YouTube la tratan bien cuando empieces a publicar.</span>
               <span class="warm-bar" aria-hidden="true"><span style="width:{{ [((age_h / 72) * 100)|round|int, 4]|max }}%"></span></span></div>
           </div>{% endif %}{% endif %}
