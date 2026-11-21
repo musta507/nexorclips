@@ -3280,8 +3280,12 @@ def test_add_account_by_web_adds_it_verified(monkeypatch):
         assert acc.status == "aceptada" and acc.bio_verified
 
 
-def test_add_account_by_web_without_keys_says_soon():
+def test_add_account_by_web_without_keys_goes_to_the_network():
     cid = make_campaign()
     a = client_for("a@test.com", verify=False)
-    r = a.get(f"/conectar/instagram?cid={cid}", follow_redirects=True)
+    r = a.get(f"/conectar/instagram?cid={cid}")
+    assert r.status_code == 302 and r.headers["Location"].startswith("https://www.instagram.com/oauth/authorize")
+    with a.session_transaction() as s:
+        state = s["api_state"]["s"]
+    r = a.get(f"/conectar/instagram/vuelta?code=c&state={state}", follow_redirects=True)
     assert "Muy pronto" in r.get_data(as_text=True)

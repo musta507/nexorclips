@@ -5608,9 +5608,10 @@ def admin_dist(did):
 @login_required
 def api_connect(platform):
     """Conectar una cuenta con la API oficial: manda a la red a pedir permiso."""
-    if platform not in official.SCOPES or not api_ready(platform):
-        flash(f"Muy pronto podrás conectar {official.LABELS.get(platform, 'esa red')}. Mientras tanto, añade tus cuentas con el código en la bio.", "info")
-        return redirect(safe_next(request.args.get("next", "")) or url_for("account", _anchor="redes"))
+    if platform not in official.SCOPES:
+        abort(404)
+    # Aunque aún no estén las claves, se manda a la página real de la red (lo pidió Mustapha): sin claves, la red
+    # enseña su propio error. Al volver, el aviso de «muy pronto» lo da api_callback.
     state = secrets.token_urlsafe(16)
     session["api_state"] = {"s": state, "p": platform, "next": safe_next(request.args.get("next", "")) or "",
                             "cid": request.args.get("cid", type=int)}       # desde «Añadir cuenta» de una campaña
@@ -5625,6 +5626,9 @@ def api_callback(platform):
     back = st.get("next") or url_for("account", _anchor="redes")
     if platform not in official.SCOPES or st.get("p") != platform or not secrets.compare_digest(st.get("s", ""), request.args.get("state", "")):
         flash("La conexión ha caducado. Vuelve a intentarlo.", "error")
+        return redirect(back)
+    if not api_ready(platform):
+        flash(f"Muy pronto podrás conectar {official.LABELS[platform]}. Mientras tanto, añade tus cuentas con el código en la bio.", "info")
         return redirect(back)
     if request.args.get("error") or not request.args.get("code"):
         flash("No se ha conectado la cuenta: no se dio permiso.", "info")
