@@ -63,7 +63,7 @@
       </div>
     </section>
 
-    {% if api_mode() != 'off' %}
+    {% if True %}
     <section id="redes" class="card set-sec">
       <header><h2>Redes conectadas</h2><p class="small muted">Conecta tus cuentas con la API oficial de cada red: se verifican al momento (sin código en la bio) y tus vistas se cuentan directamente de la red. Solo podemos leer, nunca publicar.</p></header>
       {% if tokens %}<div class="set-rows">{% for t in tokens %}
@@ -71,7 +71,7 @@
           <span class="inline" style="gap:6px">{% if t.status != 'ok' and api_ready(t.platform) %}<a class="btn sm accent" href="{{ url_for('api_connect', platform=t.platform) }}" data-turbo="false">Reconectar</a>{% endif %}
           <form method="post" action="{{ url_for('api_disconnect', tid=t.id) }}" data-confirm="¿Desconectar @{{ t.handle }}?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm soft">Desconectar</button></form></span></div>
       {% endfor %}</div>{% endif %}
-      <div class="api-btns">{% for p in ("tiktok", "instagram", "youtube", "facebook") %}{% if api_ready(p) %}<a class="btn soft api-btn" href="{{ url_for('api_connect', platform=p) }}" data-turbo="false">{{ icon(p) }} Conectar {{ OFFICIAL.LABELS[p] }}</a>{% endif %}{% endfor %}</div>
+      <div class="api-btns">{% for p in ("tiktok", "instagram", "youtube", "facebook") %}<a class="btn soft api-btn" href="{{ url_for('api_connect', platform=p) }}" data-turbo="false">{{ icon(p) }} Conectar {{ OFFICIAL.LABELS[p] }}</a>{% endfor %}</div>
       <p class="small muted">Instagram tiene que ser una cuenta profesional (de creador o empresa) y Facebook, una página (no un perfil personal). <a class="link" href="{{ url_for('data_deletion_page') }}">Cómo borrar tus datos</a>.</p>
     </section>
     {% endif %}

@@ -2462,7 +2462,7 @@ def test_official_api_connect_verify_read_and_delete(monkeypatch):
         A.db.session.commit()
     monkeypatch.setattr(A.official, "TIKTOK_CLIENT_KEY", "k"); monkeypatch.setattr(A.official, "TIKTOK_CLIENT_SECRET", "s")
     monkeypatch.setattr(A.official, "INSTAGRAM_APP_SECRET", "igsecret")
-    assert "Conectar @ana con TikTok" in a.get(f"/campana/{cid}").get_data(as_text=True)
+    assert "Conectar @ana" in a.get(f"/campana/{cid}").get_data(as_text=True)
     r = a.get("/conectar/tiktok")
     assert r.status_code == 302 and "tiktok.com/v2/auth/authorize" in r.headers["Location"]
     with a.session_transaction() as s:

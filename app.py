@@ -5607,7 +5607,7 @@ def admin_dist(did):
 def api_connect(platform):
     """Conectar una cuenta con la API oficial: manda a la red a pedir permiso."""
     if platform not in official.SCOPES or not api_ready(platform):
-        flash("La conexión con esa red aún no está disponible.", "info")
+        flash(f"Muy pronto podrás conectar {official.LABELS.get(platform, 'esa red')}. Mientras tanto, tus cuentas se verifican con el código en la bio.", "info")
         return redirect(url_for("account", _anchor="redes"))
     state = secrets.token_urlsafe(16)
     session["api_state"] = {"s": state, "p": platform, "next": safe_next(request.args.get("next", "")) or ""}
