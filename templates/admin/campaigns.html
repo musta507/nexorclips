@@ -19,7 +19,7 @@
     <tbody id="camp-rows">
     {% for c, st in cards %}
     <tr data-search="{{ c.song }} {{ c.artist }}" data-f="{{ c.status }}"{% if filt and c.status != filt %} class="f-out"{% endif %}>
-      <td data-label="Campaña"><a class="adm-camp-cell" href="{{ url_for('admin_campaign', cid=c.id) }}">{% set _t, lqip = cover_meta(c) %}<span class="dthumb sm"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="44" height="44" loading="lazy">{% endif %}</span><span><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:10px">Destacada</span>{% endif %}<span class="small muted" style="display:block">{{ c.artist }}</span></span></a></td>
+      <td data-label="Campaña"><a class="adm-camp-cell" href="{{ url_for('admin_campaign', cid=c.id) }}">{% set _t, lqip = cover_meta(c) %}<span class="dthumb sm"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(c) %}<img src="{{ cover_src(c, 160) }}" alt="" width="44" height="44" loading="lazy">{% endif %}</span><span><b>{{ c.song }}</b>{% if c.featured %} <span class="admin-tag" style="font-size:12px">Destacada</span>{% endif %}<span class="small muted" style="display:block">{{ c.artist }}</span></span></a></td>
       <td data-label="Estado"><span class="status {{ c.status }}">{{ c.status|capitalize }}</span>{% if c.full %} <span class="small muted">· Plazas completas</span>{% endif %}
         {% set pd = pend.get(c.id, {}) %}{% if pd.get("clips") or pd.get("requests") or pd.get("accounts") %}<div class="cn-pend">
           {% if pd.get("clips") %}<a href="{{ url_for('admin_campaign_review', cid=c.id) }}"><b>{{ pd.clips }}</b> por revisar</a>{% endif %}

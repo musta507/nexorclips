@@ -26,7 +26,7 @@
       <tbody>
       {% for u, m, n in rows %}
       <tr class="row-link{% if u.is_banned %} row-flag{% endif %}" data-row-link="{{ url_for('admin_clipper', uid=u.id) }}" data-search="{{ u.name }} {{ u.email }} {{ u.tiktok_handles }} {{ u.instagram_handles }} {{ u.youtube_handles }} {{ u.facebook_handles or '' }}">
-        <td data-label="Clipper"><div class="who-cell">{{ av(u) }}<div><a class="link" href="{{ url_for('admin_clipper', uid=u.id) }}"><b>{{ u.name }}</b></a>{% if u.is_admin %} <span class="admin-tag" style="font-size:10px">Admin</span>{% endif %}{% if u.is_banned %} <span class="flag">Bloqueado</span>{% endif %}
+        <td data-label="Clipper"><div class="who-cell">{{ av(u) }}<div><a class="link" href="{{ url_for('admin_clipper', uid=u.id) }}"><b>{{ u.name }}</b></a>{% if u.is_admin %} <span class="admin-tag" style="font-size:12px">Admin</span>{% endif %}{% if u.is_banned %} <span class="flag">Bloqueado</span>{% endif %}
           <div class="small muted" title="{{ u.email }} · desde {{ u.created_at|date }}">{{ u.email }}</div>
           {% if u.is_banned and u.ban_reason %}<div class="small" style="color:var(--red)">{{ u.ban_reason }}</div>{% endif %}</div></div></td>
         <td data-label="Última vez" class="small nowrap" title="{{ u.last_seen_at|date if u.last_seen_at else '' }}"><span class="seen-dot {{ u.last_seen_at|seen_level }}"></span> {{ u.last_seen_at|seen }}</td>

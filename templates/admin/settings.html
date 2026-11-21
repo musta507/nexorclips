@@ -49,7 +49,7 @@
   {% if search.stats.day %}<span class="small">Hoy: <b>{{ search.stats.ok }}</b> cuentas leídas con yt-dlp{% if search.stats.fail %} · <b style="color:var(--red-ink)">{{ search.stats.fail }} fallaron</b> (se usó Apify){% endif %}</span>
   {% for e in search.stats.errors[:3] %}<span class="small muted">· {{ e }}</span>{% endfor %}{% endif %}
 
-  <form method="post" action="{{ url_for('admin_search', accion='ahorro') }}" class="form-stack" style="gap:8px;border:1px solid var(--line);border-radius:14px;padding:12px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <form method="post" action="{{ url_for('admin_search', accion='ahorro') }}" class="form-stack" style="gap:8px;border:1px solid var(--line);border-radius:12px;padding:12px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <b class="small">Gasto de Apify</b>
     <label class="check small" style="align-items:flex-start"><input type="checkbox" name="ytdlp_stats" value="1"{% if search.stats_on %} checked{% endif %}> <span>Usar las vistas que ya trae yt-dlp al mirar el perfil (gratis) y pedir a Apify solo las que falten. <span class="muted">Con miles de clips, leerlos todos con Apify cuesta cientos de dólares al mes.</span></span></label>
     <label class="small" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">Tope diario de Apify <input name="apify_daily_max" value="{{ search.daily_max }}" inputmode="numeric" style="width:100px" aria-label="Tope diario de resultados de Apify"> resultados <span class="muted">(≈ {{ "%.2f"|format(search.daily_max * 0.004) }} $/día · 0 = sin tope) · hoy van <b>{{ search.used_today }}</b></span></label>
@@ -149,7 +149,7 @@
       <p class="small" style="font-weight:600;color:{{ 'var(--money-ink)' if app_test.success else 'var(--red-ink)' }}">{{ "✓ Funciona: Whop ha aceptado el pago desde la empresa del creador." if app_test.success else "✗ No ha funcionado. Mira la respuesta de Whop:" }}</p>
       {% for title, ok, code, body in app_test.steps %}
         <details {% if not ok %}open{% endif %}><summary class="small"><b>{{ title }}</b> · {{ "OK" if ok else "Error" }} ({{ code }})</summary>
-          <pre class="small selectable" style="white-space:pre-wrap;word-break:break-all;background:var(--soft);padding:10px;border-radius:10px;margin-top:6px">{{ body }}</pre></details>
+          <pre class="small selectable" style="white-space:pre-wrap;word-break:break-all;background:var(--soft);padding:10px;border-radius:12px;margin-top:6px">{{ body }}</pre></details>
       {% endfor %}
     {% endif %}
   {% endif %}
