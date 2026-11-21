@@ -2050,17 +2050,17 @@ document.addEventListener("click", function (e) {
     if (on) { var c = p.cloneNode(true); p.parentNode.replaceChild(c, p); }   // copia nueva: las animaciones vuelven a empezar
   });
   var t = box.querySelector("[data-ov-title]"); if (t) t.textContent = b.textContent.trim();
-  try { sessionStorage.setItem("ov-tab", k); } catch (_) {}
 });
-document.addEventListener("turbo:load", function () {
-  var k; try { k = sessionStorage.getItem("ov-tab"); } catch (_) {}
-  var b = k && document.querySelector("[data-ov-charts] [data-ov-tab='" + k + "']");
-  if (!b || b.classList.contains("on")) return;
-  var box = b.closest("[data-ov-charts]");
-  box.querySelectorAll("[data-ov-tab]").forEach(function (x) { x.classList.toggle("on", x === b); x.setAttribute("aria-selected", x === b ? "true" : "false"); });
-  box.querySelectorAll("[data-ov-pane]").forEach(function (p) { p.hidden = p.getAttribute("data-ov-pane") !== k; });
-  var t = box.querySelector("[data-ov-title]"); if (t) t.textContent = b.textContent.trim();
-});
+// Al guardar la página para «atrás» y al entrar, la tarjeta vuelve siempre a «Vistas y dinero»:
+// así la pestaña marcada y la gráfica que se ve nunca se desajustan.
+function ovReset() {
+  document.querySelectorAll("[data-ov-charts]").forEach(function (box) {
+    var first = box.querySelector("[data-ov-tab]");
+    box.querySelectorAll("[data-ov-tab]").forEach(function (x) { x.classList.toggle("on", x === first); x.setAttribute("aria-selected", x === first ? "true" : "false"); });
+    box.querySelectorAll("[data-ov-pane]").forEach(function (p, i) { p.hidden = i !== 0; });
+  });
+}
+document.addEventListener("turbo:before-cache", ovReset);
 
 // Mods: al elegir un usuario de la lista se guarda quién es (por si hay dos con el mismo nombre)
 document.addEventListener("input", function (e) {
