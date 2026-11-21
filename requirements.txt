@@ -9,3 +9,4 @@ pillow==12.3.0
 Flask-Compress==1.17
 cryptography==50.0.1
 yt-dlp[default,curl-cffi]>=2025.1.1
+sentry-sdk[flask]==2.75.0

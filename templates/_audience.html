@@ -1,6 +1,6 @@
 {# Audiencia (país, edad y sexo). Necesita `aud` = audience_for(clips). Sin datos, explica cuándo saldrá. #}
 <section class="card aud">
-  <div class="aud-h"><h3>Audiencia</h3>{% if aud %}<span class="small muted">Media de {{ aud.clips }} {{ "clip" if aud.clips == 1 else "clips" }}, según sus vistas</span>{% endif %}</div>
+  <div class="aud-h"><h3>Audiencia</h3>{% if aud and aud.demo %}<span class="status pendiente" title="Estas cifras son inventadas: salen de los datos de demostración, no de las redes.">Datos de demostración</span>{% endif %}{% if aud %}<span class="small muted">Media de {{ aud.clips }} {{ "clip" if aud.clips == 1 else "clips" }}, según sus vistas</span>{% endif %}</div>
   {% if aud %}
   <div class="aud-grid">
     {% for key, title in [("country", "Ubicación"), ("age", "Edad"), ("gender", "Sexo")] %}

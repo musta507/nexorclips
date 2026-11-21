@@ -62,6 +62,14 @@ app.config.update(
                         "image/svg+xml", "application/manifest+json"],
     COMPRESS_MIN_SIZE=600,
 )
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+if SENTRY_DSN:                                    # aviso automático de errores: página, usuario y línea
+    try:
+        import sentry_sdk
+        sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=0, send_default_pii=False,
+                        environment="produccion" if PRODUCTION else "pruebas")
+    except Exception:  # noqa: BLE001  (si falta la librería o la clave está mal, la web arranca igual)
+        SENTRY_DSN = ""
 from flask_compress import Compress
 Compress(app)                                     # envía las páginas comprimidas: cargan mucho antes con datos móviles
 db_url = (os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_PRIVATE_URL")
@@ -2493,7 +2501,9 @@ def audience_for(subs):
     if not subs:
         return {}
     ids = [s.id for s in subs]
-    per_sub = {r.submission_id: json.loads(r.data or "{}") for r in AudienceStat.query.filter(AudienceStat.submission_id.in_(ids))}
+    aud_rows = AudienceStat.query.filter(AudienceStat.submission_id.in_(ids)).all()
+    per_sub = {r.submission_id: json.loads(r.data or "{}") for r in aud_rows}
+    demo_only = bool(aud_rows) and all(r.demo for r in aud_rows)      # todo lo que hay es inventado (datos de demostración)
     handles = {(s.platform, (s.author or "").lower()) for s in subs}
     per_acc = {(r.platform, r.handle.lower()): json.loads(r.data or "{}") for r in
                AudienceStat.query.filter(AudienceStat.submission_id.is_(None)).all() if (r.platform, r.handle.lower()) in handles}
@@ -2515,6 +2525,7 @@ def audience_for(subs):
            for k in acc if weight[k]}
     if out:
         out["clips"] = sources
+        out["demo"] = demo_only
     return out
 
 
@@ -3162,6 +3173,30 @@ def before():
     return None
 
 
+SLOW_MS = int(os.environ.get("SLOW_MS", "1500"))          # a partir de aquí una página cuenta como lenta
+SLOW_SKIP = {"static", "admin_backup", "admin_refresh", "admin_probe", "admin_probe_covers", "clip_cover", "account_photo",
+             "api_callback", "google_callback"}             # descargas, lecturas a mano y cosas que dependen de fuera
+_slow, _slow_lock = [], threading.Lock()                   # (cuándo, pantalla, ms) de las últimas 24 h, en este proceso
+
+
+def note_slow(endpoint, ms):
+    now = time.time()
+    with _slow_lock:
+        _slow[:] = [x for x in _slow if now - x[0] < 86400][-400:]
+        _slow.append((now, endpoint, int(ms)))
+
+
+def slow_pages():
+    """[(pantalla, veces, peor tiempo en ms)] de las últimas 24 h en este proceso, de la más repetida a la menos."""
+    now, agg = time.time(), {}
+    with _slow_lock:
+        rows = [x for x in _slow if now - x[0] < 86400]
+    for _t, ep, ms in rows:
+        n, worst = agg.get(ep, (0, 0))
+        agg[ep] = (n + 1, max(worst, ms))
+    return sorted(((ep, n, w) for ep, (n, w) in agg.items()), key=lambda r: -r[1])
+
+
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
        "font-src 'self'; img-src 'self' data: https:; connect-src 'self' https://video.bunnycdn.com; "
        "frame-src https://www.tiktok.com https://www.instagram.com https://www.youtube-nocookie.com "
@@ -3181,7 +3216,10 @@ def security_headers(resp):
             and resp.mimetype == "text/html"):
         resp.status_code = 422
     if getattr(g, "_t0", None):     # cuánto tarda el servidor en preparar la página (sin contar internet)
-        resp.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - g._t0) * 1000:.0f}"
+        ms = (time.perf_counter() - g._t0) * 1000
+        resp.headers["Server-Timing"] = f"app;dur={ms:.0f}"
+        if ms >= SLOW_MS and request.endpoint not in SLOW_SKIP:
+            note_slow(request.endpoint or request.path, ms)
     if PRODUCTION:
         resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return resp
@@ -3563,7 +3601,7 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for("index"))
     mode = "registro" if request.args.get("modo") == "registro" else "entrar"
-    return render_template("login.html", google_ready=bool(GOOGLE_CLIENT_ID), dev_login=DEV_LOGIN, mode=mode,
+    return render_template("login.html", google_ready=bool(GOOGLE_CLIENT_ID), dev_login=DEV_LOGIN, mode=mode, mail_ready=mail_ready(),
                            form_email=session.pop("form_email", ""), form_name=session.pop("form_name", ""))
 
 
@@ -3576,6 +3614,110 @@ def too_many_fails(key):
     tries = [t for t in _login_fails.get(key, []) if now - t < 900]
     _login_fails[key] = tries
     return len(tries) >= 10
+
+
+# ---------------------------------------------------------------- correo y «he olvidado mi contraseña»
+# Se enciende solo al poner en Railway SMTP_HOST, SMTP_USER, SMTP_PASS y MAIL_FROM (cualquier servicio de correo vale).
+# Sin esas variables no se enseña el enlace ni existe la página: nada cambia.
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or 587)
+SMTP_USER = os.environ.get("SMTP_USER", "").strip()
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
+MAIL_FROM = os.environ.get("MAIL_FROM", "").strip()
+RESET_HOURS = 1
+
+
+def mail_ready():
+    return bool(SMTP_HOST and MAIL_FROM)
+
+
+def send_mail(to, subject, body):
+    """Envía un correo de texto sin hacer esperar a la página (va en un hilo aparte). Si falla, queda en el registro."""
+    if not mail_ready():
+        return False
+
+    def run():
+        import smtplib
+        from email.message import EmailMessage
+        msg = EmailMessage()
+        msg["From"], msg["To"], msg["Subject"] = f"{APP_NAME} <{MAIL_FROM}>", to, subject
+        msg.set_content(body)
+        try:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
+                smtp.starttls()
+                if SMTP_USER:
+                    smtp.login(SMTP_USER, SMTP_PASS)
+                smtp.send_message(msg)
+        except Exception:  # noqa: BLE001
+            log.exception("No se pudo enviar el correo")
+    threading.Thread(target=run, daemon=True).start()
+    return True
+
+
+def _reset_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(app.secret_key, salt="recuperar-clave")
+
+
+def reset_token(user):
+    """Enlace de un solo uso: lleva un trozo de la contraseña cifrada actual, así deja de valer en cuanto se cambia."""
+    return _reset_serializer().dumps({"u": user.id, "h": (user.password_hash or "")[-16:]})
+
+
+def reset_user(token):
+    from itsdangerous import BadData
+    try:
+        data = _reset_serializer().loads(token, max_age=RESET_HOURS * 3600)
+    except BadData:
+        return None
+    user = db.session.get(User, data.get("u") or 0)
+    if not user or not user.password_hash or user.is_banned or (user.password_hash or "")[-16:] != data.get("h"):
+        return None
+    return user
+
+
+@app.route("/recuperar", methods=["GET", "POST"])
+def recover():
+    if not mail_ready():
+        abort(404)
+    if request.method == "POST":
+        ip = "r:" + (request.remote_addr or "")
+        if too_many_fails(ip):
+            flash("Demasiados intentos. Espera unos minutos y vuelve a probar.", "error")
+            return redirect(url_for("recover"))
+        _login_fails.setdefault(ip, []).append(time.time())
+        email = (request.form.get("email") or "").strip().lower()
+        user = User.query.filter_by(email=email).first() if email else None
+        if user and user.password_hash and not user.is_banned:
+            link = (BASE_URL or request.host_url.rstrip("/")) + url_for("recover_set", token=reset_token(user))
+            send_mail(user.email, f"Cambia tu contraseña de {APP_NAME}",
+                      f"Hola, {user.name}:\n\nPara poner una contraseña nueva, abre este enlace (vale {RESET_HOURS} hora):\n\n{link}\n\n"
+                      "Si no lo has pedido tú, no hagas nada: tu contraseña sigue siendo la misma.")
+        # Siempre el mismo mensaje: no se dice si el correo existe o no
+        flash("Si ese correo tiene una cuenta con contraseña, te hemos enviado un enlace para cambiarla. Mira también en spam.", "ok")
+        return redirect(url_for("login"))
+    return render_template("recover.html", step="pedir")
+
+
+@app.route("/recuperar/<token>", methods=["GET", "POST"])
+def recover_set(token):
+    if not mail_ready():
+        abort(404)
+    user = reset_user(token)
+    if not user:
+        flash("El enlace ha caducado o ya se usó. Pide otro.", "error")
+        return redirect(url_for("recover"))
+    if request.method == "POST":
+        password = request.form.get("password") or ""
+        if len(password) < 8:
+            flash("La contraseña tiene que tener al menos 8 caracteres.", "error")
+            return redirect(url_for("recover_set", token=token))
+        user.password_hash = generate_password_hash(password)
+        audit("clave_cambiada", user.email)
+        db.session.commit()
+        flash("Contraseña cambiada. Ya puedes entrar.", "ok")
+        return redirect(url_for("login"))
+    return render_template("recover.html", step="nueva", token=token)
 
 
 @app.route("/login/correo", methods=["POST"])
@@ -4985,14 +5127,16 @@ def review_campaign_ids():
     def load():
         camps = {c.id: c for c in Campaign.query.all()}
         ask_stats = bunny_ready()
-        out = []
+        out, rule = [], {}                                 # (campaña, red) -> (mínimo, tarifa): se calcula una vez, no por clip
         for cid, plat, views, st in (db.session.query(Submission.campaign_id, Submission.platform, Submission.views,
                                                        Submission.stats_status).filter(Submission.status == "pendiente")):
             camp = camps.get(cid)
             if not camp:
                 continue
-            low = camp.min_for(plat)
-            if low and (views or 0) / 1_000_000 * camp.rate_for(plat) + 1e-9 < low:
+            if (cid, plat) not in rule:
+                rule[(cid, plat)] = (camp.min_for(plat), camp.rate_for(plat))
+            low, rate = rule[(cid, plat)]
+            if low and (views or 0) / 1_000_000 * rate + 1e-9 < low:
                 continue                                   # contando vistas
             if ask_stats and st != "enviado":
                 continue                                   # falta el vídeo de estadísticas
@@ -5316,6 +5460,13 @@ def overview_v2(camps, cards, live, todo, general, p="30"):
 
 
 def admin_analytics(days=30):
+    """Las cifras del Resumen, guardadas 2 minutos: con decenas de miles de clips recalcularlas en cada visita costaba
+    casi medio segundo. Se devuelve una copia para que nadie cambie lo guardado."""
+    import copy
+    return copy.deepcopy(ttl_cache(f"admin_analytics_{days}", 120, lambda: _admin_analytics(days)))
+
+
+def _admin_analytics(days=30):
     """Gráfica del resumen: envíos, aprobados, dinero repartido, pagado y clippers nuevos, día a día (consultas ligeras)."""
     today = datetime.utcnow().date()
     start = today - timedelta(days=days - 1)
@@ -6820,6 +6971,16 @@ def owed_total():
 def tech_alerts():
     """Avisos técnicos para el panel técnico: [(nivel, título, texto)]. Nivel: error · aviso."""
     out = []
+    slow = slow_pages()
+    if slow:
+        ep, n, worst = slow[0]
+        out.append(("aviso", f"Páginas lentas en las últimas 24 h: {sum(r[1] for r in slow)}",
+                    f"La que más: «{ep}», {n} {'vez' if n == 1 else 'veces'}, hasta {worst / 1000:.1f} s".replace(".", ",")
+                    + (f". También: {', '.join(r[0] for r in slow[1:4])}." if len(slow) > 1 else ".")))
+    if PRODUCTION and not SENTRY_DSN:
+        out.append(("aviso", "Sin aviso automático de errores", "Crea una cuenta gratuita en Sentry y pon su dirección en la variable SENTRY_DSN de Railway: cada fallo te llegará con página, usuario y línea."))
+    if PRODUCTION and not mail_ready():
+        out.append(("aviso", "Sin correo: no se puede recuperar la contraseña", "Pon SMTP_HOST, SMTP_USER, SMTP_PASS y MAIL_FROM en Railway (de cualquier servicio de correo) y aparecerá «He olvidado mi contraseña» en el acceso."))
     if not viewcounter.APIFY_TOKEN:
         out.append(("error", "Falta la clave de Apify", "Sin APIFY_TOKEN no se leen las vistas de los clips."))
     li_ = legal_info()

@@ -3438,3 +3438,49 @@ def test_cover_does_not_wait_when_outside_downloads_are_busy(monkeypatch):
     finally:
         A._outside.release(); A._outside.release()
     assert a.get(f"/clip/{sid}/portada").status_code == 404 and calls
+
+
+def test_password_recovery_by_email(monkeypatch):
+    """Con el correo configurado: se pide el enlace, llega por correo, vale una sola vez y no delata si el correo existe."""
+    sent = []
+    monkeypatch.setattr(A, "SMTP_HOST", "smtp.test"); monkeypatch.setattr(A, "MAIL_FROM", "hola@test.com")
+    monkeypatch.setattr(A, "send_mail", lambda to, subject, body: sent.append((to, body)) or True)
+    c = A.app.test_client()
+    from werkzeug.security import generate_password_hash
+    with A.app.app_context():
+        A.db.session.add(A.User(email="ana@test.com", name="Ana", password_hash=generate_password_hash("clave-vieja-1")))
+        A.db.session.commit()
+    monkeypatch.setattr(A, "_login_fails", {})
+    c = A.app.test_client()
+    with c.session_transaction() as se:
+        se["_csrf"] = "t"
+    assert "He olvidado mi contraseña" in c.get("/login").get_data(as_text=True)
+    r1 = post(c, "/recuperar", email="nadie@test.com").get_data(as_text=True)
+    r2 = post(c, "/recuperar", email="ana@test.com").get_data(as_text=True)
+    assert "te hemos enviado un enlace" in r1 and "te hemos enviado un enlace" in r2 and len(sent) == 1
+    link = re.search(r"https?://\S+/recuperar/\S+", sent[0][1]).group(0)
+    path = "/" + link.split("/", 3)[3]
+    assert "Pon una contraseña nueva" in c.get(path).get_data(as_text=True)
+    assert "al menos 8" in post(c, path, password="corta").get_data(as_text=True)
+    assert "Contraseña cambiada" in post(c, path, password="clave-nueva-2").get_data(as_text=True)
+    assert "ha caducado o ya se usó" in c.get(path, follow_redirects=True).get_data(as_text=True)     # un solo uso
+    assert "incorrectos" in post(c, "/login/correo", email="ana@test.com", password="clave-vieja-1").get_data(as_text=True)
+    c2 = A.app.test_client()
+    with c2.session_transaction() as se:
+        se["_csrf"] = "t"
+    ok = c2.post("/login/correo", data={"_csrf": "t", "email": "ana@test.com", "password": "clave-nueva-2"})
+    assert ok.status_code == 302 and "/login" not in ok.headers["Location"]
+
+
+def test_password_recovery_hidden_without_mail():
+    c = A.app.test_client()
+    assert "He olvidado mi contraseña" not in c.get("/login").get_data(as_text=True)
+    assert c.get("/recuperar").status_code == 404
+
+
+def test_slow_pages_are_noted_for_the_tech_panel(monkeypatch):
+    monkeypatch.setattr(A, "_slow", [])
+    A.note_slow("admin_home", 2300); A.note_slow("admin_home", 1800); A.note_slow("my_clips", 1600)
+    assert A.slow_pages()[0] == ("admin_home", 2, 2300)
+    with A.app.test_request_context():
+        assert any("Páginas lentas" in t for _lvl, t, _b in A.tech_alerts())

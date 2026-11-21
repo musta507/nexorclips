@@ -1,0 +1,37 @@
+{% from "_icons.html" import icon, logo with context %}<!doctype html>
+<html lang="es">
+<head>
+{% include "_head.html" %}
+  <title>Recuperar contraseña · {{ APP_NAME }}</title>
+</head>
+<body class="auth-bg">
+  <main class="auth">
+    {{ logo() }}
+    <div class="auth-card">
+      {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}">{{ m }}</div>{% endfor %}{% endwith %}
+      {% if step == "pedir" %}
+      <div>
+        <h1>Recupera tu contraseña</h1>
+        <p class="muted" style="margin-top:6px">Escribe el correo de tu cuenta y te enviamos un enlace para poner una nueva.</p>
+      </div>
+      <form method="post" action="{{ url_for('recover') }}" class="form-stack">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="field"><label for="rc-email">Correo</label><input id="rc-email" name="email" type="email" autocomplete="email" required></div>
+        <button class="btn accent block">Enviarme el enlace</button>
+      </form>
+      {% else %}
+      <div>
+        <h1>Pon una contraseña nueva</h1>
+        <p class="muted" style="margin-top:6px">Mínimo 8 caracteres.</p>
+      </div>
+      <form method="post" action="{{ url_for('recover_set', token=token) }}" class="form-stack">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="field"><label for="rc-pass">Contraseña nueva</label><input id="rc-pass" name="password" type="password" autocomplete="new-password" minlength="8" required></div>
+        <button class="btn accent block">Guardar contraseña</button>
+      </form>
+      {% endif %}
+      <p class="small muted" style="text-align:center"><a href="{{ url_for('login') }}" style="text-decoration:underline;color:var(--ink)">Volver a entrar</a></p>
+    </div>
+  </main>
+</body>
+</html>

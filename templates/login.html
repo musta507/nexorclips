@@ -32,6 +32,7 @@
         <div class="field"><label for="l-email">Correo</label><input id="l-email" name="email" type="email" value="{{ form_email }}" autocomplete="email" required></div>
         <div class="field"><label for="l-pass">Contraseña</label><input id="l-pass" name="password" type="password" autocomplete="current-password" required></div>
         <button class="btn accent block">Entrar</button>
+        {% if mail_ready %}<p class="small" style="text-align:center"><a href="{{ url_for('recover') }}" style="text-decoration:underline;color:var(--muted)">He olvidado mi contraseña</a></p>{% endif %}
       </form>
       <p class="small muted" style="text-align:center">¿No tienes cuenta? <a href="{{ url_for('login', modo='registro') }}" style="text-decoration:underline;color:var(--ink)">Créala con tu correo</a></p>
       {% endif %}
