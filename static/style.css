@@ -3274,3 +3274,14 @@ table.cl-clips .mc-ct b,table.cl-clips .mc-ct small{max-width:100%}
 .pm-legal span{flex-basis:100%;color:var(--muted)}
 /* Botón de chat: por debajo de 1520 px va solo el icono (una regla posterior volvía a enseñar el texto y salía cortado) */
 @media (max-width:1519px){.chat-fab .fab-lbl{display:none}}
+
+/* Filtros del hub (Vídeos virales, Cuentas TOP): barra normal con la pastilla, como el resto de la web */
+.fchips-row{gap:10px}
+.fchips-row > .seg,.seg.vr-bar{align-self:auto}
+.fchips-row > .seg a,.seg.vr-bar a{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.seg.vr-bar{display:inline-flex;flex-wrap:nowrap;gap:4px}
+@media (max-width:640px){.fchips-row > .seg,.seg.vr-bar{display:flex;width:100%}}
+@media (max-width:640px){
+  .fchips-row > .seg a,.seg.vr-bar a{flex:1 1 auto;justify-content:center;padding-left:8px;padding-right:8px;font-size:13px}
+  .fchips-row > .seg a svg,.seg.vr-bar a svg{display:none}
+}
