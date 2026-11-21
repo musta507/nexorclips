@@ -23,7 +23,7 @@
   <div class="facts">
     <div class="fact"><b>{{ PLATFORMS.get(result.platform, "—") }}</b><span>red detectada</span></div>
     <div class="fact"><b style="font-size:15px;word-break:break-all">{{ result.video_id or "—" }}</b><span>ID del vídeo</span></div>
-    <div class="fact"><b>{{ result.items }}</b><span>resultados de Apify</span></div>
+    <div class="fact"><b>{{ result['items'] }}</b><span>resultados de Apify</span></div>
   </div>
   {% if result.views is not none %}
   <div class="facts">
