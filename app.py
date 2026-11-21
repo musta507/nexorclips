@@ -6131,7 +6131,8 @@ def admin_settings(app_test=None):
                            alerts=tech_alerts(), creators_on=CREATORS_ENABLED, tech_set=bool(TECH_EMAILS),
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
-                           my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count())
+                           my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count(),
+                           test_users=[u for u in test_users() if not role_for(u.email)])
 
 
 @app.route("/admin/busqueda/<accion>", methods=["POST"])
@@ -6692,6 +6693,30 @@ def remove_my_demo(user):
         model.query.filter_by(user_id=user.id, my_demo=True).delete(synchronize_session=False)
     db.session.commit()
     return len(ids)
+
+
+def test_users():
+    """Usuarios reales (no de demostración) que no son administradores: los que se han registrado para probar la web."""
+    return (User.query.filter(User.is_admin.is_(False), ~User.email.like(f"%{DEMO_DOMAIN}"))
+            .order_by(User.created_at.desc()).all())
+
+
+@app.route("/admin/ajustes/borrar-usuarios", methods=["POST"])
+@admin_required
+def admin_delete_test_users():
+    """Borra de una vez todos los usuarios reales de prueba con todo lo suyo. Los de demostración y los admins se quedan."""
+    if (current_user.admin_role or "owner") != "owner":
+        abort(403)
+    if (request.form.get("confirm") or "").strip().upper() != "ELIMINAR":
+        flash("Para borrar los usuarios, escribe ELIMINAR en la casilla.", "error")
+        return redirect(url_for("admin_settings", _anchor="datos"))
+    users = [u for u in test_users() if not role_for(u.email)]      # por si alguien es admin y aún no ha vuelto a entrar
+    for u in users:
+        delete_user_account(u)
+    audit("usuarios_prueba_borrados", f"{len(users)} usuarios")
+    db.session.commit()
+    flash(f"Se han borrado {len(users)} usuarios con todos sus datos. Los de demostración y los administradores siguen igual.", "ok")
+    return redirect(url_for("admin_settings", _anchor="datos"))
 
 
 @app.route("/admin/ajustes/mi-demo", methods=["POST"])

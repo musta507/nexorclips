@@ -3326,3 +3326,27 @@ def test_ytdlp_thumb_picks_the_still_cover():
     assert V._ytdlp_thumb("tiktok", "1", {}) == ""
     assert V._ytdlp_avatar({"thumbnails": [{"id": "avatar_uncropped", "url": "https://x/a.jpg"}]}, []) == "https://x/a.jpg"
     assert V._ytdlp_avatar({}, [{"author_avatar": "https://x/b.jpg"}]) == "https://x/b.jpg"
+
+
+def test_delete_all_real_test_users_keeps_demo_and_admins():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    a = client_for("a@test.com", tiktok="ana")
+    client_for("b@test.com")
+    with A.app.app_context():
+        A.db.session.add(A.User(email="demo1" + A.DEMO_DOMAIN, name="Demo Uno"))
+        A.db.session.commit()
+    page = admin.get("/admin/ajustes").get_data(as_text=True)
+    assert "Usuarios reales de prueba" in page and "a@test.com" in page
+    post(admin, "/admin/ajustes/borrar-usuarios", confirm="no")
+    with A.app.app_context():
+        assert A.User.query.filter_by(email="a@test.com").first()
+    post(admin, "/admin/ajustes/borrar-usuarios", confirm="eliminar")
+    with A.app.app_context():
+        emails = {u.email for u in A.User.query.all()}
+        assert emails == {"admin@test.com", "demo1" + A.DEMO_DOMAIN}
+        assert not A.CampaignAccount.query.count() and not A.CampaignMember.query.count()
+    c = client_for("c@test.com")                       # un clipper no puede usarlo
+    post(c, "/admin/ajustes/borrar-usuarios", confirm="ELIMINAR")
+    with A.app.app_context():
+        assert A.User.query.filter_by(email="c@test.com").first()

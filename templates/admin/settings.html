@@ -205,6 +205,23 @@
   </form>
 </div>
 
+<div class="card tight form-stack">
+  <div>
+    <h3>Usuarios reales de prueba</h3>
+    <p class="small muted">{% if test_users %}Hay {{ test_users|length }} {{ "usuario que se ha registrado" if test_users|length == 1 else "usuarios que se han registrado" }} de verdad (con Google o con correo). Al borrarlos desaparecen con todo lo suyo: clips, cuentas, mensajes y retiros. Los de demostración y los administradores no se tocan. No se puede deshacer.{% else %}No hay ningún usuario real registrado, aparte de los administradores.{% endif %}</p>
+  </div>
+  {% if test_users %}
+  <details class="answers"><summary>Ver quiénes son ({{ test_users|length }})</summary>
+    <ul class="tu-list">{% for u in test_users %}<li><b>{{ u.name }}</b> <span class="muted selectable">{{ u.email }}</span><span class="muted"> · {{ u.submissions|length }} clips · desde {{ u.created_at|date }}</span></li>{% endfor %}</ul>
+  </details>
+  <form method="post" action="{{ url_for('admin_delete_test_users') }}" class="tu-form" data-confirm="¿Borrar {{ test_users|length }} usuarios con todos sus datos? No se puede deshacer.">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input name="confirm" placeholder="Escribe ELIMINAR" autocomplete="off" aria-label="Escribe ELIMINAR para confirmar" required>
+    <button class="btn red">Borrar los {{ test_users|length }} usuarios</button>
+  </form>
+  {% endif %}
+</div>
+
 {% if allow_wipe %}
 <details class="card wipe">
   <summary><b>Empezar de cero</b> <span class="small muted">· borrar todos los datos de prueba</span></summary>
