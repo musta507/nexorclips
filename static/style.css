@@ -3149,3 +3149,71 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):
 /* Pestañas de la campaña en el panel: el nombre a la misma altura lleve o no contador */
 .cn-tabs.seg a{display:inline-flex;align-items:center;gap:6px;line-height:1}
 .cn-tabs.seg .cn-n{flex:none}
+
+/* Botón de solo icono: el icono no se aplasta (el relleno de .btn.sm lo dejaba en 4 px) */
+.btn.ic-only,.btn.sm.ic-only{padding:0;justify-content:center;flex:none}
+.btn.ic-only svg{flex:none;width:16px;height:16px}
+@media (max-width:640px){.btn.ic-only,.btn.sm.ic-only{padding:0 14px;width:auto}}
+
+/* Ficha del clipper: columnas iguales en todas las filas y cifras juntas (el dinero ya no queda suelto a la derecha) */
+.cl-crow{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) 88px 88px 108px;column-gap:16px;row-gap:8px;padding:12px 14px}
+.cl-crow .cl-act,.cl-crow .cl-ans{grid-column:1/-1}
+.cl-crow .cl-act{display:flex;gap:8px;padding-left:46px}
+.cl-crow .cl-ans{padding-left:46px}
+.cl-n b{font-size:14px;font-weight:600}
+@media (max-width:900px){.cl-crow{grid-template-columns:repeat(3,1fr)}.cl-crow .cl-cn,.cl-crow .cl-accs{grid-column:1/-1}.cl-n{align-items:flex-start}.cl-crow .cl-act,.cl-crow .cl-ans{padding-left:0}}
+table.cl-clips{table-layout:fixed;width:100%}
+table.cl-clips th:nth-child(2),table.cl-clips td:nth-child(2){width:210px}
+table.cl-clips th:nth-child(3),table.cl-clips td:nth-child(3){width:110px}
+table.cl-clips th:nth-child(4),table.cl-clips td:nth-child(4){width:120px}
+table.cl-clips td:first-child{width:auto;max-width:none}
+table.cl-clips .mc-clip{max-width:none;align-items:flex-start}
+table.cl-clips .mc-ct{flex:1;min-width:0}
+table.cl-clips .mc-ct b,table.cl-clips .mc-ct small{max-width:100%}
+.cl-flags{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:3px}
+.cl-flags:empty{display:none}
+@media (max-width:760px){table.cl-clips{table-layout:auto}table.cl-clips th,table.cl-clips td{width:auto!important}}
+
+/* Ficha lateral del chat del panel */
+.chat-side.cs{display:flex;flex-direction:column;gap:14px;padding:16px}
+.cs-who{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;padding:4px;margin:-4px;border-radius:12px}
+.cs-who:hover{background:var(--soft,#f4f5f6)}
+.cs-who-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.cs-who-t b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-who-t small{font-size:12px}
+.cs-go{font-size:20px;line-height:1;color:#9a9a9e}
+.cs-top{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cs-top>div{display:flex;flex-direction:column;gap:2px;padding:12px;border-radius:14px;background:var(--soft,#f4f5f6);min-width:0}
+.cs-top span{font-size:12px;color:var(--muted)}
+.cs-top b{font-size:20px;font-weight:650;line-height:1.2}
+.cs-top b>.m-earn{color:var(--money-ink)}.cs-top b>.m-zero{color:var(--muted)}
+.cs-rows{display:flex;flex-direction:column}
+.cs-rows>div{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:13px}
+.cs-rows>div:first-child{border-top:0;padding-top:0}
+.cs-rows span{color:var(--muted)}
+.cs-rows b{font-weight:600;text-align:right;min-width:0;overflow-wrap:anywhere}
+.cs-h{font-size:13px;font-weight:600;margin:2px 0 -4px}
+.cs-camp{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:14px}
+.cs-camp-top{display:flex;align-items:center;gap:8px;min-width:0}
+.cs-camp-top .dthumb{width:32px;height:32px;flex:none}
+.cs-camp-top b{flex:1;min-width:0;font-size:13px;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cs-camp-top .status{flex:none}
+.cs-acc{display:flex;align-items:center;gap:8px;font-size:13px;color:inherit;text-decoration:none;padding:2px 0}
+.cs-acc svg{width:15px;height:15px;flex:none}
+.cs-acc span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-acc:hover span{text-decoration:underline}
+.cs-acc small{flex:none;font-size:12px;color:var(--muted)}
+.cs-acc small.ok{color:#0e9f6e}.cs-acc small.wait{color:#c2620a}
+.cs-camp .answers{font-size:13px}
+.cs-act{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cs-act form,.cs-act .btn{width:100%}
+
+/* Revisión de alineación: iconos que se aplastaban en el móvil y un botón que quedaba más alto que su fila */
+.wa-h svg,.v2-todo svg,.btn svg,.status svg{flex:none}
+.hub-compose-foot .file-btn{align-self:center}
+.cl-flags>.small{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cl-flags b,.cl-flags .muted{display:inline!important;font-size:12px!important;font-weight:500}
+.cl-flags b{font-weight:600!important}
+@media (min-width:901px){.cl-crow{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) 132px 84px 108px}}
+@media (max-width:900px){.cl-n small{white-space:normal}}
+.cl-n small{white-space:nowrap}

@@ -70,11 +70,11 @@
     <span class="cl-n tnum"><b>{{ c.clips }}</b><small>clips{% if c.pending %} · {{ c.pending }} por revisar{% endif %}</small></span>
     <span class="cl-n tnum"><b>{{ c.views|short }}</b><small>vistas</small></span>
     <span class="cl-n tnum"><b>{{ c.earned|earn }}</b><small>ganado</small></span>
-    {% if c.member and c.member.status == 'pendiente' %}<span class="cl-act">
-      <form method="post" action="{{ url_for('admin_campaign_member', mid=c.member.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
-      <form method="post" action="{{ url_for('admin_campaign_member', mid=c.member.id, accion='rechazar') }}" data-confirm="¿Rechazar a {{ user.name }} en «{{ c.camp.song }}»?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form></span>{% endif %}
     {% if c.answers %}<details class="answers cl-ans"><summary>Respuestas al pedir entrar</summary>
       {% for q, ans in c.answers %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}</details>{% endif %}
+    {% if c.member and c.member.status == 'pendiente' %}<div class="cl-act">
+      <form method="post" action="{{ url_for('admin_campaign_member', mid=c.member.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
+      <form method="post" action="{{ url_for('admin_campaign_member', mid=c.member.id, accion='rechazar') }}" data-confirm="¿Rechazar a {{ user.name }} en «{{ c.camp.song }}»?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form></div>{% endif %}
   </div>
   {% else %}
   <p class="muted cl-empty">Aún no ha pedido entrar en ninguna campaña.</p>
@@ -86,14 +86,14 @@
   <div class="section-head"><h2>Clips ({{ subs|length }})</h2></div>
   <div class="table-card">
   {% if subs %}
-    <div class="table-scroll"><table class="rt">
-      <thead><tr><th>Clip</th><th class="r">Vistas</th><th>Estado</th><th class="r">Gana</th></tr></thead>
+    <div class="table-scroll"><table class="rt cl-clips">
+      <thead><tr><th>Clip</th><th>Estado</th><th class="r">Vistas</th><th class="r">Gana</th></tr></thead>
       <tbody>
       {% for s in subs %}{% set stg = clip_stage(s) %}
       <tr{% if s.flag_list %} class="row-flag"{% endif %}>
-        <td data-label="Clip"><div class="mc-clip">{{ clip_cover(s) }}<div class="mc-ct"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener"><b title="{{ clip_title(s) }}">{{ clip_title(s) }}</b></a><small>#{{ s.id }} · {{ s.campaign.song }}{% if s.author %} · @{{ s.author }}{% endif %} · {{ s.created_at|date }}</small></div></div>{% include "admin/_flags.html" %}</td>
-        <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b></td>
+        <td data-label="Clip"><div class="mc-clip">{{ clip_cover(s) }}<div class="mc-ct"><a class="link" href="{{ s.url }}" target="_blank" rel="noopener"><b title="{{ clip_title(s) }}">{{ clip_title(s) }}</b></a><small>#{{ s.id }} · {{ s.campaign.song }} · {{ s.created_at|date }}</small><div class="cl-flags">{% include "admin/_flags.html" %}</div></div></div></td>
         <td data-label="Estado"><span class="status {{ stg }}">{{ STAGE_LABELS[stg] }}</span>{% if s.reject_reason %}<div class="small muted" title="{{ s.reject_reason }}">{{ s.reject_reason|truncate(40, True, '…') }}</div>{% endif %}</td>
+        <td data-label="Vistas" class="r tnum"><b>{{ s.views|num }}</b></td>
         <td data-label="Gana" class="r tnum">{{ (s.earned if s.status == 'aprobado' else 0)|earn }}</td>
       </tr>
       {% endfor %}

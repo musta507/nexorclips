@@ -14,40 +14,43 @@
       {% include "_chat.html" %}
     {% endwith %}
   </div>
-  <aside class="card form-stack chat-side">
-    <h3>Sobre este clipper</h3>
+  <aside class="card chat-side cs">
+    <a class="cs-who" href="{{ url_for('admin_clipper', uid=user.id) }}">
+      <span class="avatar">{% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ user.initial }}{% endif %}</span>
+      <span class="cs-who-t"><b>{{ user.name }}</b><small class="muted">Ver ficha del clipper</small></span>
+      <span class="cs-go" aria-hidden="true">›</span>
+    </a>
     {% if user.is_banned %}<div class="flash error">Bloqueado: {{ user.ban_reason }}</div>{% endif %}
-    <div class="facts" style="grid-template-columns:1fr 1fr">
-      <div class="fact"><b>{{ m.earned|earn(0) }}</b><span>ganado</span></div>
-      <div class="fact"><b>{{ m.available|money(0) }}</b><span>disponible</span></div>
-      <div class="fact"><b>{{ m.live|money(0) }}</b><span>en campañas abiertas</span></div>
-      <div class="fact"><b>{{ m.paid|money(0) }}</b><span>pagado</span></div>
-      <div class="fact"><b>{{ user.submissions|length }}</b><span>clips</span></div>
-    </div>
-    <div class="small side-handles">
-      <div class="label">Campañas</div>
-      {% for mb in members %}
-      <div class="side-handle">
-        <div class="top"><b>{{ mb.campaign.song }}</b>
-          <span class="status {{ 'aprobado' if mb.status == 'aceptada' else ('rechazado' if mb.status == 'rechazada' else 'pendiente') }}">{{ member_statuses[mb.status] }}</span></div>
-        {% if mb.answer_list %}<details class="answers"><summary>Sus respuestas</summary>{% for q, ans in mb.answer_list %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}</details>{% endif %}
-        {% for a in accounts if a.campaign_id == mb.campaign_id %}
-        <div class="top">{{ icon(a.platform) }} <a class="link" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">@{{ a.handle }}</a>
-          <span class="status {{ 'aprobado' if a.status == 'aceptada' else 'pendiente' }}">{{ join_statuses[a.status] }}</span></div>
-        {% endfor %}
-        {% if mb.status == 'pendiente' %}
-        <div class="inline" style="gap:6px">
-          <form method="post" action="{{ url_for('admin_campaign_member', mid=mb.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
-          <form method="post" action="{{ url_for('admin_campaign_member', mid=mb.id, accion='rechazar') }}" data-confirm="¿Rechazar a {{ user.name }} en «{{ mb.campaign.song }}»?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>
-        </div>
-        {% endif %}
-      </div>
-      {% else %}<span class="muted">Aún no ha pedido entrar en ninguna campaña.</span>{% endfor %}
-      {% if members %}<p class="hint">Las cuentas se verifican solas: el clipper pone su código en la bio y la web lo comprueba.</p>{% endif %}
-    </div>
-    <div class="small"><div class="label" style="margin-bottom:6px">Cobro</div>{% if user.payout_ready %}{% if user.payout_method == WHOP_METHOD %}<span class="whop-ico" aria-hidden="true"></span> Whop · <span class="selectable">@{{ user.whop_username }}</span>{% else %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% endif %}{% else %}<span class="muted">Sin cuenta de cobro</span>{% endif %}</div>
     {% if m.open_payout %}<div class="flash ok">Retiro pendiente de {{ m.open_payout.amount|money }}</div>{% endif %}
-    <a class="btn soft" href="{{ url_for('admin_clipper', uid=user.id) }}">Ver ficha del clipper</a>
+    <div class="cs-top">
+      <div><span>Ganado</span><b class="tnum">{{ m.earned|earn(0) }}</b></div>
+      <div><span>Disponible</span><b class="tnum">{{ m.available|money(0) }}</b></div>
+    </div>
+    <div class="cs-rows">
+      <div><span>En campañas abiertas</span><b class="tnum">{{ m.live|money(0) }}</b></div>
+      <div><span>Pagado</span><b class="tnum">{{ m.paid|money(0) }}</b></div>
+      <div><span>Clips enviados</span><b class="tnum">{{ user.submissions|length }}</b></div>
+      <div><span>Cobro</span><b>{% if user.payout_ready %}{% if user.payout_method == WHOP_METHOD %}Whop · <span class="selectable">@{{ user.whop_username }}</span>{% else %}{{ user.payout_method }} · <span class="selectable">{{ user.payout_details }}</span>{% endif %}{% else %}<span class="muted">Sin conectar</span>{% endif %}</b></div>
+    </div>
+    <h3 class="cs-h">Campañas</h3>
+    {% for mb in members %}
+    <div class="cs-camp">
+      <div class="cs-camp-top">{% set _t, lqip = cover_meta(mb.campaign) %}<span class="dthumb sm"{% if lqip %} style="background-image:url({{ lqip }})"{% endif %}>{% if cover_src(mb.campaign) %}<img src="{{ cover_src(mb.campaign, 160) }}" alt="" width="32" height="32" loading="lazy">{% endif %}</span>
+        <b>{{ mb.campaign.song }}</b>
+        <span class="status {{ 'aprobado' if mb.status == 'aceptada' else ('rechazado' if mb.status == 'rechazada' else 'pendiente') }}">{{ member_statuses[mb.status] }}</span></div>
+      {% for a in accounts if a.campaign_id == mb.campaign_id %}
+      <a class="cs-acc" href="{{ profile_url(a.platform, a.handle) }}" target="_blank" rel="noopener nofollow">{{ icon(a.platform) }}<span>@{{ a.handle }}</span>
+        <small class="{{ 'ok' if a.status == 'aceptada' else 'wait' }}">{{ join_statuses[a.status] }}</small></a>
+      {% endfor %}
+      {% if mb.answer_list %}<details class="answers"><summary>Sus respuestas</summary>{% for q, ans in mb.answer_list %}<div class="qa"><span>{{ q }}</span><p>{{ ans }}</p></div>{% endfor %}</details>{% endif %}
+      {% if mb.status == 'pendiente' %}
+      <div class="cs-act">
+        <form method="post" action="{{ url_for('admin_campaign_member', mid=mb.id, accion='aceptar') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm green">Aceptar</button></form>
+        <form method="post" action="{{ url_for('admin_campaign_member', mid=mb.id, accion='rechazar') }}" data-confirm="¿Rechazar a {{ user.name }} en «{{ mb.campaign.song }}»?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn sm red">Rechazar</button></form>
+      </div>
+      {% endif %}
+    </div>
+    {% else %}<p class="small muted">Aún no ha pedido entrar en ninguna campaña.</p>{% endfor %}
   </aside>
 </div>
 {% endblock %}
