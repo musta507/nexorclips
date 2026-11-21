@@ -41,10 +41,10 @@
     {# Gráficas en HTML (no se estiran): eje, rejilla, columnas y, si hace falta, una línea encima #}
     {% macro ylabels(mx, kind) %}<div class="v2-yax">{% for i in range(4, -1, -1) %}<span>{% if kind == "money2" %}{{ "%.2f"|format(mx * i / 4)|replace('.', ',') }}{% elif kind == "int" %}{{ (mx * i / 4)|round|int }}{% else %}{{ (mx * i / 4)|int|short }}{% endif %}</span>{% endfor %}</div>{% endmacro %}
     {% macro grid() %}{% for i in range(5) %}<i class="g" style="bottom:calc(22px + (100% - 22px) * {{ i / 4 }});margin:0"></i>{% endfor %}{% endmacro %}
-    {% macro line(vals, mx, color, fill=false) %}{% set n = vals|length %}{% set pts = [] %}{% for v in vals %}{% if v is not none %}{% set _ = pts.append(((loop.index0 + 0.5) / n * 100)|round(2) ~ "," ~ (100 - v / mx * 100)|round(2)) %}{% endif %}{% endfor %}
+    {% macro line(vals, mx, color, fill=false) %}{% set n = vals|length %}{% set pts = [] %}{% set idx = [] %}{% for v in vals %}{% if v is not none %}{% set _ = pts.append(((loop.index0 + 0.5) / n * 100)|round(2) ~ "," ~ (100 - v / mx * 100)|round(2)) %}{% set _ = idx.append(loop.index0) %}{% endif %}{% endfor %}
       <div class="ovc-line">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{% if fill and pts|length > 1 %}<polygon points="{{ pts[0].split(',')[0] }},100 {{ pts|join(' ') }} {{ pts[-1].split(',')[0] }},100" fill="{{ color }}" opacity=".12"/>{% endif %}<polyline points="{{ pts|join(' ') }}" fill="none" stroke="{{ color }}" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>
-        {% for pt in pts %}<i class="ovc-dot" style="left:{{ pt.split(',')[0] }}%;top:{{ pt.split(',')[1] }}%;--c:{{ color }}"></i>{% endfor %}
+        {% for pt in pts %}<i class="ovc-dot" data-i="{{ idx[loop.index0] }}" style="left:{{ pt.split(',')[0] }}%;top:{{ pt.split(',')[1] }}%;--c:{{ color }}"></i>{% endfor %}
       </div>{% endmacro %}
 
     {# 1 · Vistas (barras) y dinero (línea) #}
@@ -53,7 +53,7 @@
       {% set rows = charts.vm %}{% set mv = (rows|map(attribute="views")|max) or 1 %}{% set mm = (rows|map(attribute="money")|max) or 1 %}
       <div class="v2-bars">{{ ylabels(mv, "short") }}
         <div class="v2-plot">{{ grid() }}
-          {% for r in rows %}<div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms"><div class="v2-trio"><span class="ovb" style="height:{{ (r.views / mv * 100)|round(1) }}%;background:#f08a24" title="{{ r.label }}: {{ r.views|int|short }} vistas · {{ r.money|money(0) }}"></span></div><small>{{ r.label }}</small></div>{% endfor %}
+          {% for r in rows %}<div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms" data-tip-t="{{ r.label }}" data-tip='{{ [["Vistas", r.views|int|short, "#f08a24"], ["Dinero repartido", r.money|money(0), "#12b76a"]]|tojson }}'><div class="v2-trio"><span class="ovb" style="height:{{ (r.views / mv * 100)|round(1) }}%;background:#f08a24"></span></div><small>{{ r.label }}</small></div>{% endfor %}
           {% set mvals = [] %}{% for r in rows %}{% set _ = mvals.append(r.money / mm * 0.92) %}{% endfor %}{{ line(mvals, 1, "#12b76a") }}
         </div>
       </div>
@@ -67,7 +67,7 @@
       {% set mx = ([vals|max if vals else 0, charts.cpm_ref or 0]|max * 1.25) or 1 %}
       <div class="v2-bars">{{ ylabels(mx, "money2") }}
         <div class="v2-plot">{{ grid() }}
-          {% for r in rows %}<div class="v2-wk"><div class="v2-trio"></div><small>{{ r.label }}</small></div>{% endfor %}
+          {% for r in rows %}<div class="v2-wk" data-tip-t="{{ r.label }}" data-tip='{{ ([["Coste por 1.000 vistas", ("%.2f $"|format(r.v))|replace(".", ",") if r.v is not none else "sin vistas", "#8b6cf0"]] + ([["Tarifa media", ("%.2f $"|format(charts.cpm_ref))|replace(".", ","), "#9a9a9e"]] if charts.cpm_ref else []))|tojson }}'><div class="v2-trio"></div><small>{{ r.label }}</small></div>{% endfor %}
           {% if charts.cpm_ref %}<i class="ovc-ref" style="bottom:calc(22px + (100% - 22px) * {{ (charts.cpm_ref / mx)|round(4) }})"></i>{% endif %}
           {{ line(rows|map(attribute="v")|list, mx, "#8b6cf0", true) }}
         </div>
@@ -82,7 +82,7 @@
       {% set rows = charts.net %}{% set tots = [] %}{% for r in rows %}{% set t = namespace(v=0) %}{% for k in charts.nets %}{% set t.v = t.v + r[k] %}{% endfor %}{% set _ = tots.append(t.v) %}{% endfor %}{% set mx = (tots|max) or 1 %}
       <div class="v2-bars">{{ ylabels(mx, "short") }}
         <div class="v2-plot">{{ grid() }}
-          {% for r in rows %}<div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms"><div class="v2-trio"><span class="ovb ovs" style="height:{{ (tots[loop.index0] / mx * 100)|round(1) }}%">{% for k in charts.nets|reverse %}{% if r[k] %}<b style="flex:{{ r[k] }};background:{{ colors[k] }}" title="{{ r.label }} · {{ PLATFORMS[k] }}: {{ r[k]|int|short }}"></b>{% endif %}{% endfor %}</span></div><small>{{ r.label }}</small></div>{% endfor %}
+          {% for r in rows %}{% set tl = [] %}{% for k in charts.nets %}{% set _ = tl.append([PLATFORMS[k], r[k]|int|short, colors[k]]) %}{% endfor %}<div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms" data-tip-t="{{ r.label }}" data-tip='{{ tl|tojson }}'><div class="v2-trio"><span class="ovb ovs" style="height:{{ (tots[loop.index0] / mx * 100)|round(1) }}%">{% for k in charts.nets|reverse %}{% if r[k] %}<b style="flex:{{ r[k] }};background:{{ colors[k] }}"></b>{% endif %}{% endfor %}</span></div><small>{{ r.label }}</small></div>{% endfor %}
         </div>
       </div>
       {% set tot_all = tots|sum %}<p class="ov-foot">{% for k in charts.nets %}{{ PLATFORMS[k] }} {{ ((rows|map(attribute=k)|sum) / tot_all * 100)|round|int if tot_all else 0 }} %{% if not loop.last %} · {% endif %}{% else %}Aún no hay vistas en este periodo.{% endfor %}</p>
@@ -94,7 +94,7 @@
       {% set mx = (charts.top|map(attribute=1)|max) if charts.top else 1 %}
       <div class="ov-top">
         {% for name, v in charts.top %}
-        <div class="ov-trow"><span class="ov-tname">{{ name }}</span><span class="ov-ttrack"><i style="width:{{ (v / mx * 100)|round(1) }}%;--d:{{ loop.index0 * 70 }}ms"></i></span><b class="tnum">{{ v|int|short }}</b></div>
+        <div class="ov-trow" data-tip-t="{{ name }}" data-tip='{{ [["Vistas en el periodo", v|int|short, "#f08a24"], ["Parte del total", ((v / ((charts.top|map(attribute=1)|sum) or 1) * 100)|round|int) ~ " %", "#9a9a9e"]]|tojson }}'><span class="ov-tname">{{ name }}</span><span class="ov-ttrack"><i style="width:{{ (v / mx * 100)|round(1) }}%;--d:{{ loop.index0 * 70 }}ms"></i></span><b class="tnum">{{ v|int|short }}</b></div>
         {% else %}<p class="muted">Aún no hay vistas en este periodo.</p>{% endfor %}
       </div>
     </div>
@@ -105,7 +105,7 @@
       {% set rows = charts.act %}{% set mx = (rows|map(attribute="n")|max) or 1 %}
       <div class="v2-bars">{{ ylabels(mx, "int") }}
         <div class="v2-plot">{{ grid() }}
-          {% for r in rows %}<div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms"><div class="v2-trio"><span class="ovb" style="height:{{ (r.n / mx * 100)|round(1) }}%;background:#14b8a6" title="{{ r.label }}: {{ r.n }} clippers"></span></div><small>{{ r.label }}</small></div>{% endfor %}
+          {% for r in rows %}<div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms" data-tip-t="{{ r.label }}" data-tip='{{ [["Clippers activos", r.n, "#14b8a6"]]|tojson }}'><div class="v2-trio"><span class="ovb" style="height:{{ (r.n / mx * 100)|round(1) }}%;background:#14b8a6"></span></div><small>{{ r.label }}</small></div>{% endfor %}
         </div>
       </div>
       <p class="ov-foot">{{ rows|map(attribute="n")|max }} clippers en la mejor {{ {"day": "jornada", "week": "semana", "month": "mes"}[unit] }} del periodo</p>
@@ -121,10 +121,10 @@
       <div class="v2-plot">
         {% for i in range(5) %}<i class="g" style="bottom:{{ i * 25 }}%"></i>{% endfor %}
         {% for w in weeks %}
-        <div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms"><div class="v2-trio">
-          <span class="b1" style="height:{{ (w.sent / top * 100)|round(1) }}%" title="Enviados: {{ w.sent }}"></span>
-          <span class="b2" style="height:{{ (w.ok / top * 100)|round(1) }}%" title="Aprobados: {{ w.ok }}"></span>
-          <span class="b3" style="height:{{ (w.ko / top * 100)|round(1) }}%" title="Rechazados: {{ w.ko }}"></span>
+        <div class="v2-wk" style="--d:{{ loop.index0 * 60 }}ms" data-tip-t="{{ w.label }}" data-tip='{{ [["Enviados", w.sent, "#8b6cf0"], ["Aprobados", w.ok, "#14b8a6"], ["Rechazados", w.ko, "#c4c5cb"]]|tojson }}'><div class="v2-trio">
+          <span class="b1" style="height:{{ (w.sent / top * 100)|round(1) }}%"></span>
+          <span class="b2" style="height:{{ (w.ok / top * 100)|round(1) }}%"></span>
+          <span class="b3" style="height:{{ (w.ko / top * 100)|round(1) }}%"></span>
         </div><small>{{ w.label }}</small></div>
         {% endfor %}
       </div>

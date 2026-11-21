@@ -2070,3 +2070,50 @@ document.addEventListener("input", function (e) {
   Array.prototype.some.call(document.querySelectorAll("#" + i.getAttribute("list") + " option"), function (x) { if (x.value === i.value) { o = x; return true; } return false; });
   uid.value = o ? o.getAttribute("data-uid") : "";
 });
+
+// Resumen: al pasar el ratón (o tocar) una columna o una fila de la gráfica, se resalta y sale una tarjeta con sus datos
+(function () {
+  var tip = null, cur = null;
+  function quitar() {
+    if (cur) { var pl = cur.closest(".v2-plot, .ov-top"); if (pl) pl.classList.remove("hov"); cur.classList.remove("is-h"); }
+    document.querySelectorAll(".ovc-dot.is-h").forEach(function (d) { d.classList.remove("is-h"); });
+    if (tip) tip.classList.remove("on");
+    cur = null;
+  }
+  function poner(el) {
+    if (el === cur) return;
+    quitar();
+    var box = el.closest(".v2-chart");
+    if (!box) return;
+    cur = el;
+    var pl = el.closest(".v2-plot, .ov-top"); if (pl) pl.classList.add("hov");
+    el.classList.add("is-h");
+    var i = Array.prototype.indexOf.call(el.parentNode.querySelectorAll(":scope > .v2-wk"), el);
+    if (pl) pl.querySelectorAll('.ovc-dot[data-i="' + i + '"]').forEach(function (d) { d.classList.add("is-h"); });
+    if (!tip || tip.parentNode !== box) { tip = document.createElement("div"); tip.className = "ov-tip"; tip.setAttribute("role", "status"); box.appendChild(tip); }
+    var rows = []; try { rows = JSON.parse(el.getAttribute("data-tip")) || []; } catch (_) {}
+    tip.innerHTML = "";
+    var t = document.createElement("b"); t.textContent = el.getAttribute("data-tip-t") || ""; tip.appendChild(t);
+    rows.forEach(function (r) {
+      var line = document.createElement("span"), dot = document.createElement("i"), k = document.createElement("em"), v = document.createElement("strong");
+      dot.style.background = r[2] || "#0e0e0e"; k.textContent = r[0]; v.textContent = r[1];
+      line.appendChild(dot); line.appendChild(k); line.appendChild(v); tip.appendChild(line);
+    });
+    var bb = box.getBoundingClientRect(), eb = el.getBoundingClientRect();
+    tip.classList.add("on");
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var x = eb.left - bb.left + eb.width / 2 - w / 2, y = eb.top - bb.top + 8;
+    if (el.classList.contains("ov-trow")) y = eb.top - bb.top - h - 6;
+    tip.style.left = Math.max(8, Math.min(bb.width - w - 8, x)) + "px";
+    tip.style.top = Math.max(8, y) + "px";
+  }
+  document.addEventListener("mouseover", function (e) {
+    var el = e.target.closest && e.target.closest(".v2-chart [data-tip]");
+    if (el) poner(el); else if (cur && !(e.target.closest && e.target.closest(".ov-tip"))) quitar();
+  });
+  document.addEventListener("click", function (e) {            // en el móvil: tocar para ver, tocar fuera para quitar
+    var el = e.target.closest && e.target.closest(".v2-chart [data-tip]");
+    if (el) poner(el); else if (cur) quitar();
+  });
+  document.addEventListener("turbo:before-cache", quitar);
+})();
