@@ -3,7 +3,7 @@
 {% block title %}Clippers · {{ camp.song }}{% endblock %}
 {% block content %}
 {% include "admin/_camp_nav.html" %}
-<div class="live-bar"><label class="cr-q live-q">{{ icon("eye") }}<input type="search" placeholder="Buscar clipper por nombre, correo o @cuenta" data-live-search="#camp-clippers tbody" aria-label="Buscar"></label></div>
+<form class="live-bar" method="get" action="{{ url_for('admin_campaign_clippers', cid=camp.id) }}"><label class="cr-q live-q">{{ icon("eye") }}<input type="search" name="q" value="{{ q }}" placeholder="Buscar clipper por nombre, correo o @cuenta" data-live-search="#camp-clippers tbody" aria-label="Buscar"></label>{% if more or q %}<span class="small muted">{% if more %}Se ven {{ rows|length }} de {{ total }}. {% endif %}Pulsa Intro para buscar en todos.</span>{% endif %}</form>
 <div class="table-card">
   {% if rows %}
   <div class="table-scroll"><table class="rt" id="camp-clippers">
@@ -25,6 +25,8 @@
     {% endfor %}
     </tbody>
   </table></div>
+  {% if more %}<div class="cr-more-wrap" style="margin:14px 0"><a class="btn soft" href="{{ url_for('admin_campaign_clippers', cid=camp.id, q=q or None, p=page + 1) }}" data-turbo-action="replace">Ver más</a></div>{% endif %}
+  {% elif q %}<div class="empty"><h3>Nadie coincide con «{{ q }}»</h3><p class="muted"><a href="{{ url_for('admin_campaign_clippers', cid=camp.id) }}">Ver todos</a></p></div>
   {% else %}<div class="empty"><h3>Aún no hay clippers aquí</h3><p class="muted">Cuando aceptes solicitudes, saldrán en esta lista.</p></div>{% endif %}
 </div>
 </turbo-frame>

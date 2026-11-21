@@ -164,8 +164,23 @@ document.addEventListener("click", function (e) {
       })
       .catch(function () {});
   }
-  setInterval(check, 20000);
-  document.addEventListener("visibilitychange", function () { if (!document.hidden) check(); });
+  // Con la pestaña abierta y sin tocarla, se pregunta cada vez menos: 20 s mientras se usa, 60 s tras 2 minutos quieto
+  // y nada tras 15 minutos. Al volver a mover el ratón, tocar o escribir, pregunta enseguida y vuelve a 20 s.
+  var lastAct = Date.now(), lastAsk = Date.now();
+  function ask() { lastAsk = Date.now(); check(); }
+  ["pointerdown", "keydown", "scroll", "pointermove"].forEach(function (ev) {
+    window.addEventListener(ev, function () {
+      var parado = Date.now() - lastAct;
+      lastAct = Date.now();
+      if (parado > 120000 && Date.now() - lastAsk > 20000) ask();
+    }, { passive: true });
+  });
+  setInterval(function () {
+    var quieto = Date.now() - lastAct, desde = Date.now() - lastAsk;
+    if (quieto > 900000) return;
+    if (desde >= (quieto > 120000 ? 60000 : 20000) - 500) ask();
+  }, 10000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) { lastAct = Date.now(); ask(); } });
   // Cada página nueva trae su propio número de mensajes sin leer
   document.addEventListener("turbo:load", function () { shown = parseInt(document.body.getAttribute("data-unread") || "0", 10); });
 })();

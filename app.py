@@ -4978,11 +4978,33 @@ def pending_by_campaign():
     return _per_request("pending_by_campaign", _pending_by_campaign)
 
 
+def review_campaign_ids():
+    """La campaña de cada clip que está «por revisar», SIN cargar los clips enteros (solo cuatro columnas).
+    Misma regla que clip_stage: pendiente, ya llegó al mínimo y, si se piden estadísticas, ya las envió.
+    Con miles de clips pendientes, cargar los clips completos en cada pantalla del panel costaba medio segundo."""
+    def load():
+        camps = {c.id: c for c in Campaign.query.all()}
+        ask_stats = bunny_ready()
+        out = []
+        for cid, plat, views, st in (db.session.query(Submission.campaign_id, Submission.platform, Submission.views,
+                                                       Submission.stats_status).filter(Submission.status == "pendiente")):
+            camp = camps.get(cid)
+            if not camp:
+                continue
+            low = camp.min_for(plat)
+            if low and (views or 0) / 1_000_000 * camp.rate_for(plat) + 1e-9 < low:
+                continue                                   # contando vistas
+            if ask_stats and st != "enviado":
+                continue                                   # falta el vídeo de estadísticas
+            out.append(cid)
+        return out
+    return _per_request("review_campaign_ids", load)
+
+
 def _pending_by_campaign():
     out = {}
-    rev, _ = review_queue()
-    for s_ in rev:
-        out.setdefault(s_.campaign_id, {"clips": 0, "requests": 0, "accounts": 0})["clips"] += 1
+    for cid_ in review_campaign_ids():
+        out.setdefault(cid_, {"clips": 0, "requests": 0, "accounts": 0})["clips"] += 1
     for cid, n in (db.session.query(Submission.campaign_id, db.func.count(Submission.id))
                    .filter(Submission.appeal_status == "pendiente").group_by(Submission.campaign_id)):
         out.setdefault(cid, {"clips": 0, "requests": 0, "accounts": 0})["clips"] += n
@@ -5000,7 +5022,7 @@ def _pending_by_campaign():
 
 
 def review_queue_count():
-    return ttl_cache("review_count", 15, lambda: len(review_queue()[0])
+    return ttl_cache("review_count", 15, lambda: len(review_campaign_ids())
                      + Submission.query.filter_by(appeal_status="pendiente").count())
 
 
@@ -5395,9 +5417,17 @@ def admin_campaign_clippers(cid):
         accs.setdefault(a_.user_id, []).append(a_)
     rows = sorted(((m, stats.get(m.user_id, {"clips": 0, "approved": 0, "views": 0, "earned": 0.0, "last": None}),
                     accs.get(m.user_id, [])) for m in members), key=lambda r: -r[1]["views"])
+    q = (request.args.get("q") or "").strip().lower().lstrip("@")
+    if q:                                              # la búsqueda mira a todos, no solo a los que se ven
+        rows = [r for r in rows if q in (r[0].user.name or "").lower() or q in (r[0].user.email or "").lower()
+                or any(q in (a_.handle or "").lower() for a_ in r[2])]
+    total = len(rows)
+    page = max(request.args.get("p", 1, type=int), 1)
+    rows = rows[: page * LIST_PAGE * 2]                # por tandas de 100: con mil clippers la página pesaba más de 1 MB
     mods = CampaignMod.query.filter_by(campaign_id=cid).options(joinedload(CampaignMod.user)).all()
     return render_template("admin/camp_clippers.html", camp=camp, rows=rows, pend=pending_by_campaign().get(cid, {}),
-                           sec="clippers", mods=mods, mod_ids={m_.user_id for m_ in mods})
+                           sec="clippers", mods=mods, mod_ids={m_.user_id for m_ in mods}, total=total, page=page,
+                           more=total > len(rows), q=request.args.get("q", ""))
 
 
 def mod_pick_user(uid, text):
@@ -8584,6 +8614,20 @@ def fetch_image(url):
     return data
 
 
+_outside = threading.BoundedSemaphore(2)             # descargas de imágenes de fuera que se permiten a la vez dentro de la web
+
+
+def fetch_image_guarded(url):
+    """Como fetch_image, pero sin dejar que las redes lentas ocupen los hilos de la web: si ya hay dos descargas en
+    marcha, no espera (devuelve None y la pantalla enseña la imagen de la campaña; la lectura nocturna la guardará)."""
+    if not url or not _outside.acquire(blocking=False):
+        return None
+    try:
+        return fetch_image(url)
+    finally:
+        _outside.release()
+
+
 def image_response(data):
     body, ct = data
     resp = Response(body, mimetype=ct)
@@ -8599,8 +8643,13 @@ def clip_cover(sid):
     if s.thumb_ok and s.thumb_data:
         return image_response((s.thumb_data, "image/jpeg"))
     for u in ((tiktok_cover(s.url) if s.platform == "tiktok" else ""), s.thumb_url):
-        data = fetch_image(u)
+        data = fetch_image_guarded(u)
         if data:
+            if not s.thumb_ok:                             # se guarda ya: la próxima vez sale de la base de datos
+                small = shrink_image(data[0], (240, 320))
+                if small:
+                    s.thumb_data, s.thumb_ok = small, True
+                    db.session.commit()
             return image_response(data)
     abort(404)
 
@@ -8612,7 +8661,7 @@ def account_photo(aid):
     acc = db.session.get(CampaignAccount, aid) or abort(404)
     if acc.avatar_ok and acc.avatar_data:
         return image_response((acc.avatar_data, "image/jpeg"))
-    data = fetch_image(acc.avatar_url)
+    data = fetch_image_guarded(acc.avatar_url)
     if not data:
         abort(404)
     return image_response(data)

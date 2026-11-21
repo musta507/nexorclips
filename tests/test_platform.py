@@ -3382,3 +3382,59 @@ def test_ranking_periods_count_views_gained_in_the_period():
     page = a.get("/ranking?p=semana").get_data(as_text=True)
     assert "vistas esta semana" in page
     assert 'class="on" href="/ranking?p=global"' in a.get("/ranking").get_data(as_text=True)
+
+
+def test_review_counts_without_loading_clips_match_the_full_queue():
+    """El recuento ligero de «por revisar» (el del menú y la campanita) da lo mismo que clasificar los clips enteros."""
+    cid = make_campaign(min_views=1000)                    # con mínimo: unos clips están «contando» y otros «por revisar»
+    a, b = client_for("a@test.com", tiktok="ana"), client_for("b@test.com", tiktok="beto")
+    for i in range(1, 4):
+        post(a, f"/campana/{cid}", url=tt("ana", i))
+        post(b, f"/campana/{cid}", url=tt("beto", 10 + i))
+    with A.app.test_request_context():
+        subs = A.Submission.query.order_by(A.Submission.id).all()
+        for i, s in enumerate(subs):
+            s.views = [0, 50, 5_000, 80_000, 2_000_000, 900][i]
+            s.stats_status = "enviado" if i % 2 else ""
+        A.db.session.commit()
+    with A.app.test_request_context():
+        full = sorted(s.campaign_id for s in A.review_queue()[0])
+        assert sorted(A.review_campaign_ids()) == full and 0 < len(full) < 6
+        assert A.pending_by_campaign().get(cid, {}).get("clips", 0) == len(full)
+
+
+def test_campaign_clippers_list_is_paged_and_searchable(monkeypatch):
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    with A.app.app_context():
+        for i in range(5):
+            u = A.User(email=f"c{i}@test.com", name=f"Clipper {i}")
+            A.db.session.add(u); A.db.session.flush()
+            A.db.session.add(A.CampaignMember(user_id=u.id, campaign_id=cid, status="aceptada"))
+            A.db.session.add(A.CampaignAccount(user_id=u.id, campaign_id=cid, platform="tiktok", handle=f"cuenta{i}", status="aceptada"))
+        A.db.session.commit()
+    monkeypatch.setattr(A, "LIST_PAGE", 1)                      # tandas de 2
+    page = admin.get(f"/admin/campana/{cid}/clippers").get_data(as_text=True)
+    filas = 'data-label="Ganado"'
+    assert page.count(filas) == 2 and "Se ven 2 de 5" in page and "Ver más" in page
+    assert admin.get(f"/admin/campana/{cid}/clippers?p=3").get_data(as_text=True).count(filas) == 5
+    found = admin.get(f"/admin/campana/{cid}/clippers?q=cuenta4").get_data(as_text=True)
+    assert "Clipper 4" in found and "Clipper 1" not in found
+
+
+def test_cover_does_not_wait_when_outside_downloads_are_busy(monkeypatch):
+    """Si ya hay dos descargas de imágenes de fuera en marcha, la web no se queda esperando: responde 404 al momento."""
+    cid = make_campaign()
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        s = A.Submission.query.one(); s.thumb_url = "https://cdn.test/x.jpg"; A.db.session.commit(); sid = s.id
+    calls = []
+    monkeypatch.setattr(A, "fetch_image", lambda u: calls.append(u) or None)
+    monkeypatch.setattr(A, "tiktok_cover", lambda u: "")
+    assert A._outside.acquire(blocking=False) and A._outside.acquire(blocking=False)
+    try:
+        assert a.get(f"/clip/{sid}/portada").status_code == 404 and not calls
+    finally:
+        A._outside.release(); A._outside.release()
+    assert a.get(f"/clip/{sid}/portada").status_code == 404 and calls
