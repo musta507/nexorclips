@@ -3133,3 +3133,15 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):
 .way-b .bio-code-row{flex-wrap:wrap;width:100%}
 .way-b .bio-code{flex:1 1 150px;min-width:0}
 @media (max-width:480px){.way{padding:12px;gap:10px}}
+
+/* «Añadir cuenta»: elegir por la web o con un código */
+.acc-opts,.acc-nets{display:flex;flex-direction:column;gap:8px}
+.acc-opt,.acc-net{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border-radius:14px;border:1px solid var(--line,#e6e7ea);background:#fff;color:inherit;text-align:left;font:inherit;cursor:pointer;text-decoration:none;transition:background .15s,border-color .15s}
+.acc-opt:hover,.acc-net:hover{background:var(--soft,#f6f7f8);border-color:#d4d5da}
+.acc-opt:focus-visible,.acc-net:focus-visible{outline:2px solid #0e0e0e;outline-offset:2px}
+.acc-opt-ico{flex:none;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:var(--soft,#f2f3f5)}
+.acc-opt-ico svg{width:18px;height:18px}
+.acc-opt-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.acc-opt-t small{font-size:13px;line-height:1.35}
+.acc-opt-go{flex:none;font-size:22px;line-height:1;color:#9a9a9e}
+.acc-net b{flex:1}

@@ -4216,6 +4216,41 @@ def join_campaign(cid):
     return back
 
 
+def campaign_account_problem(camp, platform, handle):
+    """¿Por qué no puede el clipper añadir esta cuenta a la campaña? None si puede (y la deja vinculada a su perfil)."""
+    cid = camp.id
+    if platform not in camp.platform_list:
+        return "Elige una red de las que acepta la campaña."
+    if not handle:
+        return "Escribe el usuario de la cuenta con la que vas a publicar."
+    if handle_owner(platform, handle, exclude_user_id=current_user.id):
+        return f"La cuenta @{handle} ya está vinculada a otro clipper."
+    if False and camp.new_accounts_only:               # (opción quitada)
+        used = (CampaignAccount.query.filter(CampaignAccount.platform == platform, CampaignAccount.handle == handle,
+                                             CampaignAccount.campaign_id != cid).first()
+                or Submission.query.filter(Submission.platform == platform, Submission.author == handle,
+                                           Submission.campaign_id != cid).first())
+        if used:
+            return f"Esta campaña pide una cuenta nueva, solo para ella. @{handle} ya se usó en otra campaña."
+    other = (CampaignAccount.query.filter(CampaignAccount.platform == platform, CampaignAccount.handle == handle,
+                                          CampaignAccount.campaign_id != cid, CampaignAccount.status != "rechazada")
+             .join(Campaign).filter(Campaign.status != "finalizada").first())
+    if other:                                          # cada cuenta es de una sola campaña: todo lo que publica es de ella
+        return f"La cuenta @{handle} ya está en la campaña «{other.campaign.song}». Cada cuenta solo puede estar en una campaña."
+    existing = CampaignAccount.query.filter_by(campaign_id=cid, platform=platform, handle=handle).first()
+    if existing:
+        return ("Ya has añadido esa cuenta a esta campaña." if existing.user_id == current_user.id
+                else f"La cuenta @{handle} ya está en esta campaña con otro clipper.")
+    if len(campaign_accounts(current_user.id, cid)) >= MAX_JOIN_ACCOUNTS:
+        return f"Puedes añadir como máximo {MAX_JOIN_ACCOUNTS} cuentas por campaña."
+    linked = current_user.handles(platform)
+    if handle not in linked:
+        if len(linked) >= MAX_HANDLES:
+            return f"Ya tienes {MAX_HANDLES} cuentas de {PLATFORMS[platform]} vinculadas. Quita alguna en «Mi cuenta»."
+        setattr(current_user, f"{platform}_handles", ",".join(linked + [handle]))
+    return None
+
+
 @app.route("/campana/<int:cid>/cuentas", methods=["POST"])
 @login_required
 def add_campaign_account(cid):
@@ -4228,43 +4263,10 @@ def add_campaign_account(cid):
         return back
     platform = request.form.get("platform", "")
     handle = viewcounter.clean_handle(request.form.get("handle", ""))
-    if platform not in camp.platform_list:
-        flash("Elige una red de las que acepta la campaña.", "error")
+    problem = campaign_account_problem(camp, platform, handle)
+    if problem:
+        flash(problem, "error")
         return back
-    if not handle:
-        flash("Escribe el usuario de la cuenta con la que vas a publicar.", "error")
-        return back
-    if handle_owner(platform, handle, exclude_user_id=current_user.id):
-        flash(f"La cuenta @{handle} ya está vinculada a otro clipper.", "error")
-        return back
-    if False and camp.new_accounts_only:               # (opción quitada)
-        used = (CampaignAccount.query.filter(CampaignAccount.platform == platform, CampaignAccount.handle == handle,
-                                             CampaignAccount.campaign_id != cid).first()
-                or Submission.query.filter(Submission.platform == platform, Submission.author == handle,
-                                           Submission.campaign_id != cid).first())
-        if used:
-            flash(f"Esta campaña pide una cuenta nueva, solo para ella. @{handle} ya se usó en otra campaña.", "error")
-            return back
-    other = (CampaignAccount.query.filter(CampaignAccount.platform == platform, CampaignAccount.handle == handle,
-                                          CampaignAccount.campaign_id != cid, CampaignAccount.status != "rechazada")
-             .join(Campaign).filter(Campaign.status != "finalizada").first())
-    if other:                                          # cada cuenta es de una sola campaña: todo lo que publica es de ella
-        flash(f"La cuenta @{handle} ya está en la campaña «{other.campaign.song}». Cada cuenta solo puede estar en una campaña.", "error")
-        return back
-    existing = CampaignAccount.query.filter_by(campaign_id=cid, platform=platform, handle=handle).first()
-    if existing:
-        flash("Ya has añadido esa cuenta a esta campaña." if existing.user_id == current_user.id
-              else f"La cuenta @{handle} ya está en esta campaña con otro clipper.", "error")
-        return back
-    if len(campaign_accounts(current_user.id, cid)) >= MAX_JOIN_ACCOUNTS:
-        flash(f"Puedes añadir como máximo {MAX_JOIN_ACCOUNTS} cuentas por campaña.", "error")
-        return back
-    linked = current_user.handles(platform)
-    if handle not in linked:
-        if len(linked) >= MAX_HANDLES:
-            flash(f"Ya tienes {MAX_HANDLES} cuentas de {PLATFORMS[platform]} vinculadas. Quita alguna en «Mi cuenta».", "error")
-            return back
-        setattr(current_user, f"{platform}_handles", ",".join(linked + [handle]))
     verified = CampaignAccount.query.filter_by(user_id=current_user.id, platform=platform, handle=handle, bio_verified=True).first()
     db.session.add(CampaignAccount(user_id=current_user.id, campaign_id=cid, platform=platform, handle=handle,
                                    status="aceptada" if verified else "pendiente", decided_at=datetime.utcnow() if verified else None,
@@ -5607,10 +5609,11 @@ def admin_dist(did):
 def api_connect(platform):
     """Conectar una cuenta con la API oficial: manda a la red a pedir permiso."""
     if platform not in official.SCOPES or not api_ready(platform):
-        flash(f"Muy pronto podrás conectar {official.LABELS.get(platform, 'esa red')}. Mientras tanto, tus cuentas se verifican con el código en la bio.", "info")
-        return redirect(url_for("account", _anchor="redes"))
+        flash(f"Muy pronto podrás conectar {official.LABELS.get(platform, 'esa red')}. Mientras tanto, añade tus cuentas con el código en la bio.", "info")
+        return redirect(safe_next(request.args.get("next", "")) or url_for("account", _anchor="redes"))
     state = secrets.token_urlsafe(16)
-    session["api_state"] = {"s": state, "p": platform, "next": safe_next(request.args.get("next", "")) or ""}
+    session["api_state"] = {"s": state, "p": platform, "next": safe_next(request.args.get("next", "")) or "",
+                            "cid": request.args.get("cid", type=int)}       # desde «Añadir cuenta» de una campaña
     return redirect(official.auth_url(platform, state, api_redirect(platform)))
 
 
@@ -5649,6 +5652,21 @@ def api_callback(platform):
     if tk.get("refresh"):
         tok.refresh_enc = enc(tk["refresh"])
     tok.expires_at = datetime.utcnow() + timedelta(seconds=int(tk.get("expires_in") or 3600))
+    added = ""
+    camp = db.session.get(Campaign, st["cid"]) if st.get("cid") else None
+    if camp:                                           # «Añadir cuenta → Conectar»: la cuenta entra en la campaña ya verificada
+        member = campaign_member(current_user.id, camp.id)
+        mine = CampaignAccount.query.filter_by(campaign_id=camp.id, platform=platform, handle=handle, user_id=current_user.id).first()
+        if member and member.status == "aceptada" and not mine:
+            problem = campaign_account_problem(camp, platform, handle)
+            if problem:
+                db.session.commit()
+                flash(f"{official.LABELS[platform]} conectado (@{handle}), pero no se ha añadido a la campaña: {problem}", "error")
+                return redirect(back)
+            db.session.add(CampaignAccount(user_id=current_user.id, campaign_id=camp.id, platform=platform, handle=handle,
+                                           status="pendiente"))
+            db.session.flush()
+            added = f" Cuenta @{handle} añadida y verificada: ya puedes publicar con ella."
     n = 0
     for acc_ in CampaignAccount.query.filter_by(user_id=current_user.id, platform=platform).all():
         if viewcounter.clean_handle(acc_.handle) == handle:          # la cuenta es suya: verificada sin código en la bio
@@ -5660,7 +5678,7 @@ def api_callback(platform):
                 n += 1
     audit("cuenta_conectada", f"{official.LABELS[platform]} @{handle}")
     db.session.commit()
-    flash(f"{official.LABELS[platform]} conectado: @{handle}." + (" Cuenta verificada en tu campaña." if n else ""), "ok")
+    flash(f"{official.LABELS[platform]} conectado: @{handle}." + (added or (" Cuenta verificada en tu campaña." if n else "")), "ok")
     return redirect(back)
 
 

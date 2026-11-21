@@ -3254,3 +3254,34 @@ def test_facebook_paginas_api_oficial(monkeypatch):
     assert vids[0]["views"] == 1234 and vids[0]["likes"] == 7 and vids[0]["url"] == "https://www.facebook.com/reel/900"
     st = official.stats_by_ids("facebook", tk["access"], ["900"])["900"]
     assert st["views"] == 1234 and st["likes"] == 9
+
+
+def test_add_account_by_web_adds_it_verified(monkeypatch):
+    """«Añadir cuenta → Por la web»: al volver de la red, la cuenta entra en la campaña ya verificada."""
+    cid = make_campaign()
+    a = client_for("a@test.com", verify=False)
+    post(a, f"/campana/{cid}/unirme")
+    with A.app.app_context():
+        A.CampaignMember.query.one().status = "aceptada"
+        A.set_setting("api_mode", "on")
+        A.db.session.commit()
+    page = a.get(f"/campana/{cid}").get_data(as_text=True)
+    assert 'data-acc-go="web"' in page and 'data-acc-go="codigo"' in page
+    monkeypatch.setattr(A.official, "TIKTOK_CLIENT_KEY", "k"); monkeypatch.setattr(A.official, "TIKTOK_CLIENT_SECRET", "s")
+    r = a.get(f"/conectar/tiktok?cid={cid}&next=/campana/{cid}")
+    assert r.status_code == 302
+    with a.session_transaction() as s:
+        state = s["api_state"]["s"]
+    monkeypatch.setattr(A.official, "exchange_code", lambda p, c, ru: {"access": "AT", "refresh": "RT", "expires_in": 86400})
+    monkeypatch.setattr(A.official, "profile", lambda p, t: {"id": "oid9", "handle": "nueva_ana", "avatar": ""})
+    a.get(f"/conectar/tiktok/vuelta?code=c&state={state}")
+    with A.app.app_context():
+        acc = A.CampaignAccount.query.filter_by(campaign_id=cid, handle="nueva_ana").one()
+        assert acc.status == "aceptada" and acc.bio_verified
+
+
+def test_add_account_by_web_without_keys_says_soon():
+    cid = make_campaign()
+    a = client_for("a@test.com", verify=False)
+    r = a.get(f"/conectar/instagram?cid={cid}", follow_redirects=True)
+    assert "Muy pronto" in r.get_data(as_text=True)

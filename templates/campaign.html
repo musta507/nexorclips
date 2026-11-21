@@ -214,21 +214,56 @@
 
 
 {% if open_camp and member and member.status == 'aceptada' and accounts|length < 5 %}
-<dialog class="wd-dialog" id="acc-dialog" aria-labelledby="acc-title">
-  <form method="post" action="{{ url_for('add_campaign_account', cid=camp.id) }}" class="form-stack">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+<dialog class="wd-dialog acc-dlg" id="acc-dialog" aria-labelledby="acc-title" data-acc-steps>
+  <div class="form-stack" data-acc-step="elegir">
     <div>
       <h2 id="acc-title">Añadir cuenta</h2>
-      <p class="small muted" style="margin-top:4px">La cuenta con la que vas a publicar. Después la verificarás conectándola o con un código en su bio.</p>
+      <p class="small muted" style="margin-top:4px">La cuenta con la que vas a publicar. ¿Cómo quieres añadirla?</p>
+    </div>
+    <div class="acc-opts">
+      <button type="button" class="acc-opt" data-acc-go="web">
+        <span class="acc-opt-ico" aria-hidden="true">{{ icon("link") }}</span>
+        <span class="acc-opt-t"><b>Por la web</b><small class="muted">Inicias sesión en tu red y queda verificada al momento.</small></span>
+        <span class="acc-opt-go" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="acc-opt" data-acc-go="codigo">
+        <span class="acc-opt-ico" aria-hidden="true">{{ icon("doc") }}</span>
+        <span class="acc-opt-t"><b>Con un código</b><small class="muted">Escribes tu usuario y pones un código en tu bio.</small></span>
+        <span class="acc-opt-go" aria-hidden="true">›</span>
+      </button>
+    </div>
+    <div class="wd-actions"><button type="button" class="btn soft" data-close>Cancelar</button></div>
+  </div>
+
+  <div class="form-stack" data-acc-step="web" hidden>
+    <div>
+      <h2>Conectar por la web</h2>
+      <p class="small muted" style="margin-top:4px">Elige la red. Te llevamos a iniciar sesión y das permiso de solo lectura: nunca publicamos nada.</p>
+    </div>
+    <div class="acc-nets">
+      {% for p in camp.platform_list %}
+      <a class="acc-net" href="{{ url_for('api_connect', platform=p, cid=camp.id, next=url_for('campaign', cid=camp.id)) }}" data-turbo="false">
+        <span class="acc-pl p-{{ p }}">{{ icon(p) }}</span><b>{{ PLATFORMS[p] }}</b><span class="acc-opt-go" aria-hidden="true">›</span></a>
+      {% endfor %}
+    </div>
+    {% set ig, fb = "instagram" in camp.platform_list, "facebook" in camp.platform_list %}{% if ig or fb %}<p class="small muted">{% if ig %}Instagram tiene que ser una cuenta profesional (de creador o empresa){% endif %}{% if ig and fb %} y {% endif %}{% if fb %}{{ "Facebook" if not ig else "Facebook" }}, una página (no un perfil personal){% endif %}.</p>{% endif %}
+    <div class="wd-actions"><button type="button" class="btn soft" data-acc-go="elegir">Atrás</button></div>
+  </div>
+
+  <form method="post" action="{{ url_for('add_campaign_account', cid=camp.id) }}" class="form-stack" data-acc-step="codigo" hidden>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div>
+      <h2>Añadir con un código</h2>
+      <p class="small muted" style="margin-top:4px">Escribe tu usuario. Después te daremos un código para ponerlo en tu bio.</p>
     </div>
     <div class="join-row">
       <select name="platform" aria-label="Red social">
         {% for p in camp.platform_list %}<option value="{{ p }}">{{ PLATFORMS[p] }}</option>{% endfor %}
       </select>
-      <div class="handle-input"><span>@</span><input name="handle" placeholder="tu_usuario" required autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Usuario"></div>
+      <div class="handle-input"><span>@</span><input name="handle" placeholder="tu_usuario" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Usuario"></div>
     </div>
     <div class="wd-actions">
-      <button type="button" class="btn soft" data-close>Cancelar</button>
+      <button type="button" class="btn soft" data-acc-go="elegir">Atrás</button>
       <button class="btn accent">Añadir cuenta</button>
     </div>
   </form>

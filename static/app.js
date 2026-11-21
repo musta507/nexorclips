@@ -2117,3 +2117,21 @@ document.addEventListener("input", function (e) {
   });
   document.addEventListener("turbo:before-cache", quitar);
 })();
+
+// «Añadir cuenta»: primero se elige cómo (por la web o con un código) y luego se ve ese paso
+document.addEventListener("click", function (e) {
+  var b = e.target.closest && e.target.closest("[data-acc-go]");
+  if (!b) return;
+  var dlg = b.closest("[data-acc-steps]");
+  if (!dlg) return;
+  var go = b.getAttribute("data-acc-go");
+  dlg.querySelectorAll("[data-acc-step]").forEach(function (s) { s.hidden = s.getAttribute("data-acc-step") !== go; });
+  var inp = dlg.querySelector('[data-acc-step="' + go + '"] input[name=handle]');
+  if (inp) { inp.required = true; inp.focus(); }
+  else { var f = dlg.querySelector('[data-acc-step="' + go + '"] a, [data-acc-step="' + go + '"] button'); if (f) f.focus(); }
+});
+document.addEventListener("close", function (e) {           // al cerrar, la próxima vez empieza en «elegir»
+  var dlg = e.target;
+  if (!dlg.matches || !dlg.matches("[data-acc-steps]")) return;
+  dlg.querySelectorAll("[data-acc-step]").forEach(function (s) { s.hidden = s.getAttribute("data-acc-step") !== "elegir"; });
+}, true);
