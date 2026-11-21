@@ -2954,7 +2954,7 @@ a.lr:hover{background:var(--soft)}
 .v2-mem{grid-template-columns:auto 1fr auto}
 .v2-seen{display:inline-flex;align-items:center;gap:6px;justify-self:end;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px 10px;box-shadow:0 1px 3px rgba(16,24,40,.08);color:var(--muted)}
 .v2-seen i{width:7px;height:7px;border-radius:50%;background:#c4c5cb}
-.v2-seen.s-on{color:#067647}.v2-seen.s-on i{background:#12b76a;box-shadow:0 0 0 3px #dcfae6}
+.v2-seen.s-on{color:#067647}.v2-seen.s-on i{background:#12b76a}
 .v2-seen.s-week i{background:#f79009}
 /* Animaciones de entrada: al entrar en el panel y al cambiar de periodo */
 @keyframes v2grow{from{transform:scaleY(0)}}
