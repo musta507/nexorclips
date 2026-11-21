@@ -3013,7 +3013,7 @@ def test_legal_pages_cover_connected_networks():
     home = c.get("/").get_data(as_text=True)
     assert 'href="/terminos"' in home and 'href="/privacidad"' in home
     priv = c.get("/privacidad").get_data(as_text=True)
-    for txt in ("Datos de TikTok, Instagram y YouTube", "youtube.com/t/terms", "policies.google.com/privacy",
+    for txt in ("Datos de TikTok, Instagram, YouTube y Facebook", "youtube.com/t/terms", "policies.google.com/privacy",
                 "api-services-user-data-policy", "myaccount.google.com/permissions", "/eliminar-datos"):
         assert txt in priv
     assert "youtube.com/t/terms" in c.get("/terminos").get_data(as_text=True)
@@ -3212,3 +3212,45 @@ def test_portada_y_foto_se_guardan_al_leer(monkeypatch):
     monkeypatch.setattr(A, "fetch_image", lambda url: None)        # aunque el enlace ya no valga, se ve lo guardado
     assert a.get(f"/clip/{sid}/portada").status_code == 200
     assert a.get(f"/cuenta-red/{aid}/foto").status_code == 200
+
+
+def test_facebook_paginas_api_oficial(monkeypatch):
+    """Facebook (páginas): conectar guarda el token de la página y la lectura saca reels con sus reproducciones."""
+    import official
+
+    class R:
+        def __init__(self, d, code=200):
+            self.d, self.status_code, self.text = d, code, ""
+        def json(self):
+            return self.d
+
+    def fake_get(url, params=None, timeout=None, **kw):
+        if url.endswith("/oauth/access_token"):
+            return R({"access_token": "LARGO" if (params or {}).get("grant_type") else "CORTO"})
+        if url.endswith("/me/accounts"):
+            return R({"data": [{"id": "55", "name": "Mi página", "access_token": "PAGINA"}]})
+        if url.endswith("/me") and "picture" in (params or {}).get("fields", ""):
+            return R({"id": "55", "name": "Mi página", "username": "mipagina", "picture": {"data": {"url": "https://fb/p.jpg"}}})
+        if url.endswith("/me/video_reels"):
+            return R({"data": [{"id": "900", "description": "Clip", "created_time": "2026-11-01T10:00:00+0000",
+                                "picture": "https://fb/t.jpg", "likes": {"summary": {"total_count": 7}},
+                                "comments": {"summary": {"total_count": 2}}}]})
+        if url.endswith("/me/videos"):
+            return R({"data": []})
+        if url.endswith("/900"):
+            return R({"id": "900", "description": "Clip", "picture": "https://fb/t.jpg", "likes": {"summary": {"total_count": 9}}})
+        if url.endswith("/900/video_insights"):
+            return R({"data": [{"name": "fb_reels_total_plays", "values": [{"value": 1234}]}]})
+        return R({}, 404)
+
+    monkeypatch.setattr(official.requests, "get", fake_get)
+    monkeypatch.setattr(official, "FACEBOOK_APP_ID", "id"); monkeypatch.setattr(official, "FACEBOOK_APP_SECRET", "s")
+    assert official.configured("facebook") and "facebook.com" in official.auth_url("facebook", "st", "https://x/vuelta")
+    tk = official.exchange_code("facebook", "code", "https://x/vuelta")
+    assert tk["access"] == "PAGINA" and tk["page_id"] == "55"
+    prof = official.profile("facebook", tk["access"])
+    assert prof["handle"] == "mipagina" and prof["avatar"] == "https://fb/p.jpg"
+    vids = official.videos("facebook", tk["access"], "mipagina")
+    assert vids[0]["views"] == 1234 and vids[0]["likes"] == 7 and vids[0]["url"] == "https://www.facebook.com/reel/900"
+    st = official.stats_by_ids("facebook", tk["access"], ["900"])["900"]
+    assert st["views"] == 1234 and st["likes"] == 9

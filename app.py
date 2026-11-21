@@ -2540,7 +2540,9 @@ def discover_clips(now=None):
     _api_fresh.clear()
     accs = (CampaignAccount.query.join(Campaign)
             .filter(CampaignAccount.status == "aceptada", Campaign.status.in_(("activa", DIST_STATUS)),
-                    CampaignAccount.platform.in_(AUTO_PLATFORMS)).all())
+                    CampaignAccount.platform.in_(AUTO_PLATFORMS + ("facebook",))).all())
+    # Facebook solo se busca solo si la página está conectada con la API oficial (no hay otra forma gratis de leerla)
+    accs = [a for a in accs if a.platform != "facebook" or (api_mode() != "off" and api_token_for(a.platform, a.handle))]
     accs = [a for a in accs if not is_fake(a) and (a.campaign.status == DIST_STATUS
             or (not a.campaign.exhausted and a.platform in a.campaign.platform_list))]
     skipped = len(accs)
@@ -6093,7 +6095,7 @@ def admin_settings(app_test=None):
     apis = [{"key": p, "label": official.LABELS[p], "ok": official.configured(p), "env": official.ENV_NEEDED[p],
              "scopes": official.SCOPES[p], "redirect": base + url_for("api_callback", platform=p),
              "n": ApiToken.query.filter_by(platform=p, status="ok").count(),
-             "bad": ApiToken.query.filter_by(platform=p).filter(ApiToken.status != "ok").count()} for p in ("tiktok", "instagram", "youtube")]
+             "bad": ApiToken.query.filter_by(platform=p).filter(ApiToken.status != "ok").count()} for p in ("tiktok", "instagram", "youtube", "facebook")]
     api_info = {"mode": api_mode(), "modes": API_MODES, "apis": apis, "deletion": base + url_for("data_deletion_page"),
                 "meta_deletion": base + url_for("meta_data_deletion"), "privacy": base + url_for("privacy"), "terms": base + url_for("terms")}
     host = urlparse(base).hostname or ""

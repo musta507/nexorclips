@@ -59,7 +59,7 @@ TEST_DATABASE_URL=postgresql://... python -m pytest tests -q   # los mismos en P
 - **Bunny:** las copias de vídeo se hacen clip a clip y en segundo plano.
 - **Portadas y fotos de cuentas:** los enlaces de TikTok/Instagram caducan y no se dejan enlazar. Cuando Apify trae una portada o foto, se descarga y se guarda pequeña en la base de datos (`keep_image`, `thumb_data`/`avatar_data`); la web las sirve desde `/clip/<id>/portada` y `/cuenta-red/<id>/foto`. Si fallan 8 seguidas, para 10 min para no alargar la lectura. TikTok no da la portada por oEmbed desde Railway. Prueba: Panel técnico → Vistas y clips → «Probar portadas y fotos».
 - **Panel de admin:** menú por grupos en `base.html` (Campañas, Comunidad, Sistema). «Creadores interesados» quitado del menú y de la campanita (Mustapha); la página sigue en /admin/solicitudes por si acaso. No meter en el menú lo que hacen los mods (revisar clips, solicitudes: van dentro de cada campaña) ni lo que no le interesa al cliente; Mustapha lo pidió así; buscador en `/admin/buscar`; el Panel técnico va por pestañas (`data-hash-tabs`) y los botones vuelven a su pestaña con `_anchor`.
-- **APIs oficiales:** la guía de solicitud está en `templates/admin/_api_guide.html` (Panel técnico → APIs oficiales). Los códigos de verificación del dominio se guardan en el ajuste `site_verify` y se sirven en `_head.html`, `/tiktok….txt` y `/google….html`. Si cambian los permisos de `official.SCOPES`, hay que cambiar también los textos de la guía y la política de privacidad.
+- **APIs oficiales:** TikTok, Instagram, YouTube y Facebook (solo páginas: `pages_show_list`, `pages_read_engagement`, `read_insights`; el token de la página no caduca; variables `FACEBOOK_APP_ID`/`FACEBOOK_APP_SECRET`). Las cuentas de Facebook solo se buscan solas si la página está conectada. La guía de solicitud está en `templates/admin/_api_guide.html` (Panel técnico → APIs oficiales). Los códigos de verificación del dominio se guardan en el ajuste `site_verify` y se sirven en `_head.html`, `/tiktok….txt` y `/google….html`. Si cambian los permisos de `official.SCOPES`, hay que cambiar también los textos de la guía y la política de privacidad.
 
 ## Cosas que a Mustapha le gustan (no cambiarlas sin que lo pida)
 
@@ -102,7 +102,7 @@ Para el final:
 - Comprobar en producción que yt-dlp trae las vistas (Panel técnico → «Probar yt-dlp con una cuenta»).
 
 Sin decidir:
-- APIs oficiales de TikTok, Instagram y YouTube: el código, las páginas legales y la guía están hechos; falta que Mustapha cree las apps en cada red y pase su revisión (necesita antes el dominio propio).
+- APIs oficiales de TikTok, Instagram, YouTube y Facebook (páginas): el código, las páginas legales y la guía están hechos; falta que Mustapha cree las apps en cada red y pase su revisión (necesita antes el dominio propio).
 - Botón «Conectar con Whop» para identificar a los miembros del Whop.
 - Acceso del cliente en los planes de distribución.
 

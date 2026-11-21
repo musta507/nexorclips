@@ -98,6 +98,21 @@
 </details>
 
 <details class="card tight ag-net">
+  <summary><span class="acc-pl p-facebook">{{ icon("facebook") }}</span><b>Facebook (páginas)</b><span class="small muted">· developers.facebook.com · la misma revisión de Meta que Instagram</span></summary>
+  <ol class="ag-steps">
+    <li>En la <b>misma app de Meta</b> que Instagram (o una nueva del mismo portfolio comercial), añade el producto <b>«Inicio de sesión con Facebook para empresas»</b>.</li>
+    <li>En <b>Inicio de sesión con Facebook → Configuración</b>, pega como <b>URI de redireccionamiento de OAuth válido</b>: {% set fbapi = api_info.apis|selectattr("key", "equalto", "facebook")|first %}{{ cp(fbapi.redirect) }}</li>
+    <li>Copia el <b>Identificador de la app</b> y la <b>Clave secreta de la app</b> (Configuración de la app → Básica) y ponlos en Railway como <code>FACEBOOK_APP_ID</code> y <code>FACEBOOK_APP_SECRET</code>.</li>
+    <li>Añade tu Facebook como <b>administrador o probador</b> de la app, crea una página de prueba y conéctala en la web una vez: Meta exige una llamada correcta por permiso antes de dejar pedirlo.</li>
+    <li><b>Importante:</b> Meta solo deja leer <b>páginas</b>, no perfiles personales. Los clippers que publiquen en su perfil seguirán contándose como ahora.</li>
+    <li>En <b>Revisión de la app</b> pide acceso avanzado a <code>pages_show_list</code>, <code>pages_read_engagement</code> y <code>read_insights</code>, con explicación y vídeo de pantalla (como en Instagram).</li>
+  </ol>
+  <b class="small">pages_show_list · pages_read_engagement · read_insights</b>
+  {{ en("Clippers connect the Facebook Page where they publish campaign reels. We read the page id, name and picture to confirm they own the page registered for a campaign, the list of the page's own reels and videos with likes and comments, and the play count of each reel to calculate what the campaign pays per 1,000 views. We never post or read personal profiles.",
+        "Los clippers conectan la página de Facebook donde publican los reels de la campaña. Leemos el id, el nombre y la foto de la página para confirmar que es suya, la lista de sus reels y vídeos con me gusta y comentarios, y las reproducciones de cada reel para calcular el pago por 1.000 vistas. Nunca publicamos ni leemos perfiles personales.") }}
+</details>
+
+<details class="card tight ag-net">
   <summary><span class="acc-pl p-youtube">{{ icon("youtube") }}</span><b>YouTube</b><span class="small muted">· console.cloud.google.com · unos 10 días laborables</span></summary>
   <ol class="ag-steps">
     <li>Entra en <b>console.cloud.google.com</b>, en el mismo proyecto que ya usas para «Entrar con Google». En <b>APIs y servicios → Biblioteca</b> activa <b>YouTube Data API v3</b> y <b>YouTube Analytics API</b>.</li>

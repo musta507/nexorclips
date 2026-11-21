@@ -1,4 +1,4 @@
-"""APIs oficiales de TikTok, Instagram y YouTube (cambio 87).
+"""APIs oficiales de TikTok, Instagram, YouTube y Facebook (páginas) (cambio 87).
 
 Cuando el clipper conecta su cuenta (OAuth), la web lee sus vídeos, sus cifras y los datos de su audiencia
 (país, edad y sexo) directamente de cada red, sin Apify. Si no hay permisos o algo falla, se sigue usando Apify.
@@ -21,19 +21,25 @@ TIKTOK_CLIENT_KEY = os.environ.get("TIKTOK_CLIENT_KEY", "")
 TIKTOK_CLIENT_SECRET = os.environ.get("TIKTOK_CLIENT_SECRET", "")
 INSTAGRAM_APP_ID = os.environ.get("INSTAGRAM_APP_ID", "")
 INSTAGRAM_APP_SECRET = os.environ.get("INSTAGRAM_APP_SECRET", "")
+FACEBOOK_APP_ID = os.environ.get("FACEBOOK_APP_ID", "")
+FACEBOOK_APP_SECRET = os.environ.get("FACEBOOK_APP_SECRET", "")
 
 IG_GRAPH = "https://graph.instagram.com/v21.0"
+FB_GRAPH = "https://graph.facebook.com/v21.0"
 
 # Qué pide cada red (lo que sale en la pantalla de permisos)
 SCOPES = {
     "youtube": ["https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/yt-analytics.readonly"],
     "tiktok": ["user.info.basic", "user.info.profile", "user.info.stats", "video.list"],
     "instagram": ["instagram_business_basic", "instagram_business_manage_insights"],
+    # Facebook: solo páginas (Meta no deja leer los perfiles personales). Se usa la primera página que el clipper elija.
+    "facebook": ["pages_show_list", "pages_read_engagement", "read_insights"],
 }
-LABELS = {"youtube": "YouTube", "tiktok": "TikTok", "instagram": "Instagram"}
+LABELS = {"youtube": "YouTube", "tiktok": "TikTok", "instagram": "Instagram", "facebook": "Facebook"}
 ENV_NEEDED = {"youtube": ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
               "tiktok": ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"],
-              "instagram": ["INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET"]}
+              "instagram": ["INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET"],
+              "facebook": ["FACEBOOK_APP_ID", "FACEBOOK_APP_SECRET"]}
 
 
 class ApiError(Exception):
@@ -46,7 +52,8 @@ class ApiError(Exception):
 def configured(platform):
     return {"youtube": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
             "tiktok": bool(TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET),
-            "instagram": bool(INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET)}.get(platform, False)
+            "instagram": bool(INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET),
+            "facebook": bool(FACEBOOK_APP_ID and FACEBOOK_APP_SECRET)}.get(platform, False)
 
 
 def _ts(v):
@@ -95,6 +102,10 @@ def auth_url(platform, state, redirect_uri):
         return "https://www.instagram.com/oauth/authorize?" + urlencode({
             "client_id": INSTAGRAM_APP_ID, "redirect_uri": redirect_uri, "response_type": "code",
             "scope": ",".join(SCOPES["instagram"]), "state": state, "enable_fb_login": "0", "force_authentication": "1"})
+    if platform == "facebook":
+        return "https://www.facebook.com/v21.0/dialog/oauth?" + urlencode({
+            "client_id": FACEBOOK_APP_ID, "redirect_uri": redirect_uri, "response_type": "code",
+            "scope": ",".join(SCOPES["facebook"]), "state": state})
     raise ApiError("Red no soportada")
 
 
@@ -125,6 +136,21 @@ def exchange_code(platform, code, redirect_uri):
             timeout=TIMEOUT), "Instagram")
         # Instagram no tiene «refresh token»: el token largo (60 días) se renueva a sí mismo
         return {"access": long_.get("access_token", ""), "refresh": "", "expires_in": long_.get("expires_in"), "scope": ""}
+    if platform == "facebook":
+        d = _check(requests.get(f"{FB_GRAPH}/oauth/access_token", params={
+            "client_id": FACEBOOK_APP_ID, "client_secret": FACEBOOK_APP_SECRET, "redirect_uri": redirect_uri, "code": code},
+            timeout=TIMEOUT), "Facebook")
+        long_ = _check(requests.get(f"{FB_GRAPH}/oauth/access_token", params={
+            "grant_type": "fb_exchange_token", "client_id": FACEBOOK_APP_ID, "client_secret": FACEBOOK_APP_SECRET,
+            "fb_exchange_token": d.get("access_token", "")}, timeout=TIMEOUT), "Facebook")
+        pages = _check(requests.get(f"{FB_GRAPH}/me/accounts", params={
+            "fields": "id,name,access_token", "access_token": long_.get("access_token", "")}, timeout=TIMEOUT), "Facebook")
+        page = (pages.get("data") or [None])[0]
+        if not page or not page.get("access_token"):
+            raise ApiError("Facebook: esta cuenta no tiene ninguna página (los perfiles personales no se pueden leer)")
+        # el token de una página sacado de un token largo no caduca: se guarda ese
+        return {"access": page["access_token"], "refresh": "", "expires_in": 60 * 24 * 3600, "scope": ",".join(SCOPES["facebook"]),
+                "page_id": page.get("id", "")}
     raise ApiError("Red no soportada")
 
 
@@ -147,6 +173,9 @@ def refresh_token(platform, refresh, access=""):
         d = _check(requests.get("https://graph.instagram.com/refresh_access_token", params={
             "grant_type": "ig_refresh_token", "access_token": access}, timeout=TIMEOUT), "Instagram")
         return {"access": d.get("access_token", access), "refresh": "", "expires_in": d.get("expires_in")}
+    if platform == "facebook":                    # el token de la página no caduca: se comprueba que sigue valiendo
+        _check(requests.get(f"{FB_GRAPH}/me", params={"fields": "id", "access_token": access}, timeout=TIMEOUT), "Facebook")
+        return {"access": access, "refresh": "", "expires_in": 60 * 24 * 3600}
     raise ApiError("Red no soportada")
 
 
@@ -172,6 +201,11 @@ def profile(platform, access):
                                                           "access_token": access}, timeout=TIMEOUT), "Instagram")
         return {"id": str(d.get("user_id") or d.get("id") or ""), "handle": d.get("username", ""), "name": d.get("name", ""),
                 "avatar": d.get("profile_picture_url", ""), "followers": d.get("followers_count")}
+    if platform == "facebook":
+        d = _check(requests.get(f"{FB_GRAPH}/me", params={"fields": "id,name,username,picture.type(large){url},followers_count",
+                                                          "access_token": access}, timeout=TIMEOUT), "Facebook")
+        return {"id": str(d.get("id", "")), "handle": d.get("username") or d.get("id", ""), "name": d.get("name", ""),
+                "avatar": ((d.get("picture") or {}).get("data") or {}).get("url", ""), "followers": d.get("followers_count")}
     raise ApiError("Red no soportada")
 
 
@@ -184,6 +218,8 @@ def videos(platform, access, handle="", limit=30):
         return _tt_videos(access, handle, limit)
     if platform == "instagram":
         return _ig_videos(access, handle, limit)
+    if platform == "facebook":
+        return _fb_videos(access, handle, limit)
     raise ApiError("Red no soportada")
 
 
@@ -258,6 +294,52 @@ def _ig_videos(access, handle, limit):
                     "posted_at": _ts(m.get("timestamp")), "caption": (m.get("caption") or "")[:300],
                     "thumb": m.get("thumbnail_url", ""), "avatar": "", "video_url": m.get("media_url", "")})
     return out
+
+
+FB_FIELDS = "id,description,created_time,permalink_url,picture,likes.summary(true).limit(0),comments.summary(true).limit(0)"
+
+
+def _fb_views(access, vid):
+    """Reproducciones de un vídeo o reel de una página (Meta las da en sus estadísticas)."""
+    try:
+        d = _check(requests.get(f"{FB_GRAPH}/{vid}/video_insights", params={
+            "metric": "fb_reels_total_plays,blue_reels_play_count,total_video_views", "access_token": access}, timeout=TIMEOUT), "Facebook")
+    except ApiError as exc:
+        if exc.expired:
+            raise
+        return None
+    vals = {x.get("name"): (x.get("values") or [{}])[0].get("value") for x in d.get("data") or []}
+    for k in ("fb_reels_total_plays", "blue_reels_play_count", "total_video_views"):
+        if vals.get(k) is not None:
+            return _int(vals[k])
+    return None
+
+
+def _fb_item(v, access, handle):
+    vid = str(v.get("id", ""))
+    return {"url": f"https://www.facebook.com/reel/{vid}", "vid": vid, "author": handle, "views": _fb_views(access, vid),
+            "likes": _int(((v.get("likes") or {}).get("summary") or {}).get("total_count")),
+            "comments": _int(((v.get("comments") or {}).get("summary") or {}).get("total_count")), "shares": None,
+            "posted_at": _ts(v.get("created_time")), "caption": (v.get("description") or "")[:300],
+            "thumb": v.get("picture", ""), "avatar": "", "video_url": ""}
+
+
+def _fb_videos(access, handle, limit):
+    """Reels y vídeos de la página (los dos sitios donde se publican), sin repetir."""
+    out, seen = [], set()
+    for edge in ("video_reels", "videos"):
+        try:
+            d = _check(requests.get(f"{FB_GRAPH}/me/{edge}", params={"fields": FB_FIELDS, "limit": min(limit, 50),
+                                                                     "access_token": access}, timeout=TIMEOUT), "Facebook")
+        except ApiError as exc:
+            if exc.expired:
+                raise
+            continue
+        for v in d.get("data") or []:
+            if str(v.get("id")) not in seen:
+                seen.add(str(v.get("id")))
+                out.append(_fb_item(v, access, handle))
+    return out[:limit]
 
 
 # ---------------------------------------------------------------- 4) audiencia: país, edad y sexo
@@ -349,6 +431,17 @@ def stats_by_ids(platform, access, ids, handle=""):
                                          "comments": _int(v.get("comment_count")), "shares": _int(v.get("share_count")),
                                          "author": handle, "thumb": v.get("cover_image_url", ""),
                                          "caption": (v.get("video_description") or "")[:300]}
+    elif platform == "facebook":
+        for vid in ids[:50]:
+            try:
+                v = _check(requests.get(f"{FB_GRAPH}/{vid}", params={"fields": FB_FIELDS, "access_token": access},
+                                        timeout=TIMEOUT), "Facebook")
+            except ApiError as exc:
+                if exc.expired:
+                    raise
+                continue
+            it = _fb_item(v, access, handle)
+            out[vid] = {k: it[k] for k in ("views", "likes", "comments", "shares", "author", "thumb", "caption")}
     elif platform == "instagram":
         # Instagram identifica los reels por su código del enlace; se buscan en la lista de la cuenta (hasta 200)
         want, url = set(ids), f"{IG_GRAPH}/me/media"

@@ -8,8 +8,8 @@
   <h2>Qué datos guardamos</h2>
   <ul>
     <li><b>Tu cuenta:</b> nombre, correo y foto de perfil. Si entras con Google, no recibimos tu contraseña de Google; si te registras con correo, guardamos tu contraseña cifrada, nunca en texto.</li>
-    <li><b>Cuentas vinculadas:</b> los nombres de usuario de TikTok, Instagram y YouTube que añadas y el resultado de la comprobación de su bio.</li>
-    <li><b>Cuentas conectadas (opcional):</b> si conectas tu TikTok, Instagram o YouTube con su API oficial, guardamos el permiso de acceso cifrado, las cifras de tus vídeos y, si la red lo permite, datos agregados de tu audiencia (países, edades y sexo en porcentajes). Puedes desconectarla cuando quieras y se borran. <a class="link" href="{{ url_for('data_deletion_page') }}">Cómo borrar tus datos</a>.</li>
+    <li><b>Cuentas vinculadas:</b> los nombres de usuario de TikTok, Instagram, YouTube y Facebook que añadas y el resultado de la comprobación de su bio.</li>
+    <li><b>Cuentas conectadas (opcional):</b> si conectas tu TikTok, Instagram, YouTube o página de Facebook con su API oficial, guardamos el permiso de acceso cifrado, las cifras de tus vídeos y, si la red lo permite, datos agregados de tu audiencia (países, edades y sexo en porcentajes). Puedes desconectarla cuando quieras y se borran. <a class="link" href="{{ url_for('data_deletion_page') }}">Cómo borrar tus datos</a>.</li>
     <li><b>Solicitudes a campañas:</b> las respuestas que das a las preguntas de cada campaña.</li>
     <li><b>Clips:</b> los enlaces que envías y sus estadísticas públicas (vistas, me gusta, comentarios, compartidos y autor). Mientras revisamos un clip guardamos una copia del vídeo para verlo y como prueba en caso de fraude; la borramos unos días después de revisarlo.</li>
     <li><b>Cobros:</b> tu usuario de Whop y el historial de tus retiros.</li>
@@ -19,7 +19,7 @@
     <li><b>Datos técnicos:</b> la dirección IP y registros del servidor, para la seguridad y para evitar abusos.</li>
   </ul>
 
-  <h2 id="redes">Datos de TikTok, Instagram y YouTube</h2>
+  <h2 id="redes">Datos de TikTok, Instagram, YouTube y Facebook</h2>
   <p>Conectar tu cuenta de una red es opcional. Si la conectas, {{ APP_NAME }} solo puede <b>leer</b>: nunca publica, edita ni borra nada en tu cuenta, y nunca recibe tu contraseña.</p>
   <ul>
     <li><b>Qué leemos:</b> el identificador, el nombre de usuario, la foto y el número de seguidores de tu cuenta; la lista de tus propios vídeos con sus cifras (vistas, me gusta, comentarios y compartidos); y, si la red lo ofrece, datos agregados de tu audiencia (países, edades y sexo, siempre en porcentajes y nunca de personas concretas).</li>
@@ -29,7 +29,7 @@
     <li><b>Cómo retirar el permiso:</b> en <b>Ajustes → Redes conectadas → Desconectar</b>; el permiso y los datos de audiencia se borran al momento. También puedes retirarlo desde la propia red: en Google, en <a class="link" href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>; en TikTok, en Ajustes → Seguridad y permisos → Gestionar permisos de apps; en Instagram, en Configuración → Apps y sitios web. <a class="link" href="{{ url_for('data_deletion_page') }}">Cómo borrar tus datos</a>.</li>
   </ul>
   <p><b>YouTube.</b> {{ APP_NAME }} usa los Servicios de la API de YouTube. Al conectar tu canal aceptas también las <a class="link" href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">Condiciones del Servicio de YouTube</a>, y tus datos se tratan además según la <a class="link" href="https://policies.google.com/privacy" target="_blank" rel="noopener">Política de Privacidad de Google</a>. El uso que hacemos de la información recibida de las API de Google cumple la <a class="link" href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Política de Datos de Usuario de los Servicios de API de Google</a>, incluidos los requisitos de uso limitado.</p>
-  <p><b>TikTok e Instagram.</b> Los datos leídos de TikTok y de Instagram se usan solo para lo descrito aquí y conforme a las condiciones para desarrolladores de TikTok y de Meta.</p>
+  <p><b>TikTok, Instagram y Facebook.</b> Los datos leídos de TikTok, de Instagram y de tu página de Facebook se usan solo para lo descrito aquí y conforme a las condiciones para desarrolladores de TikTok y de Meta. De Facebook solo leemos la página que eliges al conectar (nombre, foto y sus vídeos y reels con sus reproducciones, me gusta y comentarios), nunca tu perfil personal ni publicamos nada.</p>
 
   <h2>Para qué los usamos</h2>
   <p>Para gestionar tu cuenta, contar las vistas de tus clips, calcular y pagar tus ganancias, prevenir el fraude, atenderte por el chat y enviar a los creadores informes de sus campañas. En esos informes aparecen los nombres de usuario públicos de los vídeos, nunca tu correo ni tus datos de cobro.</p>
@@ -38,7 +38,7 @@
   <p>Solo con los servicios necesarios para que la plataforma funcione. No vendemos tus datos.</p>
   <ul>
     <li><b>Google:</b> inicio de sesión, si eliges entrar con Google, y lectura de tu canal de YouTube si lo conectas.</li>
-    <li><b>TikTok y Meta (Instagram):</b> lectura de tu cuenta y de tus vídeos, solo si la conectas.</li>
+    <li><b>TikTok y Meta (Instagram y Facebook):</b> lectura de tu cuenta o página y de tus vídeos, solo si la conectas.</li>
     <li><b>Railway:</b> servidores y base de datos, alojados en la Unión Europea (Países Bajos).</li>
     <li><b>Apify:</b> lee las estadísticas públicas de los vídeos y la bio pública de tus cuentas vinculadas.</li>
     <li><b>Whop:</b> envía tus pagos; recibe tu usuario de Whop y el importe de cada retiro.</li>
