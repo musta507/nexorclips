@@ -499,9 +499,11 @@ def ytdlp_profile_videos(platform, handle, per=12, known=()):
     url = {"tiktok": f"https://www.tiktok.com/@{h}", "youtube": f"https://www.youtube.com/@{h}/shorts",
            "instagram": f"https://www.instagram.com/{h}/"}[platform]
     out = []
+    _ytdlp_keep_avatar()
     with _ydl({"extract_flat": "in_playlist", "playlistend": per}) as y:
         info = y.extract_info(url, download=False) or {}
         entries = [e for e in (info.get("entries") or []) if isinstance(e, dict) and e.get("id")][:per]
+        avatar = _ytdlp_avatar(info, entries)
         for e in entries:
             vid = str(e["id"])
             if platform == "tiktok":
@@ -527,8 +529,65 @@ def ytdlp_profile_videos(platform, handle, per=12, known=()):
             # Si el listado ya trae las cifras (TikTok suele darlas), se devuelven: quien llama decide si las usa
             out.append({"url": link, "vid": vid, "author": h, "posted_at": posted, "views": None,
                         "yt_views": num("view_count"), "likes": num("like_count"), "comments": num("comment_count"),
-                        "shares": num("repost_count", "share_count")})
+                        "shares": num("repost_count", "share_count"),
+                        "thumb": _ytdlp_thumb(platform, vid, e), "avatar": avatar})
     return out
+
+
+def _https(u):
+    return u if isinstance(u, str) and u.startswith("https://") else ""
+
+
+def _ytdlp_thumb(platform, vid, e):
+    """Portada del vídeo según el listado de yt-dlp (la fija, no la animada). En YouTube siempre hay una con su ID."""
+    ths = [t for t in (e.get("thumbnails") or []) if isinstance(t, dict) and _https(t.get("url"))]
+    for want in ("cover", "originCover", "thumbnail"):
+        for t in ths:
+            if t.get("id") == want:
+                return t["url"]
+    if platform == "youtube":
+        return f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
+    return _https(e.get("thumbnail")) or (ths[-1]["url"] if ths else "")
+
+
+def _ytdlp_avatar(info, entries):
+    """Foto de la cuenta: en YouTube viene con el canal; en TikTok, con cada vídeo (ver _ytdlp_keep_avatar)."""
+    for t in info.get("thumbnails") or []:
+        if isinstance(t, dict) and "avatar" in str(t.get("id", "")) and _https(t.get("url")):
+            return t["url"]
+    for e in entries:
+        if _https(e.get("author_avatar")):
+            return e["author_avatar"]
+    return ""
+
+
+_avatar_patched = False
+
+
+def _ytdlp_keep_avatar():
+    """yt-dlp lee la foto del autor de TikTok pero la descarta: se conserva en `author_avatar`. Si yt-dlp cambia, no pasa nada."""
+    global _avatar_patched
+    if _avatar_patched:
+        return
+    _avatar_patched = True
+    try:
+        from yt_dlp.extractor.tiktok import TikTokBaseIE
+        orig = TikTokBaseIE._parse_aweme_video_web
+
+        def patched(self, aweme_detail, *a, **k):
+            out = orig(self, aweme_detail, *a, **k)
+            try:
+                au = (aweme_detail or {}).get("author")
+                if isinstance(au, dict) and isinstance(out, dict):
+                    pic = au.get("avatarMedium") or au.get("avatarThumb") or au.get("avatarLarger")
+                    if _https(pic):
+                        out["author_avatar"] = pic
+            except Exception:  # noqa: BLE001
+                pass
+            return out
+        TikTokBaseIE._parse_aweme_video_web = patched
+    except Exception as e:  # noqa: BLE001
+        log.warning("No se pudo conservar la foto del autor en yt-dlp: %s", e)
 
 
 def ytdlp_download(url, max_mb=300):

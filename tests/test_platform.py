@@ -3289,3 +3289,40 @@ def test_add_account_by_web_without_keys_goes_to_the_network():
         state = s["api_state"]["s"]
     r = a.get(f"/conectar/instagram/vuelta?code=c&state={state}", follow_redirects=True)
     assert "Muy pronto" in r.get_data(as_text=True)
+
+
+def test_ytdlp_brings_cover_and_account_photo(monkeypatch):
+    """Cuando yt-dlp da las vistas (y no se pide nada a Apify), también deja guardadas la portada y la foto de la cuenta."""
+    import io
+    from PIL import Image
+    make_campaign(song="Bali")
+    client_for("a@test.com", tiktok="clipsdepablo")
+    _auto_accept()
+    now = datetime.utcnow()
+    with A.app.app_context():
+        A.CampaignAccount.query.one().decided_at = now - timedelta(days=2)
+        A.set_setting("search_engine", "ytdlp")
+        A.db.session.commit()
+    vids = [{"url": "https://www.tiktok.com/@clipsdepablo/video/7500000000000000021", "vid": "7500000000000000021",
+             "author": "clipsdepablo", "posted_at": now - timedelta(hours=3), "views": None, "yt_views": 500,
+             "thumb": "https://cdn.test/portada.jpg", "avatar": "https://cdn.test/foto.jpg"}]
+    monkeypatch.setattr(A.viewcounter, "ytdlp_available", lambda: True)
+    monkeypatch.setattr(A.viewcounter, "ytdlp_profile_videos", lambda p, h, per=12, known=(): [dict(v) for v in vids])
+    buf = io.BytesIO(); Image.new("RGB", (300, 400), "red").save(buf, "JPEG")
+    monkeypatch.setattr(A, "fetch_image", lambda url: (buf.getvalue(), "image/jpeg"))
+    with A.app.app_context():
+        added, errors = A.discover_clips()
+        assert added == 1 and not errors
+        sub, acc = A.Submission.query.one(), A.CampaignAccount.query.one()
+        assert sub.views == 500 and sub.thumb_ok and sub.thumb_data
+        assert acc.avatar_ok and acc.avatar_data
+
+
+def test_ytdlp_thumb_picks_the_still_cover():
+    V = A.viewcounter
+    e = {"thumbnails": [{"id": "dynamicCover", "url": "https://x/anim.webp"}, {"id": "cover", "url": "https://x/fija.jpg"}]}
+    assert V._ytdlp_thumb("tiktok", "1", e) == "https://x/fija.jpg"
+    assert V._ytdlp_thumb("youtube", "abc", {}) == "https://i.ytimg.com/vi/abc/hqdefault.jpg"
+    assert V._ytdlp_thumb("tiktok", "1", {}) == ""
+    assert V._ytdlp_avatar({"thumbnails": [{"id": "avatar_uncropped", "url": "https://x/a.jpg"}]}, []) == "https://x/a.jpg"
+    assert V._ytdlp_avatar({}, [{"author_avatar": "https://x/b.jpg"}]) == "https://x/b.jpg"
