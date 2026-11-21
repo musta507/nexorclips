@@ -3189,3 +3189,26 @@ def test_anadir_mod_por_usuario():
     post(admin, "/admin/mods", act="anadir", user=name, uid=str(uid), campaigns=[str(cid)], perms=["soporte"])
     with A.app.app_context():
         assert A.CampaignMod.query.filter_by(user_id=uid, campaign_id=cid).count() == 1
+
+
+
+def test_portada_y_foto_se_guardan_al_leer(monkeypatch):
+    """Cuando Apify trae portada y foto, se guardan en la web (luego los enlaces de las redes caducan)."""
+    import io
+    from PIL import Image
+    buf = io.BytesIO(); Image.new("RGB", (400, 600), "red").save(buf, "PNG")
+    monkeypatch.setattr(A, "fetch_image", lambda url: (buf.getvalue(), "image/png"))
+    cid = make_campaign()
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    with A.app.app_context():
+        s = A.Submission.query.filter_by(campaign_id=cid).first()
+        A.apply_reading(s, {"views": 5, "author": "ana", "thumb": "https://cdn/x.jpg", "avatar": "https://cdn/a.jpg"}, datetime.utcnow())
+        A.db.session.commit()
+        sid = s.id
+        acc = A.CampaignAccount.query.filter_by(campaign_id=cid, handle="ana").first()
+        assert s.thumb_ok and s.thumb_data[:2] == b"\xff\xd8" and acc.avatar_ok
+        aid = acc.id
+    monkeypatch.setattr(A, "fetch_image", lambda url: None)        # aunque el enlace ya no valga, se ve lo guardado
+    assert a.get(f"/clip/{sid}/portada").status_code == 200
+    assert a.get(f"/cuenta-red/{aid}/foto").status_code == 200

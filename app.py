@@ -531,6 +531,8 @@ class Submission(db.Model):
     media_url = db.Column(db.String(1000), default="")       # enlace de descarga que da Apify (caduca)
     video_error = db.Column(db.String(300), default="")      # por qué falló la copia en Bunny
     thumb_url = db.Column(db.String(1000), default="")       # portada que da Apify (se renueva en cada lectura)
+    thumb_data = db.deferred(db.Column(db.LargeBinary, nullable=True))   # portada guardada (las de las redes caducan)
+    thumb_ok = db.Column(db.Boolean, default=False)
     caption = db.Column(db.String(300), default="")          # texto del vídeo
     views_updated_at = db.Column(db.DateTime, nullable=True)
     checked_at = db.Column(db.DateTime, nullable=True)
@@ -647,6 +649,8 @@ class CampaignAccount(db.Model):
     last_post_at = db.Column(db.DateTime, nullable=True)       # último vídeo que vimos en su perfil
     last_scan_at = db.Column(db.DateTime, nullable=True)       # última vez que miramos su perfil
     avatar_url = db.Column(db.String(1000), default="")        # foto de perfil que da Apify (se renueva)
+    avatar_data = db.deferred(db.Column(db.LargeBinary, nullable=True))  # foto guardada (las de las redes caducan)
+    avatar_ok = db.Column(db.Boolean, default=False)
     user = db.relationship("User")
     campaign = db.relationship("Campaign")
 
@@ -1890,13 +1894,16 @@ def apply_reading(sub, info, now):
         sub.media_url = str(info["video_url"])[:1000]       # el enlace directo de TikTok pide cookies: solo vale el de Apify
     if isinstance(info, dict) and info.get("thumb"):
         sub.thumb_url = str(info["thumb"])[:1000]
+        if not sub.thumb_ok:                                   # la portada se guarda una vez, al llegar (luego caduca)
+            keep_image(sub, "thumb", sub.thumb_url, (240, 320))
     if isinstance(info, dict) and info.get("caption") and not sub.caption:
         sub.caption = str(info["caption"])[:300]
     if isinstance(info, dict) and info.get("avatar") and (author or sub.author):   # foto de la cuenta, también al leer vistas
         h = viewcounter.clean_handle(author or sub.author)
         acc = CampaignAccount.query.filter_by(campaign_id=sub.campaign_id, platform=sub.platform, handle=h).first()
-        if acc and acc.avatar_url != info["avatar"]:
+        if acc and (acc.avatar_url != info["avatar"] or not acc.avatar_ok):
             acc.avatar_url = str(info["avatar"])[:1000]
+            keep_image(acc, "avatar", acc.avatar_url, (96, 96))
     sub.checked_at = now
     sub.views_error = ""
     if posted and not sub.posted_at:
@@ -2798,8 +2805,9 @@ def _ingest(platform, chunk, items, now, update_existing=False):
         posted = it.get("posted_at")
         if posted and (not acc.last_post_at or posted > acc.last_post_at):
             acc.last_post_at = posted
-        if it.get("avatar"):
+        if it.get("avatar") and (acc.avatar_url != it["avatar"][:1000] or not acc.avatar_ok):
             acc.avatar_url = it["avatar"][:1000]
+            keep_image(acc, "avatar", acc.avatar_url, (96, 96))
         key = f"{platform}:{it['vid']}"
         old = Submission.query.filter_by(video_key=key).first()
         if old:
@@ -8405,7 +8413,7 @@ def clip_thumb(s):
         vid = (s.video_key or "").split(":", 1)[-1]
         if vid:
             return f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg"
-    if s.platform == "tiktok" and s.id:                # las portadas de TikTok caducan a los pocos días: se piden frescas
+    if s.id and (s.platform == "tiktok" or s.thumb_ok):  # portada guardada o, en TikTok, pedida fresca
         return url_for("clip_cover", sid=s.id)
     return s.thumb_url or ""
 
@@ -8429,7 +8437,10 @@ def tiktok_cover(url):
                          headers={"User-Agent": BROWSER_UA, "Accept": "application/json"})
         COVER_DIAG["oembed"] = r.status_code
         if r.ok:
-            thumb = (r.json() or {}).get("thumbnail_url") or ""
+            j = r.json() or {}
+            thumb = j.get("thumbnail_url") or ""
+            if not thumb:
+                COVER_DIAG["oembed_msg"] = str(j.get("status_msg") or j.get("message") or j.get("code") or "")[:80]
     except Exception as e:  # noqa: BLE001
         COVER_DIAG["oembed"] = type(e).__name__
     with _cover_lock:
@@ -8438,6 +8449,40 @@ def tiktok_cover(url):
             for k in [k for k, v in _cover_cache.items() if v[0] <= now] or list(_cover_cache)[:1000]:
                 _cover_cache.pop(k, None)
     return thumb
+
+
+def shrink_image(raw, size):
+    """Imagen pequeña en JPEG (portada 240x320 o foto 96x96) para guardarla en la base de datos sin ocupar casi nada."""
+    from PIL import Image, ImageOps, UnidentifiedImageError
+    try:
+        img = ImageOps.fit(Image.open(io.BytesIO(raw)).convert("RGB"), size)
+    except (UnidentifiedImageError, OSError, ValueError):
+        return None
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=80, optimize=True)
+    return out.getvalue()
+
+
+_keep_fails = []                                   # fallos recientes al guardar imágenes: si fallan seguidas, se para un rato
+
+
+def keep_image(obj, kind, url, size):
+    """Descarga y guarda la portada (kind="thumb") o la foto (kind="avatar") mientras el enlace de la red aún vale.
+    Si fallan 8 seguidas en 10 minutos, deja de intentarlo un rato para no alargar la lectura diaria."""
+    now = time.time()
+    _keep_fails[:] = [t for t in _keep_fails if now - t < 600]
+    if len(_keep_fails) >= 8:
+        return False
+    data = fetch_image(url)
+    small = shrink_image(data[0], size) if data else None
+    if not small:
+        _keep_fails.append(now)
+    else:
+        _keep_fails.clear()
+    if small:
+        setattr(obj, kind + "_data", small)
+        setattr(obj, kind + "_ok", True)
+    return bool(small)
 
 
 def fetch_image(url):
@@ -8477,6 +8522,8 @@ def image_response(data):
 def clip_cover(sid):
     """Portada del clip servida desde la web: la fresca de TikTok y, si no, la que dio Apify. Si no hay, 404 (sale la de la campaña)."""
     s = db.session.get(Submission, sid) or abort(404)
+    if s.thumb_ok and s.thumb_data:
+        return image_response((s.thumb_data, "image/jpeg"))
     for u in ((tiktok_cover(s.url) if s.platform == "tiktok" else ""), s.thumb_url):
         data = fetch_image(u)
         if data:
@@ -8489,6 +8536,8 @@ def clip_cover(sid):
 def account_photo(aid):
     """Foto de perfil de una cuenta de red, servida desde la web (las de TikTok e Instagram no se dejan enlazar y caducan)."""
     acc = db.session.get(CampaignAccount, aid) or abort(404)
+    if acc.avatar_ok and acc.avatar_data:
+        return image_response((acc.avatar_data, "image/jpeg"))
     data = fetch_image(acc.avatar_url)
     if not data:
         abort(404)
@@ -8513,9 +8562,13 @@ def admin_probe_covers():
     img = fetch_image(th) if th else None
     accs = CampaignAccount.query.filter_by(campaign_id=s.campaign_id, platform="tiktok").all()
     with_photo = sum(1 for a in accs if a.avatar_url)
-    flash(f"Clip #{s.id}: TikTok respondió {COVER_DIAG.get('oembed', '—')} · portada {'sí' if th else 'no'}"
+    saved = sum(1 for a in accs if a.avatar_ok)
+    n_thumbs = Submission.query.filter_by(thumb_ok=True).count()
+    msg = COVER_DIAG.get("oembed_msg")
+    flash(f"Clip #{s.id}: TikTok respondió {COVER_DIAG.get('oembed', '—')}{' (' + msg + ')' if msg else ''} · portada {'sí' if th else 'no'}"
           f" · imagen {'descargada' if img else 'no descargada'} ({COVER_DIAG.get('img', '—')})"
-          f" · cuentas de TikTok con foto guardada: {with_photo} de {len(accs)}.", "success" if img else "error")
+          f" · cuentas de TikTok con enlace de foto: {with_photo} de {len(accs)}, con foto guardada: {saved}"
+          f" · portadas guardadas en toda la web: {n_thumbs}.", "success" if img else "error")
     return redirect(url_for("admin_settings", _anchor="lectura"))
 
 
