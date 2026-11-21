@@ -12,14 +12,14 @@
       <label class="cr-q mc-q nt-q">{{ icon("search") }}<input type="search" placeholder="Buscar por nombre o correo" data-nt-q aria-label="Buscar clipper"></label>
       <select data-nt-f="camp" aria-label="Campaña" data-ico="flag"><option value="">Todas las campañas</option>{% for c in camps %}<option value="{{ c.id }}">{{ c.song }}</option>{% endfor %}<option value="none">Sin campaña</option></select>
       <select data-nt-f="act" aria-label="Actividad" data-ico="cal"><option value="">Cualquier actividad</option><option value="week">Han publicado esta semana</option><option value="idle7">Sin publicar 7 días</option><option value="idle30">Sin publicar 30 días</option><option value="never">Nunca han publicado</option></select>
-      <select data-nt-f="perf" aria-label="Rendimiento" data-ico="sort"><option value="">Cualquier rendimiento</option><option value="best">Los que más ganan</option><option value="worst">Los que menos rinden</option></select>
+      <select data-nt-sort aria-label="Ordenar" data-ico="sort"><option value="earned">Más ganado primero</option><option value="-earned">Menos ganado primero</option><option value="views">Más vistas primero</option><option value="-views">Menos vistas primero</option><option value="-idle">Publicaron hace poco</option><option value="idle">Más tiempo sin publicar</option></select>
       <select data-nt-f="age" aria-label="Antigüedad" data-ico="users"><option value="">Nuevos y antiguos</option><option value="new">Solo nuevos (14 días)</option><option value="old">Solo antiguos</option></select>
       <button type="button" class="btn soft sm" data-nt-clear hidden>Quitar filtros</button>
     </div>
     <div class="nt-bulk"><label class="check small"><input type="checkbox" data-nt-all> Elegir los <span data-nt-visible>{{ people|length }}</span> que se ven</label></div>
     <div class="nt-list">
       {% for p in people %}{% set u = p.u %}
-      <label class="nt-row" data-name="{{ u.name }} {{ u.email }}" data-first="{{ (u.name or '').split()[0] if u.name else '' }}" data-camps=",{{ p.camps|join(',') }}," data-act="{{ p.act }}" data-perf="{{ 'best' if p.best else ('worst' if p.worst else '') }}" data-age="{{ 'new' if p.new else 'old' }}">
+      <label class="nt-row" data-name="{{ u.name }} {{ u.email }}" data-first="{{ (u.name or '').split()[0] if u.name else '' }}" data-camps=",{{ p.camps|join(',') }}," data-act="{{ p.act }}" data-earned="{{ p.earned|round(2) }}" data-views="{{ p.views|int }}" data-idle="{{ p.idle if p.idle is not none else 99999 }}" data-age="{{ 'new' if p.new else 'old' }}">
         <input type="checkbox" name="uids" value="{{ u.id }}">
         {{ av(u) }}
         <span class="nt-who"><b>{{ u.name }}</b><small class="muted">{% if p.last %}último clip {{ p.last|ago }}{% else %}sin clips{% endif %}</small></span>

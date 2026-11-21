@@ -1678,19 +1678,18 @@ function avisosPanel() {
     previa();
   }
   function aplica() {
-    var t = quitarAcentos(q.value.trim()), c = val("camp"), ac = val("act"), pf = val("perf"), ag = val("age"), shown = 0;
+    var t = quitarAcentos(q.value.trim()), c = val("camp"), ac = val("act"), ag = val("age"), shown = 0;
     rows.forEach(function (r) {
       var cs = r.getAttribute("data-camps");
       var ok = (!c || (c === "none" ? cs === ",," : cs.indexOf("," + c + ",") >= 0))
         && (!ac || r.getAttribute("data-act") === ac)
-        && (!pf || r.getAttribute("data-perf") === pf)
         && (!ag || r.getAttribute("data-age") === ag)
         && (!t || quitarAcentos(r.getAttribute("data-name")).indexOf(t) >= 0);
       r.hidden = !ok; if (ok) shown++;
     });
     f.querySelector("[data-nt-visible]").textContent = shown;
     f.querySelector("[data-nt-none]").hidden = !!shown;
-    clear.hidden = !(t || c || ac || pf || ag);
+    clear.hidden = !(t || c || ac || ag);
     cuenta();
   }
   function previa() {
@@ -1698,6 +1697,15 @@ function avisosPanel() {
     var nom = (first && first.closest(".nt-row").getAttribute("data-first")) || "Ana";
     f.querySelector("[data-nt-pbody]").textContent = f.querySelector("[data-nt-body]").value.trim().replace(/\{nombre\}/gi, nom) || " ";
   }
+  var sortSel = f.querySelector("[data-nt-sort]"), list = f.querySelector(".nt-list"), none = f.querySelector("[data-nt-none]");
+  function ordena() {                                   // ordenar la lista entera (no es un filtro)
+    var v = sortSel.value, desc = v.charAt(0) !== "-", k = v.replace("-", "");
+    rows.slice().sort(function (a, b) {
+      var x = parseFloat(a.getAttribute("data-" + k)) || 0, y = parseFloat(b.getAttribute("data-" + k)) || 0;
+      return desc ? y - x : x - y;
+    }).forEach(function (r) { list.insertBefore(r, none); });
+  }
+  sortSel.addEventListener("change", ordena);
   q.addEventListener("input", aplica);
   sels.forEach(function (s) { s.addEventListener("change", aplica); });
   clear.addEventListener("click", function () {
