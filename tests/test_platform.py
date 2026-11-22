@@ -3484,3 +3484,21 @@ def test_slow_pages_are_noted_for_the_tech_panel(monkeypatch):
     assert A.slow_pages()[0] == ("admin_home", 2, 2300)
     with A.app.test_request_context():
         assert any("Páginas lentas" in t for _lvl, t, _b in A.tech_alerts())
+
+
+def test_landing_wall_shows_only_saved_covers_of_approved_clips():
+    cid = make_campaign()
+    a = client_for("a@test.com", tiktok="ana")
+    post(a, f"/campana/{cid}", url=tt("ana", 1))
+    post(a, f"/campana/{cid}", url=tt("ana", 2))
+    with A.app.app_context():
+        s1, s2 = A.Submission.query.order_by(A.Submission.id).all()
+        s1.status, s1.thumb_data, s1.thumb_ok, s1.views = "aprobado", b"\xff\xd8jpg", True, 1234
+        s2.thumb_data, s2.thumb_ok = b"\xff\xd8jpg", True              # pendiente: no se enseña
+        A.db.session.commit(); i1, i2 = s1.id, s2.id
+    anon = A.app.test_client()
+    page = anon.get("/").get_data(as_text=True)
+    assert f"/portada-clip/{i1}" in page and f"/portada-clip/{i2}" not in page and "lp-wall" in page
+    r = anon.get(f"/portada-clip/{i1}")
+    assert r.status_code == 200 and "public" in r.headers["Cache-Control"]
+    assert anon.get(f"/portada-clip/{i2}").status_code == 404

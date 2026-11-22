@@ -8,15 +8,42 @@
   <header class="lp-top">
     <div class="wrap">
       <a href="{{ url_for('index') }}" aria-label="Inicio">{{ logo() }}</a>
-      <a class="btn sm soft" href="{{ url_for('login') }}">Iniciar sesión</a>
+      <nav class="lp-nav">
+        <a class="btn sm white" href="{{ url_for('login') }}">Iniciar sesión</a>
+        <a class="btn sm" href="{{ url_for('start', rol='clipper') }}">Empezar</a>
+      </nav>
     </div>
   </header>
 
-  <main class="lp" id="contenido">
-    <h1>Gana dinero haciendo <em>clips</em>.</h1>
-    <p class="lp-sub">Clipea a los creadores hispanos más grandes. Publica en TikTok, Instagram o YouTube Shorts y cobra por cada 1.000 visitas.</p>
+  <main class="lp-hero" id="contenido">
+    {# Columnas de portadas de clips reales a los lados; se mueven despacio y se difuminan hacia el centro #}
+    {% if wall %}
+    {% set cols = [wall[0::4], wall[1::4], wall[2::4], wall[3::4]] %}
+    <div class="lp-wall" aria-hidden="true">
+      {% for side in [[0, 1], [2, 3]] %}
+      <div class="lp-side lp-side-{{ loop.index }}">
+        {% for ci in side %}{% set items = cols[ci] if cols[ci] else wall %}
+        <div class="lp-col lp-col-{{ ci }}">
+          {% for _ in range(2) %}{# dos veces seguidas: así el movimiento no tiene corte #}
+          {% for url, views in (items * (1 if items|length >= 4 else 4))[:6] %}
+          <figure class="lp-card"><img src="{{ url }}" alt="" loading="{{ 'eager' if loop.index < 3 else 'lazy' }}" decoding="async">{% if views %}<figcaption>{{ icon("eye") }} {{ views|short }}</figcaption>{% endif %}</figure>
+          {% endfor %}
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
 
-    <a class="btn lp-cta" href="{{ url_for('start', rol='clipper') }}">Empezar a clipear {{ icon("arrow") }}</a>
+    <div class="lp-center">
+      <h1>Cobra por publicar clips de <span>los creadores que te gustan</span></h1>
+      <p class="lp-sub">Clipea a los creadores hispanos más grandes. Publica en TikTok, Instagram o YouTube Shorts y cobra por cada 1.000 visitas.</p>
+      <a class="btn lp-cta" href="{{ url_for('start', rol='clipper') }}">Empezar a clipear {{ icon("arrow") }}</a>
+      {% if stats.views or stats.paid %}
+      <p class="lp-proof">{% if stats.views %}<span><b class="tnum">{{ stats.views|short }}</b> vistas generadas</span>{% endif %}{% if stats.paid %}<span><b class="tnum">{{ stats.paid|money(0) }}</b> pagados a clippers</span>{% endif %}</p>
+      {% endif %}
+    </div>
   </main>
   {% include "_footer.html" %}
 </body>

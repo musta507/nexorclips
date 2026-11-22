@@ -8796,6 +8796,18 @@ def image_response(data):
     return resp
 
 
+@app.route("/portada-clip/<int:sid>")
+def landing_cover(sid):
+    """Portada de un clip para la página pública: solo de clips aprobados (vídeos ya públicos en las redes) y solo la
+    que está guardada en la base de datos. No pide nada a las redes desde aquí."""
+    s = db.session.get(Submission, sid)
+    if not s or s.status != "aprobado" or not (s.thumb_ok and s.thumb_data):
+        abort(404)
+    resp = Response(s.thumb_data, mimetype="image/jpeg")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
 @app.route("/clip/<int:sid>/portada")
 @login_required
 def clip_cover(sid):
@@ -9760,7 +9772,23 @@ def landing_context():
         "paid": cents(db.session.query(db.func.coalesce(db.func.sum(Payout.amount), 0)).filter(Payout.status == "pagado").scalar()),
         "campaigns": len(camps),
     }
-    return {"live_text": live_text, "showcase": [(c, campaign_stats(c)) for c in camps[:6]], "stats": stats}
+    return {"live_text": live_text, "showcase": [(c, campaign_stats(c)) for c in camps[:6]], "stats": stats,
+            "wall": landing_wall()}
+
+
+def landing_wall(n=24):
+    """Portadas para las columnas de la portada pública: clips aprobados con su portada ya guardada, de más vistas a
+    menos (solo enlaces internos: aquí nunca se sale a buscar nada fuera). Si hay pocas, se completan con las portadas
+    de las campañas activas. [(url, vistas o None)]"""
+    def load():
+        rows = (db.session.query(Submission.id, Submission.views)
+                .filter(Submission.status == "aprobado", Submission.thumb_ok.is_(True))
+                .order_by(Submission.views.desc()).limit(n).all())
+        out = [(url_for("landing_cover", sid=sid), views) for sid, views in rows]
+        if len(out) < 8:
+            out += [(cover_src(c, 480), None) for c in active_campaigns() if c.cover_version][: 8 - len(out)]
+        return out
+    return ttl_cache("landing_wall", 600, load)
 
 
 def landing():
