@@ -1442,23 +1442,40 @@ def test_my_clips_tabs_and_stats(monkeypatch):
     assert "Nada por aquí" in a.get("/mis-clips?tab=aprobado").get_data(as_text=True)
 
 
-def test_onboarding_two_steps():
+def test_onboarding_one_step_all_required():
     a = client_for("a@test.com", verify=False)
-    post(a, "/bienvenida?paso=1", name="Ana García", tiktok="@anag")
-    post(a, "/bienvenida?paso=2", country="MX", languages=["es", "en"])           # el paso 2 ya termina
+    page = a.get("/bienvenida").get_data(as_text=True)
+    assert "Saltar" not in page and "Tu usuario" in page
+    r = post(a, "/bienvenida", name="Ana García", username="@AnaG", country="MX")
+    assert "Sube una foto de perfil" in r.get_data(as_text=True)          # la foto es obligatoria
     with A.app.app_context():
         u = A.User.query.filter_by(email="a@test.com").one()
-        assert (u.name, u.country, u.languages) == ("Ana García", "MX", "es")
-        assert u.onboarded_at and "anag" in u.handles("tiktok")
+        u.avatar_url = "/foto/1"; A.db.session.commit()
+    r = post(a, "/bienvenida", name="Ana García", username="a b", country="MX")
+    assert "de 3 a 24" in r.get_data(as_text=True)
+    r = post(a, "/bienvenida", name="Ana García", username="anag")
+    assert "Elige tu país" in r.get_data(as_text=True)
+    post(a, "/bienvenida", name="Ana García", username="@AnaG", country="MX")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="a@test.com").one()
+        assert (u.name, u.username, u.country, u.languages) == ("Ana García", "anag", "MX", "es")
+        assert u.onboarded_at
     home = a.get("/").get_data(as_text=True)
     assert "Primeros pasos" not in home and "Agrega tu cuenta" not in home
+    b = client_for("b@test.com", verify=False)
+    with A.app.app_context():
+        A.User.query.filter_by(email="b@test.com").one().avatar_url = "/foto/2"; A.db.session.commit()
+    r = post(b, "/bienvenida", name="Otra Ana", username="ANAG", country="ES")
+    assert "ya está cogido" in r.get_data(as_text=True)
 
 
 def test_ranking_masks_names():
     cid = make_campaign()
     admin = client_for("admin@test.com")
     a = client_for("a@test.com", tiktok="ana")
-    post(a, "/bienvenida?paso=1", name="Ana García López")
+    with A.app.app_context():
+        A.User.query.filter_by(email="a@test.com").one().avatar_url = "/foto/1"; A.db.session.commit()
+    post(a, "/bienvenida", name="Ana García López", username="anagl", country="ES")
     post(a, f"/campana/{cid}", url=tt("ana", 1))
     with A.app.app_context():
         sid = A.Submission.query.one().id
@@ -2202,13 +2219,15 @@ def test_lesson_counts_only_real_watching():
 
 def test_onboarding_other_country():
     a = client_for("otro@test.com")
-    r = post(a, "/bienvenida?paso=2", country="OT")
+    with A.app.app_context():
+        A.User.query.filter_by(email="otro@test.com").one().avatar_url = "/foto/1"; A.db.session.commit()
+    r = post(a, "/bienvenida", name="Otro", username="otro", country="OT")
     assert "Escribe en qué país vives" in r.get_data(as_text=True)
-    post(a, "/bienvenida?paso=2", country="OT", country_other="  Alemania ")
+    post(a, "/bienvenida", name="Otro", username="otro", country="OT", country_other="  Alemania ")
     with A.app.app_context():
         u = A.User.query.filter_by(email="otro@test.com").one()
         assert (u.country, u.country_other, u.country_name) == ("OT", "Alemania", "Alemania")
-    post(a, "/bienvenida?paso=2", country="ES", country_other="Alemania")
+    post(a, "/bienvenida", name="Otro", username="otro", country="ES", country_other="Alemania")
     with A.app.app_context():
         u = A.User.query.filter_by(email="otro@test.com").one()
         assert (u.country_other, u.country_name) == ("", "España")

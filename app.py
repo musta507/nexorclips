@@ -222,6 +222,7 @@ class User(UserMixin, db.Model):
     trusted = db.Column(db.Boolean, default=False)                # de confianza: sus clips se pueden aprobar solos
     country = db.Column(db.String(2), default="")
     country_other = db.Column(db.String(60), default="")       # si elige «Otro país», el que escribe
+    username = db.Column(db.String(24), default="", index=True)   # @usuario en la web (se elige al entrar la primera vez)
 
     @property
     def country_name(self):
@@ -3785,7 +3786,7 @@ def register():
     session.pop("form_name", None)
     log.info("Nuevo usuario con correo: %s", email)
     sign_in(email, name, password_user=user)
-    flash(f"¡Bienvenido, {name}! Completa tu perfil en 3 pasos.", "ok")
+    flash(f"¡Bienvenido, {name}! Completa tu perfil para empezar.", "ok")
     return redirect(url_for("onboarding"))
 
 
@@ -4787,57 +4788,75 @@ def clips_of_week(limit=3):
     return out
 
 
-# ---------------------------------------------------------------- bienvenida (3 pasos)
+# ---------------------------------------------------------------- bienvenida (un solo paso, todo obligatorio)
+USERNAME_RE = re.compile(r"^[a-z0-9._]{3,24}$")
+
+
+def clean_username(raw):
+    return (raw or "").strip().lstrip("@").lower()
+
+
+def username_problem(un, uid):
+    """Por qué no vale ese @usuario (o None si vale)."""
+    if not USERNAME_RE.match(un):
+        return "Tu usuario: de 3 a 24 letras, números, punto o guion bajo, sin espacios."
+    if User.query.filter(db.func.lower(User.username) == un, User.id != uid).first():
+        return f"El usuario @{un} ya está cogido. Prueba otro."
+    return None
+
+
+def suggest_username(u):
+    import unicodedata
+    base = unicodedata.normalize("NFKD", u.name or "").encode("ascii", "ignore").decode().lower()
+    base = re.sub(r"[^a-z0-9]", "", base)[:18] or "clipper"
+    base = base if len(base) >= 3 else base + "clip"
+    for i in range(30):
+        cand = base if i == 0 else f"{base}{secrets.randbelow(900) + 100}"
+        if not username_problem(cand, u.id):
+            return cand
+    return ""
+
+
 @app.route("/bienvenida", methods=["GET", "POST"])
 @login_required
 def onboarding():
-    step = request.args.get("paso", 1, type=int)
-    step = step if step in (1, 2) else 1
     u = current_user
     if request.method == "POST":
-        if request.form.get("saltar"):
-            u.onboarded_at = u.onboarded_at or datetime.utcnow()
+        name = (request.form.get("name") or "").strip()[:120]
+        un = clean_username(request.form.get("username"))
+        c = request.form.get("country", "")
+        other = " ".join((request.form.get("country_other") or "").split())[:60]
+        file = request.files.get("photo")
+        photo = None
+        if file and file.filename:
+            photo = process_avatar(file)
+            if not photo:
+                flash("La foto tiene que ser una imagen (JPG, PNG o WEBP).", "error")
+                return redirect(url_for("onboarding"))
+        if photo:                                # la foto se guarda ya, aunque falte otro dato
+            u.avatar_data, u.avatar_ver = photo, (u.avatar_ver or 0) + 1
+            u.avatar_url = url_for("avatar", uid=u.id, v=u.avatar_ver)
             db.session.commit()
-            return redirect(url_for("index"))
-        if step == 1:
-            name = (request.form.get("name") or "").strip()[:120]
-            if len(name) < 2:
-                flash("Escribe tu nombre.", "error")
-                return redirect(url_for("onboarding", paso=1))
-            u.name = name
-            file = request.files.get("photo")
-            if file and file.filename:
-                data = process_avatar(file)
-                if not data:
-                    flash("La foto tiene que ser una imagen (JPG, PNG o WEBP).", "error")
-                    return redirect(url_for("onboarding", paso=1))
-                u.avatar_data, u.avatar_ver = data, (u.avatar_ver or 0) + 1
-                u.avatar_url = url_for("avatar", uid=u.id, v=u.avatar_ver)
-            tt_ = viewcounter.clean_handle(request.form.get("tiktok", ""))
-            if tt_ and tt_ not in u.handles("tiktok"):
-                if handle_owner("tiktok", tt_, exclude_user_id=u.id):
-                    flash(f"La cuenta @{tt_} ya está vinculada a otro clipper.", "error")
-                    return redirect(url_for("onboarding", paso=1))
-                if len(u.handles("tiktok")) < MAX_HANDLES:
-                    u.tiktok_handles = ",".join(u.handles("tiktok") + [tt_])
-        elif step == 2:
-            c = request.form.get("country", "")
-            other = " ".join((request.form.get("country_other") or "").split())[:60]
-            if c not in COUNTRIES:
-                flash("Elige tu país.", "error")
-                return redirect(url_for("onboarding", paso=2))
-            if c == "OT" and len(other) < 2:
-                flash("Escribe en qué país vives.", "error")
-                return redirect(url_for("onboarding", paso=2))
-            u.country, u.country_other = c, (other if c == "OT" else "")
-            u.languages = "es"                       # todos publican en español: ya no se pregunta
-            u.onboarded_at = datetime.utcnow()       # el cobro (Whop) se conecta luego en «Mi cuenta»
-            db.session.commit()
-            flash("¡Perfil listo! Elige una campaña y pide unirte.", "ok")
-            return redirect(url_for("index"))
+        problem = ("Sube una foto de perfil." if not u.avatar_url else
+                   "Escribe tu nombre." if len(name) < 2 else
+                   username_problem(un, u.id) or
+                   ("Elige tu país." if c not in COUNTRIES else
+                    "Escribe en qué país vives." if c == "OT" and len(other) < 2 else None))
+        if problem:
+            session["onb_form"] = {"name": name, "username": un, "country": c, "country_other": other}
+            flash(problem, "error")
+            return redirect(url_for("onboarding"))
+        u.name, u.username = name, un
+        u.country, u.country_other = c, (other if c == "OT" else "")
+        u.languages = "es"                       # todos publican en español: ya no se pregunta
+        u.onboarded_at = datetime.utcnow()       # el cobro (Whop) se conecta luego en «Mi cuenta»
+        session.pop("onb_form", None)
         db.session.commit()
-        return redirect(url_for("onboarding", paso=step + 1))
-    return render_template("onboarding.html", step=step)
+        flash("¡Perfil listo! Elige una campaña y pide unirte.", "ok")
+        return redirect(url_for("index"))
+    form = session.pop("onb_form", None) or {"name": u.name, "username": u.username or suggest_username(u),
+                                             "country": u.country, "country_other": u.country_other}
+    return render_template("onboarding.html", form=form)
 
 
 def process_avatar(file):
@@ -5012,6 +5031,13 @@ def account():
                     flash("Escribe en qué país vives.", "error")
                     return redirect(url_for("account", _anchor="perfil"))
                 u.country, u.country_other = c, (other if c == "OT" else "")
+            un = clean_username(request.form.get("username"))
+            if un and un != (u.username or ""):
+                problem = username_problem(un, u.id)
+                if problem:
+                    flash(problem, "error")
+                    return redirect(url_for("account", _anchor="perfil"))
+                u.username = un
             u.name = name
             db.session.commit()
             flash("Perfil guardado.", "ok")

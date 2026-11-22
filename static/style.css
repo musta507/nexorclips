@@ -3353,3 +3353,27 @@ table.cl-clips .mc-ct b,table.cl-clips .mc-ct small{max-width:100%}
 /* Portada: logo y botones pegados a las esquinas (sin el ancho máximo del resto de la web) */
 .lp-top .wrap{max-width:none;width:100%;padding-left:32px;padding-right:32px}
 @media (max-width:760px){.lp-top .wrap{padding-left:16px;padding-right:16px}}
+
+/* Bienvenida (opción 3 elegida por Mustapha): un solo paso, todo obligatorio, sin menú */
+body.onb-page{margin:0;background:var(--bg);min-height:100vh;display:flex;flex-direction:column}
+.onb-top{padding:20px 32px}
+.onb-main{flex:1;display:grid;place-items:center;padding:16px 16px 64px}
+.onb-card{width:100%;max-width:460px;background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:var(--sh-2);padding:32px;display:flex;flex-direction:column;gap:16px}
+.onb-card h1{font-size:26px;line-height:1.15;letter-spacing:-.03em;margin:0;font-weight:700}
+.onb-lead{color:var(--muted);font-size:14px;margin:-10px 0 4px}
+.onb-card .flash{margin:0}
+.onb-av{position:relative;width:96px;height:96px;margin:0 auto;cursor:pointer;display:block}
+.onb-av .avatar{width:96px;height:96px;font-size:38px}
+.onb-av .avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.onb-cam{position:absolute;right:-2px;bottom:-2px;width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;border:3px solid #fff}
+.onb-cam svg{width:16px;height:16px}
+.onb-av:focus-within .avatar{box-shadow:0 0 0 3px #fff,0 0 0 5px var(--ink)}
+.onb-ph{text-align:center;font-size:13px;color:var(--muted);margin:10px 0 0}
+.onb-card .field input,.onb-card .field select{height:46px}
+.onb-at{display:flex;align-items:center;gap:6px;height:46px;border-radius:12px;background:var(--soft);border:1px solid transparent;padding:0 14px}
+.onb-at:focus-within{border-color:var(--ink);background:#fff}
+.onb-at span{color:var(--muted);font-size:16px}
+.onb-at input{flex:1;min-width:0;border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important;height:100%!important;outline:0}
+.onb-go{width:100%;height:48px;font-size:16px;margin-top:4px}
+@media (max-width:600px){.onb-top{padding:16px}.onb-card{padding:24px 20px}}
+.onb-card .file-pick{display:flex;flex-direction:column;align-items:center}

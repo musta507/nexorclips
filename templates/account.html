@@ -15,6 +15,7 @@
       <h2 class="lst-h">Perfil</h2>
       <div class="card lst">
         <label class="lr" for="name"><span class="lr-k">Nombre</span><input id="name" class="lr-in" name="name" value="{{ current_user.name }}" required maxlength="120" autocomplete="name"></label>
+        <label class="lr" for="username"><span class="lr-k">Usuario</span><input id="username" class="lr-in" name="username" value="{{ '@' + current_user.username if current_user.username else '' }}" placeholder="@tuusuario" maxlength="25" autocapitalize="none" spellcheck="false"></label>
         <div class="lr"><label class="lr-k" for="country">País</label>
           <select id="country" class="lr-sel" name="country" data-other-toggle="#country-other">
             <option value="" disabled hidden{% if not current_user.country %} selected{% endif %}>Elige tu país</option>

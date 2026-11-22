@@ -1,42 +1,41 @@
-{% extends "base.html" %}
-{% from "_icons.html" import icon %}
-{% block title %}Bienvenida · {{ APP_NAME }}{% endblock %}
-{% block content %}
-<div class="onb card">
-  <ol class="onb-steps" aria-label="Pasos">
-    {% for label in ["Tu perfil", "Dónde estás"] %}
-    <li class="{% if loop.index == step %}on{% elif loop.index < step %}done{% endif %}"><b>{{ loop.index }}</b><span>{{ label }}</span></li>
-    {% endfor %}
-  </ol>
-  <form method="post" enctype="multipart/form-data" class="form-stack" action="{{ url_for('onboarding', paso=step) }}">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    {% if step == 1 %}
-      <h1>¡Bienvenido a {{ APP_NAME }}!</h1>
-      <p class="muted">Tres pasos rápidos y empiezas a ganar con tus clips.</p>
-      <div class="onb-photo">
-        <span class="avatar lg" data-photo-prev>{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}</span>
-        <div class="field file-pick"><span class="label">Foto de perfil</span>
-          <label class="btn soft sm file-btn">{{ "Cambiar foto" if current_user.avatar_url else "Subir foto" }}<input id="photo" type="file" name="photo" accept="image/*" data-photo-input></label>
-          <span class="hint" data-file-name>JPG, PNG o WEBP. Opcional.</span></div>
+{% from "_icons.html" import icon, logo with context %}<!doctype html>
+<html lang="es">
+<head>
+{% include "_head.html" %}
+  <title>Crea tu perfil · {{ APP_NAME }}</title>
+</head>
+<body class="onb-page">
+  <header class="onb-top"><a href="{{ url_for('index') }}" aria-label="Inicio">{{ logo() }}</a></header>
+  <main class="onb-main" id="contenido">
+    <form method="post" enctype="multipart/form-data" class="onb-card" action="{{ url_for('onboarding') }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <h1>Crea tu perfil</h1>
+      <p class="onb-lead">Un minuto y empiezas a clipear.</p>
+      {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}">{{ m }}</div>{% endfor %}{% endwith %}
+      <div class="file-pick">
+      <label class="onb-av" title="Foto de perfil">
+        <span class="avatar" data-photo-prev>{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}</span>
+        <span class="onb-cam">{{ icon("camera") }}</span>
+        <input type="file" name="photo" accept="image/*" data-photo-input{% if not current_user.avatar_url %} required{% endif %} class="sr-only">
+        <span class="sr-only">Foto de perfil</span>
+      </label>
+      <p class="onb-ph" data-file-name>{{ "Pulsa la foto para cambiarla" if current_user.avatar_url else "Pulsa para subir tu foto" }}</p>
       </div>
-      <div class="field"><label for="name">Tu nombre</label><input id="name" name="name" value="{{ current_user.name }}" required maxlength="120" autocomplete="name"></div>
-      <div class="field"><label for="tiktok">Tu usuario de TikTok (opcional)</label><input id="tiktok" name="tiktok" placeholder="@tuusuario" value="{{ current_user.handles('tiktok')[0] if current_user.handles('tiktok') else '' }}"><span class="hint">Podrás añadir más cuentas en cada campaña.</span></div>
-    {% elif step == 2 %}
-      <h1>¿Desde dónde clipeas?</h1>
-      <p class="muted">Algunas campañas son solo para ciertos países.</p>
+      <div class="field"><label for="name">Tu nombre</label>
+        <input id="name" name="name" value="{{ form.name or '' }}" required minlength="2" maxlength="120" autocomplete="name"></div>
+      <div class="field"><label for="username">Tu usuario</label>
+        <div class="onb-at"><span aria-hidden="true">@</span><input id="username" name="username" value="{{ form.username or '' }}" required minlength="3" maxlength="24" pattern="@?[A-Za-z0-9._]{3,24}" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="tuusuario"></div>
+        <span class="hint">Así te verán en la web. Letras, números, punto o guion bajo.</span></div>
       <div class="field"><label for="country">País</label>
         <select id="country" name="country" required data-other-toggle="#country-other">
-          <option value="" disabled hidden{% if not current_user.country %} selected{% endif %}>Elige tu país</option>
-          {% for k, label in COUNTRIES.items() %}<option value="{{ k }}"{% if current_user.country == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
-        </select></div>
-      <div class="field" id="country-other"{% if current_user.country != 'OT' %} hidden{% endif %}><label for="country_other">¿En qué país vives?</label>
-        <input id="country_other" name="country_other" maxlength="60" value="{{ current_user.country_other or '' }}" placeholder="Escribe tu país" autocomplete="country-name"{% if current_user.country == 'OT' %} required{% endif %}></div>
-    {% endif %}
-    <div class="onb-foot">
-      <button class="btn soft" name="saltar" value="1" formnovalidate>Saltar por ahora</button>
-      <span>{% if step > 1 %}<a class="btn soft" href="{{ url_for('onboarding', paso=step - 1) }}">← Atrás</a>{% endif %}
-      <button class="btn accent">{{ "Terminar" if step == 2 else "Siguiente" }} {{ icon("arrow") }}</button></span>
-    </div>
-  </form>
-</div>
-{% endblock %}
+          <option value="" disabled hidden{% if not form.country %} selected{% endif %}>Elige tu país</option>
+          {% for k, label in COUNTRIES.items() %}<option value="{{ k }}"{% if form.country == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <span class="hint">Algunas campañas solo admiten ciertos países.</span></div>
+      <div class="field" id="country-other"{% if form.country != 'OT' %} hidden{% endif %}><label for="country_other">¿En qué país vives?</label>
+        <input id="country_other" name="country_other" maxlength="60" value="{{ form.country_other or '' }}" placeholder="Escribe tu país" autocomplete="country-name"{% if form.country == 'OT' %} required{% endif %}></div>
+      <button class="btn onb-go">Empezar a clipear {{ icon("arrow") }}</button>
+    </form>
+  </main>
+</body>
+</html>
