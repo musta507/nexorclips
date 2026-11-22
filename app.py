@@ -4837,8 +4837,7 @@ def onboarding():
             u.avatar_data, u.avatar_ver = photo, (u.avatar_ver or 0) + 1
             u.avatar_url = url_for("avatar", uid=u.id, v=u.avatar_ver)
             db.session.commit()
-        problem = ("Sube una foto de perfil." if not u.avatar_url else
-                   "Escribe tu nombre." if len(name) < 2 else
+        problem = ("Escribe tu nombre." if len(name) < 2 else
                    username_problem(un, u.id) or
                    ("Elige tu país." if c not in COUNTRIES else
                     "Escribe en qué país vives." if c == "OT" and len(other) < 2 else None))

@@ -16,10 +16,10 @@
       <label class="onb-av" title="Foto de perfil">
         <span class="avatar" data-photo-prev>{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% else %}{{ current_user.initial }}{% endif %}</span>
         <span class="onb-cam">{{ icon("camera") }}</span>
-        <input type="file" name="photo" accept="image/*" data-photo-input{% if not current_user.avatar_url %} required{% endif %} class="sr-only">
+        <input type="file" name="photo" accept="image/*" data-photo-input class="sr-only">
         <span class="sr-only">Foto de perfil</span>
       </label>
-      <p class="onb-ph" data-file-name>{{ "Pulsa la foto para cambiarla" if current_user.avatar_url else "Pulsa para subir tu foto" }}</p>
+      <p class="onb-ph" data-file-name>{{ "Pulsa la foto para cambiarla" if current_user.avatar_url else "Pulsa para subir tu foto (opcional)" }}</p>
       </div>
       <div class="field"><label for="name">Tu nombre</label>
         <input id="name" name="name" value="{{ form.name or '' }}" required minlength="2" maxlength="120" autocomplete="name"></div>

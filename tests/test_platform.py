@@ -1442,15 +1442,10 @@ def test_my_clips_tabs_and_stats(monkeypatch):
     assert "Nada por aquí" in a.get("/mis-clips?tab=aprobado").get_data(as_text=True)
 
 
-def test_onboarding_one_step_all_required():
+def test_onboarding_one_step_required_fields():
     a = client_for("a@test.com", verify=False)
     page = a.get("/bienvenida").get_data(as_text=True)
     assert "Saltar" not in page and "Tu usuario" in page
-    r = post(a, "/bienvenida", name="Ana García", username="@AnaG", country="MX")
-    assert "Sube una foto de perfil" in r.get_data(as_text=True)          # la foto es obligatoria
-    with A.app.app_context():
-        u = A.User.query.filter_by(email="a@test.com").one()
-        u.avatar_url = "/foto/1"; A.db.session.commit()
     r = post(a, "/bienvenida", name="Ana García", username="a b", country="MX")
     assert "de 3 a 24" in r.get_data(as_text=True)
     r = post(a, "/bienvenida", name="Ana García", username="anag")
@@ -1463,8 +1458,6 @@ def test_onboarding_one_step_all_required():
     home = a.get("/").get_data(as_text=True)
     assert "Primeros pasos" not in home and "Agrega tu cuenta" not in home
     b = client_for("b@test.com", verify=False)
-    with A.app.app_context():
-        A.User.query.filter_by(email="b@test.com").one().avatar_url = "/foto/2"; A.db.session.commit()
     r = post(b, "/bienvenida", name="Otra Ana", username="ANAG", country="ES")
     assert "ya está cogido" in r.get_data(as_text=True)
 
