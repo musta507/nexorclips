@@ -40,9 +40,7 @@
       <h1>Cobra por publicar clips de <span>los creadores que te gustan</span></h1>
       <p class="lp-sub">Clipea a los creadores hispanos más grandes. Publica en TikTok, Instagram o YouTube Shorts y cobra por cada 1.000 visitas.</p>
       <a class="btn lp-cta" href="{{ url_for('start', rol='clipper') }}">Empezar a clipear {{ icon("arrow") }}</a>
-      {% if stats.views or stats.paid %}
-      <p class="lp-proof">{% if stats.views %}<span><b class="tnum">{{ stats.views|short }}</b> vistas generadas</span>{% endif %}{% if stats.paid %}<span><b class="tnum">{{ stats.paid|money(0) }}</b> pagados a clippers</span>{% endif %}</p>
-      {% endif %}
+      <p class="lp-proof"><span><b class="tnum">+250K $</b> para clippers</span></p>
     </div>
   </main>
   {% include "_footer.html" %}

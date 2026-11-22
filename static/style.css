@@ -3350,3 +3350,6 @@ table.cl-clips .mc-ct b,table.cl-clips .mc-ct small{max-width:100%}
 .lt img,.lt-ph{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:12px;background:var(--soft);display:grid;place-items:center;text-align:center;padding:6px}
 .lt-ft{display:flex;flex-direction:column;gap:6px}
 .lt-ft span{display:flex;gap:6px;flex-wrap:wrap}
+/* Portada: logo y botones pegados a las esquinas (sin el ancho máximo del resto de la web) */
+.lp-top .wrap{max-width:none;width:100%;padding-left:32px;padding-right:32px}
+@media (max-width:760px){.lp-top .wrap{padding-left:16px;padding-right:16px}}
