@@ -3343,3 +3343,10 @@ table.cl-clips .mc-ct b,table.cl-clips .mc-ct small{max-width:100%}
 .lp-center{max-width:min(880px,calc(100vw - 2 * min(27vw,420px) + 40px))}
 @media (max-width:1100px){.lp-center{max-width:calc(100vw - 44vw + 20px)}.lp-center h1{font-size:clamp(34px,4.6vw,52px)}}
 @media (max-width:760px){.lp-center{max-width:none}.lp-center h1{font-size:clamp(34px,9.6vw,44px)}.lp-side-1,.lp-side-2{-webkit-mask-image:none;mask-image:none}}
+
+/* Campaña destacada → Imágenes de la portada */
+.lt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
+.lt{display:flex;flex-direction:column;gap:6px}
+.lt img,.lt-ph{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:12px;background:var(--soft);display:grid;place-items:center;text-align:center;padding:6px}
+.lt-ft{display:flex;flex-direction:column;gap:6px}
+.lt-ft span{display:flex;gap:6px;flex-wrap:wrap}

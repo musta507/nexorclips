@@ -3502,3 +3502,29 @@ def test_landing_wall_shows_only_saved_covers_of_approved_clips():
     r = anon.get(f"/portada-clip/{i1}")
     assert r.status_code == 200 and "public" in r.headers["Cache-Control"]
     assert anon.get(f"/portada-clip/{i2}").status_code == 404
+
+
+def test_landing_images_from_video_links(monkeypatch):
+    """El admin pega enlaces de vídeos y la portada pública usa sus portadas en vez de las de los clips."""
+    import io
+    from PIL import Image
+    admin = client_for("admin@test.com")
+    buf = io.BytesIO(); Image.new("RGB", (720, 1280), "blue").save(buf, "JPEG")
+    monkeypatch.setattr(A.viewcounter, "ytdlp_video_cover", lambda u: {"thumb": "https://cdn.test/p.jpg", "views": 52000})
+    monkeypatch.setattr(A, "fetch_image", lambda u: (buf.getvalue(), "image/jpeg"))
+    started = []
+    monkeypatch.setattr(A.threading, "Thread", lambda target, daemon=True: type("T", (), {"start": lambda self: started.append(target)})())
+    page = post(admin, "/admin/destacado", act="tiles",
+                links="https://www.tiktok.com/@ana/video/7500000000000000001\nhola\nhttps://www.youtube.com/shorts/abcDEF12345").get_data(as_text=True)
+    assert "Añadidos 2 vídeos" in page and started
+    A.load_landing_tiles()
+    with A.app.app_context():
+        tiles = A.LandingTile.query.all()
+        assert [t.status for t in tiles] == ["ok", "ok"] and tiles[0].views == 52000
+        tid = tiles[0].id
+    home = A.app.test_client().get("/").get_data(as_text=True)
+    assert f"/portada-inicio/{tid}" in home
+    assert A.app.test_client().get(f"/portada-inicio/{tid}").status_code == 200
+    post(admin, "/admin/destacado", act="tile_del", tid=tid)
+    with A.app.app_context():
+        assert A.LandingTile.query.count() == 1

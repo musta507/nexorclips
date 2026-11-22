@@ -815,6 +815,17 @@ class ApiToken(db.Model):
     user = db.relationship("User")
 
 
+class LandingTile(db.Model):
+    """Imágenes de las columnas de la portada pública: portadas de vídeos que elige el admin pegando sus enlaces."""
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(500), nullable=False)
+    views = db.Column(db.BigInteger, nullable=True)
+    thumb_data = db.deferred(db.Column(db.LargeBinary, nullable=True))
+    status = db.Column(db.String(12), default="cargando")      # cargando · ok · error
+    error = db.Column(db.String(200), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class AudienceStat(db.Model):
     """Audiencia (país, edad y sexo, en %) de una cuenta o de un clip, según lo que deja cada red."""
     id = db.Column(db.Integer, primary_key=True)
@@ -7291,6 +7302,33 @@ WA_GROUP_RE = re.compile(r"^https://chat\.whatsapp\.com/[A-Za-z0-9]+/?(\?[\w=&.-
 @admin_required
 def admin_featured():
     hf = home_feature()
+    act = request.form.get("act") if request.method == "POST" else ""
+    if act == "tiles":                                 # imágenes de la portada pública: enlaces de vídeos
+        known = {t.url for t in LandingTile.query.all()}
+        links = [viewcounter.normalize_url(l.strip(), resolve=False) for l in (request.form.get("links") or "").split()
+                 if l.strip().startswith("http")]
+        bad = [l for l in links if not viewcounter.detect_platform(l)]
+        new = [l for l in dict.fromkeys(links) if l not in known and l not in bad][:40]
+        for l in new:
+            db.session.add(LandingTile(url=l[:500]))
+        db.session.commit()
+        if new:
+            threading.Thread(target=load_landing_tiles, daemon=True).start()
+        flash((f"Añadidos {len(new)} vídeos: sus portadas tardan unos segundos en salir. Recarga en un momento."
+               if new else "No había enlaces nuevos.") + (f" No se reconocen {len(bad)} enlaces." if bad else ""),
+              "ok" if new else "error")
+        return redirect(url_for("admin_featured", _anchor="portada"))
+    if act in ("tile_del", "tile_retry"):
+        t = db.session.get(LandingTile, request.form.get("tid", type=int) or 0) or abort(404)
+        if act == "tile_del":
+            db.session.delete(t)
+        else:
+            t.status, t.error = "cargando", ""
+        db.session.commit()
+        _ttl.pop("landing_wall", None)
+        if act == "tile_retry":
+            threading.Thread(target=load_landing_tiles, daemon=True).start()
+        return redirect(url_for("admin_featured", _anchor="portada"))
     if request.method == "POST" and request.form.get("act") == "whatsapp":
         url = (request.form.get("whatsapp_url") or "").strip()[:300]
         if url and not WA_GROUP_RE.match(url):
@@ -7349,7 +7387,8 @@ def admin_featured():
         flash("Inicio actualizado.", "ok")
         return redirect(url_for("admin_featured"))
     camps = Campaign.query.filter(Campaign.status.notin_(("finalizada", DIST_STATUS))).order_by(Campaign.created_at.desc()).all()
-    return render_template("admin/featured.html", hf=hf, camps=camps, wa_general=get_setting("whatsapp_general", ""))
+    return render_template("admin/featured.html", hf=hf, camps=camps, wa_general=get_setting("whatsapp_general", ""),
+                           tiles=LandingTile.query.order_by(LandingTile.id).all())
 
 
 @app.route("/destacado/imagen")
@@ -8796,6 +8835,54 @@ def image_response(data):
     return resp
 
 
+@app.route("/portada-inicio/<int:tid>")
+def landing_tile_img(tid):
+    t = db.session.get(LandingTile, tid)
+    if not t or t.status != "ok" or not t.thumb_data:
+        abort(404)
+    resp = Response(t.thumb_data, mimetype="image/jpeg")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
+LANDING_TILE_SIZE = (360, 640)
+_tiles_lock = threading.Lock()
+
+
+def load_landing_tiles():
+    """Saca la portada (y las vistas) de cada enlace pendiente. Gratis con yt-dlp; si falla y hay Apify, con Apify
+    (1 resultado por enlace). Va en un hilo aparte para no hacer esperar al admin."""
+    if not _tiles_lock.acquire(blocking=False):
+        return
+    try:
+        with app.app_context():
+            for t in LandingTile.query.filter_by(status="cargando").order_by(LandingTile.id).all():
+                thumb, views, err = "", None, ""
+                try:
+                    got = viewcounter.ytdlp_video_cover(t.url)
+                    thumb, views = got["thumb"], got["views"]
+                except Exception as exc:  # noqa: BLE001
+                    err = str(exc)[:160]
+                if not thumb and viewcounter.APIFY_TOKEN:
+                    try:
+                        plat = viewcounter.detect_platform(t.url)
+                        found = viewcounter.info_by_id(plat, viewcounter.fetch_items(plat, [viewcounter.normalize_url(t.url)]))
+                        item = found.get(viewcounter.video_id(viewcounter.normalize_url(t.url))) or {}
+                        thumb, views = item.get("thumb") or "", item.get("views") if views is None else views
+                    except Exception as exc:  # noqa: BLE001
+                        err = err or str(exc)[:160]
+                data = fetch_image(thumb) if thumb else None
+                small = shrink_image(data[0], LANDING_TILE_SIZE) if data else None
+                if small:
+                    t.thumb_data, t.status, t.views, t.error = small, "ok", views, ""
+                else:
+                    t.status, t.error = "error", (err or "No se pudo sacar la portada de este enlace.")[:200]
+                db.session.commit()
+            _ttl.pop("landing_wall", None)
+    finally:
+        _tiles_lock.release()
+
+
 @app.route("/portada-clip/<int:sid>")
 def landing_cover(sid):
     """Portada de un clip para la página pública: solo de clips aprobados (vídeos ya públicos en las redes) y solo la
@@ -9781,6 +9868,10 @@ def landing_wall(n=24):
     menos (solo enlaces internos: aquí nunca se sale a buscar nada fuera). Si hay pocas, se completan con las portadas
     de las campañas activas. [(url, vistas o None)]"""
     def load():
+        picked = (db.session.query(LandingTile.id, LandingTile.views).filter(LandingTile.status == "ok")
+                  .order_by(LandingTile.id).all())
+        if picked:                                         # las que eligió el admin en «Campaña destacada»
+            return [(url_for("landing_tile_img", tid=tid), views) for tid, views in picked]
         rows = (db.session.query(Submission.id, Submission.views)
                 .filter(Submission.status == "aprobado", Submission.thumb_ok.is_(True))
                 .order_by(Submission.views.desc()).limit(n).all())

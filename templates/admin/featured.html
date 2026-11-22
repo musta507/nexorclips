@@ -27,4 +27,30 @@
   <div class="inline"><input name="whatsapp_url" value="{{ wa_general }}" placeholder="https://chat.whatsapp.com/…" aria-label="Enlace del grupo general" style="flex:1"><button class="btn accent">Guardar</button></div>
   <span class="hint">Vacío = no sale en el Inicio.</span>
 </form>
+<form method="post" class="card form-stack" id="portada" style="margin-top:16px">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="tiles">
+  <div><h3>Imágenes de la portada</h3>
+  <p class="small muted" style="margin:4px 0 0">Las que se mueven a los lados en la página de inicio, antes de entrar. Pega enlaces de vídeos de TikTok, Instagram o YouTube (uno por línea) y la web saca su portada sola. Si no pones ninguno, salen las portadas de los clips aprobados.</p></div>
+  <textarea name="links" rows="4" placeholder="https://www.tiktok.com/@…/video/…" aria-label="Enlaces de vídeos"></textarea>
+  <div><button class="btn accent">Añadir</button></div>
+</form>
+{% if tiles %}
+<div class="card" style="margin-top:12px">
+  <div class="lt-grid">
+    {% for t in tiles %}
+    <div class="lt">
+      {% if t.status == "ok" %}<img src="{{ url_for('landing_tile_img', tid=t.id) }}" alt="" loading="lazy">
+      {% else %}<div class="lt-ph small {{ 'muted' if t.status == 'cargando' else '' }}">{{ "Cargando…" if t.status == "cargando" else "No se pudo" }}</div>{% endif %}
+      <div class="lt-ft">
+        <a class="small muted" href="{{ t.url }}" target="_blank" rel="noopener">{{ t.views|short ~ " vistas" if t.views else "Ver vídeo" }}</a>
+        <span>
+          {% if t.status == "error" %}<form method="post" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="tile_retry"><input type="hidden" name="tid" value="{{ t.id }}"><button class="btn sm soft" title="{{ t.error }}">Reintentar</button></form>{% endif %}
+          <form method="post" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="tile_del"><input type="hidden" name="tid" value="{{ t.id }}"><button class="btn sm red" aria-label="Quitar">Quitar</button></form>
+        </span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 {% endblock %}

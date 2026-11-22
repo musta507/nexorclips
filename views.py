@@ -590,6 +590,18 @@ def _ytdlp_keep_avatar():
         log.warning("No se pudo conservar la foto del autor en yt-dlp: %s", e)
 
 
+def ytdlp_video_cover(url):
+    """Portada y vistas de UN vídeo con yt-dlp (gratis). {"thumb": url o "", "views": int o None}. Lanza si falla."""
+    url = normalize_url(url)
+    platform, vid = detect_platform(url), video_id(url)
+    _ytdlp_keep_avatar()
+    with _ydl({"noplaylist": True}) as y:
+        info = y.extract_info(url, download=False) or {}
+    views = info.get("view_count")
+    return {"thumb": _ytdlp_thumb(platform or "", vid or info.get("id") or "", info),
+            "views": int(views) if isinstance(views, (int, float)) else None}
+
+
 def ytdlp_download(url, max_mb=300):
     """Descarga el vídeo con yt-dlp y devuelve sus bytes."""
     import glob
