@@ -129,7 +129,8 @@ WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip(
 WHOP_AUTO_MAX = float(os.environ.get("WHOP_AUTO_MAX", "50"))    # retiros por encima de esto los aprueba un admin (0 = sin tope)
 WHOP_AUTO_DAILY = float(os.environ.get("WHOP_AUTO_DAILY", "300"))  # máximo pagado solo en 24 h entre todos; lo que pase espera a un admin (0 = sin tope)
 WHOP_USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,40}$")
-BASE_URL = os.environ.get("BASE_URL", "").strip().strip('"').rstrip("/")
+# En producción la web vive en app.clipprofit.es (la dirección de Railway manda ahí); BASE_URL en Railway lo cambia
+BASE_URL = os.environ.get("BASE_URL", "https://app.clipprofit.es" if PRODUCTION else "").strip().strip('"').rstrip("/")
 if BASE_URL and not BASE_URL.startswith("http"):
     BASE_URL = "https://" + BASE_URL
 DEV_LOGIN = os.environ.get("DEV_LOGIN") == "1" and not PRODUCTION   # nunca disponible en producción
