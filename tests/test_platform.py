@@ -3706,3 +3706,13 @@ def test_every_error_is_noted_and_explained():
         assert A.ErrorLog.query.filter_by(kind="aviso").one().times == 2
     page = client_for("admin@test.com").get("/admin/errores?tipo=aviso").get_data(as_text=True)
     assert "le salió este aviso" in page and "×2" in page
+
+
+def test_mail_by_resend(monkeypatch):
+    monkeypatch.setattr(A, "RESEND_API_KEY", "re_x")
+    monkeypatch.setattr(A, "MAIL_FROM", "no-responder@clipprofit.es")
+    sent = []
+    monkeypatch.setattr(A.requests, "post", lambda url, **k: sent.append((url, k["json"])) or type("R", (), {"status_code": 200, "text": ""})())
+    monkeypatch.setattr(A.threading, "Thread", lambda target, daemon=True: type("T", (), {"start": lambda self: target()})())
+    assert A.mail_ready() and A.send_mail("ana@x.com", "Hola", "Texto")
+    assert sent[0][0] == "https://api.resend.com/emails" and sent[0][1]["to"] == ["ana@x.com"]

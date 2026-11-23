@@ -3817,11 +3817,13 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or 587)
 SMTP_USER = os.environ.get("SMTP_USER", "").strip()
 SMTP_PASS = os.environ.get("SMTP_PASS", "")
 MAIL_FROM = os.environ.get("MAIL_FROM", "").strip()
+# Railway (plan Hobby) bloquea el correo normal (SMTP): por eso se usa Resend, que envía por internet normal (HTTPS).
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
 RESET_HOURS = 1
 
 
 def mail_ready():
-    return bool(SMTP_HOST and MAIL_FROM)
+    return bool((RESEND_API_KEY or SMTP_HOST) and MAIL_FROM)
 
 
 def send_mail(to, subject, body):
@@ -3832,6 +3834,16 @@ def send_mail(to, subject, body):
     def run():
         import smtplib
         from email.message import EmailMessage
+        if RESEND_API_KEY:
+            try:
+                r = requests.post("https://api.resend.com/emails", timeout=15,
+                                  headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+                                  json={"from": f"{APP_NAME} <{MAIL_FROM}>", "to": [to], "subject": subject, "text": body})
+                if r.status_code >= 300:
+                    log.error("Resend no envió el correo (%s): %s", r.status_code, r.text[:300])
+            except requests.RequestException:
+                log.exception("No se pudo enviar el correo por Resend")
+            return
         msg = EmailMessage()
         msg["From"], msg["To"], msg["Subject"] = f"{APP_NAME} <{MAIL_FROM}>", to, subject
         msg.set_content(body)
@@ -7243,7 +7255,7 @@ def tech_alerts():
     if PRODUCTION and not SENTRY_DSN:
         out.append(("aviso", "Sin aviso automático de errores", "Crea una cuenta gratuita en Sentry y pon su dirección en la variable SENTRY_DSN de Railway: cada fallo te llegará con página, usuario y línea."))
     if PRODUCTION and not mail_ready():
-        out.append(("aviso", "Sin correo: no se puede recuperar la contraseña", "Pon SMTP_HOST, SMTP_USER, SMTP_PASS y MAIL_FROM en Railway (de cualquier servicio de correo) y aparecerá «He olvidado mi contraseña» en el acceso."))
+        out.append(("aviso", "Sin correo: no se puede recuperar la contraseña", "Pon RESEND_API_KEY y MAIL_FROM en Railway (Railway no deja enviar correo normal en el plan Hobby) y aparecerá «He olvidado mi contraseña» en el acceso."))
     if not viewcounter.APIFY_TOKEN:
         out.append(("error", "Falta la clave de Apify", "Sin APIFY_TOKEN no se leen las vistas de los clips."))
     li_ = legal_info()
