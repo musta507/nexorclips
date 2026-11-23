@@ -3566,7 +3566,11 @@ def test_book_call_from_landing():
     c = A.app.test_client()
     page = c.get("/reservar")
     assert page.status_code == 200 and "Reserva una llamada" in page.get_data(as_text=True)
-    assert "clipprofit.es" in page.headers["Content-Security-Policy"] and "X-Frame-Options" not in page.headers
+    csp = page.headers["Content-Security-Policy"]
+    assert ("frame-ancestors 'self' https://clipprofit.es https://cool-pavlova-5ecc27.netlify.app https://www.clipprofit.es" in csp
+            and "X-Frame-Options" not in page.headers and "Set-Cookie" not in page.headers)
+    other = c.get("/login")
+    assert other.headers["X-Frame-Options"] == "DENY" and "frame-ancestors 'none'" in other.headers["Content-Security-Policy"]
     with A.app.app_context():
         slots = A.book_slots()
     assert slots

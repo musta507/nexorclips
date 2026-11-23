@@ -10028,9 +10028,14 @@ def book_slots(now=None):
     return out
 
 
+BOOK_FRAME_ORIGINS = LANDING_ORIGINS | {o.strip().rstrip("/") for o in os.environ.get(
+    "BOOK_FRAME_EXTRA", "https://cool-pavlova-5ecc27.netlify.app").split(",") if o.strip()}   # la de Netlify, solo para pruebas
+
+
 def _framable(resp):
-    """La landing (clipprofit.es) puede meter esta página dentro de la suya."""
-    anc = " ".join(sorted(LANDING_ORIGINS))
+    """Solo /reservar: la landing (clipprofit.es y la copia de pruebas) puede meterla dentro de la suya.
+    Funciona sin sesión (no usa cookies), así que da igual que el navegador las bloquee dentro del iframe."""
+    anc = " ".join(sorted(BOOK_FRAME_ORIGINS))
     resp.headers["Content-Security-Policy"] = CSP.replace("frame-ancestors 'none'", f"frame-ancestors 'self' {anc}")
     g._framable = True                              # sin «X-Frame-Options: DENY» (ver security_headers)
     return resp
