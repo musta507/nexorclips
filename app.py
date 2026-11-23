@@ -9912,10 +9912,6 @@ def landing_wall(n=24):
     menos (solo enlaces internos: aquí nunca se sale a buscar nada fuera). Si hay pocas, se completan con las portadas
     de las campañas activas. [(url, vistas o None)]"""
     def load():
-        picked = (db.session.query(LandingTile.id, LandingTile.views).filter(LandingTile.status == "ok")
-                  .order_by(LandingTile.id).all())
-        if picked:                                         # las que eligió el admin en «Campaña destacada»
-            return [(url_for("landing_tile_img", tid=tid), views) for tid, views in picked]
         rows = (db.session.query(Submission.id, Submission.views)
                 .filter(Submission.status == "aprobado", Submission.thumb_ok.is_(True))
                 .order_by(Submission.views.desc()).limit(n).all())
