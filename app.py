@@ -133,6 +133,8 @@ WHOP_USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,40}$")
 BASE_URL = os.environ.get("BASE_URL", "https://app.clipprofit.es" if PRODUCTION else "").strip().strip('"').rstrip("/")
 if BASE_URL and not BASE_URL.startswith("http"):
     BASE_URL = "https://" + BASE_URL
+if PRODUCTION and ".up.railway.app" in BASE_URL:      # una BASE_URL vieja con la dirección de Railway: manda el dominio propio
+    BASE_URL = "https://app.clipprofit.es"
 DEV_LOGIN = os.environ.get("DEV_LOGIN") == "1" and not PRODUCTION   # nunca disponible en producción
 # «Empezar de cero» borra datos reales: en producción está apagado salvo que se active a propósito en Railway
 ALLOW_WIPE = os.environ.get("ALLOW_WIPE") == "1" or not PRODUCTION
