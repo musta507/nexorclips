@@ -3659,3 +3659,11 @@ def test_google_login_starts_on_return_host_and_accepts_recent_states(monkeypatc
         "email": "nuevo@g.com", "email_verified": True, "sub": "123", "name": "Nuevo"}})())
     r = c.get(f"/auth/google/callback?code=x&state={states[0]}", base_url="https://app.clipprofit.es")
     assert r.status_code == 302 and "/login" not in r.headers["Location"]
+
+
+def test_google_callback_repeated_by_browser_is_not_an_error():
+    c = client_for("ya@dentro.com")
+    r = c.get("/auth/google/callback?code=x&state=usado")
+    assert r.status_code == 302 and "/login" not in r.headers["Location"]
+    with A.app.app_context():
+        assert A.ErrorLog.query.count() == 0

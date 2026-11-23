@@ -3870,6 +3870,9 @@ def google_callback():
         flash("Has cancelado el inicio de sesión con Google.", "error")
         return redirect(url_for("login"))
     states = session.pop("oauth_states", None) or []
+    if request.args.get("state") not in states and current_user.is_authenticated:
+        # El navegador repite la vuelta de Google (pasa en Edge): la primera ya inició la sesión, así que no es un error
+        return redirect(safe_next(session.pop("after_login", "")))
     if not request.args.get("code") or request.args.get("state") not in states:
         code = note_error("Google: la vuelta no coincide con la sesión (state)",
                           f"host={request.host} code={'sí' if request.args.get('code') else 'no'} base={BASE_URL} "
