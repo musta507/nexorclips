@@ -3795,6 +3795,7 @@ def login():
         return redirect(url_for("index"))
     mode = "registro" if request.args.get("modo") == "registro" else "entrar"
     return render_template("login.html", google_ready=bool(GOOGLE_CLIENT_ID), dev_login=DEV_LOGIN, mode=mode, mail_ready=mail_ready(),
+                           password_login=PASSWORD_LOGIN,
                            form_email=session.pop("form_email", ""), form_name=session.pop("form_name", ""))
 
 
@@ -3925,8 +3926,15 @@ def recover_set(token):
     return render_template("recover.html", step="nueva", token=token)
 
 
+# Solo Google (Mustapha, 23 nov): correo y contraseña apagados en la web real; PASSWORD_LOGIN=1 en Railway los vuelve a poner.
+PASSWORD_LOGIN = os.environ.get("PASSWORD_LOGIN", "0" if PRODUCTION else "1") == "1"
+
+
 @app.route("/login/correo", methods=["POST"])
 def login_email():
+    if not PASSWORD_LOGIN:                  # el formulario se sigue viendo (por el diseño), pero se entra con Google
+        _flask_flash("Por ahora solo se puede entrar con Google. Pulsa «Continuar con Google».", "error")
+        return redirect(url_for("login"))
     email = (request.form.get("email") or "").strip().lower()
     password = request.form.get("password") or ""
     ip = request.remote_addr or ""
@@ -3948,6 +3956,9 @@ def login_email():
 
 @app.route("/registro", methods=["POST"])
 def register():
+    if not PASSWORD_LOGIN:                  # el formulario se sigue viendo (por el diseño), pero se entra con Google
+        _flask_flash("Por ahora solo se puede entrar con Google. Pulsa «Continuar con Google».", "error")
+        return redirect(url_for("login", modo="registro"))
     name = (request.form.get("name") or "").strip()[:120]
     email = (request.form.get("email") or "").strip().lower()[:255]
     password = request.form.get("password") or ""

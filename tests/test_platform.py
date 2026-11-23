@@ -3716,3 +3716,16 @@ def test_mail_by_resend(monkeypatch):
     monkeypatch.setattr(A.threading, "Thread", lambda target, daemon=True: type("T", (), {"start": lambda self: target()})())
     assert A.mail_ready() and A.send_mail("ana@x.com", "Hola", "Texto")
     assert sent[0][0] == "https://api.resend.com/emails" and sent[0][1]["to"] == ["ana@x.com"]
+
+
+def test_google_only_when_password_login_off(monkeypatch):
+    monkeypatch.setattr(A, "PASSWORD_LOGIN", False)
+    c = A.app.test_client()
+    page = c.get("/login").get_data(as_text=True)
+    assert "Continuar con Google" in page
+    with c.session_transaction() as s:
+        s["_csrf"] = "t"
+    r = c.post("/registro", data={"_csrf": "t", "name": "X", "email": "x@x.com", "password": "12345678"}, follow_redirects=True)
+    assert "solo se puede entrar con Google" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.User.query.filter_by(email="x@x.com").count() == 0
