@@ -3423,3 +3423,7 @@ body.bk-page{margin:0;background:#fff;font-family:var(--font);color:var(--ink)}
 .bk-cfg summary .muted{font-weight:500}
 .bk-cfg form{margin-top:16px}
 .bk-cfg-days{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:14px}
+/* «Borrar» en Creadores interesados: discreto, gris; solo se pone rojo al pasar por encima (Mustapha) */
+.lead-del{display:inline-flex;align-items:center;gap:5px;border:0;background:none;padding:6px 4px;font:500 13px var(--font);color:var(--muted);cursor:pointer;border-radius:8px}
+.lead-del svg{width:14px;height:14px}
+.lead-del:hover,.lead-del:focus-visible{color:var(--red)}

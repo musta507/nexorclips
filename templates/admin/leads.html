@@ -38,7 +38,7 @@
       <form class="inline" method="post">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <input type="hidden" name="lead_id" value="{{ l.id }}">
-        <button class="btn sm red" name="status" value="borrar" data-confirm="¿Borrar la reserva de {{ l.name }}? La hora vuelve a quedar libre y no se puede deshacer.">{{ icon("trash") }} Borrar</button>
+        <button class="lead-del" name="status" value="borrar" data-confirm="¿Borrar la reserva de {{ l.name }}? La hora vuelve a quedar libre y no se puede deshacer.">{{ icon("trash") }} Borrar</button>
       </form>
     </div>
   </article>
