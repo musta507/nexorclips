@@ -3166,6 +3166,20 @@ def _start_timer():
     g._t0 = time.perf_counter()
 
 
+CANON_HOST = urlparse(BASE_URL).netloc.lower() if BASE_URL else ""
+NO_CANON = {"health", "static"}          # el chequeo de Railway y los archivos no se mandan al dominio
+
+
+@app.before_request
+def _canonical_host():
+    """Con BASE_URL puesto (https://app.clipprofit.es), quien entre por la dirección de Railway pasa al dominio propio.
+    Solo visitas normales (GET); los avisos de otros servicios (POST) siguen funcionando por cualquiera de las dos."""
+    if (CANON_HOST and request.method in ("GET", "HEAD") and request.host.lower() != CANON_HOST
+            and request.host.lower().endswith(".up.railway.app") and request.endpoint not in NO_CANON
+            and not request.path.startswith("/cron/")):
+        return redirect(BASE_URL + request.full_path.rstrip("?"), code=301)
+
+
 SEEN_EVERY = 120      # cada cuánto se guarda la última visita de un usuario (segundos)
 ONLINE_FOR = 300      # si entró hace menos de esto, sale «En línea»
 

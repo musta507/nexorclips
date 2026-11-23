@@ -3624,3 +3624,14 @@ def test_delete_lead_frees_slot():
     post(client_for("admin@test.com"), "/admin/solicitudes", lead_id=str(lid), status="borrar")
     with A.app.app_context():
         assert A.CampaignLead.query.count() == 0 and at in A.book_slots()
+
+
+def test_railway_address_goes_to_own_domain(monkeypatch):
+    c = A.app.test_client()
+    assert c.get("/login", base_url="https://web-production-x.up.railway.app").status_code == 200   # sin BASE_URL: nada cambia
+    monkeypatch.setattr(A, "BASE_URL", "https://app.clipprofit.es")
+    monkeypatch.setattr(A, "CANON_HOST", "app.clipprofit.es")
+    r = c.get("/admin/solicitudes?x=1", base_url="https://web-production-x.up.railway.app")
+    assert r.status_code == 301 and r.headers["Location"] == "https://app.clipprofit.es/admin/solicitudes?x=1"
+    assert c.get("/salud", base_url="https://web-production-x.up.railway.app").status_code != 301
+    assert c.get("/login", base_url="https://app.clipprofit.es").status_code == 200
