@@ -3592,3 +3592,15 @@ def test_book_call_from_landing():
     post(admin, "/admin/solicitudes/horario", days=["5"], start="11:00", end="12:00", slot="30", ahead="0", horizon="14")
     with A.app.app_context():
         assert A.book_cfg()["days"] == [5] and all(A._local(s).weekday() == 5 for s in A.book_slots())
+
+
+def test_book_call_keeps_landing_answers():
+    c = A.app.test_client()
+    with A.app.app_context():
+        at = A.book_slots()[0].strftime("%Y-%m-%dT%H:%M")
+    r = c.post("/reservar", data={"at": at, "name": "Pablo", "phone": "+52 55 1234 5678", "email": "p@x.com",
+                                  "budget": "$500 – $2.000", "x_Nicho": "Finanzas", "x_Seguidores": "200K"})
+    assert "Gracias por tu reserva" in r.get_data(as_text=True)
+    with A.app.app_context():
+        lead = A.CampaignLead.query.one()
+        assert lead.budget == "$500 – $2.000" and "Nicho: Finanzas" in lead.message and "Seguidores: 200K" in lead.message

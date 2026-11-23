@@ -10045,7 +10045,11 @@ def _framable(resp):
 def book_call():
     form, error, done = {}, None, None
     if request.method == "POST":
-        form = {k: " ".join((request.form.get(k) or "").split()) for k in ("name", "phone", "email", "brand", "at")}
+        form = {k: " ".join((request.form.get(k) or "").split()) for k in ("name", "phone", "email", "brand", "budget", "link", "at")}
+        form["message"] = (request.form.get("message") or "").strip()[:3000]
+        # Lo que el creador ya rellenó en la landing y no tiene casilla propia (llega como x_<pregunta>)
+        form["extra"] = [(k[2:].replace("_", " ")[:60], " ".join(v.split())[:500]) for k, v in request.form.items()
+                         if k.startswith("x_") and v.strip()][:20]
         if request.form.get("website"):                       # campo trampa: solo lo rellenan los bots
             return _framable(Response(render_template("book.html", slots=[], form={}, done=datetime.utcnow(), error=None, book_minutes=30)))
         ip = (request.remote_addr or "")[:64]
@@ -10068,15 +10072,18 @@ def book_call():
             error = "Has hecho varias reservas seguidas. Inténtalo más tarde."
         if not error:
             phone = ("+" if form["phone"].startswith("+") or len(digits) > 9 else "") + digits
+            link = form["link"] or (form["brand"] if "." in form["brand"] else "")
+            message = "\n".join(filter(None, [form["message"]] + [f"{k}: {v}" for k, v in form["extra"]]))
             db.session.add(CampaignLead(name=form["name"][:120], email=form["email"][:255].lower(),
                                         brand=(form["brand"] or form["name"])[:200], category="streamer",
-                                        link=form["brand"][:500] if "." in form["brand"] else "",
+                                        budget=form["budget"][:40], link=link[:500], message=message[:3000],
                                         phone=phone[:30], meet_at=at, ip=ip))
             db.session.commit()
             log.info("Llamada reservada: %s", form["name"][:60])
             done = at
     slots = [] if done else [x.strftime("%Y-%m-%dT%H:%M") for x in book_slots()]
     return _framable(Response(render_template("book.html", slots=slots, form=form, done=done, error=error,
+                                              origins=" ".join(sorted(BOOK_FRAME_ORIGINS)),
                                               book_minutes=book_cfg()["slot"]),
                               status=400 if error else 200))
 

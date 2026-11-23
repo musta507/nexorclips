@@ -10,7 +10,7 @@
   <script src="{{ static_url('book.js') }}" defer></script>
 </head>
 <body class="bk-page">
-<main class="bk" data-book data-slots='{{ slots|tojson }}' data-pick="{{ form.at or '' }}">
+<main class="bk" data-book data-slots='{{ slots|tojson }}' data-pick="{{ form.at or '' }}" data-origins="{{ origins }}">
   {% if done %}
   <section class="bk-done" role="status">
     <span class="bk-ok">{{ icon("check") }}</span>
@@ -43,10 +43,12 @@
       <button type="button" class="bk-back" data-back>‹ Cambiar hora</button>
       <p class="bk-sel" data-sel></p>
       {% if error %}<div class="flash error" role="alert">{{ error }}</div>{% endif %}
-      <div class="field"><label for="bk-name">Nombre</label><input id="bk-name" name="name" value="{{ form.name or '' }}" required maxlength="120" autocomplete="name"></div>
-      <div class="field"><label for="bk-phone">WhatsApp</label><input id="bk-phone" name="phone" type="tel" value="{{ form.phone or '' }}" required maxlength="30" autocomplete="tel" placeholder="+34 600 000 000"><span class="hint">Con el prefijo de tu país. Por aquí te mandamos el enlace.</span></div>
-      <div class="field"><label for="bk-email">Correo</label><input id="bk-email" name="email" type="email" value="{{ form.email or '' }}" required maxlength="255" autocomplete="email"></div>
-      <div class="field"><label for="bk-brand">Tu canal <span class="muted">(opcional)</span></label><input id="bk-brand" name="brand" value="{{ form.brand or '' }}" maxlength="200" placeholder="Enlace o nombre de tu canal"></div>
+      <div data-extra>{% for k, v in form.extra or [] %}<input type="hidden" name="x_{{ k|replace(' ', '_') }}" value="{{ v }}">{% endfor %}
+        {% for k in ["budget", "link", "message"] %}{% if form[k] %}<input type="hidden" name="{{ k }}" value="{{ form[k] }}">{% endif %}{% endfor %}</div>
+      <div class="field" data-k="name"><label for="bk-name">Nombre</label><input id="bk-name" name="name" value="{{ form.name or '' }}" required maxlength="120" autocomplete="name"></div>
+      <div class="field" data-k="phone"><label for="bk-phone">WhatsApp</label><input id="bk-phone" name="phone" type="tel" value="{{ form.phone or '' }}" required maxlength="30" autocomplete="tel" placeholder="+34 600 000 000"><span class="hint">Con el prefijo de tu país. Por aquí te mandamos el enlace.</span></div>
+      <div class="field" data-k="email"><label for="bk-email">Correo</label><input id="bk-email" name="email" type="email" value="{{ form.email or '' }}" required maxlength="255" autocomplete="email"></div>
+      <div class="field" data-k="brand"><label for="bk-brand">Tu canal <span class="muted">(opcional)</span></label><input id="bk-brand" name="brand" value="{{ form.brand or '' }}" maxlength="200" placeholder="Enlace o nombre de tu canal"></div>
       <button class="btn bk-go">Confirmar reserva</button>
     </div>
   </form>

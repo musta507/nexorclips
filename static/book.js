@@ -10,8 +10,35 @@
   function largo(d) { var t = DIA[d.getDay()] + ", " + d.getDate() + " de " + MES[d.getMonth()]; return t.charAt(0).toUpperCase() + t.slice(1); }
   var zone = ""; try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
 
+  var origins = (root.getAttribute("data-origins") || "").split(" ");
+  function avisar(msg) { if (window.parent !== window) try { window.parent.postMessage(msg, "*"); } catch (e) {} }
   var done = root.querySelector("[data-utc]");
-  if (done) { var dd = utc(done.getAttribute("data-utc")); done.textContent = largo(dd) + " · " + hora(dd); return; }
+  if (done) { var dd = utc(done.getAttribute("data-utc")); done.textContent = largo(dd) + " · " + hora(dd); avisar({ type: "clipprofit-reservado" }); return; }
+
+  // Datos que el creador ya puso en el formulario de la landing: llegan por postMessage y no se vuelven a pedir.
+  var ALIAS = { nombre: "name", name: "name", correo: "email", email: "email", mail: "email", whatsapp: "phone", telefono: "phone",
+                "teléfono": "phone", phone: "phone", movil: "phone", "móvil": "phone", canal: "brand", brand: "brand", marca: "brand",
+                presupuesto: "budget", budget: "budget", enlace: "link", link: "link", web: "link", mensaje: "message", message: "message" };
+  function recibir(datos) {
+    var extra = root.querySelector("[data-extra]");
+    Object.keys(datos || {}).forEach(function (k) {
+      var v = datos[k]; if (v === null || v === undefined || String(v).trim() === "") return;
+      v = String(v).slice(0, 500);
+      var campo = ALIAS[k.toLowerCase().trim()];
+      var box = campo && root.querySelector('[data-k="' + campo + '"]');
+      if (box) { var inp = box.querySelector("input"); inp.value = v; box.hidden = true; return; }
+      var h = document.createElement("input"); h.type = "hidden"; h.value = v;
+      h.name = campo ? campo : "x_" + k.replace(/[^\wáéíóúñÁÉÍÓÚÑ ]/g, "").trim().replace(/\s+/g, "_").slice(0, 60);
+      extra.appendChild(h);
+    });
+    var canal = root.querySelector('[data-k="brand"]');            // viene de la landing: no pedir nada opcional
+    if (canal && !canal.querySelector("input").value) canal.hidden = true;
+  }
+  window.addEventListener("message", function (e) {
+    if (origins.indexOf(e.origin) < 0 || !e.data || e.data.type !== "clipprofit-datos") return;
+    recibir(e.data.datos);
+  });
+  avisar({ type: "clipprofit-reservar-lista" });
 
   var slots = JSON.parse(root.getAttribute("data-slots") || "[]");
   var byDay = {}, first = null;
