@@ -4002,12 +4002,21 @@ def login_google():
     back = urlparse(redirect_uri())
     if back.netloc and request.host.lower() != back.netloc.lower():   # empezar en la misma dirección a la que vuelve Google
         return redirect(f"{back.scheme}://{back.netloc}{request.full_path.rstrip('?')}")
-    state = secrets.token_urlsafe(24)
-    session["oauth_states"] = (session.get("oauth_states") or [])[-4:] + [state]   # doble clic o dos pestañas: valen las 5 últimas
-    session["after_login"] = request.args.get("next", "")
+    # El «state» va firmado por la web y caduca en 15 min: así no depende de la cookie (móvil que abre Google en otra
+    # ventana, app instalada, doble clic, dos pestañas…), que era lo que hacía fallar el acceso «a veces».
+    state = _google_state().dumps({"n": secrets.token_urlsafe(8), "next": request.args.get("next", "")[:300]})
     params = {"client_id": GOOGLE_CLIENT_ID, "redirect_uri": redirect_uri(), "response_type": "code",
               "scope": "openid email profile", "state": state, "prompt": "select_account"}
     return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
+
+
+def _google_state():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(app.secret_key, salt="google-state")
+
+
+def _gcode_key(code):
+    return "gcode:" + hashlib.sha256(code.encode()).hexdigest()[:24]
 
 
 @app.route("/auth/google/callback")
@@ -4015,14 +4024,28 @@ def google_callback():
     if request.args.get("error"):
         flash("Has cancelado el inicio de sesión con Google.", "error")
         return redirect(url_for("login"))
-    states = session.pop("oauth_states", None) or []
-    if request.args.get("state") not in states and current_user.is_authenticated:
-        # El navegador repite la vuelta de Google (pasa en Edge): la primera ya inició la sesión, así que no es un error
-        return redirect(safe_next(session.pop("after_login", "")))
-    if not request.args.get("code") or request.args.get("state") not in states:
-        code = note_error("la sesión se perdió entre la web y Google (state)", kind="google", detail=
-                          f"host={request.host} code={'sí' if request.args.get('code') else 'no'} base={BASE_URL} "
-                          f"estados_en_sesion={len(states)} cookie={'sí' if request.cookies.get(app.config.get('SESSION_COOKIE_NAME', 'session')) else 'no'}")
+    from itsdangerous import BadSignature, SignatureExpired
+    try:
+        st = _google_state().loads(request.args.get("state", ""), max_age=900)
+    except SignatureExpired:
+        st = None
+        why = "tardó más de 15 minutos en elegir la cuenta"
+    except BadSignature:
+        st = None
+        why = "la vuelta de Google no traía una firma válida"
+    gcode = request.args.get("code", "")
+    if st is not None and gcode:
+        done = get_setting(_gcode_key(gcode), "")              # el navegador repite la vuelta: el código ya se usó bien
+        if done:
+            u = db.session.get(User, int(done.split("|")[0]))
+            if u:
+                login_user(u, remember=True)
+                return redirect(safe_next(st.get("next", "")))
+    if st is None or not gcode:
+        if current_user.is_authenticated:                      # ya ha entrado: no molestar con un error
+            return redirect(url_for("index"))
+        code = note_error(f"no se pudo comprobar la vuelta de Google: {why if st is None else 'sin código'}", kind="google",
+                          detail=f"host={request.host} base={BASE_URL}")
         _flask_flash(f"No se pudo iniciar sesión. Inténtalo otra vez. (Código {code})", "error")
         return redirect(url_for("login"))
     try:
@@ -4037,15 +4060,31 @@ def google_callback():
         code = note_error("Google no respondió", traceback.format_exc(), kind="google")
         _flask_flash(f"Google no respondió. Inténtalo otra vez. (Código {code})", "error")
         return redirect(url_for("login"))
+    if not info.get("email") and (token or {}).get("error") == "invalid_grant":
+        for _ in range(8):                                    # la otra vuelta repetida aún está entrando: esperarla
+            time.sleep(0.5)
+            db.session.expire_all()
+            done = get_setting(_gcode_key(gcode), "")
+            if done and (u := db.session.get(User, int(done.split("|")[0]))):
+                login_user(u, remember=True)
+                return redirect(safe_next(st.get("next", "")))
     if not info.get("email") or not info.get("email_verified"):
         bad = {k: v for k, v in (token or {}).items() if k in ("error", "error_description")}
         code = note_error("Google no dio un correo verificado o rechazó el permiso", kind="google", detail=f"token={bad} info={ {k: info.get(k) for k in ('error', 'email_verified')} } redirect_uri={redirect_uri()}")
         _flask_flash(f"No se pudo iniciar sesión con Google. (Código {code})", "error")
         return redirect(url_for("login"))
     u = sign_in(info["email"], info.get("name", ""), info.get("picture", ""), info.get("sub"))
+    try:                                                      # por si el navegador repite esta misma vuelta (2 min)
+        set_setting(_gcode_key(gcode), f"{u.id}|{int(time.time())}")
+        old = [k for (k,) in db.session.query(Setting.key).filter(Setting.key.like("gcode:%")).limit(500).all()]
+        if len(old) > 200:
+            Setting.query.filter(Setting.key.in_(old[:-50])).delete(synchronize_session=False)
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
     if u and not u.is_admin and not u.onboarded_at and not u.submissions:
         return redirect(url_for("onboarding"))
-    return redirect(safe_next(session.pop("after_login", "")))
+    return redirect(safe_next(st.get("next", "")))
 
 
 @app.route("/login/dev", methods=["POST"])

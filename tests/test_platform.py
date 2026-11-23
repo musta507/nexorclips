@@ -3644,21 +3644,30 @@ def test_error_codes(monkeypatch):
         A.app.config["PROPAGATE_EXCEPTIONS"] = None
 
 
-def test_google_login_starts_on_return_host_and_accepts_recent_states(monkeypatch):
+def test_google_login_signed_state_without_cookie(monkeypatch):
     monkeypatch.setattr(A, "GOOGLE_CLIENT_ID", "id")
     monkeypatch.setattr(A, "BASE_URL", "https://app.clipprofit.es")
     c = A.app.test_client()
     r = c.get("/login/google", base_url="https://web-production-x.up.railway.app")
     assert r.status_code == 302 and r.headers["Location"].startswith("https://app.clipprofit.es/login/google")
-    states = []
-    for _ in range(2):                                     # doble clic: dos estados distintos
-        r = c.get("/login/google", base_url="https://app.clipprofit.es")
-        states.append(r.headers["Location"].split("state=")[1].split("&")[0])
-    monkeypatch.setattr(A.requests, "post", lambda *a, **k: type("R", (), {"json": lambda self: {"access_token": "t"}})())
+    r = c.get("/login/google?next=/ranking", base_url="https://app.clipprofit.es")
+    state = r.headers["Location"].split("state=")[1].split("&")[0]
+    calls = []
+    def fake_post(*a, **k):
+        calls.append(1)
+        return type("R", (), {"json": lambda self: {"access_token": "t"} if len(calls) == 1 else {"error": "invalid_grant"}})()
+    monkeypatch.setattr(A.requests, "post", fake_post)
     monkeypatch.setattr(A.requests, "get", lambda *a, **k: type("R", (), {"json": lambda self: {
-        "email": "nuevo@g.com", "email_verified": True, "sub": "123", "name": "Nuevo"}})())
-    r = c.get(f"/auth/google/callback?code=x&state={states[0]}", base_url="https://app.clipprofit.es")
+        "email": "nuevo@g.com", "email_verified": True, "sub": "123", "name": "Nuevo"}})() if len(calls) == 1 else
+        type("R", (), {"json": lambda self: {}})())
+    other = A.app.test_client()                             # otra ventana, sin la cookie del principio (móvil, app instalada)
+    r = other.get(f"/auth/google/callback?code=abc&state={state}", base_url="https://app.clipprofit.es")
     assert r.status_code == 302 and "/login" not in r.headers["Location"]
+    third = A.app.test_client()                             # el navegador repite la misma vuelta
+    r = third.get(f"/auth/google/callback?code=abc&state={state}", base_url="https://app.clipprofit.es")
+    assert r.status_code == 302 and "/login" not in r.headers["Location"]
+    r = A.app.test_client().get("/auth/google/callback?code=abc&state=falso", base_url="https://app.clipprofit.es", follow_redirects=True)
+    assert "Código" in r.get_data(as_text=True)
 
 
 def test_google_callback_repeated_by_browser_is_not_an_error():
