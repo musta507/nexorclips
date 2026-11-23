@@ -3427,3 +3427,4 @@ body.bk-page{margin:0;background:#fff;font-family:var(--font);color:var(--ink)}
 .lead-del{display:inline-flex;align-items:center;gap:5px;border:0;background:none;padding:6px 4px;font:500 13px var(--font);color:var(--muted);cursor:pointer;border-radius:8px}
 .lead-del svg{width:14px;height:14px}
 .lead-del:hover,.lead-del:focus-visible{color:var(--red)}
+.lead-acts{width:100%}.lead-del-f{margin-left:auto}

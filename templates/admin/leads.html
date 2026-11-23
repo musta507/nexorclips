@@ -33,9 +33,9 @@
     </div>
     {% if l.link %}<p class="small"><span class="muted">Enlace:</span> <a class="link" href="{{ l.link if l.link.startswith('http') else 'https://' ~ l.link }}" target="_blank" rel="noopener nofollow">{{ l.link|truncate(70) }}</a></p>{% endif %}
     {% if l.message %}<p class="rules">{{ l.message }}</p>{% endif %}
-    <div class="inline" style="flex-wrap:wrap">
+    <div class="inline lead-acts" style="flex-wrap:wrap">
       {% if l.phone %}<a class="btn sm" href="{{ url_for('admin_lead_whatsapp', lid=l.id) }}" target="_blank" rel="noopener" data-turbo="false">{{ icon("chat") }} Enviar enlace por WhatsApp</a>{% endif %}
-      <form class="inline" method="post">
+      <form class="inline lead-del-f" method="post">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <input type="hidden" name="lead_id" value="{{ l.id }}">
         <button class="lead-del" name="status" value="borrar" data-confirm="¿Borrar la reserva de {{ l.name }}? La hora vuelve a quedar libre y no se puede deshacer.">{{ icon("trash") }} Borrar</button>
