@@ -12,6 +12,7 @@
   <a href="#apis" data-tab="apis">APIs oficiales</a>
   <a href="#pagos" data-tab="pagos">Pagos</a>
   <a href="#datos" data-tab="datos">Datos</a>
+  <a href="#notas" data-tab="notas">Notas{% set pend = notes|rejectattr('done')|list %}{% if pend %} <b class="tnum">{{ pend|length }}</b>{% endif %}</a>
 </nav>
 
 <div class="tp" id="estado">
@@ -242,6 +243,32 @@
 {% else %}
 <div class="card tight"><p class="small muted"><b>Empezar de cero</b> está desactivado en la web real para no borrar datos por error. Para activarlo, añade la variable <span class="selectable">ALLOW_WIPE=1</span> en Railway.</p></div>
 {% endif %}
+</div>
+
+<div class="tp" id="notas" hidden>
+<form class="card tight form-stack" method="post" action="{{ url_for('admin_notes') }}" data-turbo="false">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="nueva">
+  <textarea name="text" rows="3" maxlength="5000" placeholder="Escribe una nota…" aria-label="Nota nueva" required></textarea>
+  <div><button class="btn">Guardar nota</button></div>
+</form>
+{% for n in notes %}
+<div class="card tight note{% if n.done %} is-done{% endif %}">
+  <form method="post" action="{{ url_for('admin_notes') }}" data-turbo="false" class="note-check">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="nid" value="{{ n.id }}">
+    <button class="note-box" name="act" value="{{ 'pendiente' if n.done else 'hecha' }}" aria-label="{{ 'Marcar como pendiente' if n.done else 'Marcar como hecha' }}">{% if n.done %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>{% endif %}</button>
+  </form>
+  <div class="note-body">
+    <p class="note-text selectable">{{ n.text }}</p>
+    <span class="small muted">{{ when_madrid(n.created_at) }}</span>
+  </div>
+  <form method="post" action="{{ url_for('admin_notes') }}" data-turbo="false">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="nid" value="{{ n.id }}">
+    <button class="lead-del" name="act" value="borrar" data-confirm="¿Borrar esta nota?" aria-label="Borrar nota">{{ icon("trash") }}</button>
+  </form>
+</div>
+{% else %}
+<div class="table-card"><div class="empty"><h3>Aún no hay notas</h3><p class="muted">Lo que apuntes aquí solo lo ves tú.</p></div></div>
+{% endfor %}
 </div>
 
 {% endblock %}

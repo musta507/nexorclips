@@ -3433,3 +3433,14 @@ body.bk-page{margin:0;background:#fff;font-family:var(--font);color:var(--ink)}
 .err-ref{margin:14px 0 0;font-size:14px}.err-ref b{font-size:18px;letter-spacing:.08em}
 .err-row{margin-bottom:10px}.err-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}.err-top b{font-size:16px;letter-spacing:.08em}
 .err-pre{white-space:pre-wrap;word-break:break-word;font-size:12px;background:var(--soft);border-radius:12px;padding:12px;max-height:360px;overflow:auto;margin:8px 0 0}
+
+/* Panel técnico → Notas */
+.note{display:flex;gap:12px;align-items:flex-start;margin-top:10px}
+.note-check{flex:none}
+.note-box{width:22px;height:22px;border-radius:8px;border:1.5px solid var(--line);background:#fff;display:grid;place-items:center;cursor:pointer;padding:0;margin-top:1px}
+.note-box:hover{border-color:var(--ink)}
+.note.is-done .note-box{background:var(--ink);border-color:var(--ink);color:#fff}
+.note-box svg{width:14px;height:14px}
+.note-body{flex:1;min-width:0}
+.note-text{margin:0 0 4px;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.5}
+.note.is-done .note-text{color:var(--muted);text-decoration:line-through}

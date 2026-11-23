@@ -740,6 +740,14 @@ def campaign_accounts(user_id, campaign_id, status=None, platform=None):
     return load()
 
 
+class TechNote(db.Model):
+    """Notas de Mustapha en Panel técnico → Notas (solo las ve quien ve el Panel técnico)."""
+    id = db.Column(db.Integer, primary_key=True)
+    text = db.Column(db.Text, nullable=False)
+    done = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
 class ErrorLog(db.Model):
     """Fallos con código (p. ej. «K7M2QX»): el usuario ve el código y Mustapha lo busca en Panel técnico → Errores."""
     id = db.Column(db.Integer, primary_key=True)
@@ -3327,7 +3335,7 @@ ROLE_ENDPOINTS = {
 }
 
 
-TECH_ENDPOINTS = {"admin_settings", "admin_errors", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
+TECH_ENDPOINTS = {"admin_settings", "admin_errors", "admin_notes", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
                   "admin_demo", "admin_my_demo", "admin_wipe", "admin_activity", "admin_activity_delete", "admin_creators", "admin_creator_form"}
 
 
@@ -6443,7 +6451,30 @@ def admin_settings(app_test=None):
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
                            my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count(),
-                           test_users=[u for u in test_users() if not role_for(u.email)])
+                           test_users=[u for u in test_users() if not role_for(u.email)],
+                           notes=TechNote.query.order_by(TechNote.done, TechNote.created_at.desc()).limit(300).all())
+
+
+@app.route("/admin/notas", methods=["POST"])
+@admin_required
+def admin_notes():
+    if not admin_can("admin_notes"):
+        abort(403)
+    act, nid = request.form.get("act", ""), request.form.get("nid", type=int) or 0
+    if act == "nueva":
+        text = (request.form.get("text") or "").strip()[:5000]
+        if text:
+            db.session.add(TechNote(text=text))
+    elif act in ("hecha", "pendiente", "borrar", "editar"):
+        n = db.session.get(TechNote, nid) or abort(404)
+        if act == "borrar":
+            db.session.delete(n)
+        elif act == "editar":
+            n.text = (request.form.get("text") or "").strip()[:5000] or n.text
+        else:
+            n.done = act == "hecha"
+    db.session.commit()
+    return redirect(url_for("admin_settings", _anchor="notas"))
 
 
 @app.route("/admin/busqueda/<accion>", methods=["POST"])

@@ -3667,3 +3667,18 @@ def test_google_callback_repeated_by_browser_is_not_an_error():
     assert r.status_code == 302 and "/login" not in r.headers["Location"]
     with A.app.app_context():
         assert A.ErrorLog.query.count() == 0
+
+
+def test_tech_notes():
+    admin = client_for("admin@test.com")
+    post(admin, "/admin/notas", act="nueva", text="Llamar a Felipe por el dominio")
+    page = admin.get("/admin/ajustes").get_data(as_text=True)
+    assert "Llamar a Felipe por el dominio" in page and 'data-tab="notas"' in page
+    with A.app.app_context():
+        nid = A.TechNote.query.one().id
+    post(admin, "/admin/notas", act="hecha", nid=str(nid))
+    with A.app.app_context():
+        assert A.db.session.get(A.TechNote, nid).done
+    post(admin, "/admin/notas", act="borrar", nid=str(nid))
+    with A.app.app_context():
+        assert A.TechNote.query.count() == 0
