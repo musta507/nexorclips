@@ -3540,3 +3540,23 @@ def test_landing_images_from_video_links(monkeypatch):
     post(admin, "/admin/destacado", act="tile_del", tid=tid)
     with A.app.app_context():
         assert A.LandingTile.query.count() == 1
+
+
+def test_landing_lead_from_clipprofit_es():
+    c = A.app.test_client()
+    o = {"Origin": "https://clipprofit.es"}
+    pre = c.open("/api/creador-interesado", method="OPTIONS", headers=o)
+    assert pre.headers.get("Access-Control-Allow-Origin") == "https://clipprofit.es"
+    r = c.post("/api/creador-interesado", headers=o, json={"name": "Lucía", "email": "LU@x.com", "brand": "Lucía TV",
+                                                          "budget": "$2.000 – $10.000", "nicho": "Finanzas"})
+    assert r.status_code == 200 and r.get_json()["ok"]
+    assert c.post("/api/creador-interesado", headers=o, json={"name": "X", "email": "mal", "brand": "Y"}).status_code == 400
+    assert c.post("/api/creador-interesado", headers={"Origin": "https://otra.com"}, json={"name": "a"}).status_code == 403
+    assert c.post("/api/creador-interesado", headers=o, json={"name": "Bot", "email": "b@b.com", "brand": "b",
+                                                          "website": "spam"}).get_json()["ok"]
+    with A.app.app_context():
+        leads = A.CampaignLead.query.all()
+        assert len(leads) == 1 and leads[0].email == "lu@x.com" and "nicho: Finanzas" in leads[0].message
+    admin = client_for("admin@test.com")
+    page = admin.get("/admin").get_data(as_text=True)
+    assert "Creadores interesados" in page

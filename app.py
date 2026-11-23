@@ -18,7 +18,7 @@ from functools import wraps
 from urllib.parse import quote, urlencode, urlparse
 
 import requests
-from flask import (Flask, Response, abort, flash, has_request_context, redirect, render_template,
+from flask import (Flask, Response, abort, flash, has_request_context, jsonify, redirect, render_template,
                    g, request, session, url_for)
 from flask_login import (LoginManager, UserMixin, current_user, login_required,
                          login_user, logout_user)
@@ -3156,7 +3156,7 @@ def csrf_token():
     return session["_csrf"]
 
 
-CSRF_EXEMPT = {"meta_data_deletion"}     # la llama Meta (firmada con la clave de la app), no un navegador
+CSRF_EXEMPT = {"meta_data_deletion", "landing_lead"}     # Meta (firmada) y el formulario de la landing de clipprofit.es (otra web)
 
 
 @app.before_request
@@ -9565,7 +9565,8 @@ def bell_data():
                               "img": _bell_img(camps_.get(cid_)), "group": "Por hacer"})
         for n, ico, one, many, ep in [
                 (nc["payouts"], "cash", "retiro en curso", "retiros en curso", "admin_payouts"),
-                (nc["messages"], "chat", "mensaje sin leer", "mensajes sin leer", "admin_inbox")]:
+                (nc["messages"], "chat", "mensaje sin leer", "mensajes sin leer", "admin_inbox"),
+                (nc["leads"], "megaphone", "creador interesado", "creadores interesados", "admin_leads")]:
             if n > 0 and admin_can(ep):
                 items.append({"id": None, "icon": ico, "title": f"{n} {one if n == 1 else many}", "body": "", "url": url_for(ep),
                               "ago": "", "unread": True, "img": "", "group": "Por hacer"})
@@ -9921,6 +9922,70 @@ def start():
     return redirect(url_for("index"))
 
 
+LANDING_ORIGINS = {o.strip().rstrip("/") for o in os.environ.get(
+    "LANDING_ORIGINS", "https://clipprofit.es,https://www.clipprofit.es").split(",") if o.strip()}
+
+
+def save_lead(form, ip):
+    """Guarda un creador interesado. Devuelve el texto del error, o None si ha ido bien."""
+    recent = CampaignLead.query.filter(CampaignLead.ip == ip,
+                                       CampaignLead.created_at >= datetime.utcnow() - timedelta(hours=1)).count()
+    if not form.get("name") or not form.get("brand"):
+        return "Escribe tu nombre y el de tu canal."
+    email = form.get("email", "")
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return "Escribe un correo válido para poder responderte."
+    if recent >= 5:
+        return "Has enviado varias solicitudes seguidas. Inténtalo más tarde."
+    budget = form.get("budget", "")
+    extra = [f"{k}: {v}" for k, v in form.get("extra", {}).items() if v]
+    message = "\n".join(filter(None, [form.get("message", ""), *extra]))
+    db.session.add(CampaignLead(
+        name=form["name"][:120], email=email[:255].lower(), brand=form["brand"][:200], category="streamer",
+        budget=budget[:40], link=form.get("link", "")[:500], message=message[:3000], ip=ip))
+    db.session.commit()
+    log.info("Nuevo creador interesado: %s", form["brand"][:60])
+    return None
+
+
+@app.route("/api/creador-interesado", methods=["POST", "OPTIONS"])
+def landing_lead():
+    """Recibe el formulario de la landing (clipprofit.es) y lo guarda en «Creadores interesados».
+    Solo admite llamadas desde la landing (LANDING_ORIGINS); sin JavaScript, vuelve a la landing con ?enviado=1."""
+    origin = (request.headers.get("Origin") or "").rstrip("/")
+    allowed = origin in LANDING_ORIGINS
+
+    def answer(body, code=200):
+        resp = jsonify(body) if body is not None else Response(status=204)
+        if body is not None:
+            resp.status_code = code
+        if allowed:
+            resp.headers["Access-Control-Allow-Origin"] = origin
+            resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+            resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+            resp.headers["Vary"] = "Origin"
+        return resp
+
+    if request.method == "OPTIONS":
+        return answer(None)
+    if origin and not allowed:
+        return answer({"ok": False, "error": "Origen no permitido."}, 403)
+    data = request.get_json(silent=True) if request.is_json else request.form
+    data = data or {}
+    get = lambda k: " ".join(str(data.get(k) or "").split()) if k != "message" else str(data.get(k) or "").strip()
+    known = ("name", "email", "brand", "budget", "link", "message", "website")
+    form = {k: get(k) for k in known if k != "website"}
+    form["extra"] = {str(k)[:40]: " ".join(str(v).split())[:300] for k, v in list(data.items())[:20]
+                     if k not in known and k != "_csrf" and str(v).strip()}
+    if str(data.get("website") or "").strip():               # campo trampa: solo lo rellenan los bots
+        return answer({"ok": True})
+    error = save_lead(form, (request.remote_addr or "")[:64])
+    if not request.is_json and not origin:                    # formulario normal sin JavaScript
+        back = (request.referrer or "https://clipprofit.es").split("?")[0]
+        return redirect(back + ("?enviado=1" if not error else "?error=1"))
+    return answer({"ok": not error, "error": error}, 400 if error else 200)
+
+
 @app.route("/lanzar-campana", methods=["GET", "POST"])
 def launch():
     form = {}
@@ -9929,25 +9994,12 @@ def launch():
         if request.form.get("website"):                       # campo trampa: solo lo rellenan los bots
             return redirect(url_for("launch_thanks"))
         ip = (request.remote_addr or "")[:64]          # ProxyFix ya la toma del proxy de Railway
-        recent = CampaignLead.query.filter(CampaignLead.ip == ip,
-                                           CampaignLead.created_at >= datetime.utcnow() - timedelta(hours=1)).count()
-        error = None
-        if not form["name"] or not form["brand"]:
-            error = "Escribe tu nombre y el de tu canal."
-        elif "@" not in form["email"] or "." not in form["email"].split("@")[-1]:
-            error = "Escribe un correo válido para poder responderte."
-        elif recent >= 5:
-            error = "Has enviado varias solicitudes seguidas. Inténtalo más tarde."
+        if form["budget"] not in BUDGETS:
+            form["budget"] = ""
+        error = save_lead(form, ip)
         if error:
             flash(error, "error")
         else:
-            db.session.add(CampaignLead(
-                name=form["name"][:120], email=form["email"][:255].lower(), brand=form["brand"][:200],
-                category="streamer",
-                budget=form["budget"] if form["budget"] in BUDGETS else "", link=form["link"][:500],
-                message=form["message"][:3000], ip=ip))
-            db.session.commit()
-            log.info("Nueva solicitud de campaña: %s", form["brand"])
             notify_phone(f"🎬 Nueva campaña: {form['brand']}", f"{form['name']} · {form['email']} · {form['budget'] or 'sin presupuesto'}",
                          url_for("admin_leads"), tags="moneybag")
             return redirect(url_for("launch_thanks"))
