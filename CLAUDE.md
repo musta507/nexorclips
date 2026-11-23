@@ -107,7 +107,7 @@ Acordado y sin hacer:
 Para el final:
 - Poner los datos del titular (nombre, NIF y domicilio de Felipe) en Panel técnico → Datos → «Datos del aviso legal». Salen en /aviso-legal y en la privacidad. Mientras falten, hay un aviso en el Panel técnico.
 - Probar un retiro real por Whop de principio a fin.
-- Conectar el dominio clipprofit.es y poner la región de Railway en Europa.
+- Dominio: la plataforma vive en app.clipprofit.es (BASE_URL por defecto en producción); la dirección de Railway manda ahí con 301 (salvo /salud, /cron/ y los POST). Google OAuth ya tiene la dirección nueva.
 - Comprobar en producción que yt-dlp trae las vistas (Panel técnico → «Probar yt-dlp con una cuenta»).
 
 Sin decidir:
