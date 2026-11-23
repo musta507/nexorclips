@@ -1443,6 +1443,7 @@ document.addEventListener("change", function (e) {
 // Cada <select> se queda (escondido) para que el formulario funcione igual; encima va un botón y una lista propia.
 // En el móvil se usa el selector del teléfono, que es más cómodo con el dedo.
 function desplegables() {
+  desplegablesCopia();
   if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return;
   document.querySelectorAll("select:not([multiple]):not([data-native])").forEach(function (sel) {
     if (sel.closest(".dd")) return;
@@ -1515,13 +1516,19 @@ function desplegables() {
 document.addEventListener("click", function (e) {
   document.querySelectorAll(".dd.open").forEach(function (d) { if (!d.contains(e.target)) d.ddClose(); });
 });
+// Al salir de la página ya no se deshacen (antes se veía un instante el desplegable del navegador mientras
+// la página nueva esperaba a la pastilla del menú). Solo se cierran; la copia guardada se rehace al volver.
 document.addEventListener("turbo:before-cache", function () {
+  document.querySelectorAll(".dd.open").forEach(function (d) { if (d.ddClose) d.ddClose(); });
+});
+function desplegablesCopia() {
   document.querySelectorAll(".dd").forEach(function (d) {
+    if (d.ddClose) return;                                     // este está vivo: tiene sus eventos
     var sel = d.querySelector("select");
     if (sel) { sel.classList.remove("dd-native"); sel.removeAttribute("tabindex"); d.parentNode.insertBefore(sel, d); }
     d.remove();
   });
-});
+}
 
 // Destacado de inicio: enseña solo los campos de la opción elegida
 function destacado() {
