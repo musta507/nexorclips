@@ -30,11 +30,16 @@ def clean_db():
     yield
 
 
-def client_for(email, verify=True, **handles):
+def client_for(email, verify=True, onboarded=True, **handles):
     c = A.app.test_client()
     with c.session_transaction() as s:
         s["_csrf"] = "t"
     c.post("/login/dev", data={"email": email, "_csrf": "t"})
+    if onboarded:                                    # casi todas las pruebas empiezan con el perfil ya hecho
+        with A.app.app_context():
+            u = A.User.query.filter_by(email=email).first()
+            if u and not u.onboarded_at:
+                u.onboarded_at = A.datetime.utcnow(); A.db.session.commit()
     with c.session_transaction() as s:      # el login renueva el código; fijamos uno conocido para las pruebas
         s["_csrf"] = "t"
     if handles:
@@ -827,7 +832,7 @@ def test_email_register_and_login():
     with c2.session_transaction() as s:
         s["_csrf"] = "t"
     r = c2.post("/login/correo", data={"_csrf": "t", "email": "lu@test.com", "password": "12345678"})
-    assert r.status_code == 302 and c2.get("/ganancias").status_code == 200
+    assert r.status_code == 302 and "/bienvenida" in c2.get("/ganancias").headers["Location"]   # primero, su perfil
     with A.app.app_context():                     # si luego entra con Google ese correo, la contraseña deja de valer
         with A.app.test_request_context():
             A.sign_in("lu@test.com", "Lu", sub="g-123")
@@ -1443,7 +1448,7 @@ def test_my_clips_tabs_and_stats(monkeypatch):
 
 
 def test_onboarding_one_step_required_fields():
-    a = client_for("a@test.com", verify=False)
+    a = client_for("a@test.com", verify=False, onboarded=False)
     page = a.get("/bienvenida").get_data(as_text=True)
     assert "Saltar" not in page and "Tu usuario" in page
     r = post(a, "/bienvenida", name="Ana García", username="a b", country="MX")
@@ -2211,7 +2216,7 @@ def test_lesson_counts_only_real_watching():
 
 
 def test_onboarding_other_country():
-    a = client_for("otro@test.com")
+    a = client_for("otro@test.com", onboarded=False)
     with A.app.app_context():
         A.User.query.filter_by(email="otro@test.com").one().avatar_url = "/foto/1"; A.db.session.commit()
     r = post(a, "/bienvenida", name="Otro", username="otro", country="OT")
@@ -3694,7 +3699,7 @@ def test_tech_notes():
 
 
 def test_every_error_is_noted_and_explained():
-    c = client_for("ana@test.com")
+    c = client_for("ana@test.com", onboarded=False)
     post(c, "/bienvenida", name="Ana", username="a b", country="ES")             # aviso a un usuario
     c.get("/no-existe-esta-pagina")                                               # página que no existe
     c.get("/wp-login.php")                                                        # robots: no se apunta
@@ -3738,3 +3743,14 @@ def test_google_only_when_password_login_off(monkeypatch):
     assert "solo se puede entrar con Google" in r.get_data(as_text=True)
     with A.app.app_context():
         assert A.User.query.filter_by(email="x@x.com").count() == 0
+
+
+
+def test_new_account_must_finish_profile_first():
+    c = client_for("nueva@test.com", onboarded=False)
+    for path in ("/", "/ranking", "/mis-clips", "/cuenta"):
+        r = c.get(path)
+        assert r.status_code == 302 and "/bienvenida" in r.headers["Location"], path
+    assert c.get("/bienvenida").status_code == 200 and c.get("/terminos").status_code == 200
+    post(c, "/bienvenida", name="Nueva", username="nueva", country="ES")
+    assert c.get("/ranking").status_code == 200

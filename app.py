@@ -3225,7 +3225,16 @@ def before():
         if current_user.is_banned and request.endpoint not in ("logout", "static", "terms", "privacy", "health",
                                                                "support", "support_poll", "notices"):
             return render_template("banned.html"), 403
+        # Cuenta nueva: hasta completar «Crea tu perfil» (nombre, @usuario y país) no se entra en la web (Mustapha)
+        if (not current_user.onboarded_at and not current_user.is_admin and request.endpoint not in ONBOARDING_FREE
+                and not mod_campaigns(current_user)):
+            if request.method == "GET" and not request.path.startswith("/api/"):
+                return redirect(url_for("onboarding"))
     return None
+
+
+ONBOARDING_FREE = {"onboarding", "logout", "static", "terms", "privacy", "legal_notice", "cookies_page", "health", "avatar",
+                   "browser_error", "notices", "google_callback", "login_google", "book_call", "login", None}
 
 
 SLOW_MS = int(os.environ.get("SLOW_MS", "1500"))          # a partir de aquí una página cuenta como lenta
