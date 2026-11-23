@@ -3853,8 +3853,11 @@ def login_google():
     if not GOOGLE_CLIENT_ID:
         flash("El acceso con Google aún no está configurado.", "error")
         return redirect(url_for("login"))
+    back = urlparse(redirect_uri())
+    if back.netloc and request.host.lower() != back.netloc.lower():   # empezar en la misma dirección a la que vuelve Google
+        return redirect(f"{back.scheme}://{back.netloc}{request.full_path.rstrip('?')}")
     state = secrets.token_urlsafe(24)
-    session["oauth_state"] = state
+    session["oauth_states"] = (session.get("oauth_states") or [])[-4:] + [state]   # doble clic o dos pestañas: valen las 5 últimas
     session["after_login"] = request.args.get("next", "")
     params = {"client_id": GOOGLE_CLIENT_ID, "redirect_uri": redirect_uri(), "response_type": "code",
               "scope": "openid email profile", "state": state, "prompt": "select_account"}
@@ -3866,9 +3869,11 @@ def google_callback():
     if request.args.get("error"):
         flash("Has cancelado el inicio de sesión con Google.", "error")
         return redirect(url_for("login"))
-    if not request.args.get("code") or request.args.get("state") != session.pop("oauth_state", None):
+    states = session.pop("oauth_states", None) or []
+    if not request.args.get("code") or request.args.get("state") not in states:
         code = note_error("Google: la vuelta no coincide con la sesión (state)",
-                          f"host={request.host} code={'sí' if request.args.get('code') else 'no'} base={BASE_URL}")
+                          f"host={request.host} code={'sí' if request.args.get('code') else 'no'} base={BASE_URL} "
+                          f"estados_en_sesion={len(states)} cookie={'sí' if request.cookies.get(app.config.get('SESSION_COOKIE_NAME', 'session')) else 'no'}")
         flash(f"No se pudo iniciar sesión. Inténtalo otra vez. (Código {code})", "error")
         return redirect(url_for("login"))
     try:
