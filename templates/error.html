@@ -5,6 +5,7 @@
   <span class="error-code tnum">{{ code }}</span>
   <h1>{{ title }}</h1>
   <p class="muted">{{ body }}</p>
+  {% if error_code %}<p class="err-ref">Código del error: <b class="selectable tnum">{{ error_code }}</b><br><span class="muted small">Si nos escribes, pásanos este código.</span></p>{% endif %}
   <a class="btn accent" href="{{ url_for('index') }}">Volver al inicio</a>
 </div>
 {% endblock %}

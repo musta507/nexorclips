@@ -3620,3 +3620,25 @@ def test_railway_address_goes_to_own_domain(monkeypatch):
     assert r.status_code == 301 and r.headers["Location"] == "https://app.clipprofit.es/admin/solicitudes?x=1"
     assert c.get("/salud", base_url="https://web-production-x.up.railway.app").status_code != 301
     assert c.get("/login", base_url="https://app.clipprofit.es").status_code == 200
+
+
+def test_error_codes(monkeypatch):
+    A.app.config["PROPAGATE_EXCEPTIONS"] = False
+    def _boom(*a, **k):
+        raise RuntimeError("fallo de prueba")
+    monkeypatch.setitem(A.app.view_functions, "terms", _boom)
+    try:
+        r = A.app.test_client().get("/terminos")
+        body = r.get_data(as_text=True)
+        assert r.status_code == 500 and "Código del error" in body
+        with A.app.app_context():
+            e = A.ErrorLog.query.one()
+            assert e.code in body and "fallo de prueba" in e.what and "Traceback" in e.detail
+        admin = client_for("admin@test.com")
+        page = admin.get(f"/admin/errores?codigo={e.code.lower()}").get_data(as_text=True)
+        assert "fallo de prueba" in page
+        c = A.app.test_client()
+        r = c.get("/auth/google/callback?code=x&state=otro", follow_redirects=True)
+        assert "Código" in r.get_data(as_text=True)
+    finally:
+        A.app.config["PROPAGATE_EXCEPTIONS"] = None

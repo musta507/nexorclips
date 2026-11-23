@@ -740,6 +740,17 @@ def campaign_accounts(user_id, campaign_id, status=None, platform=None):
     return load()
 
 
+class ErrorLog(db.Model):
+    """Fallos con código (p. ej. «K7M2QX»): el usuario ve el código y Mustapha lo busca en Panel técnico → Errores."""
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(8), index=True, nullable=False)
+    what = db.Column(db.String(200), default="")
+    path = db.Column(db.String(300), default="")
+    user_id = db.Column(db.Integer, nullable=True)
+    detail = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
 class CampaignLead(db.Model):
     """Solicitudes de creadores que quieren lanzar una campaña (desde la portada)."""
     id = db.Column(db.Integer, primary_key=True)
@@ -3272,12 +3283,39 @@ def http_error(e):
     return render_template("error.html", code=e.code, title=title, body=body), e.code
 
 
+ERROR_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # sin 0/O ni 1/I, para que no se confundan al copiarlo
+
+
+def note_error(what, detail=""):
+    """Apunta un fallo y devuelve su código para enseñárselo a quien lo ha visto. Nunca rompe nada."""
+    code = "".join(secrets.choice(ERROR_CODE_CHARS) for _ in range(6))
+    try:
+        uid = current_user.id if has_request_context() and current_user.is_authenticated else None
+    except Exception:
+        uid = None
+    path = (request.full_path.rstrip("?") if has_request_context() else "")[:300]
+    log.error("Error %s · %s · %s", code, what, path)
+    try:
+        db.session.rollback()
+        db.session.add(ErrorLog(code=code, what=str(what)[:200], path=path, user_id=uid, detail=str(detail)[:20000]))
+        db.session.commit()
+        cutoff = datetime.utcnow() - timedelta(days=30)                 # solo se guardan los del último mes
+        ErrorLog.query.filter(ErrorLog.created_at < cutoff).delete()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        log.exception("No se pudo guardar el error %s", code)
+    return code
+
+
 @app.errorhandler(Exception)
 def unhandled_error(e):
+    import traceback
     db.session.rollback()
     log.exception("Error no controlado")
+    code = note_error(f"{type(e).__name__}: {e}"[:200], traceback.format_exc())
     title, body = ERROR_TEXT[500]
-    return render_template("error.html", code=500, title=title, body=body), 500
+    return render_template("error.html", code=500, title=title, body=body, error_code=code), 500
 
 
 # Qué puede abrir cada rol. El dueño, todo. Lo que no está en la lista es solo para el dueño (dinero, campañas, ajustes…).
@@ -3289,7 +3327,7 @@ ROLE_ENDPOINTS = {
 }
 
 
-TECH_ENDPOINTS = {"admin_settings", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
+TECH_ENDPOINTS = {"admin_settings", "admin_errors", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
                   "admin_demo", "admin_my_demo", "admin_wipe", "admin_activity", "admin_activity_delete", "admin_creators", "admin_creator_form"}
 
 
@@ -3829,7 +3867,9 @@ def google_callback():
         flash("Has cancelado el inicio de sesión con Google.", "error")
         return redirect(url_for("login"))
     if not request.args.get("code") or request.args.get("state") != session.pop("oauth_state", None):
-        flash("No se pudo iniciar sesión. Inténtalo otra vez.", "error")
+        code = note_error("Google: la vuelta no coincide con la sesión (state)",
+                          f"host={request.host} code={'sí' if request.args.get('code') else 'no'} base={BASE_URL}")
+        flash(f"No se pudo iniciar sesión. Inténtalo otra vez. (Código {code})", "error")
         return redirect(url_for("login"))
     try:
         token = requests.post("https://oauth2.googleapis.com/token", timeout=15, data={
@@ -3838,11 +3878,15 @@ def google_callback():
         info = requests.get("https://openidconnect.googleapis.com/v1/userinfo", timeout=15,
                             headers={"Authorization": f"Bearer {token.get('access_token', '')}"}).json()
     except (requests.RequestException, ValueError):
+        import traceback
         log.exception("Fallo en el login con Google")
-        flash("Google no respondió. Inténtalo otra vez.", "error")
+        code = note_error("Google no respondió", traceback.format_exc())
+        flash(f"Google no respondió. Inténtalo otra vez. (Código {code})", "error")
         return redirect(url_for("login"))
     if not info.get("email") or not info.get("email_verified"):
-        flash("Tu cuenta de Google no tiene un correo verificado.", "error")
+        bad = {k: v for k, v in (token or {}).items() if k in ("error", "error_description")}
+        code = note_error("Google: sin correo verificado o token rechazado", f"token={bad} info={ {k: info.get(k) for k in ('error', 'email_verified')} } redirect_uri={redirect_uri()}")
+        flash(f"No se pudo iniciar sesión con Google. (Código {code})", "error")
         return redirect(url_for("login"))
     u = sign_in(info["email"], info.get("name", ""), info.get("picture", ""), info.get("sub"))
     if u and not u.is_admin and not u.onboarded_at and not u.submissions:
@@ -10147,6 +10191,17 @@ def admin_leads():
     leads.sort(key=lambda l: l.status != "nueva")
     return render_template("admin/leads.html", leads=leads, statuses=LEAD_STATUSES, cfg=book_cfg(), weekdays=WEEKDAYS,
                            madrid=lambda d: d.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ)))
+
+
+@app.route("/admin/errores")
+@admin_required
+def admin_errors():
+    if not admin_can("admin_errors"):
+        abort(403)
+    q = (request.args.get("codigo") or "").strip().upper().lstrip("#")
+    rows = (ErrorLog.query.filter(ErrorLog.code == q) if q else ErrorLog.query).order_by(ErrorLog.created_at.desc()).limit(100).all()
+    users = {u.id: u for u in User.query.filter(User.id.in_({r.user_id for r in rows if r.user_id} or {0})).all()}
+    return render_template("admin/errors.html", rows=rows, q=q, users=users)
 
 
 @app.route("/admin/solicitudes/<int:lid>/whatsapp")

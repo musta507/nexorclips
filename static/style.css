@@ -3428,3 +3428,8 @@ body.bk-page{margin:0;background:#fff;font-family:var(--font);color:var(--ink)}
 .lead-del svg{width:14px;height:14px}
 .lead-del:hover,.lead-del:focus-visible{color:var(--red)}
 .lead-acts{width:100%}.lead-del-f{margin-left:auto}
+
+/* Errores con código */
+.err-ref{margin:14px 0 0;font-size:14px}.err-ref b{font-size:18px;letter-spacing:.08em}
+.err-row{margin-bottom:10px}.err-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}.err-top b{font-size:16px;letter-spacing:.08em}
+.err-pre{white-space:pre-wrap;word-break:break-word;font-size:12px;background:var(--soft);border-radius:12px;padding:12px;max-height:360px;overflow:auto;margin:8px 0 0}

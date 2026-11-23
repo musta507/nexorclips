@@ -15,6 +15,12 @@
 </nav>
 
 <div class="tp" id="estado">
+<form class="card tight form-stack" method="get" action="{{ url_for('admin_errors') }}" style="margin-bottom:12px">
+  <h3>Buscar un error por su código</h3>
+  <p class="small muted" style="margin:0">Cuando algo falla, la web enseña un código de 6 letras (p. ej. K7M2QX). Escríbelo aquí para ver qué pasó.</p>
+  <div class="inline"><input name="codigo" placeholder="Código del error" maxlength="8" autocapitalize="characters" aria-label="Código del error" style="flex:1"><button class="btn">Buscar</button>
+  <a class="btn soft" href="{{ url_for('admin_errors') }}">Ver los últimos</a></div>
+</form>
 <div class="card tight form-stack">
   <h3>Avisos técnicos</h3>
   {% if alerts %}

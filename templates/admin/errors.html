@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Errores · Admin{% endblock %}
+{% import "admin/_ui.html" as ui %}
+{% block content %}
+{% call ui.head("Errores", "") %}<a class="btn sm soft" href="{{ url_for('admin_settings') }}">Panel técnico</a>{% endcall %}
+<form class="card tight inline" method="get" style="margin-bottom:12px">
+  <input name="codigo" value="{{ q }}" placeholder="Código del error (p. ej. K7M2QX)" maxlength="8" aria-label="Código del error" style="flex:1">
+  <button class="btn">Buscar</button>{% if q %}<a class="btn soft" href="{{ url_for('admin_errors') }}">Ver todos</a>{% endif %}
+</form>
+{% for r in rows %}
+<article class="card tight err-row">
+  <div class="err-top"><b class="tnum selectable">{{ r.code }}</b><span class="muted small">{{ when_madrid(r.created_at) }} · {{ r.created_at|ago }}</span></div>
+  <p style="margin:6px 0 2px"><b>{{ r.what }}</b></p>
+  <p class="small muted" style="margin:0">{{ r.path or "—" }}{% if r.user_id %} · {% set u = users.get(r.user_id) %}{{ u.name ~ " (" ~ u.email ~ ")" if u else "usuario #" ~ r.user_id }}{% endif %}</p>
+  {% if r.detail %}<details style="margin-top:8px"><summary class="small">Detalle técnico (cópialo y pásaselo a Claude)</summary><pre class="err-pre selectable">{{ r.detail }}</pre></details>{% endif %}
+</article>
+{% else %}
+<div class="table-card"><div class="empty"><h3>{{ "No hay ningún error con ese código" if q else "No hay errores apuntados" }}</h3><p class="muted">{{ "Revisa que esté bien escrito. Se guardan los del último mes." if q else "Cuando algo falle, aparecerá aquí con su código." }}</p></div></div>
+{% endfor %}
+{% endblock %}
