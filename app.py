@@ -10119,6 +10119,12 @@ def admin_leads():
     if request.method == "POST":
         lead = db.session.get(CampaignLead, request.form.get("lead_id", type=int) or 0) or abort(404)
         status = request.form.get("status", "")
+        if status == "borrar":
+            audit("solicitud_borrada", f"#{lead.id} {lead.name}")
+            db.session.delete(lead)
+            db.session.commit()
+            flash("Reserva borrada.", "ok")
+            return redirect(url_for("admin_leads"))
         if status in LEAD_STATUSES:
             lead.status = status
             audit("solicitud_actualizada", f"#{lead.id} {lead.brand} → {LEAD_STATUSES[status]}")
@@ -10128,6 +10134,19 @@ def admin_leads():
     leads.sort(key=lambda l: l.status != "nueva")
     return render_template("admin/leads.html", leads=leads, statuses=LEAD_STATUSES, cfg=book_cfg(), weekdays=WEEKDAYS,
                            madrid=lambda d: d.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ)))
+
+
+@app.route("/admin/solicitudes/<int:lid>/whatsapp")
+@admin_required
+def admin_lead_whatsapp(lid):
+    """Abre WhatsApp con el creador y la marca como contactada (así deja de contar en el menú)."""
+    lead = db.session.get(CampaignLead, lid) or abort(404)
+    if lead.status == "nueva":
+        lead.status = "contactada"
+        db.session.commit()
+    text = f"Hola {lead.name}, soy de {APP_NAME}. Te paso el enlace de nuestra llamada: "
+    digits = re.sub(r"\D", "", lead.phone or "")
+    return redirect(f"https://wa.me/{digits}?text={quote(text)}")
 
 
 @app.route("/admin/solicitudes/horario", methods=["POST"])

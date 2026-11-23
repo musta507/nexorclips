@@ -3588,7 +3588,13 @@ def test_book_call_from_landing():
         assert slots[0] not in A.book_slots()
     admin = client_for("admin@test.com")
     page = admin.get("/admin/solicitudes").get_data(as_text=True)
-    assert "wa.me/34600112233" in page and "Horario de llamadas" in page
+    assert "Horario de llamadas" in page and "Crear campaña" not in page and "Marcar" not in page
+    with A.app.app_context():
+        lid = A.CampaignLead.query.one().id
+    r = admin.get(f"/admin/solicitudes/{lid}/whatsapp")
+    assert r.headers["Location"].startswith("https://wa.me/34600112233?text=")
+    with A.app.app_context():
+        assert A.db.session.get(A.CampaignLead, lid).status == "contactada"
     post(admin, "/admin/solicitudes/horario", days=["5"], start="11:00", end="12:00", slot="30", ahead="0", horizon="14")
     with A.app.app_context():
         assert A.book_cfg()["days"] == [5] and all(A._local(s).weekday() == 5 for s in A.book_slots())
@@ -3604,3 +3610,17 @@ def test_book_call_keeps_landing_answers():
     with A.app.app_context():
         lead = A.CampaignLead.query.one()
         assert lead.budget == "$500 – $2.000" and "Nicho: Finanzas" in lead.message and "Seguidores: 200K" in lead.message
+
+
+
+def test_delete_lead_frees_slot():
+    c = A.app.test_client()
+    with A.app.app_context():
+        at = A.book_slots()[0]
+    c.post("/reservar", data={"at": at.strftime("%Y-%m-%dT%H:%M"), "name": "Ana", "phone": "+34600000001", "email": "a@x.com"})
+    with A.app.app_context():
+        lid = A.CampaignLead.query.one().id
+        assert at not in A.book_slots()
+    post(client_for("admin@test.com"), "/admin/solicitudes", lead_id=str(lid), status="borrar")
+    with A.app.app_context():
+        assert A.CampaignLead.query.count() == 0 and at in A.book_slots()

@@ -34,14 +34,11 @@
     {% if l.link %}<p class="small"><span class="muted">Enlace:</span> <a class="link" href="{{ l.link if l.link.startswith('http') else 'https://' ~ l.link }}" target="_blank" rel="noopener nofollow">{{ l.link|truncate(70) }}</a></p>{% endif %}
     {% if l.message %}<p class="rules">{{ l.message }}</p>{% endif %}
     <div class="inline" style="flex-wrap:wrap">
-      {% if l.phone %}<a class="btn sm" href="https://wa.me/{{ l.phone|replace('+', '') }}?text={{ ('Hola ' ~ l.name ~ ', soy de ' ~ APP_NAME ~ '. Te paso el enlace de nuestra llamada: ')|urlencode }}" target="_blank" rel="noopener">{{ icon("chat") }} Enviar enlace por WhatsApp</a>{% endif %}
-      <a class="btn sm {{ 'soft' if l.phone else 'accent' }}" href="{{ url_for('admin_campaign_form', solicitud=l.id) }}">Crear campaña</a>
+      {% if l.phone %}<a class="btn sm" href="{{ url_for('admin_lead_whatsapp', lid=l.id) }}" target="_blank" rel="noopener" data-turbo="false">{{ icon("chat") }} Enviar enlace por WhatsApp</a>{% endif %}
       <form class="inline" method="post">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <input type="hidden" name="lead_id" value="{{ l.id }}">
-        {% for key, label in statuses.items() if key != l.status and key != 'convertida' %}
-          <button class="btn sm soft" name="status" value="{{ key }}">Marcar {{ label|lower }}</button>
-        {% endfor %}
+        <button class="btn sm red" name="status" value="borrar" data-confirm="¿Borrar la reserva de {{ l.name }}? La hora vuelve a quedar libre y no se puede deshacer.">{{ icon("trash") }} Borrar</button>
       </form>
     </div>
   </article>
