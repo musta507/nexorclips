@@ -7,14 +7,24 @@
   <input name="codigo" value="{{ q }}" placeholder="Código del error (p. ej. K7M2QX)" maxlength="8" aria-label="Código del error" style="flex:1">
   <button class="btn">Buscar</button>{% if q %}<a class="btn soft" href="{{ url_for('admin_errors') }}">Ver todos</a>{% endif %}
 </form>
+{% if not q %}
+<nav class="err-kinds" aria-label="Tipo de fallo">
+  <a class="{{ 'on' if not tipo }}" href="{{ url_for('admin_errors') }}">Todos</a>
+  {% for k, label in kinds.items() %}<a class="{{ 'on' if tipo == k }}" href="{{ url_for('admin_errors', tipo=k) }}">{{ label }}{% if counts.get(k) %} <b class="tnum">{{ counts[k] }}</b>{% endif %}</a>{% endfor %}
+</nav>
+<p class="small muted" style="margin:0 0 12px">Los números son de las últimas 24 horas. Se guarda todo lo del último mes.</p>
+{% endif %}
 {% for r in rows %}
-<article class="card tight err-row">
-  <div class="err-top"><b class="tnum selectable">{{ r.code }}</b><span class="muted small">{{ when_madrid(r.created_at) }} · {{ r.created_at|ago }}</span></div>
-  <p style="margin:6px 0 2px"><b>{{ r.what }}</b></p>
-  <p class="small muted" style="margin:0">{{ r.path or "—" }}{% if r.user_id %} · {% set u = users.get(r.user_id) %}{{ u.name ~ " (" ~ u.email ~ ")" if u else "usuario #" ~ r.user_id }}{% endif %}</p>
-  {% if r.detail %}<details style="margin-top:8px"><summary class="small">Detalle técnico (cópialo y pásaselo a Claude)</summary><pre class="err-pre selectable">{{ r.detail }}</pre></details>{% endif %}
+<article class="card tight err-row err-{{ r.kind or 'servidor' }}">
+  <div class="err-top"><span><span class="err-kind">{{ kinds.get(r.kind or 'servidor', r.kind) }}</span> <b class="tnum selectable">{{ r.code }}</b>{% if r.times and r.times > 1 %} <span class="err-times">×{{ r.times }}</span>{% endif %}</span>
+    <span class="muted small">{{ when_madrid(r.last_at or r.created_at) }} · {{ (r.last_at or r.created_at)|ago }}</span></div>
+  <p class="err-explain">{{ r.explain or r.what }}</p>
+  {% if r.detail or r.explain %}<details style="margin-top:8px"><summary class="small">Detalle técnico (cópialo y pásaselo a Claude)</summary><pre class="err-pre selectable">{{ r.code }} · {{ r.what }}
+{{ r.path }}{% if r.user_id %} · usuario #{{ r.user_id }}{% endif %}
+
+{{ r.detail }}</pre></details>{% endif %}
 </article>
 {% else %}
-<div class="table-card"><div class="empty"><h3>{{ "No hay ningún error con ese código" if q else "No hay errores apuntados" }}</h3><p class="muted">{{ "Revisa que esté bien escrito. Se guardan los del último mes." if q else "Cuando algo falle, aparecerá aquí con su código." }}</p></div></div>
+<div class="table-card"><div class="empty"><h3>{{ "No hay ningún error con ese código" if q else "No hay nada apuntado" }}</h3><p class="muted">{{ "Revisa que esté bien escrito. Se guardan los del último mes." if q else "Cuando algo falle, aparecerá aquí explicado." }}</p></div></div>
 {% endfor %}
 {% endblock %}

@@ -3444,3 +3444,11 @@ body.bk-page{margin:0;background:#fff;font-family:var(--font);color:var(--ink)}
 .note-body{flex:1;min-width:0}
 .note-text{margin:0 0 4px;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.5}
 .note.is-done .note-text{color:var(--muted);text-decoration:line-through}
+.err-kinds{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.err-kinds a{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:#fff;border:1px solid var(--line);font:600 13px var(--font);color:var(--ink);text-decoration:none}
+.err-kinds a.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.err-kinds a b{font-size:12px;color:var(--red)}.err-kinds a.on b{color:#fff}
+.err-kind{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:8px;background:var(--soft);color:var(--ink);margin-right:6px}
+.err-servidor .err-kind,.err-tarea .err-kind{background:#fde8e8;color:var(--red)}
+.err-times{font-size:13px;font-weight:600;color:var(--muted)}
+.err-explain{margin:8px 0 0;font-size:14px;line-height:1.5}

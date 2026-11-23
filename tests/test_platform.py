@@ -3682,3 +3682,27 @@ def test_tech_notes():
     post(admin, "/admin/notas", act="borrar", nid=str(nid))
     with A.app.app_context():
         assert A.TechNote.query.count() == 0
+
+
+def test_every_error_is_noted_and_explained():
+    c = client_for("ana@test.com")
+    post(c, "/bienvenida", name="Ana", username="a b", country="ES")             # aviso a un usuario
+    c.get("/no-existe-esta-pagina")                                               # página que no existe
+    c.get("/wp-login.php")                                                        # robots: no se apunta
+    r = A.app.test_client().post("/api/error-navegador", json={"msg": "x is not a function", "page": "https://app.clipprofit.es/mis-clips",
+                                                                "src": "app.js", "line": 10})
+    assert r.status_code == 204
+    with A.app.app_context():
+        h = A._ErrorsToPanel(); import logging
+        h.emit(logging.LogRecord("clipprofit", logging.ERROR, __file__, 1, "Apify no respondió", None, None))
+        rows = {e.kind: e for e in A.ErrorLog.query.all()}
+    assert set(rows) == {"aviso", "pagina", "navegador", "tarea"}
+    assert "ana@test.com" in rows["aviso"].explain and "de 3 a 24" in rows["aviso"].explain
+    assert "no existe" in rows["pagina"].explain and "wp-login" not in rows["pagina"].path
+    assert rows["navegador"].path == "/mis-clips" and "x is not a function" in rows["navegador"].explain
+    assert "Tarea automática" in rows["tarea"].explain
+    post(c, "/bienvenida", name="Ana", username="a b", country="ES")             # el mismo aviso otra vez: suma, no repite
+    with A.app.app_context():
+        assert A.ErrorLog.query.filter_by(kind="aviso").one().times == 2
+    page = client_for("admin@test.com").get("/admin/errores?tipo=aviso").get_data(as_text=True)
+    assert "le salió este aviso" in page and "×2" in page

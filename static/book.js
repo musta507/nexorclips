@@ -1,4 +1,8 @@
 // Reservar llamada (/reservar): calendario con las horas libres en la hora del visitante.
+window.addEventListener("error", function (e) {
+  try { navigator.sendBeacon("/api/error-navegador", new Blob([JSON.stringify({ msg: e.message, src: e.filename, line: e.lineno,
+    col: e.colno, stack: e.error && e.error.stack, page: location.href })], { type: "application/json" })); } catch (x) {}
+});
 (function () {
   var root = document.querySelector("[data-book]");
   if (!root) return;

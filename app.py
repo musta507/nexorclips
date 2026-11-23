@@ -10,6 +10,7 @@ import math
 import os
 import re
 import secrets
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -18,7 +19,7 @@ from functools import wraps
 from urllib.parse import quote, urlencode, urlparse
 
 import requests
-from flask import (Flask, Response, abort, flash, has_request_context, jsonify, redirect, render_template,
+from flask import (Flask, Response, abort, flash as _flask_flash, has_request_context, jsonify, redirect, render_template,
                    g, request, session, url_for)
 from flask_login import (LoginManager, UserMixin, current_user, login_required,
                          login_user, logout_user)
@@ -752,7 +753,11 @@ class ErrorLog(db.Model):
     """Fallos con código (p. ej. «K7M2QX»): el usuario ve el código y Mustapha lo busca en Panel técnico → Errores."""
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(8), index=True, nullable=False)
+    kind = db.Column(db.String(20), default="servidor", index=True)   # servidor · aviso · pagina · navegador · tarea · google
     what = db.Column(db.String(200), default="")
+    explain = db.Column(db.Text, default="")                          # qué pasó, en palabras normales
+    times = db.Column(db.Integer, default=1)                          # veces que se ha repetido (mismo fallo, misma página)
+    last_at = db.Column(db.DateTime, nullable=True, index=True)
     path = db.Column(db.String(300), default="")
     user_id = db.Column(db.Integer, nullable=True)
     detail = db.Column(db.Text, default="")
@@ -3180,7 +3185,7 @@ def csrf_token():
     return session["_csrf"]
 
 
-CSRF_EXEMPT = {"meta_data_deletion", "landing_lead", "book_call"}     # Meta (firmada) y el formulario de la landing de clipprofit.es (otra web)
+CSRF_EXEMPT = {"meta_data_deletion", "landing_lead", "book_call", "browser_error"}     # Meta (firmada) y el formulario de la landing de clipprofit.es (otra web)
 
 
 @app.before_request
@@ -3287,40 +3292,150 @@ ERROR_TEXT = {
 
 @app.errorhandler(HTTPException)
 def http_error(e):
+    if e.code >= 400 and not BOT_PATHS.search(request.path) and request.endpoint != "static":
+        note_error(f"{e.code} {e.description or e.name}"[:200], kind="pagina", http_code=e.code)
     title, body = ERROR_TEXT.get(e.code, (e.name, e.description or ""))
     return render_template("error.html", code=e.code, title=title, body=body), e.code
 
 
 ERROR_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # sin 0/O ni 1/I, para que no se confundan al copiarlo
+ERROR_KINDS = {"servidor": "Fallo de la web", "aviso": "Aviso a un usuario", "pagina": "Página no válida",
+               "navegador": "Fallo en el navegador", "tarea": "Tarea automática", "google": "Acceso con Google"}
+_err_local = threading.local()
+BOT_PATHS = re.compile(r"(\.php|wp-|\.env|\.git|/cgi-bin|/admin\.|xmlrpc|/vendor/|\.aspx?|/boaform|/HNAP)", re.I)
 
 
-def note_error(what, detail=""):
-    """Apunta un fallo y devuelve su código para enseñárselo a quien lo ha visto. Nunca rompe nada."""
+def _cause(exc_name, text=""):
+    """La causa probable de un fallo, en palabras normales."""
+    t = f"{exc_name} {text}"
+    for keys, why in (
+            (("OperationalError", "DisconnectionError", "could not connect", "server closed the connection"),
+             "La base de datos no respondió a tiempo o se cortó la conexión."),
+            (("IntegrityError", "UniqueViolation", "duplicate key"), "Se intentó guardar algo repetido o incompleto en la base de datos."),
+            (("Timeout", "timed out"), "Un servicio de fuera (Apify, Whop, Google, Bunny…) tardó demasiado en responder."),
+            (("ConnectionError", "Max retries", "Name or service not known"), "No se pudo conectar con un servicio de fuera."),
+            (("UndefinedError", "TemplateSyntaxError", "TemplateNotFound"), "Fallo al dibujar la pantalla: hay que arreglarlo en el código."),
+            (("MemoryError",), "La web se quedó sin memoria."),
+            (("KeyError", "AttributeError", "TypeError", "ValueError", "IndexError", "NameError", "ZeroDivisionError",
+              "AssertionError"), "Fallo en el código de la web (un dato no estaba como se esperaba): hay que arreglarlo."),
+            (("csrf",), "El formulario estaba caducado (página abierta mucho rato o en otra pestaña).")):
+        if any(k in t for k in keys):
+            return why
+    return "Fallo inesperado."
+
+
+def _who(uid):
+    if not uid:
+        return "un visitante sin sesión"
+    try:
+        u = db.session.get(User, uid)
+        return f"{u.name} ({u.email})" if u else f"el usuario #{uid}"
+    except Exception:
+        return f"el usuario #{uid}"
+
+
+def explain_error(kind, what, path, uid, code=None):
+    who, page = _who(uid), path or "—"
+    if kind == "servidor":
+        return f"A {who} le falló la página {page} y vio la pantalla de error. {_cause(what)}"
+    if kind == "aviso":
+        return f"A {who} le salió este aviso en {page}: «{what}»."
+    if kind == "pagina":
+        return {404: f"{who.capitalize()} intentó abrir {page}, que no existe (enlace roto o mal escrito).",
+                403: f"{who.capitalize()} intentó abrir {page} sin tener permiso.",
+                400: f"La web rechazó lo que envió {who} en {page}. {_cause(what)}",
+                405: f"{who.capitalize()} abrió {page} de una forma que esa página no admite.",
+                413: f"{who.capitalize()} intentó subir un archivo demasiado grande en {page}.",
+                429: f"{who.capitalize()} hizo demasiadas peticiones seguidas en {page} y la web le frenó."}.get(
+            code, f"{who.capitalize()} recibió el error {code} en {page}.")
+    if kind == "navegador":
+        return f"En el navegador de {who}, en {page}, falló algo de la pantalla: {what}"
+    if kind == "google":
+        return f"{who.capitalize()} no pudo entrar con Google: {what}"
+    return f"Tarea automática de la web: {what}. {_cause(what)}"
+
+
+def note_error(what, detail="", kind="servidor", http_code=None, path=None):
+    """Apunta un fallo (en su propia conexión, sin tocar lo que esté haciendo la página) y devuelve su código.
+    El mismo fallo en la misma página y del mismo usuario en 10 minutos no se repite: suma una vez más."""
+    if getattr(_err_local, "busy", False):
+        return ""
+    _err_local.busy = True
     code = "".join(secrets.choice(ERROR_CODE_CHARS) for _ in range(6))
     try:
-        uid = current_user.id if has_request_context() and current_user.is_authenticated else None
+        try:
+            uid = current_user.id if has_request_context() and current_user.is_authenticated else None
+        except Exception:
+            uid = None
+        path = (path if path is not None else (request.full_path.rstrip("?") if has_request_context() else ""))[:300]
+        what = str(what)[:200]
+        now = datetime.utcnow()
+        log.warning("Fallo %s · %s · %s · %s", code, kind, what, path, extra={"noted": True})
+        explain = explain_error(kind, what, path, uid, http_code)[:2000]
+        t = ErrorLog.__table__
+        with db.engine.begin() as conn:
+            prev = conn.execute(db.select(t.c.id, t.c.code).where(
+                t.c.kind == kind, t.c.what == what, t.c.path == path,
+                (t.c.user_id == uid) if uid else t.c.user_id.is_(None),
+                db.func.coalesce(t.c.last_at, t.c.created_at) >= now - timedelta(minutes=10)).limit(1)).first()
+            if prev:
+                conn.execute(t.update().where(t.c.id == prev.id).values(times=t.c.times + 1, last_at=now))
+                code = prev.code
+            else:
+                conn.execute(t.insert().values(code=code, kind=kind, what=what, explain=explain, path=path, user_id=uid,
+                                               detail=str(detail)[:20000], times=1, created_at=now, last_at=now))
+            if secrets.randbelow(50) == 0:                       # de vez en cuando, fuera los de hace más de un mes
+                conn.execute(t.delete().where(t.c.created_at < now - timedelta(days=30)))
     except Exception:
-        uid = None
-    path = (request.full_path.rstrip("?") if has_request_context() else "")[:300]
-    log.error("Error %s · %s · %s", code, what, path)
-    try:
-        db.session.rollback()
-        db.session.add(ErrorLog(code=code, what=str(what)[:200], path=path, user_id=uid, detail=str(detail)[:20000]))
-        db.session.commit()
-        cutoff = datetime.utcnow() - timedelta(days=30)                 # solo se guardan los del último mes
-        ErrorLog.query.filter(ErrorLog.created_at < cutoff).delete()
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        log.exception("No se pudo guardar el error %s", code)
+        logging.getLogger("errores").warning("No se pudo guardar el fallo %s", code, exc_info=True)
+    finally:
+        _err_local.busy = False
     return code
+
+
+def flash(message, category="message"):
+    """Igual que el de Flask, pero cada aviso de error que ve un usuario queda apuntado en Panel técnico → Errores."""
+    _flask_flash(message, category)
+    if category == "error":
+        note_error(str(message), kind="aviso")
+
+
+class _ErrorsToPanel(logging.Handler):
+    """Todo lo que la web apunta como error (también las tareas automáticas: lectura, Apify, Whop, Bunny…) va al panel."""
+    def emit(self, record):
+        if getattr(record, "noted", False) or getattr(_err_local, "busy", False) or record.name in ("errores",):
+            return
+        try:
+            import traceback
+            detail = "".join(traceback.format_exception(*record.exc_info)) if record.exc_info else ""
+            what = record.getMessage()
+            if record.exc_info and record.exc_info[1] is not None:
+                what = f"{what} ({type(record.exc_info[1]).__name__}: {record.exc_info[1]})"
+            kind = "servidor" if has_request_context() else "tarea"
+            if has_app_context_():
+                note_error(what, detail, kind=kind)
+            else:
+                with app.app_context():
+                    note_error(what, detail, kind=kind)
+        except Exception:
+            pass
+
+
+def has_app_context_():
+    from flask import has_app_context
+    return has_app_context()
+
+
+if not os.environ.get("PYTEST_CURRENT_TEST") and "pytest" not in sys.modules:
+    _h = _ErrorsToPanel(level=logging.ERROR)
+    logging.getLogger().addHandler(_h)
 
 
 @app.errorhandler(Exception)
 def unhandled_error(e):
     import traceback
     db.session.rollback()
-    log.exception("Error no controlado")
+    log.error("Error no controlado: %s", e, exc_info=True, extra={"noted": True})
     code = note_error(f"{type(e).__name__}: {e}"[:200], traceback.format_exc())
     title, body = ERROR_TEXT[500]
     return render_template("error.html", code=500, title=title, body=body, error_code=code), 500
@@ -3882,10 +3997,10 @@ def google_callback():
         # El navegador repite la vuelta de Google (pasa en Edge): la primera ya inició la sesión, así que no es un error
         return redirect(safe_next(session.pop("after_login", "")))
     if not request.args.get("code") or request.args.get("state") not in states:
-        code = note_error("Google: la vuelta no coincide con la sesión (state)",
+        code = note_error("la sesión se perdió entre la web y Google (state)", kind="google", detail=
                           f"host={request.host} code={'sí' if request.args.get('code') else 'no'} base={BASE_URL} "
                           f"estados_en_sesion={len(states)} cookie={'sí' if request.cookies.get(app.config.get('SESSION_COOKIE_NAME', 'session')) else 'no'}")
-        flash(f"No se pudo iniciar sesión. Inténtalo otra vez. (Código {code})", "error")
+        _flask_flash(f"No se pudo iniciar sesión. Inténtalo otra vez. (Código {code})", "error")
         return redirect(url_for("login"))
     try:
         token = requests.post("https://oauth2.googleapis.com/token", timeout=15, data={
@@ -3896,13 +4011,13 @@ def google_callback():
     except (requests.RequestException, ValueError):
         import traceback
         log.exception("Fallo en el login con Google")
-        code = note_error("Google no respondió", traceback.format_exc())
-        flash(f"Google no respondió. Inténtalo otra vez. (Código {code})", "error")
+        code = note_error("Google no respondió", traceback.format_exc(), kind="google")
+        _flask_flash(f"Google no respondió. Inténtalo otra vez. (Código {code})", "error")
         return redirect(url_for("login"))
     if not info.get("email") or not info.get("email_verified"):
         bad = {k: v for k, v in (token or {}).items() if k in ("error", "error_description")}
-        code = note_error("Google: sin correo verificado o token rechazado", f"token={bad} info={ {k: info.get(k) for k in ('error', 'email_verified')} } redirect_uri={redirect_uri()}")
-        flash(f"No se pudo iniciar sesión con Google. (Código {code})", "error")
+        code = note_error("Google no dio un correo verificado o rechazó el permiso", kind="google", detail=f"token={bad} info={ {k: info.get(k) for k in ('error', 'email_verified')} } redirect_uri={redirect_uri()}")
+        _flask_flash(f"No se pudo iniciar sesión con Google. (Código {code})", "error")
         return redirect(url_for("login"))
     u = sign_in(info["email"], info.get("name", ""), info.get("picture", ""), info.get("sub"))
     if u and not u.is_admin and not u.onboarded_at and not u.submissions:
@@ -7110,6 +7225,15 @@ def owed_total():
 def tech_alerts():
     """Avisos técnicos para el panel técnico: [(nivel, título, texto)]. Nivel: error · aviso."""
     out = []
+    try:
+        day = datetime.utcnow() - timedelta(hours=24)
+        n_err = (ErrorLog.query.filter(db.func.coalesce(ErrorLog.last_at, ErrorLog.created_at) >= day,
+                                       ErrorLog.kind.in_(("servidor", "tarea", "navegador", "google"))).count())
+        if n_err:
+            out.append(("error", f"Fallos en las últimas 24 h: {n_err}",
+                        "Mira qué pasó en «Ver los últimos», en «Buscar un error por su código», aquí arriba."))
+    except Exception:
+        db.session.rollback()
     slow = slow_pages()
     if slow:
         ep, n, worst = slow[0]
@@ -10232,15 +10356,48 @@ def admin_leads():
                            madrid=lambda d: d.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ)))
 
 
+_js_errs = {}
+
+
+@app.route("/api/error-navegador", methods=["POST"])
+def browser_error():
+    """Fallos de JavaScript en el navegador de cualquiera (los manda app.js solo). Como mucho 20 por hora y dirección."""
+    ip, now = (request.remote_addr or "")[:64], time.time()
+    hits = [t for t in _js_errs.get(ip, []) if now - t < 3600]
+    if len(hits) >= 20:
+        return "", 204
+    _js_errs[ip] = hits + [now]
+    if len(_js_errs) > 5000:
+        _js_errs.clear()
+    d = request.get_json(silent=True) or {}
+    msg = " ".join(str(d.get("msg") or "").split())[:180]
+    if not msg or "ResizeObserver" in msg or "Script error" == msg.strip("."):
+        return "", 204
+    detail = (f"página={str(d.get('page') or '')[:300]}\narchivo={str(d.get('src') or '')[:300]}:{d.get('line')}:{d.get('col')}\n"
+              f"navegador={request.headers.get('User-Agent', '')[:300]}\n\n{str(d.get('stack') or '')[:4000]}")
+    page = urlparse(str(d.get("page") or "")).path[:300]
+    note_error(msg, detail, kind="navegador", path=page)
+    return "", 204
+
+
 @app.route("/admin/errores")
 @admin_required
 def admin_errors():
     if not admin_can("admin_errors"):
         abort(403)
     q = (request.args.get("codigo") or "").strip().upper().lstrip("#")
-    rows = (ErrorLog.query.filter(ErrorLog.code == q) if q else ErrorLog.query).order_by(ErrorLog.created_at.desc()).limit(100).all()
+    tipo = request.args.get("tipo", "")
+    base = ErrorLog.query
+    if q:
+        base = base.filter(ErrorLog.code == q)
+    elif tipo in ERROR_KINDS:
+        base = base.filter(ErrorLog.kind == tipo)
+    rows = base.order_by(db.func.coalesce(ErrorLog.last_at, ErrorLog.created_at).desc()).limit(200).all()
+    day = datetime.utcnow() - timedelta(hours=24)
+    counts = dict(db.session.query(ErrorLog.kind, db.func.count()).filter(
+        db.func.coalesce(ErrorLog.last_at, ErrorLog.created_at) >= day).group_by(ErrorLog.kind).all())
     users = {u.id: u for u in User.query.filter(User.id.in_({r.user_id for r in rows if r.user_id} or {0})).all()}
-    return render_template("admin/errors.html", rows=rows, q=q, users=users)
+    return render_template("admin/errors.html", rows=rows, q=q, users=users, tipo=tipo, kinds=ERROR_KINDS, counts=counts)
 
 
 @app.route("/admin/solicitudes/<int:lid>/whatsapp")

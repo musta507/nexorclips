@@ -1,3 +1,30 @@
+
+// Fallos en el navegador: se mandan solos a Panel técnico → Errores (como mucho 10 por página)
+(function () {
+  if (window.__errHook) return; window.__errHook = true;
+  var sent = 0;
+  function send(msg, src, line, col, stack) {
+    if (sent >= 10 || !msg) return; sent++;
+    try {
+      var body = JSON.stringify({ msg: String(msg).slice(0, 300), src: src || "", line: line || 0, col: col || 0,
+                                  stack: String(stack || "").slice(0, 3000), page: location.href });
+      if (navigator.sendBeacon) navigator.sendBeacon("/api/error-navegador", new Blob([body], { type: "application/json" }));
+      else fetch("/api/error-navegador", { method: "POST", headers: { "Content-Type": "application/json" }, body: body, keepalive: true });
+    } catch (e) {}
+  }
+  window.addEventListener("error", function (e) {
+    if (e.target && e.target !== window && (e.target.src || e.target.href)) {          // una imagen, script o estilo que no cargó
+      var u = e.target.src || e.target.href;
+      if (e.target.tagName === "IMG") return;                                           // portadas caducadas: ya se avisan aparte
+      send("No cargó un archivo: " + u, u); return;
+    }
+    send(e.message, e.filename, e.lineno, e.colno, e.error && e.error.stack);
+  }, true);
+  window.addEventListener("unhandledrejection", function (e) {
+    var r = e.reason || {}; if (r.name === "AbortError") return;
+    send("Promesa sin controlar: " + (r.message || r), "", 0, 0, r.stack);
+  });
+})();
 // ClipProfit Hispano — JavaScript de la web.
 // La web usa Turbo: al pulsar un enlace no se recarga la página entera, solo se cambia el contenido.
 // Por eso hay dos partes:
