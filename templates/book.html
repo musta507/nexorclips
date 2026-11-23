@@ -1,0 +1,56 @@
+{% from "_icons.html" import icon %}<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Reserva una llamada · {{ APP_NAME }}</title>
+  <link rel="preload" href="{{ url_for('static', filename='fonts/inter.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
+  <script src="{{ static_url('book.js') }}" defer></script>
+</head>
+<body class="bk-page">
+<main class="bk" data-book data-slots='{{ slots|tojson }}' data-pick="{{ form.at or '' }}">
+  {% if done %}
+  <section class="bk-done" role="status">
+    <span class="bk-ok">{{ icon("check") }}</span>
+    <h1>¡Gracias por tu reserva!</h1>
+    <p class="bk-when" data-utc="{{ done.strftime('%Y-%m-%dT%H:%M') }}"></p>
+    <p class="bk-msg">Te enviaremos el enlace de la llamada por WhatsApp.</p>
+  </section>
+  {% else %}
+  <header class="bk-head">
+    <h1>Reserva una llamada</h1>
+    <p>{{ icon("clock") }} {{ book_minutes }} min · videollamada</p>
+  </header>
+  <form method="post" class="bk-body" novalidate>
+    <div class="hp" aria-hidden="true"><label for="website">No rellenes este campo</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+    <input type="hidden" name="at" value="{{ form.at or '' }}" data-at>
+    <div class="bk-step" data-step="1"{% if error and form.at %} hidden{% endif %}>
+      <div class="bk-cal">
+        <div class="bk-month"><button type="button" class="bk-nav" data-mv="-1" aria-label="Mes anterior">‹</button><b data-mlabel></b><button type="button" class="bk-nav" data-mv="1" aria-label="Mes siguiente">›</button></div>
+        <div class="bk-wd" aria-hidden="true"><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+        <div class="bk-days" data-days role="grid"></div>
+        <p class="bk-tz" data-tz></p>
+      </div>
+      <div class="bk-times">
+        <p class="bk-dlabel" data-dlabel>Elige un día</p>
+        <div class="bk-slots" data-times></div>
+      </div>
+      {% if not slots %}<p class="bk-none">Ahora mismo no quedan horas libres. Vuelve a mirar en unos días.</p>{% endif %}
+    </div>
+    <div class="bk-step bk-form" data-step="2"{% if not (error and form.at) %} hidden{% endif %}>
+      <button type="button" class="bk-back" data-back>‹ Cambiar hora</button>
+      <p class="bk-sel" data-sel></p>
+      {% if error %}<div class="flash error" role="alert">{{ error }}</div>{% endif %}
+      <div class="field"><label for="bk-name">Nombre</label><input id="bk-name" name="name" value="{{ form.name or '' }}" required maxlength="120" autocomplete="name"></div>
+      <div class="field"><label for="bk-phone">WhatsApp</label><input id="bk-phone" name="phone" type="tel" value="{{ form.phone or '' }}" required maxlength="30" autocomplete="tel" placeholder="+34 600 000 000"><span class="hint">Con el prefijo de tu país. Por aquí te mandamos el enlace.</span></div>
+      <div class="field"><label for="bk-email">Correo</label><input id="bk-email" name="email" type="email" value="{{ form.email or '' }}" required maxlength="255" autocomplete="email"></div>
+      <div class="field"><label for="bk-brand">Tu canal <span class="muted">(opcional)</span></label><input id="bk-brand" name="brand" value="{{ form.brand or '' }}" maxlength="200" placeholder="Enlace o nombre de tu canal"></div>
+      <button class="btn bk-go">Confirmar reserva</button>
+    </div>
+  </form>
+  {% endif %}
+</main>
+</body>
+</html>

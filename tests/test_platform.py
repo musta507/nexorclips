@@ -3560,3 +3560,31 @@ def test_landing_lead_from_clipprofit_es():
     admin = client_for("admin@test.com")
     page = admin.get("/admin").get_data(as_text=True)
     assert "Creadores interesados" in page
+
+
+def test_book_call_from_landing():
+    c = A.app.test_client()
+    page = c.get("/reservar")
+    assert page.status_code == 200 and "Reserva una llamada" in page.get_data(as_text=True)
+    assert "clipprofit.es" in page.headers["Content-Security-Policy"] and "X-Frame-Options" not in page.headers
+    with A.app.app_context():
+        slots = A.book_slots()
+    assert slots
+    at = slots[0].strftime("%Y-%m-%dT%H:%M")
+    r = c.post("/reservar", data={"at": at, "name": "Lucía", "phone": "+34 600 11 22 33", "email": "lu@x.com"})
+    body = r.get_data(as_text=True)
+    assert "Gracias por tu reserva" in body and "por WhatsApp" in body
+    r = c.post("/reservar", data={"at": at, "name": "Otro", "phone": "+34 600 11 22 44", "email": "o@x.com"})
+    assert "ya no está libre" in r.get_data(as_text=True)                 # la misma hora no se reserva dos veces
+    r = c.post("/reservar", data={"at": slots[1].strftime("%Y-%m-%dT%H:%M"), "name": "Otro", "phone": "12", "email": "o@x.com"})
+    assert "WhatsApp" in r.get_data(as_text=True) and r.status_code == 400
+    with A.app.app_context():
+        lead = A.CampaignLead.query.one()
+        assert (lead.phone, lead.meet_at) == ("+34600112233", slots[0])
+        assert slots[0] not in A.book_slots()
+    admin = client_for("admin@test.com")
+    page = admin.get("/admin/solicitudes").get_data(as_text=True)
+    assert "wa.me/34600112233" in page and "Horario de llamadas" in page
+    post(admin, "/admin/solicitudes/horario", days=["5"], start="11:00", end="12:00", slot="30", ahead="0", horizon="14")
+    with A.app.app_context():
+        assert A.book_cfg()["days"] == [5] and all(A._local(s).weekday() == 5 for s in A.book_slots())

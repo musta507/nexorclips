@@ -1,8 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Creadores interesados · Admin{% endblock %}
 {% import "admin/_ui.html" as ui %}
+{% from "_icons.html" import icon %}
 {% block content %}
-{% call ui.head("Creadores interesados", "Creadores que han rellenado «Lanzar una campaña». Respóndeles por correo y, cuando cerréis el trato, crea la campaña con sus datos ya puestos.") %}{% endcall %}
+{% call ui.head("Creadores interesados", "Creadores que han reservado una llamada en la landing. Mándales el enlace por WhatsApp y, cuando cerréis el trato, crea la campaña con sus datos ya puestos.") %}{% endcall %}
+<details class="card bk-cfg">
+  <summary>{{ icon("clock") }} Horario de llamadas <span class="muted">· {% for d in cfg.days %}{{ weekdays[d][:3] }}{{ ", " if not loop.last }}{% endfor %} · {{ cfg.start }}–{{ cfg.end }} · {{ cfg.slot }} min</span></summary>
+  <form method="post" action="{{ url_for('admin_book_hours') }}" class="form-stack">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="bk-cfg-days">{% for d in range(7) %}<label class="chk"><input type="checkbox" name="days" value="{{ d }}"{% if d in cfg.days %} checked{% endif %}> {{ weekdays[d] }}</label>{% endfor %}</div>
+    <div class="form-grid">
+      <div class="field"><label for="bk-s">Desde (hora de España)</label><input id="bk-s" type="time" name="start" value="{{ cfg.start }}" required></div>
+      <div class="field"><label for="bk-e">Hasta</label><input id="bk-e" type="time" name="end" value="{{ cfg.end }}" required></div>
+      <div class="field"><label for="bk-l">Duración</label><select id="bk-l" name="slot">{% for m in [15, 20, 30, 45, 60] %}<option value="{{ m }}"{% if cfg.slot == m %} selected{% endif %}>{{ m }} min</option>{% endfor %}</select></div>
+      <div class="field"><label for="bk-a">Antelación mínima</label><select id="bk-a" name="ahead">{% for h in [0, 1, 2, 3, 6, 12, 24, 48] %}<option value="{{ h }}"{% if cfg.ahead == h %} selected{% endif %}>{{ h }} h</option>{% endfor %}</select></div>
+      <div class="field"><label for="bk-h">Se puede reservar hasta</label><select id="bk-h" name="horizon">{% for d in [7, 14, 21, 30] %}<option value="{{ d }}"{% if cfg.horizon == d %} selected{% endif %}>{{ d }} días</option>{% endfor %}</select></div>
+    </div>
+    <div><button class="btn sm">Guardar horario</button></div>
+  </form>
+</details>
 <div class="leads">
   {% for l in leads %}
   <article class="card lead{% if l.status == 'nueva' %} is-new{% endif %}">
@@ -10,14 +26,16 @@
       <div>
         <span class="status {{ 'pendiente' if l.status == 'nueva' else ('aprobado' if l.status in ['contactada', 'convertida'] else 'rechazado') }}">{{ statuses[l.status] }}</span>
         <h3 style="margin-top:8px">{{ l.brand }}</h3>
-        <p class="small muted">{{ l.name }} · <span class="selectable">{{ l.email }}</span> · {{ l.created_at|ago }}</p>
+        <p class="small muted">{{ l.name }} · <span class="selectable">{{ l.email }}</span>{% if l.phone %} · <span class="selectable">{{ l.phone }}</span>{% endif %} · {{ l.created_at|ago }}</p>
       </div>
+      {% if l.meet_at %}{% set m = madrid(l.meet_at) %}<div class="lead-budget"><span class="small muted">Llamada</span><b>{{ ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"][m.weekday()] }} {{ m.day }}/{{ m.month }} · {{ m.strftime("%H:%M") }}</b></div>{% endif %}
       {% if l.budget %}<div class="lead-budget"><span class="small muted">Presupuesto</span><b>{{ l.budget }}</b></div>{% endif %}
     </div>
     {% if l.link %}<p class="small"><span class="muted">Enlace:</span> <a class="link" href="{{ l.link if l.link.startswith('http') else 'https://' ~ l.link }}" target="_blank" rel="noopener nofollow">{{ l.link|truncate(70) }}</a></p>{% endif %}
     {% if l.message %}<p class="rules">{{ l.message }}</p>{% endif %}
     <div class="inline" style="flex-wrap:wrap">
-      <a class="btn sm accent" href="{{ url_for('admin_campaign_form', solicitud=l.id) }}">Crear campaña</a>
+      {% if l.phone %}<a class="btn sm" href="https://wa.me/{{ l.phone|replace('+', '') }}?text={{ ('Hola ' ~ l.name ~ ', soy de ' ~ APP_NAME ~ '. Te paso el enlace de nuestra llamada: ')|urlencode }}" target="_blank" rel="noopener">{{ icon("chat") }} Enviar enlace por WhatsApp</a>{% endif %}
+      <a class="btn sm {{ 'soft' if l.phone else 'accent' }}" href="{{ url_for('admin_campaign_form', solicitud=l.id) }}">Crear campaña</a>
       <form class="inline" method="post">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <input type="hidden" name="lead_id" value="{{ l.id }}">

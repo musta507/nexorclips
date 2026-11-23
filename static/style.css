@@ -3377,3 +3377,49 @@ body.onb-page{margin:0;background:var(--bg);min-height:100vh;display:flex;flex-d
 .onb-go{width:100%;height:48px;font-size:16px;margin-top:4px}
 @media (max-width:600px){.onb-top{padding:16px}.onb-card{padding:24px 20px}}
 .onb-card .file-pick{display:flex;flex-direction:column;align-items:center}
+
+/* Reservar llamada (/reservar): va dentro de la landing de clipprofit.es en lugar de Calendly */
+body.bk-page{margin:0;background:#fff;font-family:var(--font);color:var(--ink)}
+.bk{max-width:880px;margin:0 auto;padding:28px 24px}
+.bk-head h1{font-size:22px;letter-spacing:-.02em;margin:0}
+.bk-head p{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:14px;margin:6px 0 22px}
+.bk-head svg{width:16px;height:16px}
+.bk-step[data-step="1"]{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:28px}
+.bk-step[hidden]{display:none!important}
+.bk-month{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.bk-month b{font-size:16px}
+.bk-nav{width:36px;height:36px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:18px;cursor:pointer;color:var(--ink)}
+.bk-nav:hover{background:var(--soft)}
+.bk-wd,.bk-days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center}
+.bk-wd span{font-size:12px;color:var(--muted);font-weight:600;padding-bottom:4px}
+.bk-day{aspect-ratio:1;max-height:48px;width:100%;border-radius:999px;border:0;background:transparent;font:500 14px var(--font);color:#b6b7bd;cursor:default}
+.bk-day.free{background:var(--soft);color:var(--ink);font-weight:600;cursor:pointer}
+.bk-day.free:hover{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.bk-day.on{background:var(--ink)!important;color:#fff!important}
+.bk-tz{font-size:12px;color:var(--muted);margin:14px 0 0}
+.bk-dlabel{font-size:14px;font-weight:600;margin:6px 0 14px}
+.bk-slots{display:flex;flex-direction:column;gap:8px;max-height:360px;overflow-y:auto;padding-right:4px}
+.bk-slot{height:44px;border-radius:12px;border:1px solid var(--line);background:#fff;font:600 14px var(--font);color:var(--ink);cursor:pointer;flex:none}
+.bk-slot:hover{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.bk-none{grid-column:1/-1;color:var(--muted);font-size:14px}
+.bk-form{max-width:440px;display:flex;flex-direction:column;gap:14px}
+.bk-back{align-self:flex-start;border:0;background:none;color:var(--muted);font:500 14px var(--font);cursor:pointer;padding:0}
+.bk-sel{font-size:16px;font-weight:600;margin:0;padding:12px 14px;border-radius:12px;background:var(--soft)}
+.bk-form .field input{height:46px}
+.bk-go{width:100%;height:48px;font-size:16px;margin-top:4px}
+.bk-form .flash{margin:0}
+.bk-done{text-align:center;padding:56px 16px;max-width:440px;margin:0 auto}
+.bk-ok{width:56px;height:56px;border-radius:50%;background:var(--money);color:#fff;display:inline-grid;place-items:center;margin-bottom:16px}
+.bk-ok svg{width:28px;height:28px}
+.bk-done h1{font-size:26px;letter-spacing:-.03em;margin:0 0 8px}
+.bk-when{font-size:16px;font-weight:600;margin:0 0 6px}
+.bk-msg{color:var(--muted);font-size:14px;margin:0}
+@media (max-width:719px){.bk{padding:20px 16px}.bk-step[data-step="1"]{grid-template-columns:1fr;gap:22px}.bk-slots{display:grid;grid-template-columns:repeat(3,1fr);max-height:none}}
+
+.bk-cfg{margin-bottom:16px;padding:16px 20px}
+.bk-cfg summary{cursor:pointer;font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;list-style:none}
+.bk-cfg summary::-webkit-details-marker{display:none}
+.bk-cfg summary svg{width:16px;height:16px}
+.bk-cfg summary .muted{font-weight:500}
+.bk-cfg form{margin-top:16px}
+.bk-cfg-days{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:14px}

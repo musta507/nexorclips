@@ -748,6 +748,8 @@ class CampaignLead(db.Model):
     link = db.Column(db.String(500), default="")
     message = db.Column(db.Text, default="")
     status = db.Column(db.String(20), default="nueva")         # nueva / contactada / convertida / descartada
+    phone = db.Column(db.String(30), default="")               # WhatsApp (reservas de llamada desde la landing)
+    meet_at = db.Column(db.DateTime, nullable=True, index=True)  # hora de la llamada reservada (UTC)
     ip = db.Column(db.String(64), default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
@@ -3156,7 +3158,7 @@ def csrf_token():
     return session["_csrf"]
 
 
-CSRF_EXEMPT = {"meta_data_deletion", "landing_lead"}     # Meta (firmada) y el formulario de la landing de clipprofit.es (otra web)
+CSRF_EXEMPT = {"meta_data_deletion", "landing_lead", "book_call"}     # Meta (firmada) y el formulario de la landing de clipprofit.es (otra web)
 
 
 @app.before_request
@@ -3219,7 +3221,8 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
 @app.after_request
 def security_headers(resp):
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-    resp.headers.setdefault("X-Frame-Options", "DENY")
+    if not getattr(g, "_framable", False):
+        resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     resp.headers.setdefault("Content-Security-Policy", CSP)
@@ -9986,6 +9989,93 @@ def landing_lead():
     return answer({"ok": not error, "error": error}, 400 if error else 200)
 
 
+# ---------------------------------------------------------------- reservar llamada (sustituye a Calendly en la landing)
+BOOK_DEFAULT = {"days": [0, 1, 2, 3, 4], "start": "10:00", "end": "20:00", "slot": 30, "ahead": 3, "horizon": 14}
+WEEKDAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+
+def book_cfg():
+    try:
+        cfg = {**BOOK_DEFAULT, **json.loads(get_setting("booking", "") or "{}")}
+    except ValueError:
+        cfg = dict(BOOK_DEFAULT)
+    return cfg
+
+
+def _hm(s):
+    h, m = (s or "0:0").split(":")
+    return int(h) * 60 + int(m)
+
+
+def book_slots(now=None):
+    """Huecos libres (UTC, sin zona) según el horario de «Creadores interesados» (hora de España)."""
+    cfg, tz = book_cfg(), ZoneInfo(APP_TZ)
+    now = (now or datetime.utcnow()).replace(tzinfo=timezone.utc)
+    first = now + timedelta(hours=cfg["ahead"])
+    taken = {l.meet_at for l in CampaignLead.query.filter(CampaignLead.meet_at >= now.replace(tzinfo=None),
+                                                         CampaignLead.status != "descartada").all()}
+    out, today = [], now.astimezone(tz).date()
+    for d in range(cfg["horizon"] + 1):
+        day = today + timedelta(days=d)
+        if day.weekday() not in cfg["days"]:
+            continue
+        m = _hm(cfg["start"])
+        while m + cfg["slot"] <= _hm(cfg["end"]):
+            at = datetime(day.year, day.month, day.day, m // 60, m % 60, tzinfo=tz).astimezone(timezone.utc)
+            if at >= first and at.replace(tzinfo=None) not in taken:
+                out.append(at.replace(tzinfo=None))
+            m += cfg["slot"]
+    return out
+
+
+def _framable(resp):
+    """La landing (clipprofit.es) puede meter esta página dentro de la suya."""
+    anc = " ".join(sorted(LANDING_ORIGINS))
+    resp.headers["Content-Security-Policy"] = CSP.replace("frame-ancestors 'none'", f"frame-ancestors 'self' {anc}")
+    g._framable = True                              # sin «X-Frame-Options: DENY» (ver security_headers)
+    return resp
+
+
+@app.route("/reservar", methods=["GET", "POST"])
+def book_call():
+    form, error, done = {}, None, None
+    if request.method == "POST":
+        form = {k: " ".join((request.form.get(k) or "").split()) for k in ("name", "phone", "email", "brand", "at")}
+        if request.form.get("website"):                       # campo trampa: solo lo rellenan los bots
+            return _framable(Response(render_template("book.html", slots=[], form={}, done=datetime.utcnow(), error=None, book_minutes=30)))
+        ip = (request.remote_addr or "")[:64]
+        recent = CampaignLead.query.filter(CampaignLead.ip == ip,
+                                           CampaignLead.created_at >= datetime.utcnow() - timedelta(hours=1)).count()
+        digits = re.sub(r"\D", "", form["phone"])
+        try:
+            at = datetime.strptime(form["at"], "%Y-%m-%dT%H:%M")
+        except ValueError:
+            at = None
+        if not at or at not in book_slots():
+            error = "Esa hora ya no está libre. Elige otra."
+        elif len(form["name"]) < 2:
+            error = "Escribe tu nombre."
+        elif not 8 <= len(digits) <= 15:
+            error = "Escribe tu WhatsApp con el prefijo del país (por ejemplo, +34 600 000 000)."
+        elif "@" not in form["email"] or "." not in form["email"].split("@")[-1]:
+            error = "Escribe un correo válido."
+        elif recent >= 5:
+            error = "Has hecho varias reservas seguidas. Inténtalo más tarde."
+        if not error:
+            phone = ("+" if form["phone"].startswith("+") or len(digits) > 9 else "") + digits
+            db.session.add(CampaignLead(name=form["name"][:120], email=form["email"][:255].lower(),
+                                        brand=(form["brand"] or form["name"])[:200], category="streamer",
+                                        link=form["brand"][:500] if "." in form["brand"] else "",
+                                        phone=phone[:30], meet_at=at, ip=ip))
+            db.session.commit()
+            log.info("Llamada reservada: %s", form["name"][:60])
+            done = at
+    slots = [] if done else [x.strftime("%Y-%m-%dT%H:%M") for x in book_slots()]
+    return _framable(Response(render_template("book.html", slots=slots, form=form, done=done, error=error,
+                                              book_minutes=book_cfg()["slot"]),
+                              status=400 if error else 200))
+
+
 @app.route("/lanzar-campana", methods=["GET", "POST"])
 def launch():
     form = {}
@@ -10024,7 +10114,27 @@ def admin_leads():
         return redirect(url_for("admin_leads"))
     leads = CampaignLead.query.order_by(CampaignLead.created_at.desc()).all()
     leads.sort(key=lambda l: l.status != "nueva")
-    return render_template("admin/leads.html", leads=leads, statuses=LEAD_STATUSES)
+    return render_template("admin/leads.html", leads=leads, statuses=LEAD_STATUSES, cfg=book_cfg(), weekdays=WEEKDAYS,
+                           madrid=lambda d: d.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ)))
+
+
+@app.route("/admin/solicitudes/horario", methods=["POST"])
+@admin_required
+def admin_book_hours():
+    f = request.form
+    try:
+        start, end = f.get("start", ""), f.get("end", "")
+        cfg = {"days": sorted({int(d) for d in f.getlist("days") if d in "0123456"}), "start": start, "end": end,
+               "slot": int(f.get("slot", 30)), "ahead": int(f.get("ahead", 3)), "horizon": int(f.get("horizon", 14))}
+        assert re.match(r"^\d{2}:\d{2}$", start) and re.match(r"^\d{2}:\d{2}$", end) and _hm(start) < _hm(end)
+        assert cfg["slot"] in (15, 20, 30, 45, 60) and 0 <= cfg["ahead"] <= 72 and 1 <= cfg["horizon"] <= 60 and cfg["days"]
+    except (ValueError, AssertionError):
+        flash("Revisa el horario: elige al menos un día y una hora de fin posterior a la de inicio.", "error")
+        return redirect(url_for("admin_leads"))
+    set_setting("booking", json.dumps(cfg))
+    audit("horario_llamadas", json.dumps(cfg))
+    flash("Horario de llamadas guardado.", "ok")
+    return redirect(url_for("admin_leads"))
 
 
 def new_leads():
