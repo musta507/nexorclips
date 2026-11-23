@@ -28,7 +28,10 @@ window.addEventListener("error", function (e) {
     Object.keys(datos || {}).forEach(function (k) {
       var v = datos[k]; if (v === null || v === undefined || String(v).trim() === "") return;
       v = String(v).slice(0, 500);
-      var campo = ALIAS[k.toLowerCase().trim()];
+      var kk = k.toLowerCase().trim();
+      var hid = root.querySelector('[data-k-hidden="' + ({ plan: "plan", boton: "boton", "botón": "boton", button: "boton" }[kk] || "") + '"]');
+      if (hid) { hid.value = v.slice(0, 80); return; }
+      var campo = ALIAS[kk];
       var box = campo && root.querySelector('[data-k="' + campo + '"]');
       if (box) { var inp = box.querySelector("input"); inp.value = v; box.hidden = true; return; }
       var h = document.createElement("input"); h.type = "hidden"; h.value = v;

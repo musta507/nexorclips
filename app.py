@@ -777,6 +777,8 @@ class CampaignLead(db.Model):
     status = db.Column(db.String(20), default="nueva")         # nueva / contactada / convertida / descartada
     phone = db.Column(db.String(30), default="")               # WhatsApp (reservas de llamada desde la landing)
     meet_at = db.Column(db.DateTime, nullable=True, index=True)  # hora de la llamada reservada (UTC)
+    plan = db.Column(db.String(80), default="", index=True)    # plan de la landing desde el que reservó
+    button = db.Column(db.String(80), default="", index=True)  # botón de la landing que pulsó
     ip = db.Column(db.String(64), default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
@@ -10336,7 +10338,8 @@ def _framable(resp):
 def book_call():
     form, error, done = {}, None, None
     if request.method == "POST":
-        form = {k: " ".join((request.form.get(k) or "").split()) for k in ("name", "phone", "email", "brand", "budget", "link", "at")}
+        form = {k: " ".join((request.form.get(k) or "").split()) for k in ("name", "phone", "email", "brand", "budget", "link", "at",
+                                                                          "plan", "boton")}
         form["message"] = (request.form.get("message") or "").strip()[:3000]
         # Lo que el creador ya rellenó en la landing y no tiene casilla propia (llega como x_<pregunta>)
         form["extra"] = [(k[2:].replace("_", " ")[:60], " ".join(v.split())[:500]) for k, v in request.form.items()
@@ -10368,10 +10371,13 @@ def book_call():
             db.session.add(CampaignLead(name=form["name"][:120], email=form["email"][:255].lower(),
                                         brand=(form["brand"] or form["name"])[:200], category="streamer",
                                         budget=form["budget"][:40], link=link[:500], message=message[:3000],
-                                        phone=phone[:30], meet_at=at, ip=ip))
+                                        phone=phone[:30], meet_at=at, ip=ip, plan=form["plan"][:80], button=form["boton"][:80]))
             db.session.commit()
             log.info("Llamada reservada: %s", form["name"][:60])
             done = at
+    if request.method == "GET":                               # la landing puede decir el plan y el botón en la dirección
+        form = {"plan": " ".join((request.args.get("plan") or "").split())[:80],
+                "boton": " ".join((request.args.get("boton") or "").split())[:80]}
     slots = [] if done else [x.strftime("%Y-%m-%dT%H:%M") for x in book_slots()]
     return _framable(Response(render_template("book.html", slots=slots, form=form, done=done, error=error,
                                               origins=" ".join(sorted(BOOK_FRAME_ORIGINS)),
@@ -10423,7 +10429,11 @@ def admin_leads():
         return redirect(url_for("admin_leads"))
     leads = CampaignLead.query.order_by(CampaignLead.created_at.desc()).all()
     leads.sort(key=lambda l: l.status != "nueva")
+    from collections import Counter
+    by_plan = Counter(l.plan or "Sin plan" for l in leads if l.meet_at).most_common()
+    by_button = Counter(l.button or "Sin indicar" for l in leads if l.meet_at).most_common()
     return render_template("admin/leads.html", leads=leads, statuses=LEAD_STATUSES, cfg=book_cfg(), weekdays=WEEKDAYS,
+                           by_plan=by_plan, by_button=by_button,
                            madrid=lambda d: d.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ)))
 
 

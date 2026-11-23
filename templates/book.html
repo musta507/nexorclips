@@ -44,6 +44,7 @@
       <p class="bk-sel" data-sel></p>
       {% if error %}<div class="flash error" role="alert">{{ error }}</div>{% endif %}
       <div data-extra>{% for k, v in form.extra or [] %}<input type="hidden" name="x_{{ k|replace(' ', '_') }}" value="{{ v }}">{% endfor %}
+        <input type="hidden" name="plan" value="{{ form.plan or '' }}" data-k-hidden="plan"><input type="hidden" name="boton" value="{{ form.boton or '' }}" data-k-hidden="boton">
         {% for k in ["budget", "link", "message"] %}{% if form[k] %}<input type="hidden" name="{{ k }}" value="{{ form[k] }}">{% endif %}{% endfor %}</div>
       <div class="field" data-k="name"><label for="bk-name">Nombre</label><input id="bk-name" name="name" value="{{ form.name or '' }}" required maxlength="120" autocomplete="name"></div>
       <div class="field" data-k="phone"><label for="bk-phone">WhatsApp</label><input id="bk-phone" name="phone" type="tel" value="{{ form.phone or '' }}" required maxlength="30" autocomplete="tel" placeholder="+34 600 000 000"><span class="hint">Con el prefijo de tu país. Por aquí te mandamos el enlace.</span></div>

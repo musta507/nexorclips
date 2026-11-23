@@ -3754,3 +3754,17 @@ def test_new_account_must_finish_profile_first():
     assert c.get("/bienvenida").status_code == 200 and c.get("/terminos").status_code == 200
     post(c, "/bienvenida", name="Nueva", username="nueva", country="ES")
     assert c.get("/ranking").status_code == 200
+
+
+def test_book_call_tracks_plan_and_button():
+    c = A.app.test_client()
+    page = c.get("/reservar?plan=Pro&boton=Precios").get_data(as_text=True)
+    assert 'name="plan" value="Pro"' in page and 'name="boton" value="Precios"' in page
+    with A.app.app_context():
+        at = A.book_slots()[0].strftime("%Y-%m-%dT%H:%M")
+    c.post("/reservar", data={"at": at, "name": "Lu", "phone": "+34600000002", "email": "lu@x.com", "plan": "Pro", "boton": "Precios"})
+    with A.app.app_context():
+        l = A.CampaignLead.query.one()
+        assert (l.plan, l.button) == ("Pro", "Precios")
+    page = client_for("admin@test.com").get("/admin/solicitudes").get_data(as_text=True)
+    assert "Reservas por plan" in page and "Plan: <b>Pro</b>" in page

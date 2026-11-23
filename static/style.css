@@ -3452,3 +3452,9 @@ body.bk-page{margin:0;background:#fff;font-family:var(--font);color:var(--ink)}
 .err-servidor .err-kind,.err-tarea .err-kind{background:#fde8e8;color:var(--red)}
 .err-times{font-size:13px;font-weight:600;color:var(--muted)}
 .err-explain{margin:8px 0 0;font-size:14px;line-height:1.5}
+
+.lead-stats{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;padding:16px 20px}
+.lead-stats ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.lead-stats li{display:flex;justify-content:space-between;gap:10px;font-size:14px}
+.lead-src{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}.lead-src span{background:var(--soft);border-radius:8px;padding:3px 8px}
+@media (max-width:600px){.lead-stats{grid-template-columns:1fr}}
