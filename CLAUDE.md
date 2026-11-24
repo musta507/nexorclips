@@ -113,12 +113,12 @@ Acordado y sin hacer:
 Para el final:
 - Poner los datos del titular (nombre, NIF y domicilio de Felipe) en Panel técnico → Datos → «Datos del aviso legal». Salen en /aviso-legal y en la privacidad. Mientras falten, hay un aviso en el Panel técnico.
 - Probar un retiro real por Whop de principio a fin.
+- La app de Whop (Clipprofit, app_Ljk0vbU7F4IBzy) está en una cuenta que no es de Mustapha ni de Felipe. Antes del primer creador real, crearla en la cuenta de Whop de ClipProfit/Felipe: permiso `payout:transfer_funds` con justificación (sin justificación no se guarda), OAuth en «Pública» con la dirección `/auth/whop/callback`, y cambiar en Railway `WHOP_APP_API_KEY`, `WHOP_APP_ID` y `WHOP_CLIENT_ID`. Probado el 24 nov: el permiso funciona (Whop solo frenó porque la empresa de prueba no está verificada; cada creador necesita su empresa verificada) y «Conectar con Whop» de los clippers funciona.
 - Dominio: la plataforma vive en app.clipprofit.es (BASE_URL por defecto en producción); la dirección de Railway manda ahí con 301 (salvo /salud, /cron/ y los POST). Google OAuth ya tiene la dirección nueva.
 - Comprobar en producción que yt-dlp trae las vistas (Panel técnico → «Probar yt-dlp con una cuenta»).
 
 Sin decidir:
 - APIs oficiales de TikTok, Instagram, YouTube y Facebook (páginas): el código, las páginas legales y la guía están hechos; falta que Mustapha cree las apps en cada red y pase su revisión (necesita antes el dominio propio).
-- Botón «Conectar con Whop» para identificar a los miembros del Whop.
 - Acceso del cliente en los planes de distribución.
 
 Flojo, sin urgencia:
