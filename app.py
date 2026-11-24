@@ -136,9 +136,6 @@ WHOP_CLIENT_ID = os.environ.get("WHOP_CLIENT_ID", "").strip()
 WHOP_CLIENT_SECRET = os.environ.get("WHOP_CLIENT_SECRET", "").strip()
 # La app de ClipProfit en Whop que instalan los creadores (sin claves): su app_… para el enlace de instalación
 WHOP_APP_ID = (os.environ.get("WHOP_APP_ID", "").strip() or WHOP_CLIENT_ID)   # prueba de la opción 2: la app de Whop que instalan los creadores
-# En Whop el «secreto de cliente» del OAuth es la propia clave apik_ de la app: si es la misma app y falta, se usa esa
-if not WHOP_CLIENT_SECRET and WHOP_CLIENT_ID and WHOP_CLIENT_ID == WHOP_APP_ID and WHOP_APP_API_KEY:
-    WHOP_CLIENT_SECRET = WHOP_APP_API_KEY
 WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip("/")
 WHOP_AUTO_MAX = float(os.environ.get("WHOP_AUTO_MAX", "50"))    # retiros por encima de esto los aprueba un admin (0 = sin tope)
 WHOP_AUTO_DAILY = float(os.environ.get("WHOP_AUTO_DAILY", "300"))  # máximo pagado solo en 24 h entre todos; lo que pase espera a un admin (0 = sin tope)
