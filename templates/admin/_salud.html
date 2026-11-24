@@ -1,0 +1,171 @@
+{# Panel técnico → Salud (24 nov, Mustapha). Datos de health_data() en app.py. #}
+{% set ST = {"ok": "Bien", "warn": "Mirar", "bad": "Mal", "off": "Sin poner"} %}
+<div class="sl">
+  <div class="card sl-hero {{ H.hero.state }}">
+    <span class="sl-big"><span class="sl-dot {{ H.hero.state }}"></span></span>
+    <div class="sl-hero-t"><b>{{ H.hero.title }}</b><p>{{ H.hero.text }}</p><small>Datos de este momento: pulsa «Actualizar» para volver a mirar.</small></div>
+    <a class="btn sm soft" href="{{ url_for('admin_settings') }}#salud" data-turbo="false">Actualizar</a>
+  </div>
+
+  <div class="sl-lights">
+    {% for l in H.lights %}
+    <div class="card sl-light {{ l.state }}">
+      <span class="sl-lh"><span class="sl-dot {{ l.state }}"></span>{{ l.name }}</span>
+      <b class="tnum">{{ l.big }}</b>
+      <small>{{ l.text }}</small>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="sl-row sl-r2">
+    <section class="card sl-card">
+      <h3>Lista para abrir<span class="sl-sub">{{ H.check_ok }} de {{ H.checklist|length }} listos</span></h3>
+      <p class="sl-hint">Se marca sola. Cuando todo esté en verde, la web está lista para usuarios reales.</p>
+      <div class="sl-prog"><i style="width:{{ (100 * H.check_ok / H.checklist|length)|round|int }}%"></i></div>
+      <ul class="sl-chk">
+        {% for c in H.checklist %}
+        <li><span class="sl-ic {{ c.state }}" aria-label="{{ ST[c.state] }}">{{ {"ok": "✓", "bad": "✕", "warn": "!", "off": "?"}[c.state] }}</span>
+          <span class="sl-t">{{ c.title }}<small>{{ c.text }}</small></span>
+          {% if c.link == "backup" %}
+          <form method="post" action="{{ url_for('admin_backups_ok') }}" data-turbo="false"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="sl-a">Ya lo activé</button></form>
+          {% elif c.link %}<a class="sl-a" href="{{ c.url }}">{{ c.link }}</a>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    <section class="card sl-card">
+      <h3>Tareas automáticas<span class="sl-sub">hora de España</span></h3>
+      <ul class="sl-tasks">
+        {% for j in H.jobs %}
+        <li><span class="sl-dot {{ j.state }}"></span>
+          <span><b>{{ j.name }}</b><small>{% if j.last %}{{ j.last|ago }} · {% endif %}{{ j.info }}{% if j.secs %} · tardó {{ (j.secs // 60) ~ ' min' if j.secs >= 60 else j.secs ~ ' s' }}{% endif %}</small></span>
+          <span class="sl-when">{{ j.next }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+
+  <section class="card sl-card">
+    <h3>Servidor<span class="sl-sub">últimas 24 h</span></h3>
+    {% set S = H.server %}
+    <div class="sl-kpis">
+      <div class="sl-kpi"><span>Versión publicada</span><b class="tnum">{{ S.sha }}</b><small>{{ S.msg or "" }}</small></div>
+      <div class="sl-kpi"><span>Encendido sin cortes</span><b class="tnum">{{ S.up }}</b><small>desde el último despliegue o reinicio</small></div>
+      <div class="sl-kpi"><span>Memoria (este proceso)</span><b class="tnum">{{ S.rss }}</b><small>{% if S.limit %}de {{ S.limit }} · {{ S.rss_pct }} %{% else %}límite no visible{% endif %}</small></div>
+      <div class="sl-kpi"><span>Respuesta media</span><b class="tnum">{{ S.tot.avg_ms ~ ' ms' if S.tot.avg_ms is not none else '—' }}</b><small>{{ S.tot.requests }} páginas · {{ S.tot.slow }} lentas</small></div>
+    </div>
+    <div class="sl-chart" role="img" aria-label="Páginas servidas y fallos por hora en las últimas 24 horas">
+      {% for x in S.hours %}<span class="sl-bar{% if x.err %} err{% endif %}" title="{{ x.label }}: {{ x.n }} páginas{% if x.err %}, {{ x.err }} fallos{% endif %}"><i style="height:{{ [x.pct, 2]|max }}%"></i>{% if x.err %}<em>{{ x.err }}</em>{% endif %}</span>{% endfor %}
+    </div>
+    <div class="sl-axis"><span>{{ S.hours[0].label }}</span><span>{{ S.hours[6].label }}</span><span>{{ S.hours[12].label }}</span><span>{{ S.hours[18].label }}</span><span>ahora</span></div>
+    <div class="sl-legend"><span><i class="g"></i>Páginas por hora{% if S.peak.n %} (pico {{ S.peak.n }} a las {{ S.peak.label }}){% endif %}</span>
+      <span><i class="r"></i>Fallos de la web: {{ S.err_24 }} en 24 h</span>
+      {% if S.slow %}<span class="sl-push">Más lentas: {% for ep, n, w in S.slow %}{{ ep }} {{ '%.1f'|format(w / 1000) }} s{{ " · " if not loop.last }}{% endfor %}</span>{% endif %}</div>
+  </section>
+
+  <div class="sl-row sl-r2e">
+    <section class="card sl-card">
+      {% set B = H.db %}
+      <h3>Base de datos<span class="sl-sub">{{ B.size_txt }}{% if B.growth_txt %} · {{ B.growth_txt }} esta semana{% endif %}</span></h3>
+      <table class="sl-tbl">
+        <thead><tr><th>Lo que guarda</th><th class="num">Filas</th>{% if B.tables and B.tables[0].bytes %}<th class="num">Ocupa</th>{% endif %}<th></th></tr></thead>
+        <tbody>
+        {% for t in B.tables %}<tr><td>{{ t.name }}</td><td class="num">{{ "{:,}".format(t.rows).replace(",", ".") }}</td>{% if t.bytes %}<td class="num">{{ (t.bytes / 1048576)|round(1)|string|replace(".", ",") }} MB</td>{% endif %}<td><span class="sl-mbar"><i style="width:{{ [t.pct, 2]|max }}%"></i></span></td></tr>{% endfor %}
+        {% if B.rest.n %}<tr class="muted"><td>Otras {{ B.rest.n }} tablas</td><td class="num">{{ "{:,}".format(B.rest.rows).replace(",", ".") }}</td>{% if B.rest.bytes %}<td class="num">{{ (B.rest.bytes / 1048576)|round(1)|string|replace(".", ",") }} MB</td>{% endif %}<td></td></tr>{% endif %}
+        </tbody>
+      </table>
+      <p class="sl-hint">Responde en {{ '%.0f'|format(B.ping) }} ms. Última copia descargada a mano: {{ B.last_copy|ago if B.last_copy else "nunca" }}.
+        Copias diarias de Railway: {{ "confirmadas el " ~ B.backups_ok if B.backups_ok else "sin confirmar" }}.</p>
+    </section>
+    <section class="card sl-card">
+      {% set R = H.read %}
+      <h3>Lectura de vistas<span class="sl-sub">cada día a las {{ R.at }}</span></h3>
+      <div class="sl-kpis sl-k3">
+        <div class="sl-kpi"><span>Hoy</span><b>{{ "Hecha" if R.done else ("Intento " ~ R.tries ~ " de 3" if R.tries else "Pendiente") }}</b></div>
+        <div class="sl-kpi"><span>Con yt-dlp (gratis) hoy</span><b class="tnum">{{ R.ytdlp_ok }}</b><small>{{ R.ytdlp_fail }} fallaron</small></div>
+        <div class="sl-kpi"><span>Clips sin poder leer</span><b class="tnum{% if R.bad %} sl-warn{% endif %}">{{ R.bad }}</b></div>
+      </div>
+      <div class="sl-meter"><div><span>Apify hoy</span><b class="tnum">{{ R.used }} / {{ R.max if R.max > 0 else "sin tope" }} resultados</b></div><div class="sl-prog o"><i style="width:{{ R.used_pct }}%"></i></div></div>
+      <p class="sl-hint">Apify últimos 7 días: {{ R.week_items }} resultados. Última lectura: {{ R.last }}</p>
+      {% if R.per %}
+      <table class="sl-tbl">
+        <thead><tr><th>Red</th><th class="num">Clips</th><th class="num">Leídos hoy</th><th class="num">Sin leer</th></tr></thead>
+        <tbody>{% for p in R.per %}<tr><td>{{ p.label }}</td><td class="num">{{ p.n }}</td><td class="num">{{ p.today }}</td><td class="num">{{ p.bad }}</td></tr>{% endfor %}</tbody>
+      </table>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="card sl-card">
+    {% set M = H.money %}
+    <h3>Dinero<span class="sl-sub">saldos de Whop guardados unos minutos</span></h3>
+    <div class="sl-kpis">
+      <div class="sl-kpi"><span>Presupuesto de campañas activas</span><b class="tnum">{{ M.budget|money }}</b><small>{{ M.active }} campañas{% if M.lonely %} · {{ M.lonely }} sin creador{% endif %}</small></div>
+      <div class="sl-kpi"><span>Repartido a clippers (siempre)</span><b class="tnum sl-money">{{ M.spent|money }}</b></div>
+      <div class="sl-kpi"><span>Retiros pendientes</span><b class="tnum">{{ M.pend_n }}</b><small>{{ M.pend_sum|money }}</small></div>
+      <div class="sl-kpi"><span>Pagos fallidos esta semana</span><b class="tnum{% if M.failed %} sl-bad{% endif %}">{{ M.failed }}</b></div>
+    </div>
+    <table class="sl-tbl sl-money-t">
+      <thead><tr><th>Quién paga</th><th>Whop</th><th class="num">Debe a clippers</th><th class="num">Saldo en su Whop</th><th>Estado</th><th class="num">Último pago</th></tr></thead>
+      <tbody>
+      {% for r in M.creators %}
+      <tr><td><b>{{ r.c.name }}</b></td>
+        <td>{% if r.via_app %}<span class="sl-chip ok">Con la app</span>{% elif r.has_key %}<span class="sl-chip ok">Con clave</span>{% else %}<span class="sl-chip bad">Sin conectar</span>{% endif %}</td>
+        <td class="num">{{ r.owed|money }}</td>
+        <td class="num">{% if r.balance is not none %}<span class="sl-money">{{ r.balance|money }}</span>{% else %}<span class="muted" title="{{ r.error }}">—</span>{% endif %}</td>
+        <td>{% if r.missing %}<span class="sl-chip bad">Faltan {{ r.missing|money }}</span>{% elif r.owed and r.balance is none %}<span class="sl-chip bad">No puede pagar</span>{% elif r.state == "warn" %}<span class="sl-chip warn">Justo</span>{% else %}<span class="sl-chip ok">Le llega</span>{% endif %}</td>
+        <td class="num muted">{{ r.last_paid|ago if r.last_paid else "nunca" }}</td></tr>
+      {% endfor %}
+      <tr><td><b>Cuenta principal</b> <small class="muted">campañas sin creador</small></td>
+        <td>{% if M.main_bal is not none %}<span class="sl-chip ok">Conectada</span>{% else %}<span class="sl-chip off">Sin saldo visible</span>{% endif %}</td>
+        <td class="num">{{ M.main_owed|money }}</td>
+        <td class="num">{% if M.main_bal is not none %}<span class="sl-money">{{ M.main_bal|money }}</span>{% else %}—{% endif %}</td>
+        <td>{% if M.main_owed and (M.main_bal is none or M.main_bal < M.main_owed) %}<span class="sl-chip warn">No le llega</span>{% elif M.main_owed %}<span class="sl-chip ok">Le llega</span>{% else %}<span class="sl-chip off">Sin uso</span>{% endif %}</td>
+        <td></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="sl-row sl-r2e">
+    <section class="card sl-card">
+      {% set U = H.users %}
+      <h3>Usuarios y actividad</h3>
+      <div class="sl-kpis sl-k3">
+        <div class="sl-kpi"><span>Registros hoy</span><b class="tnum">{{ U.today }}</b><small>{{ U.week }} esta semana</small></div>
+        <div class="sl-kpi"><span>En línea ahora</span><b class="tnum">{{ U.online }}</b><small>{{ U.active_day }} entraron hoy</small></div>
+        <div class="sl-kpi"><span>Clips nuevos hoy</span><b class="tnum">{{ U.clips_today }}</b></div>
+        <div class="sl-kpi"><span>Perfiles sin terminar</span><b class="tnum">{{ U.no_profile }}</b></div>
+        <div class="sl-kpi"><span>Clippers con Whop</span><b class="tnum">{{ U.whop_pct }} %</b><small>de {{ U.clippers }}</small></div>
+        <div class="sl-kpi"><span>Fallos al entrar con Google</span><b class="tnum{% if U.google_fail %} sl-warn{% endif %}">{{ U.google_fail }}</b><small>24 h</small></div>
+      </div>
+      <svg class="sl-spark" viewBox="0 0 500 70" preserveAspectRatio="none" aria-hidden="true"><polyline points="{{ U.pts }}"/></svg>
+      <p class="sl-hint">Registros por día, últimos 30 días: {{ U.regs_30 }} en total, como mucho {{ U.regs_max }} en un día.</p>
+    </section>
+    <section class="card sl-card">
+      <h3>Servicios conectados</h3>
+      <ul class="sl-svc">
+        {% for x in H.services %}
+        <li><span class="sl-dot {{ x.state }}"></span><span><b>{{ x.name }}</b><small>{{ x.text }}</small></span><span class="sl-chip {{ x.state }}">{{ ST[x.state] }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+
+  <section class="card sl-card">
+    {% set Z = H.security %}
+    <h3>Seguridad<span class="sl-sub">últimas 24 h</span></h3>
+    <div class="sl-kpis">
+      <div class="sl-kpi"><span>Intentos frenados</span><b class="tnum">{{ Z.tot.blocked }}</b><small>demasiados intentos seguidos</small></div>
+      <div class="sl-kpi"><span>Formularios caducados</span><b class="tnum">{{ Z.tot.csrf }}</b><small>o enviados desde fuera</small></div>
+      <div class="sl-kpi"><span>Robots buscando fallos</span><b class="tnum">{{ Z.tot.bots }}</b><small>todos rechazados</small></div>
+      <div class="sl-kpi"><span>Admins que entraron hoy</span><b class="tnum">{{ Z.admins_day }}</b><small>{{ Z.mods }} mods en campañas</small></div>
+    </div>
+    <div class="sl-row sl-r2e sl-inner">
+      <div><p class="sl-ttl">Quién tiene acceso al panel</p>
+        <ul class="sl-list">{% for a in Z.admins %}<li><span class="sl-av">{{ a.u.initial }}</span><b>{{ a.u.name or a.u.email }}</b><span class="sl-chip {{ 'ok' if a.tech else 'off' }} sl-push">{{ a.role }}{% if a.tech %} · Panel técnico{% endif %}</span></li>{% endfor %}</ul></div>
+      <div><p class="sl-ttl">Últimos accesos al panel</p>
+        {% if Z.seen %}<ul class="sl-list">{% for x in Z.seen %}<li><span class="sl-dot ok"></span>{{ x.u.name or x.u.email }} · {{ x.dev }}<span class="muted sl-push">{{ x.at|ago }}</span></li>{% endfor %}</ul>
+        {% else %}<p class="sl-hint">Aún no hay accesos apuntados.</p>{% endif %}</div>
+    </div>
+  </section>
+</div>

@@ -6,7 +6,8 @@
 {% call ui.head("Panel técnico", "Solo lo ves tú: conexiones, errores, claves y herramientas.") %}{% endcall %}
 
 <nav class="seg" data-tabs data-hash-tabs aria-label="Secciones del panel técnico">
-  <a href="#estado" data-tab="estado" class="on">Estado{% if alerts %} <b class="tnum">{{ alerts|length }}</b>{% endif %}</a>
+  <a href="#salud" data-tab="salud" class="on">Salud</a>
+  <a href="#estado" data-tab="estado">Estado{% if alerts %} <b class="tnum">{{ alerts|length }}</b>{% endif %}</a>
   <a href="#lectura" data-tab="lectura">Vistas y clips</a>
   <a href="#videos" data-tab="videos">Vídeos</a>
   <a href="#apis" data-tab="apis">APIs oficiales</a>
@@ -15,7 +16,11 @@
   <a href="#notas" data-tab="notas">Notas{% set pend = notes|rejectattr('done')|list %}{% if pend %} <b class="tnum">{{ pend|length }}</b>{% endif %}</a>
 </nav>
 
-<div class="tp" id="estado">
+<div class="tp" id="salud">
+{% include "admin/_salud.html" %}
+</div>
+
+<div class="tp" id="estado" hidden>
 <form class="card tight form-stack" method="get" action="{{ url_for('admin_errors') }}" style="margin-bottom:12px">
   <h3>Buscar un error por su código</h3>
   <p class="small muted" style="margin:0">Cuando algo falla, la web enseña un código de 6 letras (p. ej. K7M2QX). Escríbelo aquí para ver qué pasó.</p>

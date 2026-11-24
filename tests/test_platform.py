@@ -3863,3 +3863,34 @@ def test_campaign_chooses_which_creator_pays(monkeypatch):
         assert A.db.session.get(A.Campaign, cid).status == "pausada"
         A.db.session.get(A.Campaign, cid).status = "activa"; A.db.session.commit()
         assert any("sin creador" in t for _, t, _ in A.tech_alerts())
+
+
+def test_health_tab_shows_real_figures():
+    """Panel técnico → Salud: semáforo, lista para abrir, cifras por hora, accesos al panel y tareas automáticas."""
+    A._stat["n"] = {}                                   # lo que dejaron otras pruebas en memoria
+    admin = client_for("admin@test.com")
+    cid = make_campaign()
+    page = admin.get("/admin/ajustes").get_data(as_text=True)
+    for txt in ("Lista para abrir", "Tareas automáticas", "Servidor", "Base de datos", "Lectura de vistas", "Dinero",
+                "Usuarios y actividad", "Servicios conectados", "Seguridad", "campaña activa sin creador"):
+        assert txt in page, txt
+    # cifras por hora: una página y un formulario caducado
+    admin.get("/campanas")
+    admin.post("/cuenta/tema", data={"_csrf": "malo"})
+    with A.app.app_context():
+        A.stat_flush()
+        h = A.StatHour.query.one()
+        assert h.requests >= 1 and h.csrf == 1
+        u = A.User.query.filter_by(email="admin@test.com").one()
+        assert u.admin_seen_at and "Werkzeug" in (u.admin_seen_ua or "") or u.admin_seen_ua == ""
+        A.job_mark("lectura", True, "Vistas leídas en 3 de 3 clips")
+        A.db.session.commit()
+    page = admin.get("/admin/ajustes").get_data(as_text=True)
+    assert "Vistas leídas en 3 de 3 clips" in page
+    # copias de Railway: Mustapha lo confirma a mano
+    assert "Ya lo activé" in page
+    admin.post("/admin/salud/copias", data={"_csrf": "t"})
+    assert "Confirmado el" in admin.get("/admin/ajustes").get_data(as_text=True)
+    # un clipper no entra
+    assert client_for("c@test.com").post("/admin/salud/copias", data={"_csrf": "t"}).status_code in (302, 403)
+    assert A._ua_label("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) AppleWebKit Version/17.0 Mobile Safari/604.1") == "Safari en iPhone"

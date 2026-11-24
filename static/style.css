@@ -3472,6 +3472,81 @@ body.bk-page{margin:0;background:var(--card);font-family:var(--font);color:var(-
 .crm-card{margin-bottom:12px}.crm-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
 .cr-app{background:var(--soft);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}.cr-app ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}.cr-app code{word-break:break-all}
 
+/* =============================================================== Panel técnico → Salud (24 nov) */
+.sl{display:flex;flex-direction:column;gap:16px}
+.sl-dot{width:10px;height:10px;border-radius:50%;flex:none;background:#c4c5ca;box-shadow:0 0 0 4px var(--soft)}
+.sl-dot.ok{background:var(--money);box-shadow:0 0 0 4px var(--money-soft)}
+.sl-dot.warn{background:#f79009;box-shadow:0 0 0 4px #fff6ed}
+.sl-dot.bad{background:#f04438;box-shadow:0 0 0 4px #fee4e2}
+.sl-hero{display:flex;align-items:center;gap:16px;padding:18px 22px}
+.sl-big{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;flex:none;background:var(--soft)}
+.sl-big .sl-dot{width:14px;height:14px}
+.sl-hero.ok .sl-big{background:var(--money-soft)}.sl-hero.warn .sl-big{background:#fff6ed}.sl-hero.bad .sl-big{background:#fee4e2}
+.sl-hero-t{flex:1;min-width:0}.sl-hero-t b{font-size:16px}.sl-hero-t p{margin:2px 0 0;font-size:13px;color:var(--ink-2)}
+.sl-hero-t small{font-size:12px;color:var(--muted)}
+.sl-lights{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}
+.sl-light{display:flex;flex-direction:column;gap:4px;padding:16px 18px}
+.sl-lh{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.sl-light b{font-size:22px;font-weight:600;letter-spacing:-.02em;margin-top:4px}
+.sl-light small{font-size:12px;color:var(--muted)}
+.sl-light.ok{border-color:#c6efd8}.sl-light.warn{border-color:#fddcab;background:#fffcf7}.sl-light.bad{border-color:#fcc9c5;background:#fffafa}
+.sl-row{display:grid;gap:16px}.sl-r2{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}.sl-r2e{grid-template-columns:repeat(2,minmax(0,1fr))}
+.sl-card{padding:20px}
+.sl-card h3{display:flex;align-items:baseline;gap:8px;margin:0 0 4px;font-size:16px}
+.sl-sub{margin-left:auto;font-size:12px;font-weight:500;color:var(--muted)}
+.sl-hint{margin:8px 0 0;font-size:12px;color:var(--muted)}
+.sl-prog{height:8px;border-radius:999px;background:var(--soft);overflow:hidden;margin:10px 0 2px}
+.sl-prog i{display:block;height:100%;border-radius:999px;background:var(--fill)}
+.sl-prog.o i{background:#f08a24}
+.sl-chk,.sl-tasks,.sl-svc,.sl-list{list-style:none;margin:10px 0 0;padding:0}
+.sl-chk li,.sl-tasks li,.sl-svc li,.sl-list li{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:14px}
+.sl-chk li:first-child,.sl-tasks li:first-child,.sl-svc li:first-child,.sl-list li:first-child{border-top:0}
+.sl-ic{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;background:var(--soft);color:var(--muted)}
+.sl-ic.ok{background:var(--money-soft);color:var(--money-ink)}.sl-ic.bad{background:#fee4e2;color:#b42318}.sl-ic.warn{background:#fff6ed;color:#b54708}
+.sl-t{flex:1;min-width:0}.sl-t small,.sl-tasks small,.sl-svc small{display:block;font-size:12px;color:var(--muted)}
+.sl-a{font:600 12px var(--font);color:var(--ink);text-decoration:underline;text-underline-offset:3px;white-space:nowrap;background:none;border:0;padding:0;cursor:pointer}
+.sl-tasks li>span:nth-child(2),.sl-svc li>span:nth-child(2){flex:1;min-width:0}
+.sl-when{font-size:12px;color:var(--muted);text-align:right;max-width:110px}
+.sl-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}
+.sl-kpis.sl-k3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.sl-kpi{background:var(--soft);border-radius:12px;padding:12px 14px;min-width:0}
+.sl-kpi span{display:block;font-size:12px;color:var(--muted)}
+.sl-kpi b{display:block;font-size:18px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sl-kpi small{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sl-money{color:var(--money-ink)}.sl-warn{color:#b54708}.sl-bad{color:#b42318}
+.sl-chart{display:flex;align-items:flex-end;gap:6px;height:130px;margin-top:18px;padding-bottom:2px;border-bottom:1px solid var(--line)}
+.sl-bar{flex:1;height:100%;display:flex;align-items:flex-end;position:relative}
+.sl-bar i{display:block;width:100%;border-radius:8px 8px 2px 2px;background:#d4d5da}
+.sl-bar.err i{background:#fcc9c5}
+.sl-bar em{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 2px);font:600 12px/1 var(--font);font-style:normal;color:#b42318}
+.sl-bar:hover i{background:#9a9ba3}
+.sl-axis{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px}
+.sl-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin-top:8px}
+.sl-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}.sl-legend i.g{background:#c4c5ca}.sl-legend i.r{background:#f04438}
+.sl-push{margin-left:auto}
+.sl-tbl{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+.sl-tbl th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;padding:8px 6px;border-bottom:1px solid var(--line);background:none}
+.sl-tbl td{padding:9px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.sl-tbl tr:last-child td{border-bottom:0}
+.sl-tbl .num{text-align:right}
+.sl-mbar{display:block;height:6px;border-radius:999px;background:var(--soft);width:100px;overflow:hidden;margin-left:auto}
+.sl-mbar i{display:block;height:100%;background:#9a9ba3;border-radius:999px}
+.sl-meter{margin-top:12px}.sl-meter>div:first-child{display:flex;justify-content:space-between;gap:8px;font-size:13px}
+.sl-chip{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--soft);color:var(--muted)}
+.sl-chip.ok{background:var(--money-soft);color:var(--money-ink)}.sl-chip.warn{background:#fff6ed;color:#b54708}.sl-chip.bad{background:#fee4e2;color:#b42318}
+.sl-spark{display:block;width:100%;height:70px;margin-top:14px}
+.sl-spark polyline{fill:none;stroke:#14b8a6;stroke-width:2.5;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.sl-inner{margin-top:16px}
+.sl-ttl{font-size:13px;font-weight:600;margin:0 0 4px}
+.sl-list li{font-size:13px;padding:8px 0}
+.sl-av{width:26px;height:26px;border-radius:50%;background:var(--fill);color:var(--on-ink);display:grid;place-items:center;font-size:12px;font-weight:600;flex:none}
+@media (max-width:1100px){.sl-lights{grid-template-columns:repeat(3,minmax(0,1fr))}.sl-r2,.sl-r2e{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.sl-lights{grid-template-columns:repeat(2,minmax(0,1fr))}.sl-kpis,.sl-kpis.sl-k3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sl-hero{flex-wrap:wrap;padding:16px}.sl-hero-t{flex:1 1 calc(100% - 62px)}.sl-hero .btn{margin-left:62px}
+  .sl-chart{gap:3px;height:100px}.sl-mbar{width:56px}.sl-when{max-width:84px}
+  .sl-money-t th:nth-child(2),.sl-money-t td:nth-child(2),.sl-money-t th:nth-child(6),.sl-money-t td:nth-child(6){display:none}
+  .sl-money-t small{display:block}.sl-card h3{flex-wrap:wrap}.sl-sub{margin-left:0;flex-basis:100%}}
+
 /* =============================================================== modo oscuro
    Solo si el usuario lo elige (menú del perfil o Ajustes): <html data-theme="dark">. Las páginas públicas siguen en claro.
    Aquí van los mismos nombres de color con su versión oscura; lo que tenga un color fijo necesita su regla abajo. */

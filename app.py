@@ -226,6 +226,8 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), default="")      # solo si se registró con correo y contraseña
     is_admin = db.Column(db.Boolean, default=False)
     admin_role = db.Column(db.String(20), default="")          # owner · reviewer · support (sale de las variables de Railway)
+    admin_seen_at = db.Column(db.DateTime, nullable=True)       # última vez que abrió el panel (Panel técnico → Salud)
+    admin_seen_ua = db.Column(db.String(200), default="")      # con qué dispositivo
     is_banned = db.Column(db.Boolean, default=False)
     ban_reason = db.Column(db.String(255), default="")
     payout_method = db.Column(db.String(60), default="")
@@ -756,6 +758,18 @@ def campaign_accounts(user_id, campaign_id, status=None, platform=None):
     if has_request_context() and request.method == "GET":      # al pintar listas se pide lo mismo por cada clip: una vez basta
         return list(_per_request(("camp_accs", user_id, campaign_id, status, platform), load))
     return load()
+
+
+class StatHour(db.Model):
+    """Cifras del servidor por hora para Panel técnico → Salud (cada proceso las junta en memoria y las suma aquí cada minuto)."""
+    hour = db.Column(db.DateTime, primary_key=True)
+    requests = db.Column(db.Integer, default=0)        # páginas servidas (sin archivos ni consultas automáticas)
+    ms_total = db.Column(db.Float, default=0)          # suma de lo que tardó el servidor en prepararlas
+    slow = db.Column(db.Integer, default=0)            # las que tardaron más de SLOW_MS
+    errors = db.Column(db.Integer, default=0)          # fallos de la web (500)
+    blocked = db.Column(db.Integer, default=0)         # frenadas por demasiados intentos
+    csrf = db.Column(db.Integer, default=0)            # formularios caducados o falsos
+    bots = db.Column(db.Integer, default=0)            # robots buscando fallos (wp-admin, .env…)
 
 
 class TechNote(db.Model):
@@ -3061,6 +3075,21 @@ def _refresh_run():
     return st if st.get("day") == today else {"day": today, "tries": 0}
 
 
+def job_mark(name, ok=True, info="", started=None):
+    """Apunta cómo salió una tarea automática (Panel técnico → Salud → Tareas automáticas)."""
+    now = datetime.utcnow()
+    secs = (now - started).total_seconds() if started else None
+    set_setting("job:" + name, json.dumps({"at": now.isoformat(timespec="seconds"), "ok": bool(ok), "info": str(info)[:300],
+                                          "secs": round(secs) if secs is not None else None}))
+
+
+def job_info(name):
+    try:
+        return json.loads(get_setting("job:" + name, "") or "{}")
+    except ValueError:
+        return {}
+
+
 def run_daily_refresh(now=None):
     """La lectura diaria (perfiles, vistas, dinero). El día solo se da por hecho CUANDO TERMINA: si la web se reinicia
     a mitad o falla, se reintenta a los 45 min (hasta 3 veces) y, si no sale, avisa al móvil. Devuelve True si se completó."""
@@ -3099,6 +3128,8 @@ def run_daily_refresh(now=None):
     except Exception:  # noqa: BLE001
         db.session.rollback()
         log.exception("La lectura diaria falló (intento %s)", st["tries"])
+    job_mark("lectura", ok, get_setting("last_refresh", "").split(" · ", 1)[-1] if ok else
+             f"No terminó (intento {st['tries']} de {REFRESH_TRIES})", started=now)
     st = _refresh_run()
     if ok:
         st["done"] = True
@@ -3134,6 +3165,7 @@ def prune_snapshots(now=None):
             FROM view_snapshot WHERE taken_at < :lim) d
         WHERE v.id = d.id AND d.rn > 1"""), {"lim": now - timedelta(days=SNAP_KEEP_DAYS)})
     set_setting("snap_pruned", week)
+    job_mark("historial", True, f"{res.rowcount or 0} lecturas antiguas resumidas")
     db.session.commit()
     return res.rowcount or 0
 
@@ -3149,6 +3181,8 @@ def check_creator_balances():
         if r["missing"]:
             short.append(f"{r['c'].name}: debe {money(r['owed'])}, tiene {money(r['balance'])} (faltan {money(r['missing'])})")
     set_setting("creators_short_list", json.dumps(short))                # sale como aviso en el panel (los del móvil están apagados)
+    job_mark("saldos", not short, f"{len(short)} {'creador' if len(short) == 1 else 'creadores'} sin saldo suficiente" if short
+             else "A todos los creadores les llega el saldo")
 
 
 _leader_lock = GlobalLock(731900)       # quién lleva el reloj interno cuando hay varios procesos
@@ -3166,6 +3200,8 @@ def _auto_refresh_loop():
                 if not leader:
                     time.sleep(600)
                     continue
+                set_setting("clock_tick", datetime.utcnow().isoformat(timespec="seconds"))   # el reloj interno sigue vivo
+                db.session.commit()
                 call_reminders()
                 try:
                     poll_bunny_copies()
@@ -3176,10 +3212,14 @@ def _auto_refresh_loop():
                 if slot and search_engine() == "ytdlp" and not refresh_pending():
                     set_setting("ytdlp_check_slot", slot)
                     db.session.commit()
+                    t0 = datetime.utcnow()
                     try:
                         ytdlp_check()
-                    except Exception:  # noqa: BLE001
+                        job_mark("ytdlp", True, "Comprobación hecha", started=t0)
+                    except Exception as e:  # noqa: BLE001
                         log.exception("Fallo en la comprobación con yt-dlp")
+                        job_mark("ytdlp", False, str(e)[:200], started=t0)
+                    db.session.commit()
                 if _refresh_due():
                     fresh = run_daily_refresh()           # el día se marca al terminar; si se corta, se reintenta
                 due, day = reminders_due()
@@ -3188,7 +3228,9 @@ def _auto_refresh_loop():
                     db.session.commit()
                     if not fresh and not REFRESH_AT:
                         discover_clips()
-                    inactivity_reminders()
+                    n_rem = inactivity_reminders()
+                    job_mark("recordatorios", True, f"{n_rem} avisos enviados" if isinstance(n_rem, int) else "Hecho")
+                    db.session.commit()
         except Exception:  # noqa: BLE001
             log.exception("Fallo en la actualización automática de vistas")
         time.sleep(600)
@@ -3236,9 +3278,15 @@ def before():
     if request.method == "POST" and request.endpoint not in CSRF_EXEMPT:
         sent, expected = request.form.get("_csrf", ""), session.get("_csrf", "")
         if not sent or not expected or not secrets.compare_digest(sent, expected):
+            stat_add(csrf=1)
             abort(400, description="csrf")
     if current_user.is_authenticated:
         now = datetime.utcnow()
+        if (current_user.is_admin and (request.endpoint or "").startswith("admin_")
+                and (not current_user.admin_seen_at or (now - current_user.admin_seen_at).total_seconds() > 300)):
+            current_user.admin_seen_at = now                     # Panel técnico → Salud: últimos accesos al panel
+            current_user.admin_seen_ua = (request.headers.get("User-Agent") or "")[:200]
+            db.session.commit()
         if not current_user.last_seen_at or (now - current_user.last_seen_at).total_seconds() > SEEN_EVERY:
             current_user.last_seen_at = now
             db.session.commit()
@@ -3255,6 +3303,55 @@ def before():
 
 ONBOARDING_FREE = {"onboarding", "logout", "static", "terms", "privacy", "legal_notice", "cookies_page", "health", "avatar",
                    "browser_error", "notices", "google_callback", "login_google", "book_call", "login", None}
+
+
+_BOOT = time.time()                                       # cuándo arrancó este proceso (Panel técnico → Salud)
+STAT_SKIP = {"static", "health", "notices", "support_poll", "browser_error", "clip_cover", "account_photo", "cover",
+             "avatar", "landing_cover"}                   # archivos y consultas automáticas: no cuentan como páginas
+_stat, _stat_lock = {"hour": None, "flushed": 0.0, "n": {}}, threading.Lock()
+
+
+def stat_add(**inc):
+    """Suma cifras a la hora actual (en memoria); cada minuto, o al cambiar de hora, se pasan a StatHour."""
+    hour = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+    with _stat_lock:
+        if _stat["hour"] != hour:
+            old, _stat["hour"], _stat["n"] = (_stat["hour"], dict(_stat["n"])), hour, {}
+        else:
+            old = None
+        for k, v in inc.items():
+            _stat["n"][k] = _stat["n"].get(k, 0) + v
+        due = time.time() - _stat["flushed"] >= 60
+    if old and old[0] and old[1]:
+        _stat_write(*old)
+    if due:
+        stat_flush()
+
+
+def stat_flush():
+    with _stat_lock:
+        hour, n = _stat["hour"], dict(_stat["n"])
+        _stat["n"], _stat["flushed"] = {}, time.time()
+    if hour and n:
+        _stat_write(hour, n)
+
+
+def _stat_write(hour, n):
+    """Suma en su propia conexión (no toca la de la página); si falla, se pierde ese minuto y ya está."""
+    t = StatHour.__table__
+    vals = {k: getattr(t.c, k) + v for k, v in n.items() if k in t.c}
+    if not vals:
+        return
+    try:
+        with db.engine.begin() as conn:
+            if not conn.execute(t.update().where(t.c.hour == hour).values(**vals)).rowcount:
+                conn.execute(t.insert().values(hour=hour, **{k: v for k, v in n.items() if k in t.c}))
+    except Exception:  # noqa: BLE001 — dos procesos a la vez: el otro creó la fila, se suma encima
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(t.update().where(t.c.hour == hour).values(**vals))
+        except Exception:  # noqa: BLE001
+            logging.getLogger("salud").debug("No se pudieron guardar las cifras de la hora", exc_info=True)
 
 
 SLOW_MS = int(os.environ.get("SLOW_MS", "1500"))          # a partir de aquí una página cuenta como lenta
@@ -3305,6 +3402,9 @@ def security_headers(resp):
         resp.headers["Server-Timing"] = f"app;dur={ms:.0f}"
         if ms >= SLOW_MS and request.endpoint not in SLOW_SKIP:
             note_slow(request.endpoint or request.path, ms)
+        if request.endpoint not in STAT_SKIP and not request.path.startswith("/static/"):
+            stat_add(requests=1, ms_total=ms, slow=int(ms >= SLOW_MS and request.endpoint not in SLOW_SKIP),
+                     errors=int(resp.status_code >= 500))
     if PRODUCTION:
         resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return resp
@@ -3321,7 +3421,9 @@ ERROR_TEXT = {
 
 @app.errorhandler(HTTPException)
 def http_error(e):
-    if e.code >= 400 and not BOT_PATHS.search(request.path) and request.endpoint != "static":
+    if BOT_PATHS.search(request.path):
+        stat_add(bots=1)
+    elif e.code >= 400 and request.endpoint != "static":
         note_error(f"{e.code} {e.description or e.name}"[:200], kind="pagina", http_code=e.code)
     title, body = ERROR_TEXT.get(e.code, (e.name, e.description or ""))
     return render_template("error.html", code=e.code, title=title, body=body), e.code
@@ -3479,7 +3581,7 @@ ROLE_ENDPOINTS = {
 }
 
 
-TECH_ENDPOINTS = {"admin_settings", "admin_errors", "admin_notes", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
+TECH_ENDPOINTS = {"admin_settings", "admin_backups_ok", "admin_errors", "admin_notes", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
                   "admin_demo", "admin_my_demo", "admin_wipe", "admin_activity", "admin_activity_delete", "admin_creators", "admin_creator_form"}
 
 
@@ -3836,7 +3938,10 @@ def too_many_fails(key):
     now = time.time()
     tries = [t for t in _login_fails.get(key, []) if now - t < 900]
     _login_fails[key] = tries
-    return len(tries) >= 10
+    if len(tries) >= 10:
+        stat_add(blocked=1)
+        return True
+    return False
 
 
 # ---------------------------------------------------------------- correo y «he olvidado mi contraseña»
@@ -6647,6 +6752,393 @@ def bunny_info():
             "waiting": len(copy_candidates())}
 
 
+# ---------------------------------------------------------------- Panel técnico → Salud (24 nov, Mustapha: «muy muy completo»)
+# Todo con datos reales de la web. Lo que la web no puede saber (las copias de Railway) se dice tal cual.
+TEST_WHOP_APP = "app_Ljk0vbU7F4IBzy"          # la app de prueba del 24 nov, en una cuenta que no es de ClipProfit
+TABLE_NAMES = {"view_snapshot": "Lecturas de vistas", "submission": "Clips enviados", "user": "Usuarios", "message": "Mensajes",
+               "audit_log": "Actividad", "error_log": "Fallos apuntados", "campaign": "Campañas", "payout": "Retiros",
+               "campaign_account": "Cuentas de redes", "notice": "Avisos", "setting": "Ajustes", "camp_message": "Chat de campañas",
+               "post": "Publicaciones", "post_comment": "Comentarios", "stat_hour": "Cifras por hora", "campaign_member": "Clippers en campañas",
+               "audience_stat": "Audiencias", "api_token": "Conexiones de redes", "lesson_progress": "Progreso de formación"}
+SALUD_STATES = ("ok", "warn", "bad", "off")
+
+
+def _ua_label(ua):
+    ua = ua or ""
+    nav = ("Edge" if "Edg/" in ua else "Opera" if "OPR/" in ua else "Chrome" if "Chrome/" in ua or "CriOS" in ua
+           else "Firefox" if "Firefox/" in ua or "FxiOS" in ua else "Safari" if "Safari/" in ua else "Navegador")
+    dev = ("iPhone" if "iPhone" in ua else "iPad" if "iPad" in ua else "Android" if "Android" in ua else "Windows" if "Windows" in ua
+           else "Mac" if "Mac OS" in ua else "Linux" if "Linux" in ua else "")
+    return f"{nav} en {dev}" if dev else nav
+
+
+def _mb(n):
+    return f"{n / 1048576:,.0f} MB".replace(",", ".") if n >= 10 * 1048576 else f"{n / 1048576:.1f} MB".replace(".", ",")
+
+
+def _when(dt):
+    """«hoy 03:41», «ayer 23:10», «12 nov 09:00» en hora de España."""
+    if not dt:
+        return "nunca"
+    loc, today = _local(dt), _local().date()
+    hm = loc.strftime("%H:%M")
+    if loc.date() == today:
+        return f"hoy {hm}"
+    if loc.date() == today - timedelta(days=1):
+        return f"ayer {hm}"
+    return f"{loc.day} {MESES_ES[loc.month - 1]} {hm}"
+
+
+def _iso(v):
+    try:
+        return datetime.fromisoformat(v) if v else None
+    except ValueError:
+        return None
+
+
+def _mem():
+    """Memoria de este proceso y el límite del contenedor, si se puede leer."""
+    rss = limit = None
+    try:
+        for line in open("/proc/self/status"):
+            if line.startswith("VmRSS:"):
+                rss = int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    for f in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            v = open(f).read().strip()
+            if v.isdigit() and int(v) < 1 << 50:
+                limit = int(v)
+                break
+        except OSError:
+            pass
+    return rss, limit
+
+
+def _db_stats():
+    t0 = time.perf_counter()
+    db.session.execute(text("SELECT 1"))
+    ping = (time.perf_counter() - t0) * 1000
+    tables = []
+    if db.engine.dialect.name == "postgresql":
+        size = int(db.session.execute(text("SELECT pg_database_size(current_database())")).scalar() or 0)
+        for name, n, b in db.session.execute(text(
+                "SELECT relname, n_live_tup, pg_total_relation_size(relid) FROM pg_stat_user_tables ORDER BY 3 DESC")):
+            tables.append((name, int(n or 0), int(b or 0)))
+        for i, (name, n, b) in enumerate(tables[:6]):      # las 6 que más ocupan: filas exactas (la estadística de Postgres va con retraso)
+            if re.fullmatch(r"[a-z_]+", name):
+                tables[i] = (name, int(db.session.execute(text(f'SELECT count(*) FROM "{name}"')).scalar() or 0), b)
+    else:
+        size = int(db.session.execute(text("PRAGMA page_count")).scalar() or 0) * int(db.session.execute(text("PRAGMA page_size")).scalar() or 0)
+        for t in db.metadata.sorted_tables:
+            tables.append((t.name, int(db.session.execute(db.select(db.func.count()).select_from(t)).scalar() or 0), 0))
+        tables.sort(key=lambda r: -r[1])
+    try:
+        hist = json.loads(get_setting("db_size_hist", "") or "{}")
+    except ValueError:
+        hist = {}
+    today = _local().strftime("%Y-%m-%d")
+    if hist.get(today) != size:
+        hist[today] = size
+        hist = dict(sorted(hist.items())[-60:])
+        set_setting("db_size_hist", json.dumps(hist))
+        db.session.commit()
+    old = [v for d, v in hist.items() if d <= (_local() - timedelta(days=6)).strftime("%Y-%m-%d")]
+    growth = size - old[-1] if old else None
+    top = [{"name": TABLE_NAMES.get(n, n.replace("_", " ")), "rows": r, "bytes": b} for n, r, b in tables[:6]]
+    rest = tables[6:]
+    maxb = max([t["bytes"] for t in top] + [1])
+    maxr = max([t["rows"] for t in top] + [1])
+    for t in top:
+        t["pct"] = round(100 * (t["bytes"] / maxb if t["bytes"] else t["rows"] / maxr))
+    last_copy = AuditLog.query.filter_by(action="copia_descargada").order_by(AuditLog.created_at.desc()).first()
+    return {"ping": ping, "size": size, "size_txt": _mb(size), "tables": top, "n_tables": len(tables),
+            "rest": {"n": len(rest), "rows": sum(r[1] for r in rest), "bytes": sum(r[2] for r in rest)},
+            "growth": growth, "growth_txt": (("+" if growth >= 0 else "−") + _mb(abs(growth))) if growth is not None else "",
+            "last_copy": last_copy.created_at if last_copy else None, "backups_ok": get_setting("backups_ok", "")}
+
+
+def _hours24():
+    """Las últimas 24 horas de StatHour, hora a hora, y los totales."""
+    stat_flush()
+    now = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+    since = now - timedelta(hours=23)
+    rows = {r.hour: r for r in StatHour.query.filter(StatHour.hour >= since).all()}
+    hours, tot = [], {k: 0 for k in ("requests", "ms_total", "slow", "errors", "blocked", "csrf", "bots")}
+    for i in range(24):
+        h = since + timedelta(hours=i)
+        r = rows.get(h)
+        vals = {k: (getattr(r, k) or 0) if r else 0 for k in tot}
+        for k in tot:
+            tot[k] += vals[k]
+        hours.append({"label": _local(h).strftime("%H h"), "n": vals["requests"], "err": vals["errors"]})
+    peak = max(hours, key=lambda x: x["n"])
+    mx = max(peak["n"], 1)
+    for x in hours:
+        x["pct"] = round(100 * x["n"] / mx)
+    tot["avg_ms"] = round(tot["ms_total"] / tot["requests"]) if tot["requests"] else None
+    return hours, tot, peak
+
+
+def health_data():
+    now = datetime.utcnow()
+    day_ago, week_ago = now - timedelta(hours=24), now - timedelta(days=7)
+    local_midnight = _local().replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
+    D = {"now": now}
+
+    # --- servidor
+    hours, tot, peak = _hours24()
+    rss, limit = _mem()
+    sha = (os.environ.get("RAILWAY_GIT_COMMIT_SHA") or "")[:7]
+    up = int(time.time() - _BOOT)
+    D["server"] = {"sha": sha or "local", "msg": (os.environ.get("RAILWAY_GIT_COMMIT_MESSAGE") or "").split("\n")[0][:90],
+                   "boot": datetime.utcfromtimestamp(_BOOT), "up": f"{up // 86400} d {up % 86400 // 3600} h" if up >= 86400
+                   else f"{up // 3600} h {up % 3600 // 60} min" if up >= 3600 else f"{max(1, up // 60)} min",
+                   "rss": _mb(rss) if rss else "—", "limit": _mb(limit) if limit else "", "rss_pct": round(100 * rss / limit) if rss and limit else None,
+                   "hours": hours, "tot": tot, "peak": peak, "slow": slow_pages()[:3]}
+    err_24 = db.session.query(db.func.coalesce(db.func.sum(ErrorLog.times), 0)).filter(
+        ErrorLog.kind == "servidor", db.func.coalesce(ErrorLog.last_at, ErrorLog.created_at) >= day_ago).scalar() or 0
+    D["server"]["err_24"] = int(err_24)
+
+    # --- base de datos
+    D["db"] = _db_stats()
+
+    # --- lectura de vistas
+    run = _refresh_run()
+    lect = job_info("lectura")
+    try:
+        yst = json.loads(get_setting("ytdlp_stats", "") or "{}")
+    except ValueError:
+        yst = {}
+    live = Submission.query.filter(Submission.status != "rechazado")
+    per = []
+    for p, label in PLATFORMS.items():
+        q = live.filter(Submission.platform == p)
+        n = q.count()
+        if n:
+            per.append({"label": label, "n": n, "today": q.filter(Submission.checked_at >= local_midnight).count(),
+                        "bad": q.filter(Submission.views_error != "").count()})
+    bad_clips = sum(x["bad"] for x in per)
+    week_items = sum(v["items"] for v in apify_summary()["by"].values())
+    h, m = (int(x) for x in REFRESH_AT.split(":")[:2])
+    loc = _local()
+    passed = loc.hour * 60 + loc.minute >= h * 60 + m + 75
+    if not viewcounter.APIFY_TOKEN:
+        rs, rmsg = "bad", "Falta la clave de Apify: no se leen vistas"
+    elif run["tries"] >= REFRESH_TRIES and not run.get("done"):
+        rs, rmsg = "bad", "La lectura de hoy no terminó"
+    elif passed and not run.get("done"):
+        rs, rmsg = "warn", "La lectura de hoy aún no ha terminado"
+    elif bad_clips:
+        rs, rmsg = "warn", f"{bad_clips} clips no se pudieron leer"
+    else:
+        rs, rmsg = "ok", "Al día"
+    D["read"] = {"state": rs, "msg": rmsg, "done": bool(run.get("done")), "tries": run["tries"], "at": REFRESH_AT,
+                 "last": get_setting("last_refresh", "Nunca"), "job": lect, "job_at": _iso(lect.get("at")),
+                 "used": apify_used_today(), "max": apify_daily_max(), "week_items": week_items, "per": per, "bad": bad_clips,
+                 "ytdlp_ok": yst.get("ok", 0), "ytdlp_fail": yst.get("fail", 0), "engine": search_engine()}
+    D["read"]["used_pct"] = min(100, round(100 * D["read"]["used"] / D["read"]["max"])) if D["read"]["max"] > 0 else 0
+
+    # --- dinero
+    crs = creators_overview() if creators_on() else []
+    last_paid = dict(db.session.query(Payout.creator_id, db.func.max(Payout.paid_at)).filter(Payout.status == "pagado")
+                     .group_by(Payout.creator_id).all())
+    for r in crs:
+        r["last_paid"] = last_paid.get(r["c"].id)
+        r["state"] = ("bad" if r["missing"] or (r["owed"] and r["balance"] is None) else
+                      "warn" if r["balance"] is not None and r["owed"] and r["balance"] < r["owed"] * 1.2 else "ok")
+    main_owed = creator_owed(None)
+    main_bal, main_err = whop_balance(None) if WHOP_API_KEY and whop_company_id() else (None, "")
+    pend = Payout.query.filter(Payout.status.in_(("solicitado", "procesando")))
+    failed = Payout.query.filter(Payout.error != "", Payout.created_at >= week_ago).count()
+    active = Campaign.query.filter(Campaign.status == "activa")
+    D["money"] = {"creators": crs, "budget": float(db.session.query(db.func.coalesce(db.func.sum(Campaign.budget), 0))
+                                                 .filter(Campaign.status == "activa").scalar() or 0),
+                  "spent": float(db.session.query(db.func.coalesce(db.func.sum(Campaign.spent), 0)).scalar() or 0),
+                  "pend_n": pend.count(), "pend_sum": float(db.session.query(db.func.coalesce(db.func.sum(Payout.amount), 0))
+                                                           .filter(Payout.status.in_(("solicitado", "procesando"))).scalar() or 0),
+                  "failed": failed, "main_owed": main_owed, "main_bal": main_bal, "main_err": main_err,
+                  "lonely": active.filter(Campaign.creator_id.is_(None)).count(), "active": active.count()}
+    short = [r for r in crs if r["missing"]]
+    if short:
+        ms, mmsg = "bad", (f"A {short[0]['c'].name} le faltan {money(short[0]['missing'])} en Whop" if len(short) == 1
+                           else f"A {len(short)} creadores no les llega el saldo de Whop")
+    elif failed:
+        ms, mmsg = "warn", f"{failed} {'pago fallido' if failed == 1 else 'pagos fallidos'} esta semana"
+    elif D["money"]["lonely"]:
+        ms, mmsg = "warn", f"{D['money']['lonely']} {'campaña activa' if D['money']['lonely'] == 1 else 'campañas activas'} sin creador"
+    else:
+        ms, mmsg = "ok", "Todo cuadra"
+    D["money"].update(state=ms, msg=mmsg)
+
+    # --- usuarios
+    clippers = User.query.filter(User.is_admin.is_(False))
+    n_cl = clippers.count()
+    with_whop = clippers.filter(db.or_(User.whop_user_id != "", User.whop_username != "")).count()
+    regs = [u.created_at for u in User.query.with_entities(User.created_at).filter(User.created_at >= now - timedelta(days=30))]
+    by_day = {}
+    for c in regs:
+        if c:
+            k = _local(c).strftime("%Y-%m-%d")
+            by_day[k] = by_day.get(k, 0) + 1
+    days = [(_local() - timedelta(days=29 - i)).strftime("%Y-%m-%d") for i in range(30)]
+    series = [by_day.get(d, 0) for d in days]
+    mx = max(series + [1])
+    pts = " ".join(f"{round(i * 500 / 29)},{round(64 - 56 * v / mx)}" for i, v in enumerate(series))
+    g_fail = db.session.query(db.func.coalesce(db.func.sum(ErrorLog.times), 0)).filter(
+        ErrorLog.kind == "google", db.func.coalesce(ErrorLog.last_at, ErrorLog.created_at) >= day_ago).scalar() or 0
+    D["users"] = {"today": User.query.filter(User.created_at >= local_midnight).count(),
+                  "week": User.query.filter(User.created_at >= week_ago).count(),
+                  "online": User.query.filter(User.last_seen_at >= now - timedelta(seconds=ONLINE_FOR)).count(),
+                  "active_day": User.query.filter(User.last_seen_at >= day_ago).count(),
+                  "clips_today": Submission.query.filter(Submission.created_at >= local_midnight).count(),
+                  "no_profile": clippers.filter(User.onboarded_at.is_(None)).count(), "clippers": n_cl,
+                  "whop_pct": round(100 * with_whop / n_cl) if n_cl else 0, "google_fail": int(g_fail),
+                  "pts": pts, "regs_30": sum(series), "regs_max": max(series)}
+
+    # --- servicios
+    yt_ok = viewcounter.ytdlp_available()
+    apis_ok = [official.LABELS[p] for p in ("tiktok", "instagram", "youtube", "facebook") if official.configured(p)]
+    svc = [
+        ("Google (entrar)", ("ok" if not g_fail else "warn") if GOOGLE_CLIENT_ID else "bad",
+         (f"Puesto · {g_fail} fallos al entrar en 24 h" if g_fail else "Puesto · sin fallos al entrar en 24 h") if GOOGLE_CLIENT_ID
+         else "Falta GOOGLE_CLIENT_ID: nadie puede entrar"),
+        ("Whop principal", ("ok" if main_bal is not None else "warn") if WHOP_API_KEY else "bad",
+         (f"Responde · saldo {money(main_bal)}" if main_bal is not None else f"No se puede leer el saldo: {main_err or 'sin respuesta'}")
+         if WHOP_API_KEY else "Falta WHOP_API_KEY"),
+        ("App de Whop (creadores)", ("warn" if WHOP_APP_ID == TEST_WHOP_APP else "ok") if WHOP_APP_API_KEY and WHOP_APP_ID else "bad",
+         (f"{sum(1 for r in crs if r['via_app'])} creadores conectados con la app"
+          + (" · es la app de prueba: pásala a la cuenta de ClipProfit" if WHOP_APP_ID == TEST_WHOP_APP else ""))
+         if WHOP_APP_API_KEY and WHOP_APP_ID else "Falta WHOP_APP_API_KEY o WHOP_APP_ID"),
+        ("Conectar con Whop (clippers)", "ok" if WHOP_CLIENT_ID else "off",
+         f"Puesto · {with_whop} de {n_cl} clippers con Whop" if WHOP_CLIENT_ID else "Sin WHOP_CLIENT_ID: solo escribiendo el usuario"),
+        ("Apify (vistas)", "ok" if viewcounter.APIFY_TOKEN else "bad",
+         f"Puesto · {D['read']['used']} de {D['read']['max']} resultados hoy" if viewcounter.APIFY_TOKEN else "Falta APIFY_TOKEN"),
+        ("yt-dlp (búsqueda gratis)", ("warn" if yst.get("fail", 0) > yst.get("ok", 0) else "ok") if yt_ok else "warn",
+         f"Hoy: {yst.get('ok', 0)} bien, {yst.get('fail', 0)} mal" if yt_ok else "No está instalado en el servidor"),
+        ("Bunny (vídeos)", "ok" if bunny_ready() else "off",
+         "Puesto · copias de vídeo y formación" if bunny_ready() else "Sin clave: no se copian los vídeos de verificación"),
+        ("Sentry (avisos de errores)", "ok" if SENTRY_DSN else "off",
+         "Puesto · los fallos también llegan a Sentry" if SENTRY_DSN else "Sin poner: los fallos solo se ven aquí"),
+        ("APIs oficiales de redes", "ok" if len(apis_ok) == 4 else "warn" if apis_ok else "off",
+         ("Puestas: " + ", ".join(apis_ok)) if apis_ok else "Ninguna todavía (se leen con Apify y yt-dlp)"),
+    ]
+    D["services"] = [{"name": a, "state": b, "text": c} for a, b, c in svc]
+    must = [x for x in D["services"] if x["name"] in ("Google (entrar)", "Whop principal", "App de Whop (creadores)", "Apify (vistas)")]
+    n_ok = sum(1 for x in D["services"] if x["state"] == "ok")
+
+    # --- tareas automáticas
+    tick = _iso(get_setting("clock_tick", ""))
+    jobs = []
+    jobs.append({"name": "Reloj interno", "state": "off" if not tick else "ok" if now - tick < timedelta(minutes=25) else "bad",
+                 "info": ("Lleva las tareas de abajo · mira cada 10 min" if tick and now - tick < timedelta(minutes=25)
+                          else "¡Parado! Sin él no se hace nada automático" if tick else "Solo funciona en la web real"),
+                 "last": tick, "next": "Cada 10 min"})
+    for key, name, nxt in (("lectura", "Lectura diaria de vistas y reparto", f"Cada día {REFRESH_AT}"),
+                           ("saldos", "Comprobar saldos de los creadores", "Tras la lectura"),
+                           ("recordatorios", "Aviso a clippers que no publican", "Tras la lectura"),
+                           ("ytdlp", "Comprobación de yt-dlp", " · ".join(YTDLP_CHECK_AT)),
+                           ("historial", "Resumir historial de vistas antiguo", "Una vez por semana")):
+        j = job_info(key)
+        jobs.append({"name": name, "state": ("ok" if j.get("ok") else "bad") if j else "off", "info": j.get("info") or "Aún no se ha hecho",
+                     "last": _iso(j.get("at")), "secs": j.get("secs"), "next": nxt})
+    jobs.append({"name": "Copias de vídeo (Bunny)", "state": "ok" if bunny_ready() else "off",
+                 "info": "Copia los clips que llegan a revisión" if bunny_ready() else "Apagado: falta la clave", "last": None,
+                 "next": "Cada 10 min" if bunny_ready() else "—"})
+    D["jobs"] = jobs
+
+    # --- seguridad
+    admins = User.query.filter(User.is_admin.is_(True)).order_by(User.admin_seen_at.desc().nullslast()).all()
+    D["security"] = {"tot": tot, "admins": [{"u": u, "role": ADMIN_ROLES.get(u.admin_role or "owner", "Dueño"), "tech": is_tech(u)}
+                                            for u in admins],
+                     "mods": db.session.query(db.func.count(db.distinct(CampaignMod.user_id))).scalar() or 0,
+                     "seen": [{"u": u, "at": u.admin_seen_at, "dev": _ua_label(u.admin_seen_ua)} for u in admins if u.admin_seen_at][:6],
+                     "admins_day": sum(1 for u in admins if u.admin_seen_at and u.admin_seen_at >= day_ago)}
+
+    # --- lista para abrir
+    li_ = legal_info()
+    host = urlparse(BASE_URL or request.host_url).hostname or ""
+    demo_users = User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count()
+    demo_subs = Submission.query.filter(db.or_(Submission.my_demo.is_(True),
+                                               Submission.user.has(User.email.like(f"%{DEMO_DOMAIN}")))).count()
+    last_read = _iso(get_setting("last_refresh_at", ""))
+    chk = [
+        ("ok" if (BASE_URL or "").startswith("https://") and not host.endswith(("railway.app", "localhost")) else "bad",
+         "Dominio propio con HTTPS", host or "Sin BASE_URL", "", ""),
+        ("ok" if GOOGLE_CLIENT_ID else "bad", "Entrar con Google", "Puesto" if GOOGLE_CLIENT_ID else "Falta GOOGLE_CLIENT_ID en Railway", "", ""),
+        ("ok" if TECH_EMAILS else "bad", "Panel técnico solo para ti",
+         "TECH_EMAILS puesto" if TECH_EMAILS else "Ahora lo ven todos los dueños: pon tu correo en TECH_EMAILS (Railway)", "", ""),
+        ("ok" if viewcounter.APIFY_TOKEN and last_read and now - last_read < timedelta(hours=30) else "bad",
+         "Clave de Apify y lectura diaria",
+         (f"Última lectura: {_when(last_read)}" if last_read else "Aún no se ha leído ninguna vez") if viewcounter.APIFY_TOKEN
+         else "Falta APIFY_TOKEN en Railway", "", ""),
+        ("ok" if WHOP_API_KEY and whop_company_id() else "bad", "Whop principal conectado",
+         "Puesto" if WHOP_API_KEY else "Falta WHOP_API_KEY", "", ""),
+        ("ok" if WHOP_APP_API_KEY and WHOP_APP_ID and WHOP_APP_ID != TEST_WHOP_APP else "bad",
+         "App de Whop en la cuenta de ClipProfit",
+         "Puesta" if WHOP_APP_API_KEY and WHOP_APP_ID != TEST_WHOP_APP else
+         "Ahora es la app de prueba, en una cuenta que no es vuestra" if WHOP_APP_ID == TEST_WHOP_APP else "Falta la app", "", ""),
+        ("ok" if li_["owner"] and li_["nif"] and li_["address"] else "bad", "Datos legales del titular",
+         "Puestos" if li_["owner"] and li_["nif"] and li_["address"] else "Faltan nombre, NIF y domicilio de Felipe",
+         "Arreglar", "#datos"),
+        ("ok" if not demo_users and not demo_subs else "bad", "Datos de demostración borrados",
+         "No queda nada de prueba" if not demo_users and not demo_subs else
+         f"Quedan {demo_users} clippers y {demo_subs} clips de prueba", "Ir a Datos", "#datos"),
+        ("ok" if not D["money"]["lonely"] else "warn", "Todas las campañas activas con creador",
+         "Todas tienen quien las pague" if not D["money"]["lonely"] else
+         f"{D['money']['lonely']} {'campaña activa' if D['money']['lonely'] == 1 else 'campañas activas'} sin creador",
+         "Ver campañas", url_for("admin_campaigns")),
+        ("ok" if D["db"]["backups_ok"] else "off", "Copias de seguridad diarias (Railway)",
+         f"Confirmado el {D['db']['backups_ok']}" if D["db"]["backups_ok"] else
+         "La web no puede verlo: Railway → Postgres → Backups → Daily", "" if D["db"]["backups_ok"] else "backup", ""),
+        ("ok" if SENTRY_DSN else "warn", "Aviso de errores por correo (Sentry)",
+         "Puesto" if SENTRY_DSN else "Opcional: los fallos ya se apuntan aquí, pero no te llega aviso", "", ""),
+        ("ok" if bunny_ready() else "warn", "Vídeos de verificación (Bunny)",
+         "Puesto" if bunny_ready() else "Sin Bunny los vídeos de estadísticas no se guardan", "", ""),
+    ]
+    D["checklist"] = [{"state": a, "title": b, "text": c, "link": d, "url": e} for a, b, c, d, e in chk]
+    D["check_ok"] = sum(1 for x in D["checklist"] if x["state"] == "ok")
+
+    # --- semáforo y resumen de arriba
+    web_s = "bad" if err_24 > 5 else "warn" if err_24 or (tot["avg_ms"] or 0) > 800 else "ok"
+    lights = [
+        {"name": "Web", "state": web_s, "big": "Funciona" if web_s == "ok" else f"{err_24} fallos" if err_24 else "Lenta",
+         "text": (f"{tot['avg_ms']} ms de media" if tot["avg_ms"] is not None else "Sin visitas aún") + f" · {err_24} fallos en 24 h"},
+        {"name": "Base de datos", "state": "ok" if D["db"]["ping"] < 200 else "warn", "big": D["db"]["size_txt"],
+         "text": f"Responde en {D['db']['ping']:.0f} ms · {D['db']['n_tables']} tablas"},
+        {"name": "Lectura de vistas", "state": rs, "big": _when(D["read"]["job_at"]) if D["read"]["job_at"] else "Sin leer",
+         "text": rmsg},
+        {"name": "Pagos", "state": ms, "big": "Bien" if ms == "ok" else "Revisar", "text": mmsg},
+        {"name": "Servicios", "state": "bad" if any(x["state"] == "bad" for x in must) else "ok" if n_ok == len(D["services"]) else "warn",
+         "big": f"{n_ok} de {len(D['services'])}",
+         "text": " · ".join(t for t in (f"{sum(1 for x in D['services'] if x['state'] == 'bad')} con fallo" if any(x["state"] == "bad" for x in D["services"]) else "",
+                                         f"{sum(1 for x in D['services'] if x['state'] in ('warn', 'off'))} sin poner o a medias"
+                                         if any(x["state"] in ("warn", "off") for x in D["services"]) else "") if t) or "Todos bien"},
+    ]
+    D["lights"] = lights
+    issues = [f"{x['name']}: {x['text']}" for x in lights if x["state"] in ("warn", "bad")]
+    worst = "bad" if any(x["state"] == "bad" for x in lights) else "warn" if issues else "ok"
+    D["hero"] = {"state": worst, "title": "Todo funciona" if not issues else
+                 (f"Todo funciona, con {len(issues)} {'cosa' if len(issues) == 1 else 'cosas'} que mirar" if worst == "warn"
+                  else f"Hay {len(issues)} {'problema' if len(issues) == 1 else 'problemas'} que arreglar"),
+                 "text": " · ".join(issues) or "Nada que mirar ahora mismo."}
+    return D
+
+
+@app.route("/admin/salud/copias", methods=["POST"])
+@admin_required
+def admin_backups_ok():
+    """Mustapha confirma que activó las copias diarias en Railway (la web no puede comprobarlo)."""
+    if not is_tech():
+        abort(403)
+    set_setting("backups_ok", _local().strftime("%d/%m/%Y"))
+    audit("copias_railway_confirmadas", "")
+    db.session.commit()
+    flash("Apuntado: copias diarias activadas en Railway.", "ok")
+    return redirect(url_for("admin_settings", _anchor="salud"))
+
+
 @app.route("/admin/ajustes")
 @admin_required
 def admin_settings(app_test=None):
@@ -6669,7 +7161,8 @@ def admin_settings(app_test=None):
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
                            my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count(),
                            test_users=[u for u in test_users() if not role_for(u.email)],
-                           notes=TechNote.query.order_by(TechNote.done, TechNote.created_at.desc()).limit(300).all())
+                           notes=TechNote.query.order_by(TechNote.done, TechNote.created_at.desc()).limit(300).all(),
+                           H=health_data())
 
 
 @app.route("/admin/notas", methods=["POST"])
@@ -10573,6 +11066,7 @@ def browser_error():
     ip, now = (request.remote_addr or "")[:64], time.time()
     hits = [t for t in _js_errs.get(ip, []) if now - t < 3600]
     if len(hits) >= 20:
+        stat_add(blocked=1)
         return "", 204
     _js_errs[ip] = hits + [now]
     if len(_js_errs) > 5000:
