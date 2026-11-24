@@ -129,6 +129,8 @@ BUNNY_LIBRARY_ID = os.environ.get("BUNNY_LIBRARY_ID", "").strip()
 BUNNY_API_KEY = os.environ.get("BUNNY_API_KEY", "").strip()
 BUNNY_TOKEN_KEY = os.environ.get("BUNNY_TOKEN_KEY", "").strip()     # opcional: solo se ven los vídeos desde la web
 BUNNY_CDN_HOST = os.environ.get("BUNNY_CDN_HOST", "").strip().removeprefix("https://").strip("/")   # vz-xxxx.b-cdn.net: miniaturas
+# Modo oscuro: apagado (24 nov, Mustapha: «quítalo y luego lo ponemos mejor»). El código y los colores siguen; DARK_MODE=1 lo enciende
+DARK_MODE = os.environ.get("DARK_MODE", "").strip() == "1"
 WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
 WHOP_APP_API_KEY = os.environ.get("WHOP_APP_API_KEY", "").strip()
 # «Conectar con Whop» para los clippers (OAuth de Whop): el código app_… de la app y, si Whop lo pide, su secreto
@@ -3629,7 +3631,7 @@ def static_url(filename):
 
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": csrf_token, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
+    return {"csrf_token": csrf_token, "DARK_MODE": DARK_MODE, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "chan_icon": chan_icon, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_CLIENT_ID": WHOP_CLIENT_ID, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,

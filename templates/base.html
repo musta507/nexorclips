@@ -1,5 +1,5 @@
 {% from "_icons.html" import icon, logo with context %}<!doctype html>
-<html lang="es"{% if current_user.is_authenticated and current_user.theme == "dark" %} data-theme="dark"{% endif %}>
+<html lang="es"{% if DARK_MODE and current_user.is_authenticated and current_user.theme == "dark" %} data-theme="dark"{% endif %}>
 <head>
 {% include "_head.html" %}
   {% set note = notice_data() if current_user.is_authenticated else {"unread": 0} %}
@@ -56,7 +56,7 @@
           <a class="pm-bal" href="{{ url_for('earnings') }}"><span>Saldo disponible</span><b class="tnum">{{ my_available()|earn }}</b></a>
           <div class="pm-group">
             <a href="{{ url_for('account') }}">{{ icon("gear") }} Ajustes</a>
-            <label class="pm-tg">{{ icon("moon") }} Modo oscuro<input type="checkbox" class="tg tg-ink" data-theme-toggle data-url="{{ url_for('set_theme') }}" data-csrf="{{ csrf_token() }}" aria-label="Modo oscuro"{% if current_user.theme == "dark" %} checked{% endif %}></label>
+            {% if DARK_MODE %}<label class="pm-tg">{{ icon("moon") }} Modo oscuro<input type="checkbox" class="tg tg-ink" data-theme-toggle data-url="{{ url_for('set_theme') }}" data-csrf="{{ csrf_token() }}" aria-label="Modo oscuro"{% if current_user.theme == "dark" %} checked{% endif %}></label>{% endif %}
             <a href="{{ url_for('earnings') }}">{{ icon("wallet") }} Ganancias</a>
             <a href="{{ url_for('ranking_page') }}">{{ icon("trophy") }} Ranking</a>
             <a href="{{ url_for('support') }}">{{ icon("chat") }} Soporte{% if unread and not current_user.is_admin %} <span class="count">{{ unread }}</span>{% endif %}</a>

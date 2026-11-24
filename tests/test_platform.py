@@ -3816,8 +3816,17 @@ def test_creator_paid_through_installed_app_without_key(monkeypatch):
         assert A.wallet(c.id) == ("app-key", "biz_abc12345", "Pablo") and A.wallet_ready(c.id)
 
 
-def test_dark_mode_is_chosen_by_each_user():
-    """Modo oscuro: claro por defecto; cada usuario lo enciende o apaga y se guarda en su cuenta."""
+def test_dark_mode_is_off_for_now():
+    """Mustapha lo quitó (24 nov): sin DARK_MODE no sale el interruptor ni se pone oscuro aunque la cuenta lo tenga."""
+    c = client_for("sinoscuro@example.com")
+    c.post("/cuenta/tema", data={"_csrf": "t", "theme": "dark"}, headers={"X-Requested-With": "fetch"})
+    page = c.get("/cuenta").get_data(as_text=True)
+    assert 'data-theme="dark"' not in page and "data-theme-toggle" not in page and "Modo oscuro" not in page
+
+
+def test_dark_mode_is_chosen_by_each_user(monkeypatch):
+    """Modo oscuro (si se enciende con DARK_MODE): claro por defecto; cada usuario lo elige y se guarda en su cuenta."""
+    monkeypatch.setattr(A, "DARK_MODE", True)
     c = client_for("oscuro@example.com")
     page = c.get("/cuenta").get_data(as_text=True)
     assert 'data-theme="dark"' not in page and "data-theme-toggle" in page

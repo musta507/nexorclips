@@ -110,7 +110,7 @@
       <div class="card lst">
         <div class="lr"><span class="lr-k">Correo</span><span class="lr-v">{{ current_user.email }}</span></div>
         <div class="lr"><span class="lr-k">Miembro desde</span><span class="lr-v">{{ current_user.created_at|date }}</span></div>
-        <label class="lr" for="theme-dark"><span class="lr-k">Modo oscuro</span><input type="checkbox" class="tg tg-ink" id="theme-dark" data-theme-toggle data-url="{{ url_for('set_theme') }}" data-csrf="{{ csrf_token() }}"{% if current_user.theme == "dark" %} checked{% endif %}></label>
+        {% if DARK_MODE %}<label class="lr" for="theme-dark"><span class="lr-k">Modo oscuro</span><input type="checkbox" class="tg tg-ink" id="theme-dark" data-theme-toggle data-url="{{ url_for('set_theme') }}" data-csrf="{{ csrf_token() }}"{% if current_user.theme == "dark" %} checked{% endif %}></label>{% endif %}
         <a class="lr lr-go" href="{{ url_for('terms') }}"><span class="lr-k">Términos</span></a>
         <a class="lr lr-go" href="{{ url_for('privacy') }}"><span class="lr-k">Privacidad</span></a>
       </div>
