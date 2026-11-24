@@ -9570,7 +9570,7 @@ def campaign_pay_rows(camp):
         earned = cents(sum(x.earned or 0 for x in us))
         paid = cents(sent.get(uid, 0))
         owed = cents(earned - paid)
-        if owed >= CENT:                                   # nunca más de lo que tiene libre en el Whop de este creador
+        if owed >= CENT and camp.status == "finalizada":   # nunca más de lo que tiene libre en el Whop de este creador
             owed = min(owed, cents(user_money(u)["by_creator"].get(key, 0)))
         checks = []
         bad = [x for x in us if set(x.flag_list) & set(PAY_RED_FLAGS)]
