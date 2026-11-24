@@ -3958,6 +3958,7 @@ def sign_in(email, name, avatar="", sub=None, password_user=None):
     if role_for(email) and password_user is None:   # el admin solo se activa entrando con Google, nunca con contraseña
         user.is_admin, user.admin_role = True, role_for(email)
     db.session.commit()
+    give_my_demo(user)
     session.pop("_csrf", None)            # código de seguridad nuevo en cada inicio de sesión
     session.permanent = True
     login_user(user, remember=True)
@@ -7909,7 +7910,7 @@ def load_my_demo(user, days=21, seed=11):
     """Demo personal: llena la cuenta del admin como si fuera un clipper (campañas, cuentas, clips, vistas y avisos).
     Va marcada aparte (my_demo) y no se mezcla con los clippers de demostración de la plataforma."""
     import random as rnd
-    r = rnd.Random(seed + user.id)
+    r = rnd.Random(seed)                  # la misma semilla para todos: cada admin ve la misma demo (Mustapha, 24 nov)
     now = datetime.utcnow()
     camps = [c for c in Campaign.query.order_by(Campaign.id).all() if c.status != "finalizada" and not c.exhausted]
     if not camps:
@@ -8025,21 +8026,44 @@ def admin_delete_test_users():
     return redirect(url_for("admin_settings", _anchor="datos"))
 
 
+def has_my_demo(user):
+    return bool(Submission.query.filter_by(user_id=user.id, my_demo=True).first())
+
+
+def give_my_demo(user):
+    """Si la demo de los administradores está puesta, el admin que entra por primera vez también la recibe."""
+    if user.is_admin and get_setting("my_demo_all") == "1" and not has_my_demo(user):
+        try:
+            load_my_demo(user)
+        except Exception:  # noqa: BLE001
+            db.session.rollback()
+            log.warning("No se pudo cargar la demo del admin %s", user.id, exc_info=True)
+
+
 @app.route("/admin/ajustes/mi-demo", methods=["POST"])
 @admin_required
 def admin_my_demo():
+    """Demo como clipper para TODOS los administradores a la vez, con los mismos datos (Mustapha, 24 nov)."""
+    admins = User.query.filter_by(is_admin=True).order_by(User.id).all()
     if request.form.get("accion") == "quitar":
-        n = remove_my_demo(current_user)
-        audit("mi_demo_quitada", f"{n} clips")
+        n = sum(remove_my_demo(u) for u in admins)
+        set_setting("my_demo_all", "")
+        audit("mi_demo_quitada", f"{n} clips · {len(admins)} admins")
         db.session.commit()
-        flash(f"Tu demo como clipper se ha quitado ({n} clips). La demo de la plataforma y lo real siguen igual.", "ok")
-    elif Submission.query.filter_by(user_id=current_user.id, my_demo=True).first():
-        flash("Ya tienes tu demo cargada. Quítala primero si quieres volver a cargarla.", "error")
+        flash(f"Demo como clipper quitada a todos los administradores ({n} clips). La demo de la plataforma y lo real siguen igual.", "ok")
     else:
-        msg = load_my_demo(current_user)
-        audit("mi_demo_cargada", msg)
+        todo = [u for u in admins if not has_my_demo(u)]
+        msg = ""
+        for u in todo:
+            msg = load_my_demo(u)
+        set_setting("my_demo_all", "1")
+        audit("mi_demo_cargada", f"{len(todo)} admins · {msg}")
         db.session.commit()
-        flash(msg, "ok")
+        if todo and msg.startswith("No hay"):
+            flash(msg, "error")
+        else:
+            flash(f"Demo como clipper cargada a {len(admins)} {'administrador' if len(admins) == 1 else 'administradores'}, "
+                  "con los mismos datos. Los que entren por primera vez también la tendrán.", "ok")
     return redirect(url_for("admin_settings", _anchor="datos"))
 
 

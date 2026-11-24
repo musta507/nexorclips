@@ -2316,7 +2316,7 @@ def test_my_demo_is_separate_from_platform_demo(monkeypatch):
         assert A.ViewSnapshot.query.filter(A.ViewSnapshot.submission_id.in_([s.id for s in mine])).count()
         assert A.Notice.query.filter_by(user_id=me.id, my_demo=True).count() == 4
     assert admin.get("/mis-clips").status_code == 200 and admin.get("/ganancias").status_code == 200
-    assert "Quitar mi demo" in admin.get("/admin/ajustes").get_data(as_text=True)
+    assert "Quitar la demo a todos" in admin.get("/admin/ajustes").get_data(as_text=True)
     post(admin, "/admin/ajustes/mi-demo", accion="cargar")             # no se duplica
     with A.app.app_context():
         assert A.Submission.query.filter_by(user_id=me.id, my_demo=True).count() == len(mine)
@@ -2329,6 +2329,24 @@ def test_my_demo_is_separate_from_platform_demo(monkeypatch):
         assert abs(get(A.Campaign, cid).spent - spent_before) < 0.01          # el presupuesto vuelve a como estaba
         assert A.User.query.filter(A.User.email.like(f"%{A.DEMO_DOMAIN}")).count() == platform_demo   # la otra demo sigue
         assert A.Submission.query.filter_by(user_id=A.User.query.filter_by(email="a@test.com").first().id).count() == 1
+
+
+def test_my_demo_is_the_same_for_every_admin(monkeypatch):
+    """La demo como clipper se pone a todos los admins con los mismos datos, también al que entra después."""
+    make_campaign(budget=5000)
+    monkeypatch.setattr(A, "ADMIN_EMAILS", A.ADMIN_EMAILS | {"jefe@test.com", "nuevo@test.com"})
+    admin, jefe = client_for("admin@test.com"), client_for("jefe@test.com")
+    post(admin, "/admin/ajustes/mi-demo", accion="cargar")
+    def views(email):
+        with A.app.app_context():
+            u = A.User.query.filter_by(email=email).one()
+            return sorted(s_.views for s_ in A.Submission.query.filter_by(user_id=u.id, my_demo=True))
+    assert views("admin@test.com") and views("admin@test.com") == views("jefe@test.com")
+    client_for("nuevo@test.com")                                       # entra por primera vez: también la tiene
+    assert views("nuevo@test.com") == views("admin@test.com")
+    post(admin, "/admin/ajustes/mi-demo", accion="quitar")
+    with A.app.app_context():
+        assert A.Submission.query.filter_by(my_demo=True).count() == 0
 
 
 def test_daily_scan_at_3_madrid(monkeypatch):
