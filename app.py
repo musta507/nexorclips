@@ -155,6 +155,7 @@ if BASE_URL and not BASE_URL.startswith("http"):
     BASE_URL = "https://" + BASE_URL
 if PRODUCTION and ".up.railway.app" in BASE_URL:      # una BASE_URL vieja con la dirección de Railway: manda el dominio propio
     BASE_URL = "https://app.clipprofit.es"
+IMG_FORMATS = ("JPEG", "PNG", "WEBP", "GIF")      # solo se abren estos formatos de imagen: los raros (TIFF, BMP, PDF…) son los que traen los fallos
 DEV_LOGIN = os.environ.get("DEV_LOGIN") == "1" and not PRODUCTION   # nunca disponible en producción
 # «Empezar de cero» borra datos reales: en producción está apagado salvo que se active a propósito en Railway
 ALLOW_WIPE = os.environ.get("ALLOW_WIPE") == "1" or not PRODUCTION
@@ -3792,7 +3793,7 @@ def _cover_meta(data):
     """Color de fondo para la tarjeta destacada y una miniatura difuminada (en texto) a partir de la portada."""
     import base64
     from PIL import Image
-    img = Image.open(io.BytesIO(data)).convert("RGB")
+    img = Image.open(io.BytesIO(data), formats=IMG_FORMATS).convert("RGB")
     small = img.resize((24, 24))
     r = g = b = n = 0.0
     for pr, pg, pb in small.getdata():
@@ -4660,7 +4661,7 @@ _cover_cache = {}
 def resize_cover(data, size):
     """Versión pequeña de la portada en WebP, para que el móvil no descargue la imagen entera."""
     from PIL import Image
-    img = Image.open(io.BytesIO(data)).convert("RGB")
+    img = Image.open(io.BytesIO(data), formats=IMG_FORMATS).convert("RGB")
     img.thumbnail((size, size))
     out = io.BytesIO()
     img.save(out, "WEBP", quality=80, method=4)
@@ -5570,10 +5571,10 @@ def process_avatar(file):
     """Foto de perfil: cuadrada, 256 px, JPEG limpio (sin datos de la cámara)."""
     from PIL import Image, ImageOps, UnidentifiedImageError
     try:
-        img = Image.open(file.stream)
+        img = Image.open(file.stream, formats=IMG_FORMATS)
         img.verify()
         file.stream.seek(0)
-        img = ImageOps.exif_transpose(Image.open(file.stream)).convert("RGB")
+        img = ImageOps.exif_transpose(Image.open(file.stream, formats=IMG_FORMATS)).convert("RGB")
     except (UnidentifiedImageError, OSError, ValueError):
         return None
     img = ImageOps.fit(img, (256, 256))
@@ -8460,10 +8461,10 @@ def process_cover(file):
     """Valida la imagen y la vuelve a guardar limpia (sin datos ocultos) y a un tamaño razonable."""
     from PIL import Image, UnidentifiedImageError
     try:
-        img = Image.open(file.stream)
+        img = Image.open(file.stream, formats=IMG_FORMATS)
         img.verify()
         file.stream.seek(0)
-        img = Image.open(file.stream)
+        img = Image.open(file.stream, formats=IMG_FORMATS)
         img = img.convert("RGB")
     except (UnidentifiedImageError, OSError, ValueError):
         return None
@@ -10581,7 +10582,7 @@ def shrink_image(raw, size):
     """Imagen pequeña en JPEG (portada 240x320 o foto 96x96) para guardarla en la base de datos sin ocupar casi nada."""
     from PIL import Image, ImageOps, UnidentifiedImageError
     try:
-        img = ImageOps.fit(Image.open(io.BytesIO(raw)).convert("RGB"), size)
+        img = ImageOps.fit(Image.open(io.BytesIO(raw), formats=IMG_FORMATS).convert("RGB"), size)
     except (UnidentifiedImageError, OSError, ValueError):
         return None
     out = io.BytesIO()
@@ -11477,10 +11478,10 @@ def process_photo(file):
     """Foto del chat: se comprueba que sea una imagen y se guarda limpia y a un tamaño razonable."""
     from PIL import Image, ImageOps, UnidentifiedImageError
     try:
-        img = Image.open(file.stream)
+        img = Image.open(file.stream, formats=IMG_FORMATS)
         img.verify()
         file.stream.seek(0)
-        img = ImageOps.exif_transpose(Image.open(file.stream)).convert("RGB")
+        img = ImageOps.exif_transpose(Image.open(file.stream, formats=IMG_FORMATS)).convert("RGB")
     except (UnidentifiedImageError, OSError, ValueError):
         return None
     img.thumbnail((1600, 1600))

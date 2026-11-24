@@ -4209,3 +4209,15 @@ def test_landing_keeps_chosen_images():
     html = A.app.test_client().get("/").get_data(as_text=True)
     assert f"/portada-inicio/{tid}" in html
     assert A.app.test_client().get(f"/portada-inicio/{tid}").status_code == 200
+
+
+def test_only_safe_image_formats_are_opened():
+    """Solo se abren JPEG, PNG, WEBP y GIF: los formatos raros (TIFF, BMP…) son los que traen fallos de seguridad."""
+    import io as _io
+    from PIL import Image
+    from werkzeug.datastructures import FileStorage
+    def up(fmt):
+        b = _io.BytesIO(); Image.new("RGB", (40, 40), "red").save(b, fmt); b.seek(0)
+        return FileStorage(stream=b, filename="x." + fmt.lower())
+    assert A.process_avatar(up("PNG")) is not None
+    assert A.process_avatar(up("TIFF")) is None and A.process_avatar(up("BMP")) is None
