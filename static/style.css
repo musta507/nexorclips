@@ -3782,3 +3782,11 @@ html[data-theme=dark] .hm-step-list .done{background:rgba(47,213,133,.08)}
   @container tbl (max-width:780px){#cpay-table :is(th,td):nth-child(3){display:none}}
   @container tbl (max-width:680px){#cpay-table :is(th,td):nth-child(4){display:none}}
 }
+
+/* Campañas del panel: columna «Repartido» (24 nov, Mustapha: texto y barra alineados, con aire) */
+.camp-rep{min-width:150px}
+.rep-top{font-size:13px;white-space:nowrap;line-height:1.3}
+.rep-top b{font-weight:600}
+.rep-bar{height:4px;width:100%;max-width:150px;margin-top:7px;border-radius:999px;background:var(--soft-2);overflow:hidden}
+.rep-bar span{display:block;height:100%;border-radius:999px;background:var(--money)}
+@media (max-width:640px){table.rt td.camp-rep .rep-bar{margin-left:auto;max-width:120px}}

@@ -26,7 +26,7 @@
           {% if pd.get("requests") or pd.get("accounts") %}<a href="{{ url_for('admin_campaign_requests', cid=c.id) }}"><b>{{ pd.get("requests", 0) + pd.get("accounts", 0) }}</b> {{ "solicitud" if pd.get("requests", 0) + pd.get("accounts", 0) == 1 else "solicitudes" }}</a>{% endif %}
         </div>{% endif %}</td>
       <td data-label="Pago / 1.000" class="r tnum">{% if c.rates_vary %}<span class="small muted">hasta </span>{% endif %}{{ c.rate|rate_k }}</td>
-      <td data-label="Repartido" class="tnum"><span class="small">{{ st.spent|money(0) }} / {{ c.budget|money(0) }}</span><div class="bar mini-bar" style="margin-top:6px"><span style="width:{{ st.pct }}%"></span></div></td>
+      <td data-label="Repartido" class="tnum camp-rep"><div class="rep-top"><b>{{ st.spent|money(0) }}</b><span class="muted"> de {{ c.budget|money(0) }}</span></div><div class="rep-bar" role="img" aria-label="{{ st.pct }} % repartido"><span style="width:{{ st.pct }}%"></span></div></td>
       <td data-label="Vistas" class="r tnum">{{ st.views|short }}</td>
       <td data-label="Clips" class="r tnum">{{ st.clips }}</td>
       <td data-label="" class="r"><a class="btn sm soft" href="{{ url_for('admin_campaign', cid=c.id) }}">Abrir</a></td>
