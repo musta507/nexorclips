@@ -129,6 +129,10 @@ BUNNY_LIBRARY_ID = os.environ.get("BUNNY_LIBRARY_ID", "").strip()
 BUNNY_API_KEY = os.environ.get("BUNNY_API_KEY", "").strip()
 BUNNY_TOKEN_KEY = os.environ.get("BUNNY_TOKEN_KEY", "").strip()     # opcional: solo se ven los vídeos desde la web
 BUNNY_CDN_HOST = os.environ.get("BUNNY_CDN_HOST", "").strip().removeprefix("https://").strip("/")   # vz-xxxx.b-cdn.net: miniaturas
+# El dinero de cada campaña sale del Whop de su creador, nunca de la cuenta principal (Mustapha, 24 nov): en la web real
+# no se puede activar una campaña sin creador. REQUIRE_CREATOR=0 en Railway lo quita
+REQUIRE_CREATOR = os.environ.get("REQUIRE_CREATOR", "1" if PRODUCTION else "0").strip() == "1"
+NO_CREATOR_MSG = "Elige qué creador paga esta campaña («Paga desde el Whop de»). Si aún no está, añádelo en Creadores."
 # Modo oscuro: apagado (24 nov, Mustapha: «quítalo y luego lo ponemos mejor»). El código y los colores siguen; DARK_MODE=1 lo enciende
 DARK_MODE = os.environ.get("DARK_MODE", "").strip() == "1"
 WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
@@ -3631,7 +3635,7 @@ def static_url(filename):
 
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": csrf_token, "DARK_MODE": DARK_MODE, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
+    return {"csrf_token": csrf_token, "DARK_MODE": DARK_MODE, "REQUIRE_CREATOR": REQUIRE_CREATOR, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "chan_icon": chan_icon, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_CLIENT_ID": WHOP_CLIENT_ID, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
@@ -7331,6 +7335,10 @@ def tech_alerts():
         if short:
             out.append(("error", "A algún creador no le llega el saldo de Whop", " · ".join(short[:5]) +
                         ". Sus retiros se quedan esperando hasta que meta saldo."))
+    lonely = Campaign.query.filter(Campaign.status == "activa", Campaign.creator_id.is_(None)).count()
+    if lonely:
+        out.append(("aviso", f"{lonely} {'campaña activa' if lonely == 1 else 'campañas activas'} sin creador",
+                    "Se pagarían desde la cuenta principal. En cada campaña, elige en «Paga desde el Whop de» qué creador paga."))
     try:
         day = datetime.utcnow() - timedelta(hours=24)
         n_err = (ErrorLog.query.filter(db.func.coalesce(ErrorLog.last_at, ErrorLog.created_at) >= day,
@@ -7612,8 +7620,13 @@ def _campaign_from_form(camp):
             setattr(camp, f"min_{p}", None)
             setattr(camp, f"max_{p}", None)
     camp.platforms = ",".join(p for p in PLATFORMS if request.form.get(f"pf_{p}")) or "tiktok"
+    if "creator_id" in request.form:                   # «Paga desde el Whop de» (se perdió el 3 nov; vuelve el 24 nov)
+        crid = request.form.get("creator_id", type=int)
+        camp.creator_id = crid if crid and db.session.get(Creator, crid) else None
     status = request.form.get("status", "activa")
     status = status if status in ("activa", "pausada", "finalizada") else "activa"
+    if REQUIRE_CREATOR and status == "activa" and not camp.creator_id and (not camp.id or camp.status != "activa"):
+        return NO_CREATOR_MSG
     if status == "finalizada" and camp.id and camp.status != "finalizada":
         close_campaign(camp, current_user.id)          # al cerrarla, los clippers ya pueden retirar
     camp.status = status
@@ -7865,6 +7878,9 @@ def admin_campaign_state(cid):
         camp.status = "pausada"
         flash("Campaña pausada: ya no se ve ni acepta clips.", "ok")
     elif accion == "reanudar" and camp.status == "pausada":
+        if REQUIRE_CREATOR and not camp.creator_id:
+            flash(NO_CREATOR_MSG, "error")
+            return redirect(url_for("admin_campaign", cid=cid))
         if camp.exhausted:
             flash("No tiene presupuesto libre. Añade presupuesto primero.", "error")
             return redirect(url_for("admin_campaign", cid=cid))

@@ -73,6 +73,12 @@
             </div>
             <span class="hint">Cada clip cobra según la red donde está publicado: empieza a cobrar al llegar al mínimo y no pasa del máximo. Vacío = sin mínimo / sin máximo.</span>
           </div>
+          <div class="field" style="max-width:340px"><label for="creator_id">Paga desde el Whop de</label>
+            <select id="creator_id" name="creator_id">
+              <option value="">{{ "Elige el creador" if REQUIRE_CREATOR else "Cuenta principal" }}</option>
+              {% for cr in creators %}<option value="{{ cr.id }}" {% if camp.creator_id == cr.id %}selected{% endif %}>{{ cr.name }}</option>{% endfor %}
+            </select>
+            <span class="hint">El dinero de esta campaña va del Whop de este creador al de los clippers. {% if creators %}Se añaden en{% else %}Aún no hay ninguno: añádelo en{% endif %} <a class="link" href="{{ url_for('admin_creators') }}">Creadores</a>.</span></div>
           <div class="field" style="max-width:340px"><label for="budget">Presupuesto total ({{ CUR_CODE }})</label><input id="budget" name="budget" value="{{ '%g'|format(camp.budget) if camp.budget else '' }}" inputmode="decimal" placeholder="2000" required>{% if editing and camp.spent %}<span class="hint">Ya repartido: {{ camp.spent|money }}. No puede ser menor.</span>{% endif %}</div>
         </fieldset>
 

@@ -3837,3 +3837,29 @@ def test_dark_mode_is_chosen_by_each_user(monkeypatch):
     c.post("/cuenta/tema", data={"_csrf": "t", "theme": ""})
     assert 'data-theme="dark"' not in c.get("/cuenta").get_data(as_text=True)
     assert c.post("/cuenta/tema", data={"theme": "dark"}).status_code == 400          # sin código de seguridad no vale
+
+
+def test_campaign_chooses_which_creator_pays(monkeypatch):
+    """«Paga desde el Whop de» vuelve al formulario; en la web real no se activa una campaña sin creador."""
+    admin = client_for("admin@test.com")
+    with A.app.app_context():
+        cr = A.Creator(name="Pablo", company_id="biz_pablo"); A.db.session.add(cr); A.db.session.commit(); crid = cr.id
+    assert "Paga desde el Whop de" in admin.get("/admin/campana/nueva").get_data(as_text=True)
+    monkeypatch.setattr(A, "REQUIRE_CREATOR", True)
+    base = dict(song="Sin dueño", artist="Pablo", rate="100", budget="500", pf_tiktok="on", status="activa")
+    r = post(admin, "/admin/campana/nueva", creator_id="", **base)
+    assert "Elige qué creador paga" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.Campaign.query.count() == 0
+    post(admin, "/admin/campana/nueva", creator_id=str(crid), **base)
+    with A.app.app_context():
+        camp = A.Campaign.query.one()
+        assert camp.creator_id == crid and camp.status == "activa"
+        camp.creator_id, camp.status = None, "pausada"; A.db.session.commit(); cid = camp.id
+        assert any("sin creador" not in t for _, t, _ in A.tech_alerts())
+    r = post(admin, f"/admin/campana/{cid}/estado", accion="reanudar")
+    assert "Elige qué creador paga" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.db.session.get(A.Campaign, cid).status == "pausada"
+        A.db.session.get(A.Campaign, cid).status = "activa"; A.db.session.commit()
+        assert any("sin creador" in t for _, t, _ in A.tech_alerts())
