@@ -4320,10 +4320,17 @@ def confirm_email(token):
     if not user:
         flash("El enlace ha caducado o no es válido. Entra y pide otro.", "error")
         return redirect(url_for("login"))
-    if not user.email_verified_at:
+    first = not user.email_verified_at
+    if first:
         user.email_verified_at = datetime.utcnow()
         audit("correo_confirmado", user.email)
         db.session.commit()
+    if first and not current_user.is_authenticated and not user.is_banned:
+        # Abierto en otro navegador (el del móvil, el del correo): el enlace demuestra que el correo es suyo, así que
+        # entra ya y va a «Crea tu perfil» (Mustapha, 24 nov). Solo la primera vez: un enlace ya usado no abre sesión.
+        sign_in(user.email, user.name, password_user=user)
+        flash("Correo confirmado. ¡Ya puedes empezar!", "ok")
+        return redirect(url_for("onboarding") if not user.onboarded_at else url_for("index"))
     if current_user.is_authenticated and current_user.id == user.id:
         flash("Correo confirmado. ¡Ya puedes empezar!", "ok")
         return redirect(url_for("onboarding") if not user.onboarded_at else url_for("index"))

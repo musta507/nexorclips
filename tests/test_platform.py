@@ -3976,6 +3976,26 @@ def test_register_with_email_must_confirm(monkeypatch):
     assert "/confirmar-correo" not in (c.get("/campanas").headers.get("Location") or "")
 
 
+def test_confirm_link_on_phone_goes_to_profile(monkeypatch):
+    """El enlace abierto en otro navegador (el móvil) entra y lleva a «Crea tu perfil»; sin perfil no se ve la web.
+    Un enlace ya usado no vuelve a abrir sesión."""
+    sent = _fake_resend(monkeypatch)
+    monkeypatch.setattr(A, "PASSWORD_LOGIN", True)
+    monkeypatch.setattr(A, "_login_fails", {})
+    c = A.app.test_client()
+    with c.session_transaction() as se:
+        se["_csrf"] = "t"
+    c.post("/registro", data={"_csrf": "t", "email": "movil@test.com", "password": "una-clave-larga"})
+    path = "/" + re.search(r"https?://\S+/confirmar/\S+", sent[0]["text"]).group(0).split("/", 3)[3]
+    phone = A.app.test_client()
+    assert "/bienvenida" in phone.get(path).headers["Location"]
+    for p in ("/", "/campanas", "/mis-clips", "/ganancias", "/ranking", "/cuenta"):
+        assert "/bienvenida" in (phone.get(p).headers.get("Location") or ""), p
+    other = A.app.test_client()
+    assert other.get(path).headers["Location"].endswith("/login")          # segunda vez: no abre sesión
+    assert other.get("/campanas").status_code == 302
+
+
 def test_notice_by_email_and_unsubscribe(monkeypatch):
     """Un aviso con la casilla «Correo» llega también por correo, con enlace de baja que funciona con un clic."""
     sent = _fake_resend(monkeypatch)
