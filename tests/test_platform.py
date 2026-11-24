@@ -1,3 +1,4 @@
+import json
 import re
 """Pruebas automáticas de ClipProfit Hispano. Ejecutar con:  python -m pytest -q"""
 import io
@@ -2069,7 +2070,18 @@ def test_discover_clips_from_profiles_and_daily_reminder(monkeypatch):
         s_ = A.Submission.query.one()
         assert s_.source == "auto" and s_.views == 1200 and s_.campaign_id == cid
         assert A.discover_clips()[0] == 0                       # no se duplica
-        assert not hasattr(A, "inactivity_reminders")           # el aviso «no has publicado en 24 h» se quitó (Mustapha, 24 nov)
+        # «No ha publicado en 24 h»: apagado por defecto (Mustapha, 24 nov); se enciende en Avisos → «Automáticos»
+        acc = A.CampaignAccount.query.one()
+        acc.last_post_at = datetime.utcnow() - timedelta(hours=30)
+        A.db.session.commit()
+        assert not A.auto_on("inactividad")
+        A.inactivity_reminders()
+        uid = A.User.query.filter_by(email="a@test.com").one().id
+        assert A.Notice.query.filter_by(user_id=uid, kind="inactividad").count() == 0
+        A.set_setting("auto_notices", json.dumps({"inactividad": True}))
+        A.db.session.commit()
+        assert A.inactivity_reminders() == 1
+        assert A.Notice.query.filter_by(user_id=uid, kind="inactividad").count() == 1
         # 3:00 en Madrid, justo después de la lectura diaria
         A.set_setting("reminders_sent", "")
         assert not A.reminders_due(datetime(2026, 11, 6, 1, 30))[0]   # 01:30 UTC = 02:30 Madrid (invierno)
@@ -3885,3 +3897,47 @@ def test_health_tab_shows_real_figures():
     # un clipper no entra
     assert client_for("c@test.com").post("/admin/salud/copias", data={"_csrf": "t"}).status_code in (302, 403)
     assert A._ua_label("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) AppleWebKit Version/17.0 Mobile Safari/604.1") == "Safari en iPhone"
+
+
+
+def test_auto_notices_switches():
+    """Avisos → «Automáticos»: lo que ya existía viene encendido, lo nuevo apagado; apagar uno lo corta para todos."""
+    admin = client_for("admin@test.com")
+    page = admin.get("/admin/avisos").get_data(as_text=True)
+    assert "Mensajes que manda la web sola" in page and "Campaña nueva" in page and "Clip cerca del mínimo" in page
+    with A.app.app_context():
+        st = A.auto_notices()
+        assert st["campana_nueva"] and st["clip_aprobado"] and not st["bienvenida"] and not st["inactividad"]
+    # apagar «Campaña nueva» y encender «Bienvenida»: el resto, como estaba
+    on = {k: "on" for k, v in st.items() if v and k != "campana_nueva"}
+    on["bienvenida"] = "on"
+    assert admin.post("/admin/avisos/automaticos", data={"_csrf": "t", **on}, headers={"X-Requested-With": "fetch"}).status_code == 204
+    make_campaign()
+    a = client_for("nuevo@test.com", onboarded=False)
+    a.post("/bienvenida", data={"_csrf": "t", "name": "Nuevo Clipper", "username": "nuevo_clip", "country": "ES"})
+    with A.app.app_context():
+        uid = A.User.query.filter_by(email="nuevo@test.com").one().id
+        kinds = {n.kind for n in A.Notice.query.filter_by(user_id=uid).all()}
+        assert "bienvenida" in kinds
+        A.announce_campaign(A.Campaign.query.first())
+        assert not A.Notice.query.filter_by(user_id=uid, kind="campana_nueva").count()
+    # un clipper no puede cambiarlo
+    assert client_for("c@test.com").post("/admin/avisos/automaticos", data={"_csrf": "t"}).status_code in (302, 403)
+
+
+def test_near_minimum_notice_once():
+    cid = make_campaign(min_tiktok=1.0)
+    a = client_for("a@test.com", tiktok="ana")
+    with A.app.app_context():
+        camp = A.db.session.get(A.Campaign, cid)
+        uid = A.User.query.filter_by(email="a@test.com").one().id
+        sub = A.Submission(user_id=uid, campaign_id=cid, platform="tiktok", url="https://www.tiktok.com/@ana/video/1", video_key="tiktok:1", views=0)
+        A.db.session.add(sub); A.db.session.commit()
+        low = camp.min_for("tiktok")
+        assert low == 1.0
+        sub.views = int(low * 0.85 / camp.rate_for("tiktok") * 1_000_000)
+        A.db.session.commit()
+        A.set_setting("auto_notices", json.dumps({"minimo_cerca": True}))
+        assert A.near_min_notice(sub) is True
+        A.db.session.commit()
+        assert A.near_min_notice(sub) is False                  # solo una vez por clip

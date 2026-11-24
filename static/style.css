@@ -3472,6 +3472,20 @@ body.bk-page{margin:0;background:var(--card);font-family:var(--font);color:var(-
 .crm-card{margin-bottom:12px}.crm-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
 .cr-app{background:var(--soft);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}.cr-app ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}.cr-app code{word-break:break-all}
 
+/* =============================================================== Avisos → Automáticos (24 nov) */
+.au{padding:20px;max-width:860px}
+.au-h h3{margin:0 0 4px;font-size:16px}.au-h p{margin:0}
+.au-g{margin:20px 0 4px;font-size:13px;font-weight:600;color:var(--muted)}
+.au-list{display:flex;flex-direction:column}
+.au-row{display:flex;align-items:center;gap:16px;padding:12px 0;border-top:1px solid var(--line);cursor:pointer}
+.au-list .au-row:first-child{border-top:0}
+.au-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.au-t b{font-size:14px;font-weight:600}
+.au-t small{font-size:12px}
+.au-msg{color:var(--ink-2)}
+.au-new{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:var(--soft);color:var(--muted);font-size:12px;font-weight:600;vertical-align:1px}
+.au-save{margin-top:16px}
+
 /* =============================================================== Panel técnico → Salud (24 nov) */
 .sl{display:flex;flex-direction:column;gap:16px}
 .sl-dot{width:10px;height:10px;border-radius:50%;flex:none;background:#c4c5ca;box-shadow:0 0 0 4px var(--soft)}

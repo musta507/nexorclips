@@ -1470,6 +1470,25 @@ document.addEventListener("change", function (e) {
   if (pv) pv.style.backgroundImage = "url('" + URL.createObjectURL(inp.files[0]) + "')";
 });
 
+// Avisos → «Automáticos»: cada casilla se guarda al momento
+document.addEventListener("change", function (e) {
+  var f = e.target.closest && e.target.closest("form[data-auto-notices]");
+  if (!f) return;
+  var save = f.querySelector(".au-save");
+  fetch(f.action, { method: "POST", body: new FormData(f), credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
+    .then(function (r) {
+      if (!r.ok) throw 0;
+      var n = f.querySelectorAll("input[type=checkbox]:checked").length, b = document.querySelector('[data-tab="automaticos"] b');
+      if (b) b.textContent = n;
+      toast(e.target.checked ? "Aviso encendido" : "Aviso apagado", "ok");
+    })
+    .catch(function () { if (save) save.hidden = false; toast("No se pudo guardar. Pulsa «Guardar».", "error"); });
+});
+document.addEventListener("turbo:load", function () {
+  var s = document.querySelector("form[data-auto-notices] .au-save");
+  if (s) s.hidden = true;                                   // con JavaScript se guarda solo; el botón queda de reserva
+});
+
 // =============================================================== modo oscuro
 // Lo elige cada usuario (menú del perfil o Ajustes): cambia al momento y se guarda en su cuenta.
 function temaOscuro(on) {

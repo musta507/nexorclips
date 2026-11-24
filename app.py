@@ -1588,6 +1588,23 @@ def auto_review(sub, now=None):
     return ""
 
 
+def near_min_notice(sub):
+    """Aviso (una vez por clip) cuando un clip que aún cuenta vistas vale ya el 80 % del pago mínimo de su red."""
+    camp = sub.campaign
+    low = camp.min_for(sub.platform)
+    if not low:
+        return False
+    value = (sub.views or 0) / 1_000_000 * camp.rate_for(sub.platform)
+    if not (low * 0.8 <= value < low):
+        return False
+    url = f"/mis-clips?clip={sub.id}"
+    if Notice.query.filter_by(user_id=sub.user_id, kind="minimo_cerca", url=url).first():
+        return False
+    notify_user(sub.user_id, "minimo_cerca", f"Tu clip está a punto de cobrar · {camp.song}",
+                f"Ya vale {money(value)} y el mínimo es {money(low)}. Unas pocas vistas más y pasa a revisión.", url, camp_id=camp.id)
+    return True
+
+
 def finalize_if_exhausted(camp):
     if camp.exhausted and camp.status == "activa":
         close_campaign(camp)
@@ -1602,6 +1619,8 @@ def close_campaign(camp, sender_id=None):
         if s.status == "aprobado" and (s.earned or 0) > 0:
             totals[s.user_id] = totals.get(s.user_id, 0) + s.earned
     for uid, amount in totals.items():
+        notify_user(uid, "campana_fin", f"{camp.song} ha terminado", f"Ya puedes retirar {money(amount)}. Ve a Ganancias y pulsa «Retirar».",
+                    "/ganancias", camp_id=camp.id)
         db.session.add(Message(user_id=uid, from_admin=True, sender_id=sender_id, read_by_admin=True, read_by_user=False,
                                body=f"La campaña «{camp.song}» ha terminado. Ya puedes retirar lo que ganaste en ella: "
                                     f"{money(amount)}. Ve a Ganancias y pulsa «Retirar»."))
@@ -2109,11 +2128,14 @@ def refresh_views():
         auto = {"aprobado": 0, "rechazado": 0}
         pend = (Submission.query.join(Campaign)
                 .filter(Campaign.status == "activa", Submission.status == "pendiente").all())
+        near_on = auto_on("minimo_cerca")
         for s in pend:                                   # reglas automáticas (también caduca lo que no llegó al mínimo)
             if not s.review_since and reached_min(s):
                 s.review_since = datetime.utcnow()
             if is_fake(s):
                 continue
+            if near_on and not s.review_since:
+                near_min_notice(s)
             r = auto_review(s)
             if r:
                 auto[r] += 1
@@ -2182,6 +2204,11 @@ def budget_alerts():
     for c in Campaign.query.filter_by(status="activa", low_alert_sent=False).all():
         if c.low_budget:
             c.low_alert_sent = True
+            if auto_on("presupuesto_bajo"):
+                for (uid,) in db.session.query(CampaignMember.user_id).filter_by(campaign_id=c.id, status="aceptada").all():
+                    notify_user(uid, "presupuesto_bajo", f"A {c.song} le queda poco dinero",
+                                f"Quedan {money(c.remaining, 0)} por repartir. Sube tus clips ya para no quedarte fuera.",
+                                f"/campana/{c.id}", camp_id=c.id)
             db.session.commit()
             notify_phone(f"💸 A «{c.song}» le queda poco presupuesto",
                          f"Quedan {money(c.remaining)} de {money(c.budget)}. Añade más si quieres que siga.",
@@ -2488,7 +2515,7 @@ def api_failed(tok, e):
     tok.error = str(e)[:300]
     if getattr(e, "expired", False) and tok.status == "ok":
         tok.status = "caducado"
-        notify_user(tok.user_id, "mensaje", f"Vuelve a conectar tu {official.LABELS[tok.platform]}",
+        notify_user(tok.user_id, "conexion", f"Vuelve a conectar tu {official.LABELS[tok.platform]}",
                     f"El permiso de @{tok.handle} ha caducado. Mientras tanto seguimos contando tus vistas, pero conéctala otra vez.",
                     "/cuenta#redes")
     db.session.commit()
@@ -2966,6 +2993,33 @@ def when_madrid(dt, fmt="full"):
     return f"{DIAS[l_.weekday()]} {l_.day} {MESES_ES[l_.month - 1]} · {l_.strftime('%H:%M')}"
 
 
+def inactivity_reminders(now=None):
+    """Aviso diario (apagado por defecto: admin → Avisos → «Automáticos»): cuentas de campañas activas que no han publicado en 24 h."""
+    now = now or datetime.utcnow()
+    accs = (CampaignAccount.query.join(Campaign)
+            .filter(CampaignAccount.status == "aceptada", Campaign.status == "activa").all())
+    n = 0
+    for a in accs:
+        camp = a.campaign
+        if camp.exhausted or is_fake(a) or (a.user and a.user.is_banned):
+            continue
+        if (a.decided_at or a.created_at or now) > now - timedelta(hours=12):
+            continue                                          # recién aceptada: aún no toca
+        if a.platform not in AUTO_PLATFORMS or not a.last_scan_at or a.last_scan_at < now - timedelta(hours=26):
+            continue                                          # si no hemos podido mirar su perfil, no avisamos a ciegas
+        if a.last_post_at and a.last_post_at > now - timedelta(hours=24):
+            continue
+        if not a.last_post_at or now - a.last_post_at > timedelta(days=DORMANT_AFTER):
+            continue                                          # cuenta parada (nunca publicó o lleva semanas): sin aviso diario
+        st = campaign_stats(camp)
+        notify_user(a.user_id, "inactividad", f"@{a.handle} no ha subido ningún clip en 24 h",
+                    f"Quedan {money(st['remaining'], 0)} por repartir en {camp.song}. Sube un clip para no quedarte fuera.",
+                    f"/campana/{camp.id}", camp_id=camp.id)
+        n += 1
+    db.session.commit()
+    return n
+
+
 def call_reminders(now=None):
     """30 min antes de cada llamada: aviso a los clippers de la campaña (campanita y móvil). Una sola vez por llamada."""
     now = now or datetime.utcnow()
@@ -3201,6 +3255,9 @@ def _auto_refresh_loop():
                     db.session.commit()
                     if not fresh and not REFRESH_AT:
                         discover_clips()
+                    if auto_on("inactividad"):            # solo si Mustapha lo enciende en Avisos → «Automáticos»
+                        inactivity_reminders()
+                        db.session.commit()
         except Exception:  # noqa: BLE001
             log.exception("Fallo en la actualización automática de vistas")
         time.sleep(600)
@@ -5211,6 +5268,8 @@ def onboarding():
         u.languages = "es"                       # todos publican en español: ya no se pregunta
         u.onboarded_at = datetime.utcnow()       # el cobro (Whop) se conecta luego en «Mi cuenta»
         session.pop("onb_form", None)
+        notify_user(u.id, "bienvenida", f"Bienvenido a {APP_NAME}, {name.split()[0]}",
+                    "Así empiezas: mira la guía de Formación, elige una campaña y pide unirte.", "/formacion")
         db.session.commit()
         flash("¡Perfil listo! Elige una campaña y pide unirte.", "ok")
         return redirect(url_for("index"))
@@ -9520,8 +9579,47 @@ def _spawn(fn, *args):
     threading.Thread(target=fn, args=args, daemon=True).start()
 
 
+# Avisos automáticos (admin → Avisos → «Automáticos», 24 nov, Mustapha): cada uno se enciende o apaga para todos.
+# (clave, grupo, nombre, qué le llega al clipper, cuándo, encendido por defecto). Los que ya existían vienen encendidos;
+# los nuevos, apagados, para que Mustapha elija. Los mensajes del equipo (soporte, avisos a mano) no se tocan aquí.
+AUTO_NOTICES = [
+    ("clip_nuevo", "Clips", "Clip detectado", "«Clip detectado en <campaña>: hemos añadido solo tu nuevo vídeo»", "Cuando la lectura encuentra un vídeo nuevo en su cuenta", True),
+    ("minimo_cerca", "Clips", "Clip cerca del mínimo", "«Tu clip está a punto de cobrar: le falta poco para el mínimo»", "Una vez por clip, al llegar al 80 % del pago mínimo", False),
+    ("estadisticas", "Clips", "Pedir la grabación de estadísticas", "«Verifica las vistas de tu clip: tienes 72 h»", "Cuando un clip llega al mínimo. Si lo apagas, el clipper no se entera del plazo y el clip se rechaza solo", True),
+    ("clip_aprobado", "Clips", "Clip aprobado", "«Tu clip de <campaña> está aprobado»", "Cuando un admin o mod lo aprueba", True),
+    ("clip_rechazado", "Clips", "Clip rechazado", "«Clip rechazado en <campaña>» con el motivo", "Cuando un admin o mod lo rechaza", True),
+    ("campana_nueva", "Campañas", "Campaña nueva", "«Nueva campaña de <creador>» con lo que se puede ganar", "Al crear una campaña activa", True),
+    ("plazas", "Campañas", "Plazas abiertas", "«Hay plazas en <campaña>»", "A quien pulsó «Avísame» cuando se reabren plazas", True),
+    ("presupuesto_bajo", "Campañas", "Queda poco presupuesto", "«A <campaña> le queda poco dinero: sube tus clips ya»", "Una vez, cuando queda el 20 % del presupuesto. A los clippers de esa campaña", False),
+    ("campana_fin", "Campañas", "Campaña terminada", "«<campaña> ha terminado: ya puedes retirar X $»", "Al cerrarse la campaña, a quien ganó dinero en ella (además del mensaje del chat)", False),
+    ("anuncio", "Campañas", "Anuncios de la campaña", "«<canal> · <campaña>» con el texto del anuncio", "Cuando el equipo publica en un canal de anuncios", True),
+    ("llamada", "Campañas", "Llamadas", "«Nueva llamada en <campaña>» y «La llamada empieza en 30 min»", "Al programar una llamada y 30 min antes", True),
+    ("retiro", "Dinero", "Retiro enviado", "«Retiro enviado: X $ ya están en tu Whop»", "Cuando Whop envía un retiro", True),
+    ("conexion", "Cuenta", "Volver a conectar una red", "«Vuelve a conectar tu TikTok»", "Cuando caduca el permiso de una red conectada por la web", True),
+    ("mod", "Cuenta", "Nombrado mod", "«Ahora eres mod de <campaña>»", "Cuando le hacen mod de una campaña", True),
+    ("bienvenida", "Cuenta", "Bienvenida", "«Bienvenido a ClipProfit: así empiezas» con enlace a Formación", "Al terminar «Crea tu perfil»", False),
+    ("inactividad", "Actividad", "No ha publicado en 24 h", "«@cuenta no ha subido ningún clip en 24 h. Quedan X $ por repartir»", "Cada día tras la lectura, a cuentas activas que no publicaron (no a cuentas paradas)", False),
+]
+AUTO_KEYS = {k for k, *_ in AUTO_NOTICES}
+
+
+def auto_notices():
+    """{clave: encendido} con lo guardado por Mustapha y, si no, lo de por defecto."""
+    try:
+        saved = json.loads(get_setting("auto_notices", "") or "{}")
+    except ValueError:
+        saved = {}
+    return {k: bool(saved.get(k, d)) for k, _g, _n, _t, _w, d in AUTO_NOTICES}
+
+
+def auto_on(event):
+    return event not in AUTO_KEYS or auto_notices().get(event, True)
+
+
 def notify_user(user_id, event, title, body, path="", bell=True, camp_id=None):
     """Aviso personal a un clipper: siempre en su campanita y, si lo tiene activado, en su móvil."""
+    if not auto_on(event):                          # apagado en admin → Avisos → «Automáticos»
+        return
     u = db.session.get(User, user_id)
     if not u or is_demo(u):
         return
@@ -10374,7 +10472,24 @@ def admin_notify():
         flash(f"Mensaje enviado a {len(users)} {'clipper' if len(users) == 1 else 'clippers'}.", "ok" if users else "error")
         return redirect(url_for("admin_notify"))
     return render_template("admin/notify.html", camps=camps, push_ready=push_ready(),
-                           devices=PushSub.query.count(), people=notify_people())
+                           devices=PushSub.query.count(), people=notify_people(),
+                           auto=AUTO_NOTICES, auto_state=auto_notices())
+
+
+@app.route("/admin/avisos/automaticos", methods=["POST"])
+@admin_required
+def admin_auto_notices():
+    """Avisos → «Automáticos»: qué mensajes manda la web sola (una casilla por tipo)."""
+    if not admin_can("admin_notify"):
+        abort(403)
+    state = {k: bool(request.form.get(k)) for k in AUTO_KEYS}
+    set_setting("auto_notices", json.dumps(state))
+    audit("avisos_automaticos", ", ".join(k for k, v in state.items() if v) or "ninguno")
+    db.session.commit()
+    if request.headers.get("X-Requested-With") == "fetch":
+        return ("", 204)
+    flash("Avisos automáticos guardados.", "ok")
+    return redirect(url_for("admin_notify", _anchor="automaticos"))
 
 
 def notify_people():

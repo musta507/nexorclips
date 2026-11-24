@@ -4,6 +4,34 @@
 {% block title %}Avisos · Admin{% endblock %}
 {% block content %}
 <h1 class="sr-only">Avisos a clippers</h1>
+<nav class="seg" data-tabs data-hash-tabs aria-label="Avisos" style="margin-bottom:16px">
+  <a href="#enviar" data-tab="enviar" class="on">Enviar aviso</a>
+  <a href="#automaticos" data-tab="automaticos">Automáticos <b class="tnum">{{ auto_state.values()|select|list|length }}</b></a>
+</nav>
+
+<div class="tp" id="automaticos" hidden>
+<form method="post" action="{{ url_for('admin_auto_notices') }}" class="card au" data-auto-notices data-turbo="false">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="au-h"><h3>Mensajes que manda la web sola</h3>
+    <p class="small muted">Llegan a la campanita del clipper. Marca los que quieras: se guarda al momento. Los mensajes que mandas tú y las respuestas de soporte no dependen de esto.</p></div>
+  {% for grp in ["Clips", "Campañas", "Dinero", "Cuenta", "Actividad"] %}
+  <p class="au-g">{{ grp }}</p>
+  <div class="au-list">
+    {% for key, _grp, name, text, when, default in auto if _grp == grp %}
+    <label class="au-row" for="au-{{ key }}">
+      <span class="au-t"><b>{{ name }}{% if not default %} <span class="au-new">Nuevo</span>{% endif %}</b>
+        <small class="au-msg">{{ text }}</small>
+        <small class="muted">{{ when }}</small></span>
+      <input type="checkbox" class="tg tg-ink" id="au-{{ key }}" name="{{ key }}"{% if auto_state[key] %} checked{% endif %} aria-label="{{ name }}">
+    </label>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  <button class="btn sm au-save">Guardar</button>
+</form>
+</div>
+
+<div class="tp" id="enviar">
 <form method="post" class="nt" data-notify>
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <section class="card nt-people">
@@ -42,4 +70,5 @@
     <button class="btn accent" data-nt-send data-confirm="¿Enviar este mensaje a los clippers elegidos?" disabled>Enviar a <span data-nt-count2>0</span> <span data-nt-word>clippers</span></button>
   </section>
 </form>
+</div>
 {% endblock %}
