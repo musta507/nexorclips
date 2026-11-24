@@ -2069,16 +2069,7 @@ def test_discover_clips_from_profiles_and_daily_reminder(monkeypatch):
         s_ = A.Submission.query.one()
         assert s_.source == "auto" and s_.views == 1200 and s_.campaign_id == cid
         assert A.discover_clips()[0] == 0                       # no se duplica
-        assert A.inactivity_reminders() == 0                    # publicó hace 3 h: sin aviso
-        acc = A.CampaignAccount.query.one()
-        acc.last_post_at = datetime.utcnow() - timedelta(hours=30)
-        A.db.session.commit()
-        assert A.inactivity_reminders() == 1
-        acc.last_scan_at = None                                 # sin poder mirar el perfil, no se avisa
-        A.db.session.commit()
-        assert A.inactivity_reminders() == 0
-        uid = A.User.query.filter_by(email="a@test.com").one().id
-        assert A.Notice.query.filter_by(user_id=uid, kind="inactividad").count() == 1
+        assert not hasattr(A, "inactivity_reminders")           # el aviso «no has publicado en 24 h» se quitó (Mustapha, 24 nov)
         # 3:00 en Madrid, justo después de la lectura diaria
         A.set_setting("reminders_sent", "")
         assert not A.reminders_due(datetime(2026, 11, 6, 1, 30))[0]   # 01:30 UTC = 02:30 Madrid (invierno)

@@ -2941,33 +2941,6 @@ def _ingest(platform, chunk, items, now, update_existing=False):
     return added
 
 
-def inactivity_reminders(now=None):
-    """Aviso diario: cuentas de campañas activas que no han publicado nada en las últimas 24 h."""
-    now = now or datetime.utcnow()
-    accs = (CampaignAccount.query.join(Campaign)
-            .filter(CampaignAccount.status == "aceptada", Campaign.status == "activa").all())
-    n = 0
-    for a in accs:
-        camp = a.campaign
-        if camp.exhausted or is_fake(a) or (a.user and a.user.is_banned):
-            continue
-        if (a.decided_at or a.created_at or now) > now - timedelta(hours=12):
-            continue                                          # recién aceptada: aún no toca
-        if a.platform not in AUTO_PLATFORMS or not a.last_scan_at or a.last_scan_at < now - timedelta(hours=26):
-            continue                                          # si no hemos podido mirar su perfil, no avisamos a ciegas
-        if a.last_post_at and a.last_post_at > now - timedelta(hours=24):
-            continue
-        if not a.last_post_at or now - a.last_post_at > timedelta(days=DORMANT_AFTER):
-            continue                                          # cuenta parada (nunca publicó o lleva semanas): sin aviso diario
-        st = campaign_stats(camp)
-        notify_user(a.user_id, "inactividad", f"@{a.handle} no ha subido ningún clip en 24 h",
-                    f"Quedan {money(st['remaining'], 0)} por repartir en {camp.song}. Sube un clip para no quedarte fuera.",
-                    f"/campana/{camp.id}", camp_id=camp.id)
-        n += 1
-    db.session.commit()
-    return n
-
-
 def parse_madrid(d, t):
     """«2026-11-13» + «19:00» en hora de España → UTC (con el cambio de hora). None si no es válida."""
     try:
@@ -3223,14 +3196,11 @@ def _auto_refresh_loop():
                 if _refresh_due():
                     fresh = run_daily_refresh()           # el día se marca al terminar; si se corta, se reintenta
                 due, day = reminders_due()
-                if due:                                   # justo después de la lectura: aviso a quien no publicó en 24 h
+                if due:                                   # justo después de la lectura (el aviso «no has publicado en 24 h» se quitó el 24 nov)
                     set_setting("reminders_sent", day)
                     db.session.commit()
                     if not fresh and not REFRESH_AT:
                         discover_clips()
-                    n_rem = inactivity_reminders()
-                    job_mark("recordatorios", True, f"{n_rem} avisos enviados" if isinstance(n_rem, int) else "Hecho")
-                    db.session.commit()
         except Exception:  # noqa: BLE001
             log.exception("Fallo en la actualización automática de vistas")
         time.sleep(600)
@@ -7037,7 +7007,6 @@ def health_data():
                  "last": tick, "next": "Cada 10 min"})
     for key, name, nxt in (("lectura", "Lectura diaria de vistas y reparto", f"Cada día {REFRESH_AT}"),
                            ("saldos", "Comprobar saldos de los creadores", "Tras la lectura"),
-                           ("recordatorios", "Aviso a clippers que no publican", "Tras la lectura"),
                            ("ytdlp", "Comprobación de yt-dlp", " · ".join(YTDLP_CHECK_AT)),
                            ("historial", "Resumir historial de vistas antiguo", "Una vez por semana")):
         j = job_info(key)
