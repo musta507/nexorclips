@@ -5045,7 +5045,7 @@ def delete_comment(coid):
     db.session.delete(co)
     db.session.commit()
     nxt = request.form.get("next", "")
-    return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("campaign", cid=ch.campaign_id, canal=ch.id))
+    return redirect(safe_next(nxt) if nxt else url_for("campaign", cid=ch.campaign_id, canal=ch.id))
 
 
 @app.route("/publicacion/<int:pid>/imagen")
@@ -9391,7 +9391,11 @@ def admin_campaign_close(cid):
         close_campaign(camp, current_user.id)
         audit("campaña_cerrada", f"#{camp.id} {camp.song} · repartido {money(camp.spent)}")
         db.session.commit()
-        flash("Campaña cerrada. Los clippers ya pueden retirar lo que ganaron y les hemos avisado por el chat.", "ok")
+        if CLIPPER_WITHDRAW:
+            flash("Campaña cerrada. Los clippers ya pueden retirar lo que ganaron y les hemos avisado por el chat.", "ok")
+        else:
+            flash("Campaña cerrada y clippers avisados. Revisa y paga en la pestaña «Pagos».", "ok")
+            return redirect(url_for("admin_campaign_pay", cid=cid) if admin_can("admin_campaign_pay") else url_for("admin_campaign", cid=cid))
     return redirect(url_for("admin_campaign", cid=cid))
 
 
@@ -10428,10 +10432,10 @@ AUTO_NOTICES = [
     ("campana_nueva", "Campañas", "Campaña nueva", "«Nueva campaña de <creador>» con lo que se puede ganar", "Al crear una campaña activa", True),
     ("plazas", "Campañas", "Plazas abiertas", "«Hay plazas en <campaña>»", "A quien pulsó «Avísame» cuando se reabren plazas", True),
     ("presupuesto_bajo", "Campañas", "Queda poco presupuesto", "«A <campaña> le queda poco dinero: sube tus clips ya»", "Una vez, cuando queda el 20 % del presupuesto. A los clippers de esa campaña", False),
-    ("campana_fin", "Campañas", "Campaña terminada", "«<campaña> ha terminado: ya puedes retirar X $»", "Al cerrarse la campaña, a quien ganó dinero en ella (además del mensaje del chat)", False),
+    ("campana_fin", "Campañas", "Campaña terminada", "«<campaña> ha terminado: has ganado X $ y te lo enviamos a tu Whop»", "Al cerrarse la campaña, a quien ganó dinero en ella (además del mensaje del chat)", False),
     ("anuncio", "Campañas", "Anuncios de la campaña", "«<canal> · <campaña>» con el texto del anuncio", "Cuando el equipo publica en un canal de anuncios", True),
     ("llamada", "Campañas", "Llamadas", "«Nueva llamada en <campaña>» y «La llamada empieza en 30 min»", "Al programar una llamada y 30 min antes", True),
-    ("retiro", "Dinero", "Retiro enviado", "«Retiro enviado: X $ ya están en tu Whop»", "Cuando Whop envía un retiro", True),
+    ("retiro", "Dinero", "Pago enviado", "«Pago de <campaña> enviado: X $ ya están en tu Whop»", "Cuando Whop envía un pago", True),
     ("conexion", "Cuenta", "Volver a conectar una red", "«Vuelve a conectar tu TikTok»", "Cuando caduca el permiso de una red conectada por la web", True),
     ("mod", "Cuenta", "Nombrado mod", "«Ahora eres mod de <campaña>»", "Cuando le hacen mod de una campaña", True),
     ("bienvenida", "Cuenta", "Bienvenida", "«Bienvenido a ClipProfit: así empiezas» con enlace a Formación", "Al terminar «Crea tu perfil»", False),
@@ -10673,9 +10677,27 @@ def keep_image(obj, kind, url, size):
     return bool(small)
 
 
+def public_host(url):
+    """¿La dirección apunta a internet? (no a la red interna de Railway, a localhost ni a IPs privadas). Auditoría 24 nov:
+    las direcciones de portadas y fotos vienen de datos de terceros; así nadie puede usar la web para mirar dentro."""
+    import ipaddress
+    try:
+        u = urlparse(url)
+    except ValueError:
+        return False
+    host = (u.hostname or "").lower().rstrip(".")
+    if u.scheme not in ("http", "https") or not host or host == "localhost" or host.endswith((".internal", ".local", ".localhost")):
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return True                                  # un nombre normal (cdn.tiktok…)
+    return ip.is_global
+
+
 def fetch_image(url):
     """Descarga una imagen de una red (sin decir desde qué web se pide) y la guarda 6 horas. Así no la bloquean ni caduca a medias."""
-    if not url or not url.startswith("http"):
+    if not url or not url.startswith("http") or not public_host(url):
         return None
     now = time.time()
     hit = _img_cache.get(url)
@@ -10683,7 +10705,15 @@ def fetch_image(url):
         return hit[1:] if hit[1] else None
     data = None
     try:
-        r = requests.get(url, timeout=8, headers={"User-Agent": BROWSER_UA, "Accept": "image/*"})
+        r, hops = None, 0
+        while hops < 4:                              # las redirecciones se siguen a mano para comprobar cada salto
+            r = requests.get(url, timeout=8, headers={"User-Agent": BROWSER_UA, "Accept": "image/*"}, allow_redirects=False)
+            nxt = r.headers.get("Location") if r.is_redirect else None
+            if not nxt:
+                break
+            url, hops = requests.compat.urljoin(url, nxt), hops + 1
+            if not public_host(url):
+                raise ValueError("redirección a una dirección interna")
         COVER_DIAG["img"] = r.status_code
         ct = (r.headers.get("Content-Type") or "").split(";")[0]
         if r.ok and ct.startswith("image/") and len(r.content) < 3_000_000:

@@ -4371,3 +4371,20 @@ def test_audit_tech_panel_does_not_load_every_user():
         assert tu["n"] >= 60 and len(tu["rows"]) == 50
     page = admin.get("/admin/ajustes").get_data(as_text=True)
     assert "los 50 últimos de" in page
+
+
+def test_audit_apify_key_only_goes_to_apify(monkeypatch):
+    seen = []
+    monkeypatch.setattr(A.viewcounter, "APIFY_TOKEN", "secreto")
+    monkeypatch.setattr(A.viewcounter.requests, "get", lambda url, **kw: seen.append((url, kw["headers"])))
+    A.viewcounter.download_video("https://evil.example/v.mp4?x=api.apify.com")
+    A.viewcounter.download_video("https://api.apify.com/v2/key-value-stores/x/records/v.mp4")
+    assert "Authorization" not in seen[0][1] and seen[1][1]["Authorization"] == "Bearer secreto"
+
+
+def test_audit_images_only_from_internet():
+    for bad in ("http://localhost/x.jpg", "http://127.0.0.1/x.jpg", "http://10.0.0.5/x.jpg", "http://169.254.169.254/latest",
+                "http://postgres.railway.internal:5432/", "ftp://cdn.x.com/a.jpg", "http://[::1]/x"):
+        assert not A.public_host(bad), bad
+        assert A.fetch_image(bad) is None
+    assert A.public_host("https://p16-sign.tiktokcdn.com/obj/x.jpeg") and A.public_host("https://8.8.8.8/x.jpg")

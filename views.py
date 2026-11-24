@@ -332,7 +332,8 @@ def fetch_download_urls(platform, urls):
 def download_video(url):
     """Descarga un vídeo. Los que guarda Apify se piden con el token (si no, pueden dar 403)."""
     headers = {"User-Agent": "Mozilla/5.0"}
-    if "api.apify.com" in url and APIFY_TOKEN:
+    from urllib.parse import urlparse as _up
+    if APIFY_TOKEN and (_up(url).hostname or "").lower() == "api.apify.com":   # solo a Apify de verdad (no a «…?api.apify.com»)
         headers["Authorization"] = f"Bearer {APIFY_TOKEN}"
     elif "tiktok" in url:
         headers["Referer"] = "https://www.tiktok.com/"
