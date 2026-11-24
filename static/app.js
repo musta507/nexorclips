@@ -1802,35 +1802,57 @@ function carruseles() {
     slides.forEach(function (sl, k) { sl.classList.toggle("is-on", k === 0); sl.setAttribute("aria-hidden", k === 0 ? "false" : "true"); if (k) sl.inert = true; });
     if (n < 2) return;
     var quieto = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var auto = box.hasAttribute("data-autoplay") && !quieto;
+    // Tiempo: al poner el cursor encima se PARA donde iba (no vuelve a empezar) y al quitarlo sigue desde ahí.
+    var left = CAR_MS, since = 0, stops = {}, outTm = null, outEl = null;
+    function parado() { return Object.keys(stops).length > 0; }
     function puntos() {
       dots.forEach(function (d, k) {
-        d.classList.remove("on", "run");
-        if (k === cur) { void d.offsetWidth; d.classList.add("on"); if (timer) d.classList.add("run"); }
+        d.classList.remove("on", "run", "paused");
+        if (k === cur) { void d.offsetWidth; d.classList.add("on"); if (auto) d.classList.add("run"); if (parado()) d.classList.add("paused"); }
       });
+    }
+    function armar(ms) {
+      clearTimeout(timer); timer = null;
+      if (!auto || parado()) return;
+      since = Date.now(); left = ms;
+      timer = setTimeout(function () {
+        if (document.hidden) { reiniciar(); return; }
+        ir(cur + 1, 1); reiniciar();
+      }, ms);
+    }
+    function reiniciar() { left = CAR_MS; puntos(); armar(CAR_MS); }
+    function parar(why) {
+      if (stops[why]) return;
+      if (!parado() && timer) { left = Math.max(0, left - (Date.now() - since)); clearTimeout(timer); timer = null; }
+      stops[why] = 1;
+      dots.forEach(function (d) { if (d.classList.contains("on")) d.classList.add("paused"); });
+    }
+    function seguir(why) {
+      if (!stops[why]) return;
+      delete stops[why];
+      if (parado()) return;
+      dots.forEach(function (d) { d.classList.remove("paused"); });
+      armar(left);
     }
     function ir(i, dir) {
       i = (i + n) % n;
-      if (i === cur || busy) return;
+      if (i === cur) return;
+      if (outTm) { clearTimeout(outTm); outEl.classList.remove("is-out"); outTm = null; }   // a mitad de un cambio: se termina ya (antes había que pulsar dos veces)
       dir = dir || (i > cur ? 1 : -1);
       var from = slides[cur], to = slides[i];
-      busy = true;
       box.style.setProperty("--dir", dir);
       from.classList.remove("is-on"); from.classList.add("is-out"); from.setAttribute("aria-hidden", "true"); from.inert = true;
       to.classList.remove("is-out"); to.classList.add("is-on"); to.setAttribute("aria-hidden", "false"); to.inert = false;
       cur = i;
-      puntos();
-      setTimeout(function () { from.classList.remove("is-out"); busy = false; }, quieto ? 0 : 700);
+      outEl = from;
+      outTm = setTimeout(function () { from.classList.remove("is-out"); outTm = null; }, quieto ? 0 : 700);
     }
-    function play() {
-      clearInterval(timer); timer = null;
-      if (box.hasAttribute("data-autoplay") && !quieto) timer = setInterval(function () { if (!document.hidden) ir(cur + 1, 1); }, CAR_MS);
-      puntos();
-    }
-    function pausa() { clearInterval(timer); timer = null; dots.forEach(function (d) { d.classList.remove("run"); }); }
+    function play() { reiniciar(); }
     box.addEventListener("click", function (e) {
       var d = e.target.closest("[data-car-dot]"), p = e.target.closest("[data-car-prev]"), nx = e.target.closest("[data-car-next]");
       if (d) ir(+d.getAttribute("data-car-dot")); else if (p) ir(cur - 1, -1); else if (nx) ir(cur + 1, 1); else return;
-      e.preventDefault(); play();
+      e.preventDefault(); reiniciar();
     });
     // Deslizar con el dedo (o arrastrar con el ratón en horizontal)
     var x0 = null, y0 = 0, moved = false;
@@ -1847,11 +1869,12 @@ function carruseles() {
     box.addEventListener("keydown", function (e) {
       if (e.key === "ArrowRight") { ir(cur + 1, 1); play(); } else if (e.key === "ArrowLeft") { ir(cur - 1, -1); play(); }
     });
-    box.addEventListener("mouseenter", pausa);
-    box.addEventListener("mouseleave", play);
-    box.addEventListener("focusin", pausa);
-    play();
-    limpiar.push(tuyo(box, function () { clearInterval(timer); }));
+    box.addEventListener("mouseenter", function () { parar("raton"); });
+    box.addEventListener("mouseleave", function () { seguir("raton"); });
+    box.addEventListener("focusin", function (e) { if (!e.target.closest("[data-car-prev],[data-car-next],[data-car-dot]")) parar("foco"); });
+    box.addEventListener("focusout", function () { seguir("foco"); });
+    reiniciar();
+    limpiar.push(tuyo(box, function () { clearTimeout(timer); clearTimeout(outTm); }));
   });
 }
 
