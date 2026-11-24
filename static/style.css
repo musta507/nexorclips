@@ -3462,3 +3462,5 @@ body.bk-page{margin:0;background:#fff;font-family:var(--font);color:var(--ink)}
 .lead-src{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}.lead-src span{background:var(--soft);border-radius:8px;padding:3px 8px}
 @media (max-width:600px){.lead-stats{grid-template-columns:1fr}}
 .fcar-dot.on.run.paused::after{animation-play-state:paused}
+/* Portada del destacado: cuadrada y del alto de la tarjeta (Mustapha); el tamaño lo pone app.js en --fcar-art */
+@media (min-width:901px){.fcar .featured{grid-template-columns:var(--fcar-art,330px) minmax(0,1fr)}.fcar .featured .art{width:var(--fcar-art,330px);height:var(--fcar-art,330px)}}

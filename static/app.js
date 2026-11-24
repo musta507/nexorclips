@@ -1799,6 +1799,18 @@ function carruseles() {
     var track = box.querySelector("[data-car-track]"), dots = box.querySelectorAll("[data-car-dot]");
     var slides = Array.prototype.slice.call(track.children), n = slides.length, cur = 0, timer = null, busy = false;
     box.classList.add("fcar-fx");
+    // La portada ocupa todo el alto de la tarjeta (cuadrada), con el mismo margen arriba, abajo y a la izquierda
+    if (window.ResizeObserver && window.matchMedia("(min-width:901px)").matches) {
+      var fit = function () {
+        var hi = 0;
+        box.querySelectorAll(".featured .info").forEach(function (inf) { hi = Math.max(hi, inf.scrollHeight); });
+        var maxW = box.clientWidth * 0.42;
+        var size = Math.round(Math.min(maxW, Math.max(330, hi)));
+        if (Math.abs((box._art || 0) - size) > 2) { box._art = size; box.style.setProperty("--fcar-art", size + "px"); }
+      };
+      var ro = new ResizeObserver(function () { requestAnimationFrame(fit); });
+      ro.observe(box); fit();
+    }
     slides.forEach(function (sl, k) { sl.classList.toggle("is-on", k === 0); sl.setAttribute("aria-hidden", k === 0 ? "false" : "true"); if (k) sl.inert = true; });
     if (n < 2) return;
     var quieto = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
