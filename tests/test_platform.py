@@ -3797,18 +3797,10 @@ def test_connect_whop_with_button(monkeypatch):
     assert "Código" in r.get_data(as_text=True)
 
 
-def test_creators_payment_switch_in_tech_panel():
-    A._creators_cache["v"] = None
-    admin = client_for("admin@test.com")
-    page = admin.get("/admin/ajustes").get_data(as_text=True)
-    assert "De dónde sale el dinero de los retiros" in page and "Whop principal" in page
-    post(admin, "/admin/ajustes/pagos-creadores", on="1")
-    with A.app.app_context():
-        assert A.creators_on()
-    assert "Cada creador paga desde su propio Whop" in admin.get("/admin/ajustes").get_data(as_text=True)
-    post(admin, "/admin/ajustes/pagos-creadores", on="0")
-    with A.app.app_context():
-        assert not A.creators_on()
+def test_creators_always_pay_from_their_whop_without_switch():
+    assert A.creators_on()
+    page = client_for("admin@test.com").get("/admin/ajustes").get_data(as_text=True)
+    assert "De dónde sale el dinero de los retiros" not in page and "Volver al Whop principal" not in page
 
 
 def test_creator_paid_through_installed_app_without_key(monkeypatch):
@@ -3817,7 +3809,7 @@ def test_creator_paid_through_installed_app_without_key(monkeypatch):
     monkeypatch.setattr(A, "WHOP_APP_ID", "app_123")
     admin = client_for("admin@test.com")
     page = admin.get("/admin/creadores/nuevo").get_data(as_text=True)
-    assert "https://whop.com/apps/app_123/install" in page and "sin claves" in page
+    assert "https://whop.com/apps/app_123/install" in page and "Cómo conectar el Whop del creador" in page and "WHOP_KEY_" not in page
     post(admin, "/admin/creadores/nuevo", name="Pablo", company_id="biz_abc12345", key_var="")
     with A.app.app_context():
         c = A.Creator.query.filter_by(name="Pablo").one()

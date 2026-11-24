@@ -105,20 +105,12 @@ SUPPORT_EMAILS = {e.strip().lower() for e in os.environ.get("SUPPORT_EMAILS", ""
 ADMIN_ROLES = {"owner": "Dueño", "reviewer": "Revisor", "support": "Soporte"}
 # Panel técnico (claves, errores, Apify, Whop, copias…): solo estos correos. Vacío = cualquier dueño (hasta configurarlo)
 TECH_EMAILS = {e.strip().lower() for e in os.environ.get("TECH_EMAILS", "").split(",") if e.strip()}
-CREATORS_ENABLED = False          # valor de partida; el interruptor de verdad está en Panel técnico → Pagos (ajuste creators_mode)
-_creators_cache = {"v": None, "t": 0.0}
 
 
 def creators_on():
-    """¿Cada creador paga desde su propio Whop? (Panel técnico → Pagos). Se mira la base de datos como mucho cada 15 s."""
-    now = time.time()
-    if _creators_cache["v"] is None or now - _creators_cache["t"] > 15:
-        try:
-            _creators_cache["v"] = get_setting("creators_mode", "1" if CREATORS_ENABLED else "0") == "1"
-        except Exception:
-            _creators_cache["v"] = CREATORS_ENABLED
-        _creators_cache["t"] = now
-    return _creators_cache["v"]
+    """Cada creador paga desde su propio Whop (con la app de ClipProfit instalada). Es la única forma (Mustapha, 24 nov):
+    el dinero va del creador al clipper sin pasar por ClipProfit. Solo las campañas sin creador usan el Whop principal."""
+    return True
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
@@ -7481,22 +7473,6 @@ def whop_callback():
     audit("whop_conectado", f"@{current_user.whop_username} ({uid})")
     _flask_flash(f"Whop conectado: @{current_user.whop_username}. Cuando retires, el dinero te llegará al momento.", "ok")
     return back
-
-
-@app.route("/admin/ajustes/pagos-creadores", methods=["POST"])
-@admin_required
-def admin_creators_mode():
-    """Interruptor: cada creador paga desde su Whop (encendido) o todo desde el Whop principal (apagado)."""
-    if not is_tech():
-        abort(403)
-    on = request.form.get("on") == "1"
-    set_setting("creators_mode", "1" if on else "0")
-    _creators_cache["v"] = None
-    audit("pagos_creadores", "encendido" if on else "apagado")
-    db.session.commit()
-    flash("Ahora cada creador paga desde su propio Whop." if on else
-          "Ahora todos los retiros salen del Whop principal de ClipProfit.", "ok")
-    return redirect(url_for("admin_settings", _anchor="pagos"))
 
 
 @app.route("/admin/ajustes/probar-app-whop", methods=["POST"])

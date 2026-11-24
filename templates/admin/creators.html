@@ -22,8 +22,7 @@
       <td data-label="Creador"><b>{{ r.c.name }}</b>{% if r.c.contact %}<div class="small muted selectable">{{ r.c.contact }}</div>{% endif %}</td>
       <td data-label="Whop">
         {% if r.via_app %}<span class="status aprobado">Conectado con la app</span><div class="small muted selectable">{{ r.c.company_id }}</div>
-        {% elif not r.c.key_var %}<span class="status pendiente">Sin conectar</span>
-        {% elif not r.has_key %}<span class="status rechazado">Falta {{ r.c.key_var }} en Railway</span>
+        {% elif not r.has_key %}<span class="status pendiente">Sin conectar</span>
         {% elif not r.company %}<span class="status rechazado">Clave no válida</span>{% if r.error %}<div class="small muted">{{ r.error }}</div>{% endif %}
         {% else %}<span class="status aprobado">Conectado</span><div class="small muted selectable">{{ r.company }}</div>{% endif %}
       </td>
@@ -41,11 +40,11 @@
 <div class="card tight form-stack">
   <h3>Cómo conectar el Whop de un creador</h3>
   <ol class="small" style="margin:0;padding-left:18px;line-height:1.8">
-    <li>El creador crea una clave en su Whop (Desarrollador → Claves de API) con los permisos <b>payout:transfer_funds</b>, <b>payout:transfer:read</b>, <b>company:balance:read</b> y <b>payout:account:read</b>, y te la manda por privado.</li>
-    <li>En Railway, en el servicio de la web → Variables, añade una variable nueva con un nombre como <b>WHOP_KEY_PABLO</b> y pega su clave. Pulsa los 3 puntos → <b>Seal</b> para que nadie pueda volver a verla.</li>
-    <li>Aquí, pulsa «Añadir creador» y escribe ese mismo nombre de variable. La clave nunca se guarda en la web.</li>
-    <li>Al crear o editar una campaña, elige en «Paga desde el Whop de» a ese creador.</li>
+    <li>Pulsa «Añadir creador» y escribe su nombre.</li>
+    <li>Mándale el enlace para instalar la app de ClipProfit en su Whop{% if install_url %}: <code class="selectable">{{ install_url }}</code>{% endif %}. Él pulsa «Aprobar». Sin claves.</li>
+    <li>Pídele el código de su empresa (empieza por <b>biz_</b>, lo ve en la dirección de su panel de Whop) y pégalo en su ficha.</li>
+    <li>Al crear o editar una campaña, elige en «Paga desde el Whop de» a ese creador. El dinero irá de su Whop al de los clippers, sin pasar por ClipProfit.</li>
   </ol>
-  {% if env_keys %}<p class="small muted">Variables de creadores que ya hay en Railway: {% for k in env_keys %}<span class="chip">{{ k }}</span> {% endfor %}</p>{% endif %}
+  {% if not app_key %}<p class="small" style="color:var(--red-ink);margin:0">Falta <code>WHOP_APP_API_KEY</code> en Railway: sin ella no se puede pagar desde el Whop de los creadores.</p>{% endif %}
 </div>
 {% endblock %}
