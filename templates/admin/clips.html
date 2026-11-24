@@ -118,7 +118,11 @@
             {% if player %}<iframe src="{{ player }}" title="Vídeo del clip" loading="lazy" allow="accelerometer; gyroscope; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
             {% else %}<a class="cr-novideo" href="{{ s.url }}" target="_blank" rel="noopener">{{ icon(s.platform) }}<span>Ver en {{ PLATFORMS[s.platform] }}</span></a>{% endif %}
             {% if s.stats_status == 'enviado' and stats_embed(s) %}
-            <div class="cr-stats-video"><b>Verificación de vistas que subió el clipper</b><iframe src="{{ stats_embed(s) }}" title="Vídeo de estadísticas" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+            <div class="cr-stats-video"><button type="button" class="btn sm" data-open="sv-{{ s.id }}">{{ icon("play") }} Ver vídeo de estadísticas</button>
+              <dialog class="wd-dialog sv-dialog" id="sv-{{ s.id }}" aria-label="Vídeo de estadísticas del clipper">
+                <div class="sv-head"><b>Verificación de vistas{% if s.author %} · @{{ s.author }}{% endif %}</b><button type="button" class="sv-x" data-close aria-label="Cerrar">×</button></div>
+                <iframe data-src="{{ stats_embed(s) }}" title="Vídeo de estadísticas" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+              </dialog>
               {% if s.status == 'pendiente' and (not acting_as_mod() or mod_can(current_user, s.campaign_id, 'verificar')) %}<details class="cr-redo"><summary class="small link">Pedir otra grabación</summary>
                 <form method="post" action="{{ url_for('admin_review', sid=s.id, accion='pedir_estadisticas') }}" class="form-stack"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
                   <input name="reason" maxlength="300" required placeholder="Qué corregir (p. ej. no se ven los países)" aria-label="Qué corregir"><button class="btn sm soft">Pedir otra</button></form></details>{% endif %}</div>

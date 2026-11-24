@@ -129,12 +129,18 @@ document.addEventListener("click", function (e) {
   });
 });
 
+// Al cerrar una ventana con vídeo, se para (se quita el vídeo y se vuelve a cargar al abrirla)
+document.addEventListener("close", function (e) {
+  if (e.target.tagName === "DIALOG") e.target.querySelectorAll("iframe[data-src]").forEach(function (f) { f.removeAttribute("src"); });
+}, true);
+
 // Ventana de retirar
 document.addEventListener("click", function (e) {
   var all = e.target.closest(".wd-all");
   if (all) { var i = document.getElementById("wd-amount"); if (i) { i.value = all.getAttribute("data-all"); i.focus(); } return; }
   var o = e.target.closest("[data-open]");
-  if (o) { var d = document.getElementById(o.getAttribute("data-open")); if (d && d.showModal) { d.showModal(); var a = d.querySelector("input[name=amount]"); if (a) a.select(); } return; }
+  if (o) { var d = document.getElementById(o.getAttribute("data-open")); if (d && d.showModal) { d.showModal(); var a = d.querySelector("input[name=amount]"); if (a) a.select();
+    d.querySelectorAll("iframe[data-src]").forEach(function (f) { if (!f.src) f.src = f.getAttribute("data-src"); }); } return; }
   var c = e.target.closest("[data-close]");
   if (c) { var dl = c.closest("dialog"); if (dl) dl.close(); return; }
   if (e.target.tagName === "DIALOG" && e.target.open) e.target.close();   // clic fuera de la ventana
