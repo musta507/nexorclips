@@ -669,7 +669,7 @@ function iniciarChat(chat) {
 // Las barras que cambian de página llevan data-pill-nav y data-turbo-permanent: la barra no se repinta al cambiar
 // de página (Turbo deja la misma), así que la pastilla se desliza como en las de la misma página. Al llegar, la
 // pestaña activa se comprueba con la dirección (sirve también para «atrás») y los números se copian de la página nueva.
-var PILL_MS = 320;
+var PILL_MS = 280;
 function pillItems(box) { return box.querySelectorAll(":scope > a, :scope > button"); }
 function pillCambiaPagina(it) {
   var h = it.tagName === "A" ? (it.getAttribute("href") || "") : "";
@@ -785,11 +785,9 @@ function pastillaOrden() {
 }
 // La copia que Turbo guarda para «atrás» queda como la manda el servidor
 document.addEventListener("turbo:before-cache", function () {
-  // La copia guardada para «atrás» lleva marcada la pestaña de esa página (no la que se acaba de pulsar)
-  document.querySelectorAll("[data-pill-nav]").forEach(function (box) {
-    var its = pillItems(box);
-    if (box._srv >= 0 && its[box._srv]) its.forEach(function (x, i) { x.classList.toggle("on", i === box._srv); });
-  });
+  // Las barras que cambian de página (data-pill-nav) NO se tocan aquí: son la barra de verdad que sigue en pantalla, y
+  // volver a marcar la pestaña de antes hacía que la pastilla y el nombre en negrita fueran y volvieran (se veía feo).
+  // Al volver «atrás», pillSegunDireccion ya marca la pestaña correcta según la dirección.
   document.querySelectorAll(".seg.has-pill, .sortbar.has-pill").forEach(function (box) { if (box._pill && !pillAnimando(box)) pillSync(box, null, false); });
 });
 // Barras que cambian de página: la de la página nueva se descarta y se queda la de ahora, con sus números al día.
@@ -810,7 +808,7 @@ document.addEventListener("turbo:before-render", function (e) { pillAdoptar(e.de
 // Fluidez: pintar la pantalla nueva ocupa al navegador unas decenas de milésimas y, si pilla a la pastilla a medio
 // camino, la deja congelada un instante (se ve como un tirón). Se espera a que la pastilla casi haya llegado
 // (va muy rápida al principio: al 62 % del tiempo ya ha recorrido el 95 %) y entonces se pinta. Como mucho son 0,2 s.
-var PILL_HOLD = 0.62;
+var PILL_HOLD = 0.5;
 document.addEventListener("turbo:before-render", function (e) {
   if (!e.detail || typeof e.detail.resume !== "function" || e.defaultPrevented) return;
   var falta = 0, ahora = Date.now();
@@ -820,7 +818,7 @@ document.addEventListener("turbo:before-render", function (e) {
   });
   if (falta < 12) return;
   e.preventDefault();
-  setTimeout(function () { e.detail.resume(); }, Math.min(falta, 220));
+  setTimeout(function () { e.detail.resume(); }, Math.min(falta, 150));
 });
 document.addEventListener("turbo:before-frame-render", function (e) { pillAdoptar(e.detail && e.detail.newFrame); });
 // La pestaña activa al llegar: la que coincide con la dirección (ruta igual y sus parámetros en la dirección);
