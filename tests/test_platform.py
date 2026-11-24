@@ -3814,3 +3814,17 @@ def test_creator_paid_through_installed_app_without_key(monkeypatch):
     with A.app.app_context():
         c = A.Creator.query.filter_by(name="Pablo").one()
         assert A.wallet(c.id) == ("app-key", "biz_abc12345", "Pablo") and A.wallet_ready(c.id)
+
+
+def test_dark_mode_is_chosen_by_each_user():
+    """Modo oscuro: claro por defecto; cada usuario lo enciende o apaga y se guarda en su cuenta."""
+    c = client_for("oscuro@example.com")
+    page = c.get("/cuenta").get_data(as_text=True)
+    assert 'data-theme="dark"' not in page and "data-theme-toggle" in page
+    assert c.post("/cuenta/tema", data={"_csrf": "t", "theme": "dark"}, headers={"X-Requested-With": "fetch"}).status_code == 204
+    assert 'data-theme="dark"' in c.get("/cuenta").get_data(as_text=True)
+    other = client_for("claro@example.com")
+    assert 'data-theme="dark"' not in other.get("/cuenta").get_data(as_text=True)
+    c.post("/cuenta/tema", data={"_csrf": "t", "theme": ""})
+    assert 'data-theme="dark"' not in c.get("/cuenta").get_data(as_text=True)
+    assert c.post("/cuenta/tema", data={"theme": "dark"}).status_code == 400          # sin código de seguridad no vale

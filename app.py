@@ -237,6 +237,7 @@ class User(UserMixin, db.Model):
     country = db.Column(db.String(2), default="")
     country_other = db.Column(db.String(60), default="")       # si elige «Otro país», el que escribe
     username = db.Column(db.String(24), default="", index=True)   # @usuario en la web (se elige al entrar la primera vez)
+    theme = db.Column(db.String(8), default="")   # "dark" = modo oscuro (lo elige el usuario; por defecto claro)
 
     @property
     def country_name(self):
@@ -5280,6 +5281,17 @@ def withdraw():
         msgs.append(f"Whop no ha podido enviar {money(failed)}. No se te ha descontado: sigue en tu saldo.")
     flash(" ".join(msgs), "error" if failed and not paid and not waiting else "ok")
     return redirect(url_for("earnings", tab="retiros"))
+
+
+@app.route("/cuenta/tema", methods=["POST"])
+@login_required
+def set_theme():
+    """Modo oscuro: lo elige cada usuario (Ajustes o menú del perfil) y se guarda en su cuenta."""
+    current_user.theme = "dark" if request.form.get("theme") == "dark" else ""
+    db.session.commit()
+    if request.headers.get("X-Requested-With") == "fetch":
+        return ("", 204)
+    return redirect(url_for("account", _anchor="cuenta"))
 
 
 @app.route("/cuenta", methods=["GET", "POST"])

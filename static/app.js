@@ -1470,6 +1470,29 @@ document.addEventListener("change", function (e) {
   if (pv) pv.style.backgroundImage = "url('" + URL.createObjectURL(inp.files[0]) + "')";
 });
 
+// =============================================================== modo oscuro
+// Lo elige cada usuario (menú del perfil o Ajustes): cambia al momento y se guarda en su cuenta.
+function temaOscuro(on) {
+  var html = document.documentElement;
+  html.classList.add("theme-swap");                 // sin transiciones mientras cambian los colores
+  if (on) html.setAttribute("data-theme", "dark"); else html.removeAttribute("data-theme");
+  document.querySelectorAll("[data-theme-toggle]").forEach(function (x) { x.checked = on; });
+  requestAnimationFrame(function () { requestAnimationFrame(function () { html.classList.remove("theme-swap"); }); });
+}
+document.addEventListener("change", function (e) {
+  var t = e.target.closest && e.target.closest("[data-theme-toggle]");
+  if (!t) return;
+  temaOscuro(t.checked);
+  var body = new FormData();
+  body.append("_csrf", t.getAttribute("data-csrf") || "");
+  body.append("theme", t.checked ? "dark" : "");
+  fetch(t.getAttribute("data-url"), { method: "POST", body: body, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } }).catch(function () {});
+});
+document.addEventListener("turbo:load", function () {         // páginas guardadas por Turbo: el interruptor sigue al tema de verdad
+  var on = document.documentElement.getAttribute("data-theme") === "dark";
+  document.querySelectorAll("[data-theme-toggle]").forEach(function (x) { x.checked = on; });
+});
+
 // =============================================================== desplegables con el diseño de la web
 // Cada <select> se queda (escondido) para que el formulario funcione igual; encima va un botón y una lista propia.
 // En el móvil se usa el selector del teléfono, que es más cómodo con el dedo.
