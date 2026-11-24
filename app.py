@@ -125,7 +125,10 @@ BUNNY_API_KEY = os.environ.get("BUNNY_API_KEY", "").strip()
 BUNNY_TOKEN_KEY = os.environ.get("BUNNY_TOKEN_KEY", "").strip()     # opcional: solo se ven los vídeos desde la web
 BUNNY_CDN_HOST = os.environ.get("BUNNY_CDN_HOST", "").strip().removeprefix("https://").strip("/")   # vz-xxxx.b-cdn.net: miniaturas
 WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
-WHOP_APP_API_KEY = os.environ.get("WHOP_APP_API_KEY", "").strip()   # prueba de la opción 2: la app de Whop que instalan los creadores
+WHOP_APP_API_KEY = os.environ.get("WHOP_APP_API_KEY", "").strip()
+# «Conectar con Whop» para los clippers (OAuth de Whop): el código app_… de la app y, si Whop lo pide, su secreto
+WHOP_CLIENT_ID = os.environ.get("WHOP_CLIENT_ID", "").strip()
+WHOP_CLIENT_SECRET = os.environ.get("WHOP_CLIENT_SECRET", "").strip()   # prueba de la opción 2: la app de Whop que instalan los creadores
 WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip("/")
 WHOP_AUTO_MAX = float(os.environ.get("WHOP_AUTO_MAX", "50"))    # retiros por encima de esto los aprueba un admin (0 = sin tope)
 WHOP_AUTO_DAILY = float(os.environ.get("WHOP_AUTO_DAILY", "300"))  # máximo pagado solo en 24 h entre todos; lo que pase espera a un admin (0 = sin tope)
@@ -3619,7 +3622,7 @@ def static_url(filename):
 def inject_globals():
     return {"csrf_token": csrf_token, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "chan_icon": chan_icon, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
-            "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
+            "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_CLIENT_ID": WHOP_CLIENT_ID, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
             "FLAG_LABELS": FLAG_LABELS, "PAYOUT_DAYS": PAYOUT_DAYS, "YEAR": datetime.utcnow().year, "now_utc": datetime.utcnow(),
             "REFRESH_DAYS": REFRESH_DAYS, "REFRESH_HOURS": REFRESH_HOURS, "REFRESH_AT": REFRESH_AT, "next_scan_utc": next_scan_utc, "admin_counts": admin_counts, "unread_messages": unread_messages, "notice_data": notice_data, "new_leads": new_leads,
@@ -7382,6 +7385,78 @@ def tech_alert_count():
         return sum(1 for lvl, _, _ in tech_alerts() if lvl == "error") if is_tech() else 0
     except Exception:  # noqa: BLE001
         return 0
+
+
+def _whop_state():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(app.secret_key, salt="whop-connect")
+
+
+def whop_redirect_uri():
+    return (BASE_URL or request.url_root.rstrip("/")) + "/auth/whop/callback"
+
+
+@app.route("/cobros/whop/conectar")
+@login_required
+def whop_connect():
+    """«Conectar con Whop»: el clipper entra en su Whop y autoriza; así no se puede equivocar de cuenta."""
+    if not WHOP_CLIENT_ID:
+        flash("Aún no se puede conectar con el botón: escribe tu usuario de Whop.", "error")
+        return redirect(url_for("account", _anchor="cobro"))
+    import base64
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    session["whop_pkce"] = verifier
+    state = _whop_state().dumps({"u": current_user.id, "n": secrets.token_urlsafe(8)})
+    params = {"response_type": "code", "client_id": WHOP_CLIENT_ID, "redirect_uri": whop_redirect_uri(),
+              "scope": "openid profile", "state": state, "nonce": secrets.token_urlsafe(12),
+              "code_challenge": challenge, "code_challenge_method": "S256"}
+    return redirect("https://api.whop.com/oauth/authorize?" + urlencode(params))
+
+
+@app.route("/auth/whop/callback")
+@login_required
+def whop_callback():
+    from itsdangerous import BadSignature
+    back = redirect(url_for("account", _anchor="cobro"))
+    if request.args.get("error"):
+        _flask_flash("Has cancelado la conexión con Whop.", "error")
+        return back
+    try:
+        st = _whop_state().loads(request.args.get("state", ""), max_age=900)
+    except BadSignature:
+        st = None
+    verifier = session.pop("whop_pkce", "")
+    if not st or st.get("u") != current_user.id or not verifier or not request.args.get("code"):
+        code = note_error("no se pudo comprobar la vuelta de Whop (conectar cuenta)", kind="aviso",
+                          detail=f"state={'ok' if st else 'mal'} verifier={'sí' if verifier else 'no'}")
+        _flask_flash(f"No se pudo conectar con Whop. Inténtalo otra vez. (Código {code})", "error")
+        return back
+    body = {"grant_type": "authorization_code", "code": request.args["code"], "redirect_uri": whop_redirect_uri(),
+            "client_id": WHOP_CLIENT_ID, "code_verifier": verifier}
+    if WHOP_CLIENT_SECRET:
+        body["client_secret"] = WHOP_CLIENT_SECRET
+    try:
+        tok = requests.post("https://api.whop.com/oauth/token", json=body, timeout=15).json()
+        info = requests.get("https://api.whop.com/oauth/userinfo", timeout=15,
+                            headers={"Authorization": f"Bearer {tok.get('access_token', '')}"}).json()
+    except (requests.RequestException, ValueError):
+        import traceback
+        code = note_error("Whop no respondió al conectar la cuenta", traceback.format_exc(), kind="aviso")
+        _flask_flash(f"Whop no respondió. Inténtalo otra vez. (Código {code})", "error")
+        return back
+    uid, uname = str(info.get("sub") or ""), str(info.get("preferred_username") or "").lstrip("@")
+    if not uid.startswith("user_"):
+        code = note_error("Whop no devolvió la cuenta al conectar", f"token={ {k: tok.get(k) for k in ('error', 'error_description')} }",
+                          kind="aviso")
+        _flask_flash(f"No se pudo conectar con Whop. Inténtalo otra vez. (Código {code})", "error")
+        return back
+    current_user.whop_user_id, current_user.whop_username = uid, (uname or uid)[:80]
+    current_user.payout_method = WHOP_METHOD
+    db.session.commit()
+    audit("whop_conectado", f"@{current_user.whop_username} ({uid})")
+    _flask_flash(f"Whop conectado: @{current_user.whop_username}. Cuando retires, el dinero te llegará al momento.", "ok")
+    return back
 
 
 @app.route("/admin/ajustes/probar-app-whop", methods=["POST"])

@@ -3768,3 +3768,30 @@ def test_book_call_tracks_plan_and_button():
         assert (l.plan, l.button) == ("Pro", "Precios")
     page = client_for("admin@test.com").get("/admin/solicitudes").get_data(as_text=True)
     assert "Reservas por plan" in page and "Plan: <b>Pro</b>" in page
+
+
+def test_connect_whop_with_button(monkeypatch):
+    monkeypatch.setattr(A, "WHOP_CLIENT_ID", "app_x")
+    monkeypatch.setattr(A, "BASE_URL", "https://app.clipprofit.es")
+    monkeypatch.setattr(A, "whop_enabled", lambda: True)
+    c = client_for("juan@test.com")
+    assert "Conectar con Whop" in c.get("/cuenta").get_data(as_text=True)
+    r = c.get("/cobros/whop/conectar")
+    loc = r.headers["Location"]
+    assert loc.startswith("https://api.whop.com/oauth/authorize?") and "code_challenge_method=S256" in loc
+    assert "redirect_uri=https%3A%2F%2Fapp.clipprofit.es%2Fauth%2Fwhop%2Fcallback" in loc
+    state = loc.split("state=")[1].split("&")[0]
+    sent = {}
+    def fake_post(url, json=None, **k):
+        sent.update(json or {})
+        return type("R", (), {"json": lambda self: {"access_token": "t"}})()
+    monkeypatch.setattr(A.requests, "post", fake_post)
+    monkeypatch.setattr(A.requests, "get", lambda *a, **k: type("R", (), {"json": lambda self: {"sub": "user_abc", "preferred_username": "juanclips"}})())
+    from urllib.parse import unquote
+    r = c.get(f"/auth/whop/callback?code=xyz&state={unquote(state)}")
+    assert r.status_code == 302 and sent["code_verifier"] and sent["grant_type"] == "authorization_code"
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="juan@test.com").one()
+        assert (u.whop_user_id, u.whop_username, u.payout_method) == ("user_abc", "juanclips", A.WHOP_METHOD)
+    r = c.get("/auth/whop/callback?code=xyz&state=falso", follow_redirects=True)
+    assert "Código" in r.get_data(as_text=True)

@@ -51,14 +51,22 @@
             <input type="hidden" name="payout_method" value="{{ WHOP_METHOD }}"><button class="btn accent sm">Cobrar por Whop</button></form>
           {% endif %}
           {% endif %}
-          <form method="post" class="lst-sub"{% if whop_linked %} hidden data-whop-change{% endif %}>
+          <div class="lst-sub"{% if whop_linked %} hidden data-whop-change{% endif %}>
+          {% if WHOP_CLIENT_ID %}
+          <div class="lr lr-end lr-note"><small class="muted">Entras en tu Whop y autorizas. Así el dinero va siempre a tu cuenta.</small>
+            <a class="btn accent sm" href="{{ url_for('whop_connect') }}" data-turbo="false"><span class="whop-ico" aria-hidden="true"></span>Conectar con Whop</a></div>
+          <details class="whop-manual"><summary class="lr lr-go"><span class="lr-k small">O escribe tu usuario de Whop</span></summary>
+          {% endif %}
+          <form method="post" class="lst-sub">
             <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <input type="hidden" name="section" value="cobro">
             <input type="hidden" name="payout_method" value="{{ WHOP_METHOD }}">
             <label class="lr" for="whop_username"><span class="lr-k">Usuario de Whop</span>
               <input id="whop_username" class="lr-in" name="whop_username" placeholder="@tu_usuario" autocomplete="off" autocapitalize="none" spellcheck="false" required></label>
-            <div class="lr lr-end lr-note"><small class="muted">Lo ves en tu perfil de whop.com. El dinero va a esa cuenta: comprueba que es la tuya.</small><button class="btn accent sm">Conectar</button></div>
+            <div class="lr lr-end lr-note"><small class="muted">Lo ves en tu perfil de whop.com. El dinero va a esa cuenta: comprueba que es la tuya.</small><button class="btn {{ 'soft' if WHOP_CLIENT_ID else 'accent' }} sm">Conectar</button></div>
           </form>
+          {% if WHOP_CLIENT_ID %}</details>{% endif %}
+          </div>
           {% if whop_linked %}<button type="button" class="lr lr-go lr-btn" data-show-whop><span class="lr-k">Cambiar de cuenta de Whop</span></button>{% endif %}
         {% endif %}
       </div>
