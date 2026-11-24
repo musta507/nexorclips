@@ -139,6 +139,19 @@
 </div>
 
 <div class="tp" id="pagos" hidden>
+<div class="card tight form-stack crm-card">
+  <div class="crm-top">
+    <div><h3 style="margin:0">De dónde sale el dinero de los retiros</h3>
+      <p class="small muted" style="margin:4px 0 0">{% if creators_on %}<b>Cada creador paga desde su propio Whop.</b> El dinero va del Whop del creador al del clipper, sin pasar por ClipProfit. Las campañas sin creador asignado se pagan desde el Whop principal.{% else %}<b>Todo sale del Whop principal de ClipProfit</b> (la clave de Railway), aunque la campaña tenga creador.{% endif %}</p></div>
+    <span class="status {{ 'aprobado' if creators_on else 'pausada' }}">{{ "Cada creador" if creators_on else "Whop principal" }}</span>
+  </div>
+  <form method="post" action="{{ url_for('admin_creators_mode') }}" data-turbo="false" class="inline"
+        data-confirm="{{ '¿Volver a pagar todo desde el Whop principal de ClipProfit?' if creators_on else '¿Que cada creador pague desde su propio Whop? Las campañas con creador asignado necesitarán su Whop conectado para poder pagar.' }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="on" value="{{ '0' if creators_on else '1' }}">
+    <button class="btn sm {{ 'soft' if creators_on else '' }}">{{ "Volver al Whop principal" if creators_on else "Que cada creador pague desde su Whop" }}</button>
+    {% if creators_on %}<a class="btn sm" href="{{ url_for('admin_creators') }}">Ver creadores y sus Whop</a>{% endif %}
+  </form>
+</div>
 {% if creators_on %}<div class="card tight form-stack" id="app-whop">
   <h3 class="whop-h"><span class="whop-ico" aria-hidden="true"></span>Probar app de Whop (pagos desde el Whop del creador)</h3>
   {% if not has_app_key %}

@@ -105,7 +105,20 @@ SUPPORT_EMAILS = {e.strip().lower() for e in os.environ.get("SUPPORT_EMAILS", ""
 ADMIN_ROLES = {"owner": "Dueño", "reviewer": "Revisor", "support": "Soporte"}
 # Panel técnico (claves, errores, Apify, Whop, copias…): solo estos correos. Vacío = cualquier dueño (hasta configurarlo)
 TECH_EMAILS = {e.strip().lower() for e in os.environ.get("TECH_EMAILS", "").split(",") if e.strip()}
-CREATORS_ENABLED = False          # pagos desde el Whop de cada creador: en pausa hasta hablarlo con el cliente
+CREATORS_ENABLED = False          # valor de partida; el interruptor de verdad está en Panel técnico → Pagos (ajuste creators_mode)
+_creators_cache = {"v": None, "t": 0.0}
+
+
+def creators_on():
+    """¿Cada creador paga desde su propio Whop? (Panel técnico → Pagos). Se mira la base de datos como mucho cada 15 s."""
+    now = time.time()
+    if _creators_cache["v"] is None or now - _creators_cache["t"] > 15:
+        try:
+            _creators_cache["v"] = get_setting("creators_mode", "1" if CREATORS_ENABLED else "0") == "1"
+        except Exception:
+            _creators_cache["v"] = CREATORS_ENABLED
+        _creators_cache["t"] = now
+    return _creators_cache["v"]
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
@@ -1814,13 +1827,13 @@ def user_money(user):
     paid = cents(sum(p.amount for p in user.payouts if p.status == "pagado"))
     balance = cents(closed - withdrawn)
     # Saldo por creador: cada creador paga desde su Whop lo que se ganó en SUS campañas
-    by_creator = {}
+    by_creator, on_cr = {}, creators_on()
     for s_, a in earned_rows:
-        k = s_.campaign.creator_id if CREATORS_ENABLED else None
+        k = s_.campaign.creator_id if on_cr else None
         by_creator[k] = by_creator.get(k, 0) + a
     for p in user.payouts:
         if p.status in PAYOUT_OPEN + ("pagado",):
-            k = p.creator_id if CREATORS_ENABLED else None
+            k = p.creator_id if on_cr else None
             by_creator[k] = by_creator.get(k, 0) - p.amount
     by_creator = {k: cents(v) for k, v in by_creator.items() if cents(v) >= CENT}
     return {
@@ -3130,10 +3143,11 @@ def check_creator_balances():
     if get_setting("creators_checked", "") == today:
         return
     set_setting("creators_checked", today)
-    for r in (creators_overview() if CREATORS_ENABLED else []):
+    short = []
+    for r in (creators_overview() if creators_on() else []):
         if r["missing"]:
-            notify_phone(f"⚠️ A {r['c'].name} le falta saldo en Whop",
-                         f"Debe {money(r['owed'])} a clippers y tiene {money(r['balance'])}. Faltan {money(r['missing'])}.", tags="warning")
+            short.append(f"{r['c'].name}: debe {money(r['owed'])}, tiene {money(r['balance'])} (faltan {money(r['missing'])})")
+    set_setting("creators_short_list", json.dumps(short))                # sale como aviso en el panel (los del móvil están apagados)
 
 
 _leader_lock = GlobalLock(731900)       # quién lleva el reloj interno cuando hay varios procesos
@@ -3479,7 +3493,7 @@ def admin_can(endpoint, user=None):
     user = user or current_user
     if not getattr(user, "is_admin", False):
         return False
-    if endpoint in ("admin_creators", "admin_creator_form") and not CREATORS_ENABLED:
+    if endpoint in ("admin_creators", "admin_creator_form") and not creators_on():
         return False
     if endpoint in TECH_ENDPOINTS:
         return is_tech(user)
@@ -6638,7 +6652,7 @@ def admin_settings(app_test=None):
                     support_email=SUPPORT_EMAIL, verify=site_verify())
     return render_template("admin/settings.html", whop=whop, last_refresh=get_setting("last_refresh", "Nunca"), allow_wipe=ALLOW_WIPE,
                            api_info=api_info, bunny_info=bunny_info(), search=search_info(), bunny_report=bunny_report(),
-                           alerts=tech_alerts(), creators_on=CREATORS_ENABLED, tech_set=bool(TECH_EMAILS),
+                           alerts=tech_alerts(), creators_on=creators_on(), tech_set=bool(TECH_EMAILS),
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
                            my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count(),
@@ -7301,6 +7315,14 @@ def owed_total():
 def tech_alerts():
     """Avisos técnicos para el panel técnico: [(nivel, título, texto)]. Nivel: error · aviso."""
     out = []
+    if creators_on():
+        try:
+            short = json.loads(get_setting("creators_short_list", "[]") or "[]")
+        except ValueError:
+            short = []
+        if short:
+            out.append(("error", "A algún creador no le llega el saldo de Whop", " · ".join(short[:5]) +
+                        ". Sus retiros se quedan esperando hasta que meta saldo."))
     try:
         day = datetime.utcnow() - timedelta(hours=24)
         n_err = (ErrorLog.query.filter(db.func.coalesce(ErrorLog.last_at, ErrorLog.created_at) >= day,
@@ -7457,6 +7479,22 @@ def whop_callback():
     audit("whop_conectado", f"@{current_user.whop_username} ({uid})")
     _flask_flash(f"Whop conectado: @{current_user.whop_username}. Cuando retires, el dinero te llegará al momento.", "ok")
     return back
+
+
+@app.route("/admin/ajustes/pagos-creadores", methods=["POST"])
+@admin_required
+def admin_creators_mode():
+    """Interruptor: cada creador paga desde su Whop (encendido) o todo desde el Whop principal (apagado)."""
+    if not is_tech():
+        abort(403)
+    on = request.form.get("on") == "1"
+    set_setting("creators_mode", "1" if on else "0")
+    _creators_cache["v"] = None
+    audit("pagos_creadores", "encendido" if on else "apagado")
+    db.session.commit()
+    flash("Ahora cada creador paga desde su propio Whop." if on else
+          "Ahora todos los retiros salen del Whop principal de ClipProfit.", "ok")
+    return redirect(url_for("admin_settings", _anchor="pagos"))
 
 
 @app.route("/admin/ajustes/probar-app-whop", methods=["POST"])
@@ -8484,7 +8522,7 @@ def creator_company_id(creator):
 
 def wallet(creator_id):
     """(clave, empresa, nombre) del Whop del que sale el dinero de un creador; sin creador = la cuenta principal."""
-    if creator_id and CREATORS_ENABLED:
+    if creator_id and creators_on():
         c = db.session.get(Creator, creator_id)
         if c:
             return creator_key(c), creator_company_id(c), c.name
@@ -8524,7 +8562,7 @@ def whop_enabled():
     """¿Se puede pagar por Whop? Con la cuenta principal o con el Whop de algún creador."""
     if WHOP_API_KEY and whop_company_id():
         return True
-    return CREATORS_ENABLED and any(creator_key(c) for c in Creator.query.all())
+    return creators_on() and any(creator_key(c) for c in Creator.query.all())
 
 
 def whop_lookup_key():

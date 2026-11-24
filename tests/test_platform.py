@@ -1108,7 +1108,7 @@ def test_campaign_full_blocks_new_requests(monkeypatch):
 
 
 def test_whop_app_test_box(monkeypatch):
-    monkeypatch.setattr(A, "CREATORS_ENABLED", True)
+    monkeypatch.setattr(A, "creators_on", lambda: True)
     c, admin = _clipper_with_balance(monkeypatch)
     monkeypatch.setattr(A, "WHOP_APP_API_KEY", "apik_test")
     calls = []
@@ -1263,7 +1263,7 @@ def _two_creator_setup(monkeypatch):
 
 
 def test_withdraw_splits_by_creator_wallet(monkeypatch):
-    monkeypatch.setattr(A, "CREATORS_ENABLED", True)
+    monkeypatch.setattr(A, "creators_on", lambda: True)
     c, admin, crid, before = _two_creator_setup(monkeypatch)
     assert before["by_creator"].get(crid) == 40
     calls = _whop_fake(monkeypatch)
@@ -1281,7 +1281,7 @@ def test_withdraw_splits_by_creator_wallet(monkeypatch):
 
 
 def test_creator_without_key_keeps_money_reserved(monkeypatch):
-    monkeypatch.setattr(A, "CREATORS_ENABLED", True)
+    monkeypatch.setattr(A, "creators_on", lambda: True)
     c, admin, crid, before = _two_creator_setup(monkeypatch)
     monkeypatch.delenv("WHOP_KEY_PABLO")
     _whop_fake(monkeypatch)
@@ -1294,7 +1294,7 @@ def test_creator_without_key_keeps_money_reserved(monkeypatch):
 
 
 def test_creators_page_and_roles(monkeypatch):
-    monkeypatch.setattr(A, "CREATORS_ENABLED", True)
+    monkeypatch.setattr(A, "creators_on", lambda: True)
     c, admin, crid, before = _two_creator_setup(monkeypatch)
     html = admin.get("/admin/creadores").get_data(as_text=True)
     assert "Pablo" in html and "Conectado" in html
@@ -3795,3 +3795,17 @@ def test_connect_whop_with_button(monkeypatch):
         assert (u.whop_user_id, u.whop_username, u.payout_method) == ("user_abc", "juanclips", A.WHOP_METHOD)
     r = c.get("/auth/whop/callback?code=xyz&state=falso", follow_redirects=True)
     assert "Código" in r.get_data(as_text=True)
+
+
+def test_creators_payment_switch_in_tech_panel():
+    A._creators_cache["v"] = None
+    admin = client_for("admin@test.com")
+    page = admin.get("/admin/ajustes").get_data(as_text=True)
+    assert "De dónde sale el dinero de los retiros" in page and "Whop principal" in page
+    post(admin, "/admin/ajustes/pagos-creadores", on="1")
+    with A.app.app_context():
+        assert A.creators_on()
+    assert "Cada creador paga desde su propio Whop" in admin.get("/admin/ajustes").get_data(as_text=True)
+    post(admin, "/admin/ajustes/pagos-creadores", on="0")
+    with A.app.app_context():
+        assert not A.creators_on()
