@@ -3322,6 +3322,8 @@ def _auto_refresh_loop():
                     db.session.commit()
                 if _refresh_due():
                     fresh = run_daily_refresh()           # el día se marca al terminar; si se corta, se reintenta
+                if backup_due() and not refresh_pending():
+                    run_offsite_backup()                  # copia de la noche a Bunny Storage
                 due, day = reminders_due()
                 if due:                                   # justo después de la lectura (el aviso «no has publicado en 24 h» se quitó el 24 nov)
                     set_setting("reminders_sent", day)
@@ -3686,7 +3688,7 @@ ROLE_ENDPOINTS = {
 }
 
 
-TECH_ENDPOINTS = {"admin_settings", "admin_backups_ok", "admin_errors", "admin_notes", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
+TECH_ENDPOINTS = {"admin_settings", "admin_backups_ok", "admin_backup_now", "admin_errors", "admin_notes", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
                   "admin_demo", "admin_my_demo", "admin_wipe", "admin_activity", "admin_activity_delete", "admin_creators", "admin_creator_form"}
 
 
@@ -3844,7 +3846,7 @@ def static_url(filename):
 
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": csrf_token, "DARK_MODE": DARK_MODE, "REQUIRE_CREATOR": REQUIRE_CREATOR, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "staff_keys": staff_keys, "staff_home_url": staff_home_url, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
+    return {"csrf_token": csrf_token, "DARK_MODE": DARK_MODE, "REQUIRE_CREATOR": REQUIRE_CREATOR, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "storage_ready": storage_ready, "BACKUP_AT": BACKUP_AT, "staff_keys": staff_keys, "staff_home_url": staff_home_url, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "chan_icon": chan_icon, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_CLIENT_ID": WHOP_CLIENT_ID, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
@@ -7193,7 +7195,20 @@ def _db_stats():
     return {"ping": ping, "size": size, "size_txt": _mb(size), "tables": top, "n_tables": len(tables),
             "rest": {"n": len(rest), "rows": sum(r[1] for r in rest), "bytes": sum(r[2] for r in rest)},
             "growth": growth, "growth_txt": (("+" if growth >= 0 else "−") + _mb(abs(growth))) if growth is not None else "",
-            "last_copy": last_copy.created_at if last_copy else None, "backups_ok": get_setting("backups_ok", "")}
+            "last_copy": last_copy.created_at if last_copy else None, "backups_ok": get_setting("backups_ok", ""),
+            "backup": backup_last()}
+
+
+def backup_check():
+    """Estado de la copia de la noche para «Lista para abrir»: ok si la última salió bien hace menos de 36 h."""
+    if not storage_ready():
+        return "bad"
+    j, b = job_info("copia"), backup_last()
+    if j and not j.get("ok"):
+        return "bad"
+    if b.get("when") and datetime.utcnow() - b["when"] < timedelta(hours=36):
+        return "ok"
+    return "warn"
 
 
 def _hours24():
@@ -7390,6 +7405,11 @@ def health_data():
         j = job_info(key)
         jobs.append({"name": name, "state": ("ok" if j.get("ok") else "bad") if j else "off", "info": j.get("info") or "Aún no se ha hecho",
                      "last": _iso(j.get("at")), "secs": j.get("secs"), "next": nxt})
+    jc = job_info("copia")
+    jobs.append({"name": "Copia de seguridad (Bunny Storage)",
+                 "state": ("ok" if jc.get("ok") else "bad") if jc and storage_ready() else "off",
+                 "info": (jc.get("info") or "Aún no se ha hecho") if storage_ready() else "Apagado: faltan BUNNY_STORAGE_ZONE y BUNNY_STORAGE_KEY",
+                 "last": _iso(jc.get("at")), "secs": jc.get("secs"), "next": f"Cada día {BACKUP_AT}" if storage_ready() else "—"})
     jobs.append({"name": "Copias de vídeo (Bunny)", "state": "ok" if bunny_ready() else "off",
                  "info": "Copia los clips que llegan a revisión" if bunny_ready() else "Apagado: falta la clave", "last": None,
                  "next": "Cada 10 min" if bunny_ready() else "—"})
@@ -7436,9 +7456,12 @@ def health_data():
          "Todas tienen quien las pague" if not D["money"]["lonely"] else
          f"{D['money']['lonely']} {'campaña activa' if D['money']['lonely'] == 1 else 'campañas activas'} sin creador",
          "Ver campañas", url_for("admin_campaigns")),
-        ("ok" if D["db"]["backups_ok"] else "off", "Copias de seguridad diarias (Railway)",
-         f"Confirmado el {D['db']['backups_ok']}" if D["db"]["backups_ok"] else
-         "La web no puede verlo: Railway → Postgres → Backups → Daily", "" if D["db"]["backups_ok"] else "backup", ""),
+        (backup_check(),
+         "Copia de seguridad cada noche (Bunny)",
+         ("Última: " + _local(D["db"]["backup"]["when"]).strftime("%d/%m %H:%M") + " · " + _mb(D["db"]["backup"]["size"])
+          if D["db"]["backup"].get("when") else "Conectada; la primera se hace esta noche")
+         if storage_ready() else "Falta crear la Storage Zone en Bunny y poner sus 2 variables en Railway",
+         "Hacer copia ahora" if storage_ready() else "", "backup_now" if storage_ready() else ""),
         ("ok" if mail_ready() else ("bad" if PASSWORD_LOGIN else "warn"), "Correo conectado (Resend)",
          "Puesto: confirmar el correo, recuperar contraseña y avisos" if mail_ready() else
          "Falta RESEND_API_KEY y MAIL_FROM en Railway, y verificar clipprofit.es en Resend", "", ""),
@@ -9548,29 +9571,235 @@ BACKUP_SKIP = {("campaign", "cover_data"), ("message", "image_data"), ("course",
 @admin_required
 def admin_backup():
     """Copia de todos los datos (sin imágenes) en un archivo JSON, para guardarla fuera de Railway."""
-    from base64 import b64encode
-    out = {"app": APP_NAME, "created_at": datetime.utcnow().isoformat() + "Z", "tables": {}}
-    with db.engine.connect() as conn:
-        for table in db.metadata.sorted_tables:
-            cols = [c for c in table.columns if (table.name, c.name) not in BACKUP_SKIP]
-            rows = []
-            for r in conn.execute(db.select(*cols)):
-                row = {}
-                for c, v in zip(cols, r):
-                    if isinstance(v, datetime):
-                        v = v.isoformat()
-                    elif isinstance(v, (bytes, bytearray, memoryview)):
-                        v = b64encode(bytes(v)).decode()
-                    elif v is not None and not isinstance(v, (int, float, str, bool)):
-                        v = str(v)
-                    row[c.name] = v
-                rows.append(row)
-            out["tables"][table.name] = rows
-    audit("copia_descargada", f"{sum(len(v) for v in out['tables'].values())} filas")
+    buf = io.StringIO()
+    n = write_backup(buf)
+    audit("copia_descargada", f"{n} filas")
     db.session.commit()
     name = f"copia-{APP_NAME.lower().replace(' ', '-')}-{datetime.utcnow():%Y%m%d-%H%M}.json"
-    return Response(json.dumps(out, ensure_ascii=False), mimetype="application/json",
+    return Response(buf.getvalue(), mimetype="application/json",
                     headers={"Content-Disposition": f"attachment; filename={name}"})
+
+
+def _backup_val(v):
+    if isinstance(v, datetime):
+        return v.isoformat()
+    if isinstance(v, (bytes, bytearray, memoryview)):
+        return base64.b64encode(bytes(v)).decode()
+    if v is not None and not isinstance(v, (int, float, str, bool)):
+        return str(v)
+    return v
+
+
+def write_backup(fh):
+    """Escribe la copia (JSON: {app, created_at, tables: {tabla: [filas]}}) fila a fila, sin cargarla entera en memoria.
+    Devuelve cuántas filas lleva. Las imágenes (BACKUP_SKIP) no van: pesan mucho y no son datos del negocio."""
+    total = 0
+    fh.write(json.dumps({"app": APP_NAME, "created_at": datetime.utcnow().isoformat() + "Z"})[:-1] + ', "tables": {')
+    with db.engine.connect() as conn:
+        for i, table in enumerate(db.metadata.sorted_tables):
+            cols = [c for c in table.columns if (table.name, c.name) not in BACKUP_SKIP]
+            fh.write(("," if i else "") + json.dumps(table.name) + ":[")
+            res = conn.execution_options(stream_results=True, yield_per=500).execute(db.select(*cols))
+            for n, r in enumerate(res):
+                fh.write(("," if n else "") + json.dumps({c.name: _backup_val(v) for c, v in zip(cols, r)}, ensure_ascii=False))
+                total += 1
+            fh.write("]")
+    fh.write("}}")
+    return total
+
+
+def restore_backup(data):
+    """Vuelve a meter una copia en una base de datos VACÍA (la web recién creada). Devuelve cuántas filas metió."""
+    from sqlalchemy import Date, DateTime, LargeBinary
+    tables = data.get("tables") or {}
+    with db.engine.begin() as conn:
+        for table in db.metadata.sorted_tables:
+            if tables.get(table.name) and conn.execute(db.select(db.func.count()).select_from(table)).scalar():
+                raise RuntimeError(f"La tabla «{table.name}» no está vacía: la copia solo se mete en una base de datos nueva.")
+    total = 0
+    with db.engine.begin() as conn:
+        for table in db.metadata.sorted_tables:
+            rows = tables.get(table.name) or []
+            kinds = {c.name: c.type for c in table.columns}
+            batch = []
+            for row in rows:
+                clean = {}
+                for k, v in row.items():
+                    t_ = kinds.get(k)
+                    if t_ is None:
+                        continue                                  # columna que ya no existe
+                    if v is not None and isinstance(t_, DateTime):
+                        v = datetime.fromisoformat(v.replace("Z", ""))
+                    elif v is not None and isinstance(t_, Date):
+                        v = datetime.fromisoformat(v).date()
+                    elif v is not None and isinstance(t_, LargeBinary):
+                        v = base64.b64decode(v)
+                    clean[k] = v
+                batch.append(clean)
+                if len(batch) >= 500:
+                    conn.execute(table.insert(), batch)
+                    total, batch = total + len(batch), []
+            if batch:
+                conn.execute(table.insert(), batch)
+                total += len(batch)
+        if db.engine.dialect.name == "postgresql":           # que los números nuevos sigan después de los de la copia
+            for table in db.metadata.sorted_tables:
+                if "id" in table.columns and tables.get(table.name):
+                    conn.execute(text(f"SELECT setval(pg_get_serial_sequence('\"{table.name}\"', 'id'), "
+                                      f"(SELECT COALESCE(MAX(id), 1) FROM \"{table.name}\"))"))
+    return total
+
+
+@app.cli.command("restaurar-copia")
+def restore_backup_cmd():
+    """flask --app app restaurar-copia < copia.json(.gz): mete una copia en una base de datos vacía."""
+    import gzip
+    raw = sys.stdin.buffer.read()
+    if raw[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw)
+    with app.app_context():
+        db.create_all()
+        print(f"Copia restaurada: {restore_backup(json.loads(raw))} filas.")
+
+
+# Copia de cada noche fuera de Railway (24 nov, Mustapha): Railway solo programa copias en el plan Pro, así que la web
+# guarda la suya en Bunny Storage. Variables: BUNNY_STORAGE_ZONE (nombre de la zona) y BUNNY_STORAGE_KEY (su contraseña,
+# pestaña «FTP & API Access»); BUNNY_STORAGE_HOST solo si la zona no está en Falkenstein (p. ej. uk.storage.bunnycdn.com).
+BUNNY_STORAGE_ZONE = os.environ.get("BUNNY_STORAGE_ZONE", "").strip()
+BUNNY_STORAGE_KEY = os.environ.get("BUNNY_STORAGE_KEY", "").strip()
+BUNNY_STORAGE_HOST = (os.environ.get("BUNNY_STORAGE_HOST", "").strip().removeprefix("https://").strip("/")
+                      or "storage.bunnycdn.com")
+BACKUP_AT = os.environ.get("BACKUP_AT", "04:30")          # hora de España, después de la lectura de las 03:00
+BACKUP_KEEP_DAYS = 14                                     # las de cada día, 2 semanas
+BACKUP_KEEP_MONTHS = 6                                    # y la del día 1 de cada mes, medio año
+
+
+def storage_ready():
+    return bool(BUNNY_STORAGE_ZONE and BUNNY_STORAGE_KEY)
+
+
+def _storage_url(path=""):
+    return f"https://{BUNNY_STORAGE_HOST}/{BUNNY_STORAGE_ZONE}/copias/{path}"
+
+
+def backup_state():
+    try:
+        return json.loads(get_setting("backup_run", "") or "{}")
+    except ValueError:
+        return {}
+
+
+def backup_due(now=None):
+    """¿Toca la copia? Una al día a partir de BACKUP_AT; si falla, otro intento a la hora (hasta 3)."""
+    if not storage_ready():
+        return False
+    loc = _local(now)
+    if loc.strftime("%H:%M") < BACKUP_AT:
+        return False
+    st = backup_state()
+    day = loc.strftime("%Y-%m-%d")
+    if st.get("day") != day:
+        return True
+    if st.get("ok") or st.get("tries", 0) >= 3:
+        return False
+    last = st.get("at")
+    return not last or datetime.utcnow() - datetime.fromisoformat(last) > timedelta(minutes=60)
+
+
+def run_offsite_backup(now=None):
+    """Hace la copia, la sube comprimida a Bunny Storage (copias/copia-AAAA-MM-DD.json.gz) y borra las viejas."""
+    import gzip
+    import tempfile
+    t0 = datetime.utcnow()
+    day = _local(now).strftime("%Y-%m-%d")
+    st = backup_state()
+    tries = (st.get("tries", 0) if st.get("day") == day else 0) + 1
+    set_setting("backup_run", json.dumps({"day": day, "tries": tries, "at": t0.isoformat(timespec="seconds"), "ok": False}))
+    db.session.commit()
+    name = f"copia-{day}.json.gz"
+    try:
+        with tempfile.TemporaryFile() as tmp:
+            gz = gzip.GzipFile(fileobj=tmp, mode="wb")
+            txt = io.TextIOWrapper(gz, encoding="utf-8")
+            rows = write_backup(txt)
+            txt.flush()
+            txt.detach()
+            gz.close()
+            size = tmp.tell()
+            tmp.seek(0)
+            r = requests.put(_storage_url(name), data=tmp, timeout=600,
+                             headers={"AccessKey": BUNNY_STORAGE_KEY, "Content-Type": "application/octet-stream"})
+        if r.status_code == 401:
+            raise RuntimeError("Bunny rechaza la contraseña (401): revisa BUNNY_STORAGE_KEY (la de la Storage Zone, no la de vídeos)")
+        if r.status_code == 404:
+            raise RuntimeError("Bunny no encuentra la zona (404): revisa BUNNY_STORAGE_ZONE y, si no está en Falkenstein, BUNNY_STORAGE_HOST")
+        if r.status_code >= 300:
+            raise RuntimeError(f"Bunny Storage respondió {r.status_code}: {r.text[:150]}")
+        gone = prune_offsite_backups(_local(now).date())
+    except Exception as e:  # noqa: BLE001
+        log.error("No se pudo hacer la copia de seguridad: %s", e)
+        job_mark("copia", False, str(e)[:250], started=t0)
+        db.session.commit()
+        return False
+    set_setting("backup_run", json.dumps({"day": day, "tries": tries, "at": t0.isoformat(timespec="seconds"), "ok": True}))
+    set_setting("backup_last", json.dumps({"at": datetime.utcnow().isoformat(timespec="seconds"), "name": name,
+                                           "size": size, "rows": rows}))
+    job_mark("copia", True, f"{name} · {_mb(size)} · {rows:,} filas".replace(",", ".")
+             + (f" · {gone} antiguas borradas" if gone else ""), started=t0)
+    db.session.commit()
+    return True
+
+
+def prune_offsite_backups(today):
+    """Borra de Bunny las copias de más de 14 días, salvo la del día 1 de cada mes (esas, 6 meses)."""
+    r = requests.get(_storage_url(), headers={"AccessKey": BUNNY_STORAGE_KEY, "Accept": "application/json"}, timeout=30)
+    if r.status_code != 200:
+        return 0
+    gone = 0
+    for o in r.json() or []:
+        m = re.match(r"copia-(\d{4})-(\d{2})-(\d{2})\.json\.gz$", o.get("ObjectName") or "")
+        if not m:
+            continue
+        d = datetime(int(m[1]), int(m[2]), int(m[3])).date()
+        age = (today - d).days
+        if age < BACKUP_KEEP_DAYS or (d.day == 1 and age < 31 * BACKUP_KEEP_MONTHS):
+            continue
+        if requests.delete(_storage_url(m[0]), headers={"AccessKey": BUNNY_STORAGE_KEY}, timeout=30).status_code < 300:
+            gone += 1
+    return gone
+
+
+def backup_last():
+    try:
+        b = json.loads(get_setting("backup_last", "") or "{}")
+    except ValueError:
+        return {}
+    if b.get("at"):
+        b["when"] = datetime.fromisoformat(b["at"])
+    return b
+
+
+@app.route("/admin/copia-ahora", methods=["POST"])
+@admin_required
+def admin_backup_now():
+    """Botón del Panel técnico: hace la copia a Bunny en este momento (en segundo plano: no hace esperar a la página)."""
+    if not storage_ready():
+        flash("Falta conectar Bunny Storage: pon BUNNY_STORAGE_ZONE y BUNNY_STORAGE_KEY en Railway.", "error")
+        return redirect(url_for("admin_settings", _anchor="salud"))
+    audit("copia_manual", "")
+    db.session.commit()
+
+    def go():
+        with app.app_context():
+            set_setting("backup_run", "")
+            db.session.commit()
+            run_offsite_backup()
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        go()
+    else:
+        threading.Thread(target=go, daemon=True).start()
+    flash("Haciendo la copia. En un minuto verás el resultado aquí, en «Tareas automáticas».", "ok")
+    return redirect(url_for("admin_settings", _anchor="salud"))
 
 
 @app.route("/admin/borrar-datos", methods=["POST"])

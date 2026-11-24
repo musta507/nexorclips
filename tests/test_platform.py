@@ -1224,6 +1224,55 @@ def test_campaign_analytics_series(monkeypatch):
     assert "data-chart-data" in page and "eCPM" in page
 
 
+def test_nightly_backup_to_bunny_and_restore(monkeypatch):
+    """Copia de la noche: se sube comprimida a Bunny Storage, se borran las viejas (salvo las del día 1) y se puede restaurar."""
+    import gzip, json as _json
+    c, admin = _clipper_with_balance(monkeypatch)
+    monkeypatch.setattr(A, "BUNNY_STORAGE_ZONE", "cp-copias")
+    monkeypatch.setattr(A, "BUNNY_STORAGE_KEY", "clave")
+    up, deleted = {}, []
+
+    class R:
+        def __init__(self, code, data=None):
+            self.status_code, self._d, self.text = code, data, ""
+        def json(self):
+            return self._d
+    def fake_put(url, data=None, **kw):
+        up[url] = data.read(); return R(201)
+    old = [{"ObjectName": n} for n in ("copia-2026-11-20.json.gz", "copia-2026-10-01.json.gz", "copia-2026-10-02.json.gz",
+                                       "copia-2026-01-01.json.gz", "otra-cosa.txt")]
+    monkeypatch.setattr(A.requests, "put", fake_put)
+    monkeypatch.setattr(A.requests, "get", lambda url, **kw: R(200, old))
+    monkeypatch.setattr(A.requests, "delete", lambda url, **kw: (deleted.append(url.rsplit("/", 1)[1]), R(200))[1])
+    now = A.datetime(2026, 11, 24, 4, 0)                          # 05:00 en España
+    with A.app.app_context():
+        assert A.backup_due(now)
+        assert A.run_offsite_backup(now)
+        assert not A.backup_due(now)                               # una al día
+        rows_users = A.User.query.count(); rows_camps = A.Campaign.query.count()
+    url = next(iter(up))
+    assert url == "https://storage.bunnycdn.com/cp-copias/copias/copia-2026-11-24.json.gz"
+    data = _json.loads(gzip.decompress(up[url]))
+    assert len(data["tables"]["user"]) == rows_users and len(data["tables"]["campaign"]) == rows_camps
+    assert sorted(deleted) == ["copia-2026-01-01.json.gz", "copia-2026-10-02.json.gz"]   # la del 1 de octubre se queda
+    assert "copia-2026-11-24.json.gz" in admin.get("/admin/ajustes").get_data(as_text=True)
+    with A.app.app_context():                                      # restaurar en una base de datos vacía
+        for t in reversed(A.db.metadata.sorted_tables):
+            A.db.session.execute(t.delete())
+        A.db.session.commit()
+        assert A.restore_backup(data) == sum(len(v) for v in data["tables"].values())
+        assert A.User.query.count() == rows_users and A.Campaign.query.count() == rows_camps
+        try:
+            A.restore_backup(data); assert False
+        except RuntimeError as e:
+            assert "no está vacía" in str(e)                       # nunca encima de datos que ya existen
+    monkeypatch.setattr(A.requests, "put", lambda url, **kw: R(401))
+    with A.app.app_context():
+        A.set_setting("backup_run", ""); A.db.session.commit()
+        assert not A.run_offsite_backup(now)
+        assert "401" in A.job_info("copia")["info"]
+
+
 def test_backup_and_wipe_blocked_in_production(monkeypatch):
     import json as _json
     c, admin = _clipper_with_balance(monkeypatch)
@@ -3956,12 +4005,10 @@ def test_health_tab_shows_real_figures():
         A.db.session.commit()
     page = admin.get("/admin/ajustes").get_data(as_text=True)
     assert "Vistas leídas en 3 de 3 clips" in page
-    # copias de Railway: Mustapha lo confirma a mano
-    assert "Ya lo activé" in page
-    admin.post("/admin/salud/copias", data={"_csrf": "t"})
-    assert "Confirmado el" in admin.get("/admin/ajustes").get_data(as_text=True)
+    # copia de la noche: sin Bunny Storage, la lista dice qué falta
+    assert "Falta crear la Storage Zone en Bunny" in page
     # un clipper no entra
-    assert client_for("c@test.com").post("/admin/salud/copias", data={"_csrf": "t"}).status_code in (302, 403)
+    assert client_for("c@test.com").post("/admin/copia-ahora", data={"_csrf": "t"}).status_code in (302, 403)
     assert A._ua_label("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) AppleWebKit Version/17.0 Mobile Safari/604.1") == "Safari en iPhone"
 
 

@@ -26,8 +26,8 @@
         {% for c in H.checklist %}
         <li><span class="sl-ic {{ c.state }}" aria-label="{{ ST[c.state] }}">{{ {"ok": "✓", "bad": "✕", "warn": "!", "off": "?"}[c.state] }}</span>
           <span class="sl-t">{{ c.title }}<small>{{ c.text }}</small></span>
-          {% if c.link == "backup" %}
-          <form method="post" action="{{ url_for('admin_backups_ok') }}" data-turbo="false"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="sl-a">Ya lo activé</button></form>
+          {% if c.url == "backup_now" %}
+          <form method="post" action="{{ url_for('admin_backup_now') }}" data-turbo="false"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="sl-a">{{ c.link }}</button></form>
           {% elif c.link %}<a class="sl-a" href="{{ c.url }}">{{ c.link }}</a>{% endif %}
         </li>
         {% endfor %}
@@ -75,7 +75,7 @@
         </tbody>
       </table>
       <p class="sl-hint">Responde en {{ '%.0f'|format(B.ping) }} ms. Última copia descargada a mano: {{ B.last_copy|ago if B.last_copy else "nunca" }}.
-        Copias diarias de Railway: {{ "confirmadas el " ~ B.backups_ok if B.backups_ok else "sin confirmar" }}.</p>
+        Copia de cada noche en Bunny: {{ ("la última " ~ B.backup.when|ago) if B.backup.when else "aún ninguna" }}.</p>
     </section>
     <section class="card sl-card">
       {% set R = H.read %}

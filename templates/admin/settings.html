@@ -191,8 +191,11 @@
 
 <div class="card tight">
   <h3>Copia de seguridad</h3>
-  <p class="small muted" style="margin:6px 0 12px">Descarga todos los datos (campañas, clips, clippers, retiros, mensajes, actividad) en un archivo. Las imágenes no van incluidas. Guárdala en tu ordenador o en Drive de vez en cuando, además de las copias de Railway.</p>
-  <a class="btn soft" href="{{ url_for('admin_backup') }}" data-turbo="false">Descargar copia de seguridad</a>
+  <p class="small muted" style="margin:6px 0 12px">Cada noche a las {{ BACKUP_AT }} la web guarda sola una copia de todos los datos (campañas, clips, clippers, retiros, mensajes, actividad; sin imágenes) en Bunny Storage, fuera de Railway: las de los últimos 14 días y la del día 1 de cada mes durante 6 meses. {% if not storage_ready() %}<b>Ahora está apagada: faltan BUNNY_STORAGE_ZONE y BUNNY_STORAGE_KEY en Railway.</b> {% endif %}También puedes descargar una ahora.</p>
+  <div class="inline" style="gap:8px;flex-wrap:wrap">
+    <a class="btn soft" href="{{ url_for('admin_backup') }}" data-turbo="false">Descargar copia de seguridad</a>
+    {% if storage_ready() %}<form method="post" action="{{ url_for('admin_backup_now') }}" data-turbo="false"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft">Guardar copia en Bunny ahora</button></form>{% endif %}
+  </div>
 </div>
 
 <div class="card tight toolbar">
