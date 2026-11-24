@@ -9667,8 +9667,8 @@ def restore_backup_cmd():
 # pestaña «FTP & API Access»); BUNNY_STORAGE_HOST solo si la zona no está en Falkenstein (p. ej. uk.storage.bunnycdn.com).
 BUNNY_STORAGE_ZONE = os.environ.get("BUNNY_STORAGE_ZONE", "").strip()
 BUNNY_STORAGE_KEY = os.environ.get("BUNNY_STORAGE_KEY", "").strip()
-BUNNY_STORAGE_HOST = (os.environ.get("BUNNY_STORAGE_HOST", "").strip().removeprefix("https://").strip("/")
-                      or "storage.bunnycdn.com")
+BUNNY_STORAGE_HOST = (os.environ.get("BUNNY_STORAGE_HOST", "").strip().removeprefix("https://").split("/")[0]
+                      or "storage.bunnycdn.com")          # aunque peguen la dirección entera de Bunny, solo vale el host
 BACKUP_AT = os.environ.get("BACKUP_AT", "04:30")          # hora de España, después de la lectura de las 03:00
 BACKUP_KEEP_DAYS = 14                                     # las de cada día, 2 semanas
 BACKUP_KEEP_MONTHS = 6                                    # y la del día 1 de cada mes, medio año
