@@ -4254,10 +4254,7 @@ def register():
     if too_many_fails("reg:" + (request.remote_addr or "")):
         flash("Has creado varias cuentas seguidas. Inténtalo más tarde.", "error")
         return back
-    if not name:
-        flash("Escribe tu nombre.", "error")
-        return back
-    if not EMAIL_RE.match(email):
+    if not EMAIL_RE.match(email):                       # el nombre ya no se pide aquí: va en «Crea tu perfil» (Mustapha, 24 nov)
         flash("Escribe un correo válido.", "error")
         return back
     if len(password) < 8:
@@ -4280,7 +4277,7 @@ def register():
     if mail_ready():                                   # hay que confirmar el correo antes de usar la web
         send_confirm_mail(user)
         return redirect(url_for("confirm_pending"))
-    flash(f"¡Bienvenido, {name}! Completa tu perfil para empezar.", "ok")
+    flash("¡Bienvenido! Completa tu perfil para empezar.", "ok")
     return redirect(url_for("onboarding"))
 
 

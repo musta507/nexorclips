@@ -823,7 +823,7 @@ def test_email_register_and_login():
     r = c.post("/registro", data={"_csrf": "t", "name": "Lu", "email": "admin@test.com", "password": "12345678"}, follow_redirects=True)
     assert "se entra con Google" in r.get_data(as_text=True)
     r = c.post("/registro", data={"_csrf": "t", "name": "Lu", "email": "Lu@Test.com", "password": "12345678"}, follow_redirects=True)
-    assert "Bienvenido, Lu" in r.get_data(as_text=True)
+    assert "¡Bienvenido! Completa tu perfil" in r.get_data(as_text=True)
     c.get("/salir")
     c2 = A.app.test_client()
     with c2.session_transaction() as s:
@@ -3962,7 +3962,8 @@ def test_register_with_email_must_confirm(monkeypatch):
     c = A.app.test_client()
     with c.session_transaction() as se:
         se["_csrf"] = "t"
-    r = c.post("/registro", data={"_csrf": "t", "name": "Leo Ruiz", "email": "leo@test.com", "password": "una-clave-larga"})
+    assert 'name="name"' not in c.get("/login?modo=registro").get_data(as_text=True)     # el nombre va en «Crea tu perfil»
+    r = c.post("/registro", data={"_csrf": "t", "email": "leo@test.com", "password": "una-clave-larga"})
     assert r.headers["Location"].endswith("/confirmar-correo")
     assert len(sent) == 1 and sent[0]["to"] == ["leo@test.com"] and "Confirmar mi correo" in sent[0]["html"]
     assert c.get("/campanas").headers["Location"].endswith("/confirmar-correo")          # sin confirmar, no entra

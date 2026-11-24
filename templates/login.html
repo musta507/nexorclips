@@ -20,7 +20,6 @@
       {% if mode == "registro" %}
       <form method="post" action="{{ url_for('register') }}" class="form-stack">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-        <div class="field"><label for="r-name">Nombre</label><input id="r-name" name="name" value="{{ form_name }}" autocomplete="name" required maxlength="120"></div>
         <div class="field"><label for="r-email">Correo</label><input id="r-email" name="email" type="email" value="{{ form_email }}" autocomplete="email" required></div>
         <div class="field"><label for="r-pass">Contraseña</label><input id="r-pass" name="password" type="password" autocomplete="new-password" minlength="8" required><span class="hint">Mínimo 8 caracteres.</span></div>
         <button class="btn accent block">Crear cuenta</button>
