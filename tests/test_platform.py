@@ -4221,3 +4221,153 @@ def test_only_safe_image_formats_are_opened():
         return FileStorage(stream=b, filename="x." + fmt.lower())
     assert A.process_avatar(up("PNG")) is not None
     assert A.process_avatar(up("TIFF")) is None and A.process_avatar(up("BMP")) is None
+
+
+# ---------------------------------------------------------------- auditoría de ingeniería (24 nov)
+def test_audit_whop_no_answer_never_pays_twice(monkeypatch):
+    """Si Whop no responde (corte, tiempo agotado, fallo 5xx) no sabemos si el dinero salió: el pago se queda en cola y
+    se reintenta con la MISMA clave. Antes se cancelaba, el dinero «volvía» y al pagar otra vez salía un segundo pago."""
+    monkeypatch.setattr(A, "CLIPPER_WITHDRAW", False)
+    cid = make_campaign(rate=100, budget=1000)
+    admin = client_for("admin@test.com")
+    a = client_for("wt@test.com", tiktok="wtt")
+    post(a, f"/campana/{cid}", url=tt("wtt", 21))
+    approve_all(admin)
+    set_views(monkeypatch, {str(7300000000000000021): 100_000})
+    with A.app.app_context():
+        A.refresh_views()
+        u = A.User.query.filter_by(email="wt@test.com").one()
+        u.created_at = A.datetime.utcnow() - A.timedelta(days=30); A.db.session.commit(); uid = u.id
+    calls = _whop_fake(monkeypatch)
+    post(a, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="wtt")
+    monkeypatch.setattr(A, "whop_balance", lambda cr: (1000.0, ""))
+    post(admin, f"/admin/campana/{cid}/cerrar")
+    keys = []
+
+    def no_answer(method, url, **kw):
+        if method == "POST" and "/transfers" in url:
+            keys.append(kw["json"]["idempotence_key"])
+            raise A.requests.ConnectionError("tiempo agotado")
+        return _R(200, {})
+    monkeypatch.setattr(A.requests, "request", no_answer)
+    post(admin, f"/admin/campana/{cid}/pagar", act="pagar", uids=[str(uid)])
+    with A.app.app_context():
+        p = A.Payout.query.filter_by(campaign_id=cid).one()
+        assert p.status == "solicitado" and p.error                       # sigue pendiente, NO devuelto al saldo
+        rows = A.campaign_pay_rows(A.db.session.get(A.Campaign, cid))
+        assert rows[0]["owed"] == 0                                        # no se le puede volver a pagar aparte
+    assert "Whop no respondió" in admin.get(f"/admin/campana/{cid}/pagar").get_data(as_text=True)
+    monkeypatch.setattr(A.requests, "request", lambda m, url, **kw: (keys.append(kw["json"]["idempotence_key"]) if m == "POST" else None)
+                        or _R(201, {"id": "xfer_9", "status": "succeeded"}))
+    post(admin, f"/admin/campana/{cid}/pagar", act="seguir")
+    with A.app.app_context():
+        ps = A.Payout.query.filter_by(campaign_id=cid).all()
+        assert len(ps) == 1 and ps[0].status == "pagado"
+    assert len(keys) == 2 and keys[0] == keys[1]                          # la misma clave: Whop no paga dos veces
+
+
+def test_audit_clippers_function_cannot_pay(monkeypatch):
+    """Un mod con la función «Clippers» (ver fichas) no puede pagar ni marcar retiros desde esa pantalla."""
+    c, admin = _clipper_with_balance(monkeypatch)
+    _whop_fake(monkeypatch)
+    post(c, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    monkeypatch.setattr(A, "WHOP_AUTO_MAX", 1.0)                            # que el retiro se quede esperando
+    post(c, "/ganancias/retirar")
+    mod = client_for("vermod@test.com")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="vermod@test.com").one(); u.staff_perms = "clippers"; A.db.session.commit()
+        pid = A.Payout.query.one().id
+    assert mod.get("/admin/clippers").status_code == 200
+    assert mod.post("/admin/clippers", data={"_csrf": "t", "payout_id": pid, "action": "pagar"}).status_code == 403
+    with A.app.app_context():
+        assert A.Payout.query.one().status == "solicitado"
+
+
+def test_audit_mod_cannot_raise_own_campaign_permissions():
+    cid = make_campaign()
+    admin = client_for("admin@test.com")
+    boss = client_for("jefemod@test.com")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="jefemod@test.com").one(); u.staff_perms = "mods"
+        A.db.session.add(A.CampaignMod(campaign_id=cid, user_id=u.id, perms="revisar")); A.db.session.commit()
+        mid = A.CampaignMod.query.one().id
+    assert boss.post("/admin/mods", data={"_csrf": "t", "act": "permisos", "mid": mid, "perms": ["dinero", "estado"]}).status_code == 403
+    with A.app.app_context():
+        assert A.CampaignMod.query.one().perm_set == {"revisar"}
+
+
+def test_audit_clip_without_known_account_cannot_be_approved():
+    """Un vídeo de Instagram o YouTube enviado a mano no se puede aprobar hasta saber de qué cuenta es."""
+    cid = make_campaign(platforms="instagram")
+    admin = client_for("admin@test.com")
+    c = client_for("ig@test.com")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="ig@test.com").one()
+        A.db.session.add(A.CampaignMember(user_id=u.id, campaign_id=cid, status="aceptada"))
+        A.db.session.add(A.CampaignAccount(user_id=u.id, campaign_id=cid, platform="instagram", handle="mia", status="aceptada",
+                                           bio_verified=True))
+        A.db.session.commit()
+    post(c, "/mis-clips", campaign_id=str(cid), url="https://www.instagram.com/reel/AbCdEf123/")
+    with A.app.app_context():
+        s = A.Submission.query.one()
+        assert not s.author and not A.account_verified(s)
+        sid = s.id
+    r = post(admin, f"/admin/envio/{sid}/aprobar")
+    assert "Aún no sabemos de qué cuenta es" in r.get_data(as_text=True)
+    with A.app.app_context():
+        s = A.db.session.get(A.Submission, sid)
+        assert s.status == "pendiente"
+        s.author = "otra.persona"; A.db.session.commit()
+        assert not A.account_verified(s)
+        s.author = "mia"; A.db.session.commit()
+        assert A.account_verified(s)
+
+
+def test_audit_delete_real_users_needs_allow_wipe(monkeypatch):
+    """«Borrar usuarios de prueba» borraría a todos los clippers reales: en la web real va apagado como «Borrar datos»."""
+    admin = client_for("admin@test.com")
+    client_for("real@test.com")
+    monkeypatch.setattr(A, "ALLOW_WIPE", False)
+    r = post(admin, "/admin/ajustes/borrar-usuarios", confirm="ELIMINAR")
+    assert "desactivado" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.User.query.filter_by(email="real@test.com").first()
+    assert "Borrar los 1 usuarios" in admin.get("/admin/ajustes").get_data(as_text=True)
+
+
+def test_audit_signup_and_recover_caps(monkeypatch):
+    """Robots registrándose sin parar gastarían los 100 correos del día; y nadie puede llenar el correo de otro
+    pidiendo «He olvidado mi contraseña» sin parar."""
+    sent = _fake_resend(monkeypatch)
+    monkeypatch.setattr(A, "PASSWORD_LOGIN", True)
+    monkeypatch.setattr(A, "_login_fails", {})
+    monkeypatch.setattr(A, "SIGNUP_HOUR_MAX", 2)
+    for i in range(3):
+        c = A.app.test_client()
+        with c.session_transaction() as se:
+            se["_csrf"] = "t"
+        r = c.post("/registro", data={"_csrf": "t", "email": f"bot{i}@test.com", "password": "una-clave-larga"}, follow_redirects=True)
+    assert "muchas altas" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.User.query.filter(A.User.email.like("bot%")).count() == 2
+    monkeypatch.setattr(A, "_login_fails", {})
+    n0 = len(sent)
+    for _ in range(5):
+        c = A.app.test_client()
+        with c.session_transaction() as se:
+            se["_csrf"] = "t"
+        c.post("/recuperar", data={"_csrf": "t", "email": "bot0@test.com"})
+    assert len(sent) - n0 == A.RECOVER_HOUR_MAX
+
+
+def test_audit_tech_panel_does_not_load_every_user():
+    """El Panel técnico cuenta los usuarios reales en la base de datos y solo enseña los últimos 50."""
+    admin = client_for("admin@test.com")
+    with A.app.app_context():
+        for i in range(60):
+            A.db.session.add(A.User(email=f"real{i}@x.com", name=f"Real {i}"))
+        A.db.session.commit()
+        tu = A.test_users_summary()
+        assert tu["n"] >= 60 and len(tu["rows"]) == 50
+    page = admin.get("/admin/ajustes").get_data(as_text=True)
+    assert "los 50 últimos de" in page

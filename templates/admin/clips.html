@@ -111,7 +111,7 @@
         <div class="cr-appeal"><span class="small"><b>Se rechazó por:</b> {{ s.reject_reason or "—" }}</span><span class="small"><b>El clipper dice:</b> {{ s.appeal_text }}</span></div>
         {% endif %}
         {% if clip_stage(s) == 'estadisticas' %}<div class="cr-appeal warn"><span class="small">Esperando la verificación de vistas del clipper{% if s.stats_reason %} (le pediste otra: {{ s.stats_reason }}){% endif %}. Hasta que la suba no se puede aprobar.</span></div>{% endif %}
-        {% if not account_verified(s) %}<div class="cr-appeal warn"><span class="small">La cuenta {% if s.author %}@{{ s.author }} {% endif %}no está verificada en esta campaña: no se puede aprobar hasta que lo esté.</span></div>{% endif %}
+        {% if not account_verified(s) %}<div class="cr-appeal warn"><span class="small">{% if s.author %}La cuenta @{{ s.author }} no está verificada en esta campaña: no se puede aprobar hasta que lo esté.{% else %}Aún no sabemos de qué cuenta es este vídeo: se sabrá en la próxima lectura de vistas. Hasta entonces no se puede aprobar.{% endif %}</span></div>{% endif %}
 
         <div class="cr-body">
           <div class="cr-video">

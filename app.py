@@ -1235,7 +1235,7 @@ def campaign_channels(camp, deleted=False):
 
 
 def is_campaign_member(user, camp):
-    if getattr(user, "is_admin", False):
+    if getattr(user, "is_admin", False) or is_mod(user, camp.id):     # los mods de la campaña también ven y comentan el hub
         return True
     m = campaign_member(user.id, camp.id)
     return bool(m and m.status == "aceptada") or bool(campaign_accounts(user.id, camp.id, "aceptada"))
@@ -2000,11 +2000,14 @@ def profile_url(platform, handle):
 
 
 def account_verified(sub):
-    """¿El clip viene de una cuenta aceptada por el equipo en esta campaña?"""
+    """¿El clip viene de una cuenta aceptada por el equipo en esta campaña?
+    Auditoría 24 nov: si aún no sabemos de qué cuenta es el vídeo (Instagram o YouTube enviados a mano, antes de la
+    primera lectura), NO cuenta como verificado. Antes bastaba con tener alguna cuenta aceptada, y así se podía enviar y
+    aprobar el vídeo viral de otra persona y cobrarlo."""
+    if not sub.author:
+        return False
     ok = {a.handle for a in campaign_accounts(sub.user_id, sub.campaign_id, "aceptada", sub.platform)}
-    if sub.author:
-        return sub.author in ok
-    return bool(ok)
+    return sub.author in ok
 
 
 def check_growth(sub, new_views, likes):
@@ -2356,8 +2359,8 @@ def copy_candidates(ids=None):
         q = q.filter(Submission.id.in_(ids))
     else:
         q = q.filter(Submission.video_tries < 3)
-    subs = q.order_by(Submission.created_at).all()
-    return [s_ for s_ in subs if not is_fake(s_) and clip_stage(s_) != "contando"]
+    subs = q.options(joinedload(Submission.user), joinedload(Submission.campaign)).order_by(Submission.created_at).all()
+    return [s_ for s_ in subs if not is_fake(s_) and clip_stage(s_) != "contando"]       # (antes: 2 consultas por clip)
 
 
 def poll_bunny_copies():
@@ -3700,7 +3703,7 @@ ROLE_ENDPOINTS = {
 }
 
 
-TECH_ENDPOINTS = {"admin_settings", "admin_backups_ok", "admin_backup_now", "admin_errors", "admin_notes", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
+TECH_ENDPOINTS = {"admin_settings", "admin_backups_ok", "admin_backup_now", "admin_delete_test_users", "admin_errors", "admin_notes", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
                   "admin_demo", "admin_my_demo", "admin_wipe", "admin_activity", "admin_activity_delete", "admin_creators", "admin_creator_form"}
 
 
@@ -4056,6 +4059,8 @@ def login():
 
 
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
+SIGNUP_HOUR_MAX = int(os.environ.get("SIGNUP_HOUR_MAX", "30"))   # altas con correo sin confirmar en 1 h, entre todos
+RECOVER_HOUR_MAX = 3                                             # correos de «he olvidado mi contraseña» por cuenta y hora
 _login_fails = {}
 
 
@@ -4257,6 +4262,9 @@ def recover():
         _login_fails.setdefault(ip, []).append(time.time())
         email = (request.form.get("email") or "").strip().lower()
         user = User.query.filter_by(email=email).first() if email else None
+        if user and EmailLog.query.filter(EmailLog.user_id == user.id, EmailLog.kind == "recuperar",
+                                          EmailLog.created_at >= datetime.utcnow() - timedelta(hours=1)).count() >= RECOVER_HOUR_MAX:
+            user = None                                  # ya se le mandaron varios: no se llena su correo ni se gasta el cupo
         if user and user.password_hash and not user.is_banned:
             link = (BASE_URL or request.host_url.rstrip("/")) + url_for("recover_set", token=reset_token(user))
             lines = [f"Hola, {user.name}:", f"Para poner una contraseña nueva, pulsa el botón. El enlace vale {RESET_HOURS} hora.",
@@ -4302,12 +4310,13 @@ def login_email():
     email = (request.form.get("email") or "").strip().lower()
     password = request.form.get("password") or ""
     ip = request.remote_addr or ""
-    if too_many_fails(ip):
+    if too_many_fails(ip) or too_many_fails("em:" + email):    # por IP y también por cuenta (ataques desde muchas IP)
         flash("Demasiados intentos. Espera unos minutos y vuelve a probar.", "error")
         return redirect(url_for("login"))
     user = User.query.filter_by(email=email).first()
     if not user or not user.password_hash or not check_password_hash(user.password_hash, password):
         _login_fails.setdefault(ip, []).append(time.time())
+        _login_fails.setdefault("em:" + email, []).append(time.time())
         session["form_email"] = email[:255]
         if user and not user.password_hash:
             flash("Esa cuenta se creó con Google. Pulsa «Continuar con Google».", "error")
@@ -4343,6 +4352,11 @@ def register():
     if User.query.filter_by(email=email).first():
         flash("Ya hay una cuenta con ese correo. Entra con ella.", "error")
         return redirect(url_for("login"))
+    if mail_ready() and SIGNUP_HOUR_MAX and User.query.filter(               # auditoría 24 nov: altas en masa (robots) gastarían
+            User.password_hash != "", User.email_verified_at.is_(None),       # los 100 correos del día de Resend y nadie más
+            User.created_at >= datetime.utcnow() - timedelta(hours=1)).count() >= SIGNUP_HOUR_MAX:   # podría confirmar
+        flash("Ahora mismo hay muchas altas. Inténtalo en unos minutos o entra con Google.", "error")
+        return back
     user = User(email=email, name=name, password_hash=generate_password_hash(password), accepted_terms_at=datetime.utcnow())
     db.session.add(user)
     db.session.commit()
@@ -6410,6 +6424,8 @@ def admin_mods():
             flash(f"Funciones generales de {u.name} guardadas." if general else f"{u.name} ya no tiene funciones generales.", "ok")
         elif act == "permisos":
             row = db.session.get(CampaignMod, request.form.get("mid", type=int) or 0) or abort(404)
+            if row.user_id == current_user.id:          # un mod con «Mods de campaña» no se sube los permisos a sí mismo
+                abort(403)
             if not perms:
                 flash("Marca al menos un permiso (o quita al mod de esa campaña).", "error")
             else:
@@ -6418,11 +6434,15 @@ def admin_mods():
                 flash(f"Permisos de {row.user.name} en «{row.campaign.song}» guardados.", "ok")
         elif act == "quitar":
             row = db.session.get(CampaignMod, request.form.get("mid", type=int) or 0) or abort(404)
+            if row.user_id == current_user.id:
+                abort(403)
             audit("mod_quitado", f"{row.user.email} · «{row.campaign.song}»")
             flash(f"{row.user.name} ya no es mod de «{row.campaign.song}».", "ok")
             db.session.delete(row)
         elif act == "quitar_todo":
             uid = request.form.get("uid", type=int) or 0
+            if uid == current_user.id:
+                abort(403)
             rows = CampaignMod.query.filter_by(user_id=uid).all()
             for row in rows:
                 db.session.delete(row)
@@ -7570,7 +7590,7 @@ def admin_settings(app_test=None):
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
                            my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count(),
-                           test_users=[u for u in test_users() if not role_for(u.email)],
+                           tu=test_users_summary(),
                            notes=TechNote.query.order_by(TechNote.done, TechNote.created_at.desc()).limit(300).all(),
                            H=health_data())
 
@@ -8163,12 +8183,26 @@ def test_users():
             .order_by(User.created_at.desc()).all())
 
 
+def test_users_summary(limit=50):
+    """Para el Panel técnico: cuántos usuarios reales hay y los últimos, con sus clips contados en la base de datos.
+    (Antes se cargaban todos y sus clips uno a uno: con 10.000 usuarios el Panel técnico tardaba 20 s.)"""
+    q = User.query.filter(User.is_admin.is_(False), ~User.email.like(f"%{DEMO_DOMAIN}"))
+    n_clips = (db.session.query(Submission.user_id, db.func.count(Submission.id).label("n"))
+               .group_by(Submission.user_id).subquery())
+    rows = (q.outerjoin(n_clips, n_clips.c.user_id == User.id).add_columns(db.func.coalesce(n_clips.c.n, 0))
+            .order_by(User.created_at.desc()).limit(limit).all())
+    return {"n": q.count(), "rows": [(u, n) for u, n in rows if not role_for(u.email)]}
+
+
 @app.route("/admin/ajustes/borrar-usuarios", methods=["POST"])
 @admin_required
 def admin_delete_test_users():
     """Borra de una vez todos los usuarios reales de prueba con todo lo suyo. Los de demostración y los admins se quedan."""
-    if (current_user.admin_role or "owner") != "owner":
+    if (current_user.admin_role or "owner") != "owner" or not is_tech():
         abort(403)
+    if not ALLOW_WIPE:                    # con clippers reales esto borraría a todos y lo que se les debe: igual que «Borrar datos»
+        flash("Borrar usuarios está desactivado en la web real. Para activarlo un momento, añade ALLOW_WIPE=1 en Railway.", "error")
+        return redirect(url_for("admin_settings", _anchor="datos"))
     if (request.form.get("confirm") or "").strip().upper() != "ELIMINAR":
         flash("Para borrar los usuarios, escribe ELIMINAR en la casilla.", "error")
         return redirect(url_for("admin_settings", _anchor="datos"))
@@ -8345,8 +8379,9 @@ def tech_alerts():
 
 
 def tech_alert_count():
-    try:
-        return sum(1 for lvl, _, _ in tech_alerts() if lvl == "error") if is_tech() else 0
+    try:                                             # 2 min guardado: tech_alerts pregunta a Whop su saldo y, si Whop va lento,
+        return (ttl_cache("tech_alert_count", 120,   # cada página del panel esperaba (auditoría 24 nov)
+                          lambda: sum(1 for lvl, _, _ in tech_alerts() if lvl == "error")) if is_tech() else 0)
     except Exception:  # noqa: BLE001
         return 0
 
@@ -9204,9 +9239,12 @@ def admin_review(sid, accion):
     nxt = request.form.get("next", "")
     if accion == "aprobar":
         if not account_verified(sub):
-            who = f"@{sub.author}" if sub.author else f"de {PLATFORMS[sub.platform]}"
-            flash(f"No puedes aprobar este clip: la cuenta {who} de {sub.user.name} aún no está verificada. "
-                  "Verifícala desde su chat.", "error")
+            if not sub.author:
+                flash("Aún no sabemos de qué cuenta es este vídeo: se sabrá en la próxima lectura de vistas. "
+                      "Hasta entonces no se puede aprobar.", "error")
+            else:
+                flash(f"No puedes aprobar este clip: la cuenta @{sub.author} de {sub.user.name} aún no está verificada. "
+                      "Verifícala desde su chat.", "error")
             return _back()
         if needs_stats(sub):
             flash("Aún no puedes aprobarlo: falta que el clipper verifique las vistas.", "error")
@@ -9522,6 +9560,7 @@ def whop_find_user(username):
 
 
 WHOP_FAIL_NOTE = "No se pudo enviar por Whop. El dinero ha vuelto a tu saldo."
+WHOP_WAIT_NOTE = "Whop no ha respondido: lo volvemos a intentar (sin pagarte dos veces)."
 OLD_WHOP_FAIL_NOTE = "Pago automático pendiente de revisar"
 
 
@@ -9536,7 +9575,7 @@ def release_stuck_payouts(query=None):
 
 
 # ---------------------------------------------------------------- pagar una campaña de una vez
-PAY_RED_FLAGS = ("subida_rapida", "pocos_likes", "cuenta_de_otro")
+PAY_RED_FLAGS = ("subida_rapida", "pocos_likes", "cuenta_de_otro", "cuenta_no_declarada")
 
 
 def campaign_pay_rows(camp):
@@ -9618,9 +9657,11 @@ def run_campaign_payouts(ids):
             continue
         try:
             whop_pay(p_)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001        # no sabemos si salió: se queda en cola (misma clave al reintentar)
             log.exception("Fallo pagando el pago #%s", pid)
-            p_.status, p_.note, p_.error = "rechazado", WHOP_FAIL_NOTE, str(e)[:400]
+            db.session.rollback()
+            p_ = db.session.get(Payout, pid)
+            p_.status, p_.note, p_.error = "solicitado", WHOP_WAIT_NOTE, str(e)[:400]
         db.session.commit()
 
 
@@ -9631,8 +9672,10 @@ def admin_campaign_pay(cid):
     camp = db.session.get(Campaign, cid) or abort(404)
     if request.method == "POST":
         act = request.form.get("act", "")
-        if act == "seguir":                               # pagos que se quedaron en cola (p. ej. la web se reinició)
+        if act == "seguir":                               # pagos que se quedaron en cola (la web se reinició o Whop no respondió)
             queued = [p_.id for p_ in Payout.query.filter_by(campaign_id=cid, status="solicitado").all()]
+            Payout.query.filter(Payout.id.in_(queued or [0])).update({"error": ""}, synchronize_session=False)
+            db.session.commit()
             _start_payouts(queued)
             flash("Reanudando los pagos en cola.", "ok")
             return redirect(url_for("admin_campaign_pay", cid=cid))
@@ -9672,13 +9715,14 @@ def admin_campaign_pay(cid):
         return redirect(url_for("admin_campaign_pay", cid=cid))
     whop_sync(Payout.query.filter_by(campaign_id=cid, status="procesando").all())
     rows = campaign_pay_rows(camp)
-    queued = Payout.query.filter_by(campaign_id=cid, status="solicitado").count()
+    queued = Payout.query.filter_by(campaign_id=cid, status="solicitado", error="").count()
+    stuck = Payout.query.filter(Payout.campaign_id == cid, Payout.status == "solicitado", Payout.error != "").count()
     done = (Payout.query.filter(Payout.campaign_id == cid, Payout.status.in_(("pagado", "procesando")))
             .options(joinedload(Payout.user)).order_by(Payout.created_at.desc()).limit(200).all())
     bal = None
     if camp.status == "finalizada" and wallet_ready(camp.creator_id):
         bal, _ = whop_balance(camp.creator_id)
-    return render_template("admin/camp_pay.html", camp=camp, rows=rows, queued=queued, done=done, bal=bal,
+    return render_template("admin/camp_pay.html", camp=camp, rows=rows, queued=queued, stuck=stuck, done=done, bal=bal,
                            pend=pending_by_campaign().get(cid, {}), sec="pagos",
                            owed=cents(sum(r["owed"] for r in rows)),
                            ready=cents(sum(r["owed"] for r in rows if r["can_pay"] and r["level"] != "red")),
@@ -9716,6 +9760,15 @@ def _whop_apply(payout, ok, code, data):
         return "procesando"
     err = data.get("error")
     reason = data.get("failure_reason") or data.get("message") or (err.get("message") if isinstance(err, dict) else err)
+    if not ok and (code == 0 or code == 429 or code >= 500):
+        # Auditoría 24 nov: sin respuesta clara de Whop (se cortó la conexión, tardó demasiado o falló Whop por dentro)
+        # NO sabemos si el dinero salió. Antes se cancelaba y el dinero «volvía» al clipper: al pagarle otra vez salía un
+        # pago nuevo (con otra clave) y podía cobrar dos veces. Ahora se queda en cola y se reintenta con la MISMA clave:
+        # si el primero sí llegó, Whop no lo repite.
+        payout.status, payout.note = "solicitado", WHOP_WAIT_NOTE
+        payout.error = f"Whop {code}: {reason or str(data)[:300]}"[:400]
+        log.error("Whop: sin respuesta clara al pagar #%s (%s): queda en cola para reintentar", payout.id, code)
+        return "espera"
     payout.status, payout.note = "rechazado", WHOP_FAIL_NOTE      # se cancela solo: el dinero vuelve a su saldo
     payout.error = f"Whop {code}: {reason or str(data)[:300]}"[:400]
     log.error("Whop: fallo al pagar el retiro #%s (%s) %s", payout.id, code, str(data)[:500])
@@ -9737,8 +9790,8 @@ def whop_pay(payout):
     """Manda el retiro al saldo de Whop del clipper, desde el Whop del creador que paga esas campañas.
     Es seguro repetirlo: la clave de idempotencia evita pagar dos veces."""
     api_key, company, _ = wallet(payout.creator_id)
-    if not api_key or not company:
-        return _whop_apply(payout, False, 0, {"error": "El Whop de este creador no está conectado"})
+    if not api_key or not company:                    # seguro que no salió nada: se cancela (código -1, no «sin respuesta»)
+        return _whop_apply(payout, False, -1, {"error": "El Whop de este creador no está conectado"})
     key = f"{APP_NAME.lower().replace(' ', '')}-payout-{payout.id}"
     body = {"type": "balance", "amount": round(payout.amount, 2), "currency": "usd", "origin_id": company,
             "destination_id": payout.user.whop_user_id, "notes": f"Retiro #{payout.id} · {APP_NAME}"[:50],
@@ -10078,6 +10131,8 @@ def camp_admin_url(camp):
 @admin_required
 def admin_clippers():
     if request.method == "POST":
+        if not admin_can("admin_payouts"):          # auditoría 24 nov: ver clippers no basta para pagar o marcar retiros
+            abort(403)
         payout = db.session.get(Payout, request.form.get("payout_id", type=int) or 0) or abort(404)
         if payout.status != "solicitado":
             flash("Ese retiro ya estaba gestionado.", "error")
@@ -10093,7 +10148,9 @@ def admin_clippers():
             audit("retiro_whop", f"#{payout.id} {money(payout.amount)} a {payout.user.email} · {result} · {payout.ext_id}")
             db.session.commit()
             flash({"pagado": f"Enviado {money(payout.amount)} a @{payout.user.whop_username} por Whop.",
-                   "procesando": "Whop está procesando el pago. Se actualizará solo."}.get(
+                   "procesando": "Whop está procesando el pago. Se actualizará solo.",
+                   "espera": "Whop no ha respondido. El retiro sigue pendiente: vuelve a pulsar «Pagar con Whop» en un rato "
+                             "(si el primero llegó, Whop no lo repite)."}.get(
                 result, f"Whop no ha aceptado el pago ({payout.error}). El dinero ha vuelto al saldo del clipper."),
                 "ok" if result != "fallido" else "error")
             return redirect(url_for("admin_payouts"))
@@ -10127,7 +10184,11 @@ def admin_clippers():
         base = base.order_by(db.func.coalesce(agg.c.e, 0).desc(), User.created_at.desc())
     page = max(request.args.get("p", 1, type=int), 1)             # de 50 en 50 (la búsqueda y el orden van sobre todos)
     total = base.count()
-    rows = [(u, user_money(u), n) for u, n in base.limit(page * LIST_PAGE).all()]
+    page_rows = base.limit(page * LIST_PAGE).all()
+    if page_rows:                                  # clips (con su campaña) y retiros de los que se ven, en 3 consultas (antes 2 por fila)
+        User.query.filter(User.id.in_([u.id for u, _ in page_rows])).options(
+            selectinload(User.submissions).joinedload(Submission.campaign), selectinload(User.payouts)).all()
+    rows = [(u, user_money(u), n) for u, n in page_rows]
     now = datetime.utcnow()
     seen = db.session.query(db.func.count(User.id)).filter(User.is_admin.is_(False))
     activity = {"online": seen.filter(User.last_seen_at >= now - timedelta(seconds=ONLINE_FOR)).scalar(),
@@ -11419,8 +11480,7 @@ def open_notice(nid):
     if not n.read:
         n.read = True
         db.session.commit()
-    url = n.url or "/"
-    return redirect(url if url.startswith("/") and not url.startswith("//") else "/")
+    return redirect(safe_next(n.url or "/"))         # (safe_next también corta «/\\otra-web»)
 
 
 @app.route("/avisos/leer", methods=["POST"])
@@ -11566,7 +11626,7 @@ def support_mini():
 @login_required
 def chat_image(mid):
     m = db.session.get(Message, mid)
-    if not m or not m.image_mime or (m.user_id != current_user.id and not current_user.is_admin):
+    if not m or not m.image_mime or (m.user_id != current_user.id and not admin_can("admin_chat")):   # también mods con «Mensajes»
         abort(404)
     resp = Response(m.image_data, mimetype=m.image_mime)
     resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"

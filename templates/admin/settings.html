@@ -223,16 +223,16 @@
 <div class="card tight form-stack">
   <div>
     <h3>Usuarios reales de prueba</h3>
-    <p class="small muted">{% if test_users %}Hay {{ test_users|length }} {{ "usuario que se ha registrado" if test_users|length == 1 else "usuarios que se han registrado" }} de verdad (con Google o con correo). Al borrarlos desaparecen con todo lo suyo: clips, cuentas, mensajes y retiros. Los de demostración y los administradores no se tocan. No se puede deshacer.{% else %}No hay ningún usuario real registrado, aparte de los administradores.{% endif %}</p>
+    <p class="small muted">{% if tu.n %}Hay {{ tu.n }} {{ "usuario que se ha registrado" if tu.n == 1 else "usuarios que se han registrado" }} de verdad (con Google o con correo). Al borrarlos desaparecen con todo lo suyo: clips, cuentas, mensajes y retiros. Los de demostración y los administradores no se tocan. No se puede deshacer.{% if not allow_wipe %} <b>En la web real está desactivado: para usarlo, pon ALLOW_WIPE=1 en Railway y quítalo después.</b>{% endif %}{% else %}No hay ningún usuario real registrado, aparte de los administradores.{% endif %}</p>
   </div>
-  {% if test_users %}
-  <details class="answers"><summary>Ver quiénes son ({{ test_users|length }})</summary>
-    <ul class="tu-list">{% for u in test_users %}<li><b>{{ u.name }}</b> <span class="muted selectable">{{ u.email }}</span><span class="muted"> · {{ u.submissions|length }} clips · desde {{ u.created_at|date }}</span></li>{% endfor %}</ul>
+  {% if tu.n %}
+  <details class="answers"><summary>Ver quiénes son{% if tu.n > tu.rows|length %} (los {{ tu.rows|length }} últimos de {{ tu.n }}){% else %} ({{ tu.n }}){% endif %}</summary>
+    <ul class="tu-list">{% for u, n in tu.rows %}<li><b>{{ u.name }}</b> <span class="muted selectable">{{ u.email }}</span><span class="muted"> · {{ n }} clips · desde {{ u.created_at|date }}</span></li>{% endfor %}</ul>
   </details>
-  <form method="post" action="{{ url_for('admin_delete_test_users') }}" class="tu-form" data-confirm="¿Borrar {{ test_users|length }} usuarios con todos sus datos? No se puede deshacer.">
+  <form method="post" action="{{ url_for('admin_delete_test_users') }}" class="tu-form" data-confirm="¿Borrar {{ tu.n }} usuarios con todos sus datos? No se puede deshacer.">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <input name="confirm" placeholder="Escribe ELIMINAR" autocomplete="off" aria-label="Escribe ELIMINAR para confirmar" required>
-    <button class="btn red">Borrar los {{ test_users|length }} usuarios</button>
+    <button class="btn red"{% if not allow_wipe %} disabled{% endif %}>Borrar los {{ tu.n }} usuarios</button>
   </form>
   {% endif %}
 </div>

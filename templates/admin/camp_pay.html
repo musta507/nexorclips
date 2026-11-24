@@ -13,6 +13,9 @@
   </div>
   {% if camp.status != "finalizada" %}
   <p class="small muted">La campaña sigue abierta. Aquí ya puedes ver cuánto le toca a cada uno y sus comprobaciones; el botón de pagar sale cuando la campaña termine.</p>
+  {% elif stuck and not queued %}
+  <p class="small cpay-red">Whop no respondió en {{ stuck }} {{ "pago" if stuck == 1 else "pagos" }}. No sabemos si llegaron, así que siguen pendientes (no se ha devuelto el dinero para no pagar dos veces).</p>
+  <form method="post" data-turbo="false"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seguir"><button class="btn sm">Reintentar (sin pagar dos veces)</button></form>
   {% elif queued %}
   <p class="small"><span class="status procesando">Pagando…</span> Quedan {{ queued }} {{ "pago" if queued == 1 else "pagos" }} en cola. Esta página se actualiza sola.</p>
   <form method="post" data-turbo="false"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seguir"><button class="link small">¿Se ha parado? Seguir pagando</button></form>
