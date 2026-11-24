@@ -8,11 +8,21 @@
     <h2>{{ "Editar creador" if c.id else "Nuevo creador" }}</h2>
     <div class="field"><label for="name">Nombre del creador</label><input id="name" name="name" value="{{ c.name or '' }}" required placeholder="Ej.: Pablo Pérez"></div>
     <div class="field"><label for="contact">Contacto</label><input id="contact" name="contact" value="{{ c.contact or '' }}" placeholder="Correo o WhatsApp, para avisarle si le falta saldo"></div>
-    <div class="field"><label for="key_var">Variable de Railway con su clave de Whop</label>
+    <div class="cr-app">
+      <b>Conectar su Whop sin claves (recomendado)</b>
+      <ol class="small">
+        <li>Mándale al creador este enlace para instalar la app de ClipProfit en su Whop y aprobar el permiso de enviar pagos:<br>
+          {% if install_url %}<code class="selectable">{{ install_url }}</code>{% else %}<span style="color:var(--red-ink)">falta <code>WHOP_APP_ID</code> (o <code>WHOP_CLIENT_ID</code>) en Railway</span>{% endif %}</li>
+        <li>Pídele el código de su empresa: empieza por <code>biz_</code> y lo ve en la dirección de su panel de Whop (whop.com/dashboard/<b>biz_…</b>).</li>
+        <li>Pégalo abajo en «Código de su empresa» y deja vacía la variable de la clave.</li>
+      </ol>
+      {% if not app_key %}<p class="small" style="color:var(--red-ink);margin:0">Falta <code>WHOP_APP_API_KEY</code> en Railway: sin ella esta forma no puede pagar.</p>{% endif %}
+    </div>
+    <div class="field"><label for="key_var">Variable de Railway con su clave de Whop (forma antigua)</label>
       <input id="key_var" name="key_var" value="{{ c.key_var or '' }}" placeholder="WHOP_KEY_PABLO" list="env-keys" autocomplete="off" autocapitalize="characters" spellcheck="false">
       <datalist id="env-keys">{% for k in env_keys %}<option value="{{ k }}">{% endfor %}</datalist>
       <span class="hint">Solo el NOMBRE de la variable, no la clave. Tiene que empezar por WHOP_KEY_. La clave se pega en Railway, nunca aquí.</span></div>
-    <div class="field"><label for="company_id">Código de su empresa en Whop (opcional)</label><input id="company_id" name="company_id" value="{{ c.company_id or '' }}" placeholder="biz_…"><span class="hint">Si lo dejas vacío, la web lo averigua con su clave.</span></div>
+    <div class="field"><label for="company_id">Código de su empresa en Whop</label><input id="company_id" name="company_id" value="{{ c.company_id or '' }}" placeholder="biz_…"><span class="hint">Con la app instalada, es lo único que hace falta. Con la forma antigua, si lo dejas vacío, la web lo averigua con su clave.</span></div>
     <div class="field"><label for="notes">Notas</label><textarea id="notes" name="notes" rows="3">{{ c.notes or '' }}</textarea></div>
     <button class="btn">Guardar creador</button>
   </form>

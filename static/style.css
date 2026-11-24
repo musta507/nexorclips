@@ -3470,3 +3470,4 @@ body.bk-page{margin:0;background:#fff;font-family:var(--font);color:var(--ink)}
 @media (min-width:901px){.fcar .featured{grid-template-columns:var(--fcar-art,330px) minmax(0,1fr);padding:34px;gap:34px}.fcar .featured .art{width:var(--fcar-art,330px);height:var(--fcar-art,330px)}}
 .whop-manual > summary{list-style:none;cursor:pointer}.whop-manual > summary::-webkit-details-marker{display:none}
 .crm-card{margin-bottom:12px}.crm-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.cr-app{background:var(--soft);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}.cr-app ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}.cr-app code{word-break:break-all}

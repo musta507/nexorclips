@@ -3809,3 +3809,16 @@ def test_creators_payment_switch_in_tech_panel():
     post(admin, "/admin/ajustes/pagos-creadores", on="0")
     with A.app.app_context():
         assert not A.creators_on()
+
+
+def test_creator_paid_through_installed_app_without_key(monkeypatch):
+    monkeypatch.setattr(A, "creators_on", lambda: True)
+    monkeypatch.setattr(A, "WHOP_APP_API_KEY", "app-key")
+    monkeypatch.setattr(A, "WHOP_APP_ID", "app_123")
+    admin = client_for("admin@test.com")
+    page = admin.get("/admin/creadores/nuevo").get_data(as_text=True)
+    assert "https://whop.com/apps/app_123/install" in page and "sin claves" in page
+    post(admin, "/admin/creadores/nuevo", name="Pablo", company_id="biz_abc12345", key_var="")
+    with A.app.app_context():
+        c = A.Creator.query.filter_by(name="Pablo").one()
+        assert A.wallet(c.id) == ("app-key", "biz_abc12345", "Pablo") and A.wallet_ready(c.id)

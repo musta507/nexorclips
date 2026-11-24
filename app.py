@@ -141,7 +141,9 @@ WHOP_COMPANY_ID = os.environ.get("WHOP_COMPANY_ID", "").strip()
 WHOP_APP_API_KEY = os.environ.get("WHOP_APP_API_KEY", "").strip()
 # «Conectar con Whop» para los clippers (OAuth de Whop): el código app_… de la app y, si Whop lo pide, su secreto
 WHOP_CLIENT_ID = os.environ.get("WHOP_CLIENT_ID", "").strip()
-WHOP_CLIENT_SECRET = os.environ.get("WHOP_CLIENT_SECRET", "").strip()   # prueba de la opción 2: la app de Whop que instalan los creadores
+WHOP_CLIENT_SECRET = os.environ.get("WHOP_CLIENT_SECRET", "").strip()
+# La app de ClipProfit en Whop que instalan los creadores (sin claves): su app_… para el enlace de instalación
+WHOP_APP_ID = (os.environ.get("WHOP_APP_ID", "").strip() or WHOP_CLIENT_ID)   # prueba de la opción 2: la app de Whop que instalan los creadores
 WHOP_API = os.environ.get("WHOP_API_URL", "https://api.whop.com/api/v1").rstrip("/")
 WHOP_AUTO_MAX = float(os.environ.get("WHOP_AUTO_MAX", "50"))    # retiros por encima de esto los aprueba un admin (0 = sin tope)
 WHOP_AUTO_DAILY = float(os.environ.get("WHOP_AUTO_DAILY", "300"))  # máximo pagado solo en 24 h entre todos; lo que pase espera a un admin (0 = sin tope)
@@ -8137,12 +8139,13 @@ def creators_overview():
     rows, short = [], 0
     for c in Creator.query.order_by(Creator.name).all():
         key = creator_key(c)
-        company = creator_company_id(c) if key else ""
-        balance, err = whop_balance(c.id) if key and company else (None, "")
+        via_app = not key and bool(c.company_id and WHOP_APP_API_KEY)     # instaló la app de ClipProfit: sin clave
+        company = creator_company_id(c) if key else (c.company_id if via_app else "")
+        balance, err = whop_balance(c.id) if (key or via_app) and company else (None, "")
         owed = creator_owed(c.id)
         missing = cents(owed - balance) if balance is not None and balance + CENT < owed else 0
         short += 1 if missing else 0
-        rows.append({"c": c, "has_key": bool(key), "company": company, "balance": balance, "error": err or
+        rows.append({"c": c, "has_key": bool(key), "via_app": via_app, "company": company, "balance": balance, "error": err or
                      (_creator_company.get(c.key_var, {}).get("error", "") if key and not company else ""),
                      "owed": owed, "missing": missing, "campaigns": len(c.campaigns),
                      "live": sum(1 for x in c.campaigns if x.status == "activa")})
@@ -8154,7 +8157,8 @@ def creators_overview():
 @admin_required
 def admin_creators():
     env_keys = sorted(k for k in os.environ if CREATOR_KEY_RE.match(k))
-    return render_template("admin/creators.html", rows=creators_overview(), env_keys=env_keys,
+    return render_template("admin/creators.html", rows=creators_overview(), env_keys=env_keys, app_key=bool(WHOP_APP_API_KEY),
+                           install_url=f"https://whop.com/apps/{WHOP_APP_ID}/install" if WHOP_APP_ID else "",
                            main_ready=bool(WHOP_API_KEY and whop_company_id()), main_owed=creator_owed(None))
 
 
@@ -8199,7 +8203,8 @@ def admin_creator_form(crid=None):
                   f" Falta añadir la variable {key_var} en Railway con su clave de Whop."), "ok")
             return redirect(url_for("admin_creators"))
     env_keys = sorted(k for k in os.environ if CREATOR_KEY_RE.match(k))
-    return render_template("admin/creator_form.html", c=c, env_keys=env_keys)
+    return render_template("admin/creator_form.html", c=c, env_keys=env_keys, app_key=bool(WHOP_APP_API_KEY),
+                           install_url=f"https://whop.com/apps/{WHOP_APP_ID}/install" if WHOP_APP_ID else "")
 
 
 @app.route("/admin/campana/<int:cid>")
@@ -8525,7 +8530,10 @@ def wallet(creator_id):
     if creator_id and creators_on():
         c = db.session.get(Creator, creator_id)
         if c:
-            return creator_key(c), creator_company_id(c), c.name
+            key = creator_key(c)
+            if not key and c.company_id and WHOP_APP_API_KEY:     # sin clave: instaló la app de ClipProfit en su Whop
+                return WHOP_APP_API_KEY, c.company_id, c.name
+            return key, creator_company_id(c), c.name
         return "", "", "Creador borrado"
     return WHOP_API_KEY, (whop_company_id() if WHOP_API_KEY else ""), "Cuenta principal"
 
@@ -8562,7 +8570,7 @@ def whop_enabled():
     """¿Se puede pagar por Whop? Con la cuenta principal o con el Whop de algún creador."""
     if WHOP_API_KEY and whop_company_id():
         return True
-    return creators_on() and any(creator_key(c) for c in Creator.query.all())
+    return creators_on() and any(creator_key(c) or (c.company_id and WHOP_APP_API_KEY) for c in Creator.query.all())
 
 
 def whop_lookup_key():

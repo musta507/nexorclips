@@ -21,7 +21,8 @@
     <tr>
       <td data-label="Creador"><b>{{ r.c.name }}</b>{% if r.c.contact %}<div class="small muted selectable">{{ r.c.contact }}</div>{% endif %}</td>
       <td data-label="Whop">
-        {% if not r.c.key_var %}<span class="status pendiente">Sin clave</span>
+        {% if r.via_app %}<span class="status aprobado">Conectado con la app</span><div class="small muted selectable">{{ r.c.company_id }}</div>
+        {% elif not r.c.key_var %}<span class="status pendiente">Sin conectar</span>
         {% elif not r.has_key %}<span class="status rechazado">Falta {{ r.c.key_var }} en Railway</span>
         {% elif not r.company %}<span class="status rechazado">Clave no válida</span>{% if r.error %}<div class="small muted">{{ r.error }}</div>{% endif %}
         {% else %}<span class="status aprobado">Conectado</span><div class="small muted selectable">{{ r.company }}</div>{% endif %}
