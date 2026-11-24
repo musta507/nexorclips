@@ -25,6 +25,7 @@ from flask_login import (LoginManager, UserMixin, current_user, login_required,
                          login_user, logout_user)
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect as sa_inspect, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, selectinload
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -624,7 +625,7 @@ class Payout(db.Model):
 
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    admin_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)   # Mods: actividad de cada uno
     action = db.Column(db.String(60), nullable=False)
     detail = db.Column(db.String(500), default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
@@ -4876,7 +4877,11 @@ def submit_clip(camp, raw_url):
     db.session.add(Submission(user_id=current_user.id, campaign_id=camp.id, url=url, platform=platform,
                               video_key=f"{platform}:{vid}", author=author,
                               review_since=None if camp.min_for(platform) else datetime.utcnow()))
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:                         # doble clic o dos pestañas a la vez: el segundo ya no entra (antes, error 500)
+        db.session.rollback()
+        return False, "Ese vídeo ya se envió antes."
     if any(camp.min_for(p) for p in camp.platform_list):
         return True, "¡Clip enviado! Ya está contando vistas. Lo revisaremos cuando llegue al pago mínimo."
     return True, "¡Clip enviado! Lo revisaremos y empezará a sumar vistas."
@@ -5099,7 +5104,12 @@ def join_campaign(cid):
         answers.append([q, a])
     db.session.add(CampaignMember(user_id=current_user.id, campaign_id=cid,
                                   answers=json.dumps(answers, ensure_ascii=False) if answers else ""))
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:                         # doble clic: la solicitud ya estaba
+        db.session.rollback()
+        flash("Ya enviaste tu solicitud para esta campaña.", "info")
+        return back
     notify_phone(f"🙋 {current_user.name} quiere unirse", f"«{camp.song}». Revisa su solicitud.",
                  url_for("admin_home", _anchor="unirse"), tags="raising_hand")
     flash("¡Solicitud enviada! Te avisaremos cuando el equipo la revise.", "ok")
