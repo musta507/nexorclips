@@ -744,6 +744,7 @@ def test_pay_whole_campaign_with_checks(monkeypatch):
         A.db.session.commit()
     page = admin.get(f"/admin/campana/{cid}/pagar").get_data(as_text=True)
     assert "sigue abierta" in page and 'name="uids"' not in page                     # abierta: se ve, pero no se paga
+    assert "El botón se activa cuando termines la campaña" in page and "data-pay-btn disabled" in page
     assert "Ya no hace falta pedir retiros" in post(a, "/ganancias/retirar").get_data(as_text=True)
     assert "Por cobrar" in a.get("/ganancias").get_data(as_text=True)
     post(admin, f"/admin/campana/{cid}/cerrar")

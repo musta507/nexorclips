@@ -54,10 +54,14 @@
       </tbody>
     </table></div>
   </div>
-  {% if payable and camp.status == "finalizada" and not queued %}
+  {% if owed >= 0.01 %}
+  {% set live = payable and camp.status == "finalizada" and not queued %}
   <div class="cpay-bar">
-    <span class="small muted">El dinero va del Whop que paga la campaña directo al de cada clipper. A nadie se le paga dos veces.</span>
-    <button class="btn accent" data-pay-btn>Pagar <span data-pay-total>…</span></button>
+    <span class="small muted">{% if live %}El dinero va del Whop que paga la campaña directo al de cada clipper. A nadie se le paga dos veces.
+      {% elif queued %}Pagando ahora: espera a que termine.
+      {% elif camp.status != "finalizada" %}El botón se activa cuando termines la campaña (Ajustes → Cerrar campaña).
+      {% else %}Nadie de esta lista tiene su Whop conectado todavía: su dinero queda guardado hasta que lo conecten.{% endif %}</span>
+    <button class="btn accent" data-pay-btn{% if not live %} disabled{% endif %}>Pagar {% if live %}<span data-pay-total>…</span>{% else %}{{ owed|money }}{% endif %}</button>
   </div>
   {% endif %}
 </form>
