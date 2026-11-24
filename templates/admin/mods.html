@@ -10,6 +10,9 @@
   <div class="mods-checks">{% for k, label in perms.items() if k not in defaults %}<label class="check"><input type="checkbox" name="perms" value="{{ k }}"{% if k in on %} checked{% endif %}> {{ label }}{% if k in risky %} <span class="mods-risk">{{ risky[k] }}</span>{% endif %}</label>{% endfor %}</div>
 </div>
 {% endmacro %}
+{% macro staff_checks(staff_perms, on) %}
+<div class="mods-checks mods-staff">{% for k, v in staff_perms.items() %}<label class="check"><input type="checkbox" name="staff" value="{{ k }}"{% if k in on %} checked{% endif %}> <span><b>{{ v[0] }}</b>{% if v[4] %} <span class="mods-risk">{{ v[4] }}</span>{% endif %}<small class="muted">{{ v[1] }}</small></span></label>{% endfor %}</div>
+{% endmacro %}
 {% block content %}
 {% call ui.head("Mods", "Quién modera cada campaña, qué puede hacer y cuánto ha trabajado esta semana.") %}{% endcall %}
 
@@ -21,9 +24,12 @@
       <input id="mod-user" name="user" list="mod-users" required autocomplete="off" placeholder="Escribe su nombre" data-mod-pick>
       <input type="hidden" name="uid" data-mod-uid>
       <datalist id="mod-users">{% for i, n in pick %}<option value="{{ n }}" data-uid="{{ i }}"></option>{% endfor %}</datalist></div>
+    {% if boss %}<div class="field"><span class="label">Funciones generales</span>
+      {{ staff_checks(staff_perms, []) }}
+      <span class="hint">Cada una abre esa sección del panel en todas las campañas. Puede tener solo estas, sin ninguna campaña. El Panel técnico es siempre solo tuyo.</span></div>{% endif %}
     <div class="field"><span class="label">Campañas</span>
       <div class="mods-checks">{% for c in camps %}<label class="check"><input type="checkbox" name="campaigns" value="{{ c.id }}"> {{ c.song }}</label>{% else %}<span class="small muted">No hay campañas activas.</span>{% endfor %}</div></div>
-    <div class="field"><span class="label">Permisos</span>
+    <div class="field"><span class="label">Permisos en esas campañas</span>
       {{ perm_checks(perms, defaults, defaults, risky) }}
       <span class="hint">Vienen marcados los básicos. Los demás actívalos solo si confías en esa persona. Retiros, bloquear clippers y borrar campañas son siempre solo tuyos.</span></div>
     <button class="btn accent" style="align-self:flex-start">Añadir mod</button>
@@ -40,7 +46,7 @@
     <header class="mod-card-head">
       {{ av(m.user) }}
       <div class="mods-who"><b>{{ m.user.name }} <span class="mod-tag">MOD</span></b><span class="small muted">{{ m.user.email }}</span></div>
-      <form method="post" data-confirm="¿Quitar a {{ m.user.name }} como mod de todas sus campañas?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="quitar_todo"><input type="hidden" name="uid" value="{{ m.user.id }}"><button class="btn sm soft">Quitar de todo</button></form>
+      <form method="post" data-confirm="¿Quitar a {{ m.user.name }} como mod de todo{{ ' (campañas y funciones generales)' if boss }}?"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="quitar_todo"><input type="hidden" name="uid" value="{{ m.user.id }}"><button class="btn sm soft">Quitar de todo</button></form>
     </header>
     <div class="mod-act">
       <div><b class="tnum">{{ m.activity.clips }}</b><span>clips revisados</span></div>
@@ -51,6 +57,14 @@
     <span class="small muted">Últimos 7 días{% if m.last %} · última acción {{ m.last|ago }}{% else %} · aún sin actividad{% endif %}</span>
     {% if m.recent %}<details class="mod-recent"><summary class="small link">Ver lo último que ha hecho</summary>
       <ul>{% for l in m.recent %}<li><span class="act-tag">{{ l.action|replace("_", " ")|capitalize }}</span><span class="small">{{ l.detail|truncate(70, True, '…') }}</span><small class="muted">{{ l.created_at|ago }}</small></li>{% endfor %}</ul></details>{% endif %}
+    {% if boss %}<details class="mod-camp mod-general">
+      <summary><span class="mod-camp-name">Funciones generales</span><span class="small muted">{{ m.general|length }} de {{ staff_perms|length }}</span><span class="link small">Gestionar</span></summary>
+      <form method="post" class="form-stack" style="margin-top:10px">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="general"><input type="hidden" name="uid" value="{{ m.user.id }}">
+        {{ staff_checks(staff_perms, m.general) }}
+        <div class="inline" style="gap:8px"><button class="btn sm">Guardar funciones</button></div>
+      </form>
+    </details>{% elif m.general %}<p class="small muted">Funciones generales: {% for k in staff_perms if k in m.general %}{{ staff_perms[k][0] }}{{ ", " if not loop.last }}{% endfor %}</p>{% endif %}
     <div class="mod-camps">
       {% for r in m.rows %}{% set ps = r.perm_set %}
       <details class="mod-camp">

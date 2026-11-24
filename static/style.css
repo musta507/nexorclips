@@ -1585,6 +1585,11 @@ body.has-tabs>.site-footer{flex:none}
 .danger-menu .cr-menu{min-width:240px}.danger-menu hr{border:0;border-top:1px solid var(--line);margin:6px 0}
 .mods-add-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px}.mods-add-sum::-webkit-details-marker{display:none}.mods-add-sum svg{width:16px;height:16px}
 .mods-checks{display:flex;flex-wrap:wrap;gap:8px 18px}
+.mods-staff{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px 18px}
+.mods-staff .check{align-items:flex-start}
+.mods-staff .check>span{display:flex;flex-direction:column;gap:2px;line-height:1.35}
+.mods-staff small{font-size:12px}
+.mods-staff .mods-risk{align-self:flex-start;margin:2px 0}
 .mods-search{margin:16px 0 12px}.live-q{max-width:420px}
 .mods-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
 .mod-card{padding:16px;display:flex;flex-direction:column;gap:10px}

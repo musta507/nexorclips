@@ -6,12 +6,12 @@
   <title>{% if note.unread %}({{ note.unread }}) {% endif %}{% block title %}{{ APP_NAME }}{% endblock %}</title>
 </head>
 {% set ep = request.endpoint or "" %}
-{% set admin_page = ep.startswith("admin_") and current_user.is_authenticated and current_user.is_admin %}
+{% set admin_page = ep.startswith("admin_") and current_user.is_authenticated and (current_user.is_admin or admin_can(ep)) %}
 <body class="{{ 'admin-shell' if admin_page else 'has-tabs' }}{{ ' page-support' if ep == 'support' }}" data-notices="{{ url_for('notices') }}" data-unread="{{ note.unread }}" {% if current_user.is_authenticated and current_user.is_admin %}data-staff {% endif %}data-on-chat="{{ 1 if (request.endpoint or '') in ['support', 'admin_chat', 'admin_inbox'] else 0 }}">
   <a class="skip" href="#contenido">Saltar al contenido</a>
   <header class="topbar">
     <div class="wrap">
-      <a class="home-link" href="{{ url_for('admin_home') if admin_page else url_for('index') }}" aria-label="Inicio">{{ logo() }}{% if admin_page %}<span class="admin-tag adm-badge">{{ "Admin" if (current_user.admin_role or "owner") == "owner" else ADMIN_ROLES[current_user.admin_role] }}</span>{% endif %}</a>
+      <a class="home-link" href="{{ staff_home_url() if admin_page else url_for('index') }}" aria-label="Inicio">{{ logo() }}{% if admin_page %}<span class="admin-tag adm-badge">{{ "Mod" if not current_user.is_admin else ("Admin" if (current_user.admin_role or "owner") == "owner" else ADMIN_ROLES[current_user.admin_role]) }}</span>{% endif %}</a>
       {% if admin_page %}
       {% if admin_can("admin_find") %}<form class="adm-find" method="get" action="{{ url_for('admin_find') }}" role="search">{{ icon("search") }}<input type="search" name="q" placeholder="Buscar clipper, @cuenta o campaña" aria-label="Buscar en el panel" value="{{ request.args.get('q', '') if ep == 'admin_find' else '' }}"></form>{% else %}<span></span>{% endif %}
       {% else %}
@@ -63,6 +63,8 @@
             {% if current_user.is_admin %}
             <a href="{{ url_for('admin_home') }}">{{ icon("grid") }} Panel de admin</a>
             <a href="{{ url_for('admin_inbox') }}">{{ icon("inbox") }} Mensajes del panel{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
+            {% elif staff_keys() %}
+            <a href="{{ staff_home_url() }}">{{ icon("grid") }} Panel del equipo</a>
             {% endif %}
           </div>
           {% set mcs = mod_campaigns(current_user) %}{% if mcs %}<div class="pm-group"><a href="{{ url_for('modero') }}"><span class="mod-tag">MOD</span> Modero <small class="muted push">{{ mcs|length }} {{ "campaña" if mcs|length == 1 else "campañas" }}</small></a></div>{% endif %}

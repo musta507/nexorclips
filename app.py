@@ -230,6 +230,7 @@ class User(UserMixin, db.Model):
     email_verified_at = db.Column(db.DateTime, nullable=True)   # confirmó su correo (Google ya lo confirma)
     email_off = db.Column(db.Boolean, default=False)           # no quiere avisos por correo (los de su cuenta sí le llegan)
     admin_seen_ua = db.Column(db.String(200), default="")      # con qué dispositivo
+    staff_perms = db.Column(db.String(300), default="")        # funciones generales de un mod (STAFF_PERMS, separadas por comas)
     is_banned = db.Column(db.Boolean, default=False)
     ban_reason = db.Column(db.String(255), default="")
     payout_method = db.Column(db.String(60), default="")
@@ -1025,6 +1026,63 @@ MOD_PERMS = {"revisar": "Revisar clips", "verificar": "Pedir otra verificación 
              "estado": "Pausar, abrir/cerrar plazas y finalizar"}
 MOD_DEFAULT = ("revisar", "verificar", "solicitudes", "canales", "comentarios", "soporte")
 MOD_RISKY = {"dinero": "toca el dinero de la campaña", "estado": "puede cerrar la campaña"}
+
+# Funciones generales de un mod (24 nov, Mustapha: «todas las que tiene un admin y ahí puede elegir»). Cada casilla abre una
+# sección del panel en TODAS las campañas. Clave: (nombre, explicación, pantallas del panel, permisos de campaña que da en
+# todas, aviso si es arriesgada). El Panel técnico (y lo que solo se ve desde él: Creadores, Actividad) nunca se puede dar.
+STAFF_PERMS = {
+    "resumen": ("Resumen", "Las cifras generales del panel", {"admin_home"}, (), ""),
+    "revisar": ("Revisar clips y solicitudes", "En todas las campañas, sin añadirlo una a una",
+                {"admin_campaigns", "admin_clips", "admin_requests", "admin_campaign", "admin_campaign_review",
+                 "admin_campaign_requests", "admin_review", "admin_review_bulk", "admin_campaign_member",
+                 "admin_campaign_account", "admin_invites"}, ("revisar", "verificar", "solicitudes", "estadisticas"), ""),
+    "campanas": ("Crear y editar campañas", "Crear, editar, pausar y cerrar campañas, canales y soporte de cada campaña",
+                 {"admin_campaigns", "admin_campaign", "admin_campaign_form", "admin_campaign_duplicate", "admin_campaign_state",
+                  "admin_campaign_close", "admin_campaign_channels", "admin_campaign_content", "admin_campaign_csv",
+                  "admin_campaign_clippers", "admin_campaign_support", "admin_invites"}, tuple(MOD_PERMS),
+                 "toca presupuestos y tarifas"),
+    "retiros": ("Retiros", "Ver y enviar los retiros de los clippers", {"admin_payouts", "admin_payouts_csv"}, (), "mueve dinero"),
+    "destacado": ("Campaña destacada", "Elegir qué campaña sale destacada", {"admin_featured"}, (), ""),
+    "distribucion": ("Distribución", "Los planes de distribución", {"admin_dists", "admin_dist"}, (), ""),
+    "interesados": ("Creadores interesados", "Las reservas de llamada que llegan de la portada",
+                    {"admin_leads", "admin_lead_whatsapp", "admin_book_hours"}, (), ""),
+    "clippers": ("Clippers", "Buscar y ver la ficha de cualquier clipper", {"admin_clippers", "admin_clipper", "admin_find"},
+                 ("clippers",), ""),
+    "mensajes": ("Mensajes", "Leer y contestar el soporte general", {"admin_inbox", "admin_chat", "admin_chat_poll"}, (), ""),
+    "avisos": ("Avisos", "Enviar avisos y elegir los automáticos", {"admin_notify", "admin_auto_notices"}, (), ""),
+    "formacion": ("Formación", "Cursos y lecciones",
+                  {"admin_courses", "admin_course", "admin_lesson", "admin_lesson_video", "admin_lesson_video_status"}, (), ""),
+    "mods": ("Mods de campaña", "Añadir y quitar mods de campaña (las funciones generales solo las das tú)",
+             {"admin_mods", "admin_campaign_mods"}, (), "da permisos a otros"),
+}
+
+
+def staff_keys(user=None):
+    """Funciones generales de un mod (vacío para los admins, que ya lo tienen todo según su rol, y para el resto)."""
+    user = user or current_user
+    if not getattr(user, "is_authenticated", False) or getattr(user, "is_admin", False) or getattr(user, "is_banned", False):
+        return set()
+    return {k for k in (getattr(user, "staff_perms", "") or "").split(",") if k in STAFF_PERMS}
+
+
+def staff_endpoints(user=None):
+    return set().union(*(STAFF_PERMS[k][2] for k in staff_keys(user))) if staff_keys(user) else set()
+
+
+def staff_home_url(user=None):
+    """Primera pantalla del panel que puede abrir: el Resumen si lo tiene; si no, la primera de sus funciones."""
+    user = user or current_user
+    if getattr(user, "is_admin", False):
+        return url_for("admin_home")
+    first = {"resumen": "admin_home", "revisar": "admin_clips", "campanas": "admin_campaigns", "retiros": "admin_payouts",
+             "destacado": "admin_featured", "distribucion": "admin_dists", "interesados": "admin_leads",
+             "clippers": "admin_clippers", "mensajes": "admin_inbox", "avisos": "admin_notify", "formacion": "admin_courses",
+             "mods": "admin_mods"}
+    keys = staff_keys(user)
+    for k in STAFF_PERMS:
+        if k in keys:
+            return url_for(first[k])
+    return url_for("index")
 ENDPOINT_PERM = {"admin_campaign_review": "revisar", "admin_review": ("revisar", "verificar"), "admin_review_bulk": "revisar",
                  "admin_campaign_requests": "solicitudes", "admin_invites": "solicitudes", "admin_campaign_member": "solicitudes",
                  "admin_campaign_account": "solicitudes", "admin_campaign_channels": ("canales", "gestionar_canales"),
@@ -1037,7 +1095,8 @@ def mod_perms(user, cid):
     if not getattr(user, "is_authenticated", False) or not cid:
         return set()
     m = CampaignMod.query.filter_by(campaign_id=cid, user_id=user.id).first()
-    return m.perm_set if m else set()
+    general = set().union(*(STAFF_PERMS[k][3] for k in staff_keys(user))) if staff_keys(user) else set()
+    return (m.perm_set if m else set()) | set(general)             # lo de esta campaña + lo que le dan sus funciones generales
 
 
 def mod_can(user, cid, perm):
@@ -3340,7 +3399,7 @@ def before():
             return render_template("banned.html"), 403
         # Cuenta nueva: hasta completar «Crea tu perfil» (nombre, @usuario y país) no se entra en la web (Mustapha)
         if (not current_user.onboarded_at and not current_user.is_admin and request.endpoint not in ONBOARDING_FREE
-                and not mod_campaigns(current_user)):
+                and not mod_campaigns(current_user) and not staff_keys(current_user)):
             if request.method == "GET" and not request.path.startswith("/api/"):
                 return redirect(url_for("onboarding"))
     return None
@@ -3641,7 +3700,7 @@ def is_tech(user=None):
 def admin_can(endpoint, user=None):
     user = user or current_user
     if not getattr(user, "is_admin", False):
-        return False
+        return endpoint not in TECH_ENDPOINTS and endpoint in staff_endpoints(user)     # mod con funciones generales
     if endpoint in ("admin_creators", "admin_creator_form") and not creators_on():
         return False
     if endpoint in TECH_ENDPOINTS:
@@ -3654,7 +3713,7 @@ def admin_required(f):
     @wraps(f)
     @login_required
     def wrapper(*a, **kw):
-        if not current_user.is_admin or not admin_can(request.endpoint):
+        if not admin_can(request.endpoint):          # admin según su rol, o mod con esa función general
             abort(403)
         return f(*a, **kw)
     return wrapper
@@ -3673,6 +3732,8 @@ def staff_required(campaign_of):
             cid = campaign_of(kw)
             if request.endpoint in MOD_ENDPOINTS and cid and mod_can(current_user, cid, ENDPOINT_PERM.get(request.endpoint, "")):
                 g.mod_cid = cid
+                return f(*a, **kw)
+            if admin_can(request.endpoint):          # mod con funciones generales (p. ej. crear campañas, sin campaña aún)
                 return f(*a, **kw)
             abort(403)
         return wrapper
@@ -3783,7 +3844,7 @@ def static_url(filename):
 
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": csrf_token, "DARK_MODE": DARK_MODE, "REQUIRE_CREATOR": REQUIRE_CREATOR, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
+    return {"csrf_token": csrf_token, "DARK_MODE": DARK_MODE, "REQUIRE_CREATOR": REQUIRE_CREATOR, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "staff_keys": staff_keys, "staff_home_url": staff_home_url, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "chan_icon": chan_icon, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_CLIENT_ID": WHOP_CLIENT_ID, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
@@ -6285,6 +6346,8 @@ def admin_mods():
         chosen = set(request.form.getlist("perms"))
         perms = [p_ for p_ in MOD_PERMS if p_ in chosen]
         perm_str = ",".join(perms)
+        boss = current_user.is_admin                  # las funciones generales solo las da un admin (un mod no se las da a sí mismo)
+        general = [k for k in STAFF_PERMS if k in set(request.form.getlist("staff"))] if boss else []
         if act == "anadir":
             u = mod_pick_user(request.form.get("uid", type=int), request.form.get("user") or request.form.get("email") or "")
             cids = [int(x) for x in request.form.getlist("campaigns") if x.isdigit()]
@@ -6294,12 +6357,16 @@ def admin_mods():
                 flash(f"{u.name} ya es del equipo: puede hacerlo todo.", "info")
             elif u.is_banned:
                 flash("No puedes hacer mod a un usuario bloqueado.", "error")
-            elif not cids:
-                flash("Elige al menos una campaña.", "error")
-            elif not perms:
-                flash("Marca al menos un permiso.", "error")
+            elif u.id == current_user.id:
+                flash("No puedes cambiar tus propios permisos.", "error")
+            elif not cids and not general:
+                flash("Elige al menos una campaña o una función general.", "error")
+            elif cids and not perms:
+                flash("Marca al menos un permiso de campaña.", "error")
             else:
                 n = 0
+                if general:
+                    set_staff_perms(u, general)
                 for camp in Campaign.query.filter(Campaign.id.in_(cids)).all():
                     row = CampaignMod.query.filter_by(campaign_id=camp.id, user_id=u.id).first()
                     if row:
@@ -6310,8 +6377,19 @@ def admin_mods():
                                 "Te han dado permisos de moderador en esta campaña. Entra desde la campaña o desde tu menú.",
                                 f"/campana/{camp.id}", camp_id=camp.id)
                     n += 1
-                audit("mod_añadido", f"{u.email} · {len(cids)} campañas · {perm_str or 'todos'}")
-                flash(f"{u.name} es mod en {n} {'campaña nueva' if n == 1 else 'campañas nuevas'}.", "ok")
+                audit("mod_añadido", f"{u.email} · {len(cids)} campañas · {perm_str or 'todos'}"
+                      + (f" · generales: {','.join(general)}" if general else ""))
+                flash(f"{u.name} es mod" + (f" en {n} {'campaña nueva' if n == 1 else 'campañas nuevas'}" if cids else "")
+                      + (" con funciones generales" if general else "") + ".", "ok")
+        elif act == "general":
+            if not boss:
+                abort(403)
+            u = db.session.get(User, request.form.get("uid", type=int) or 0) or abort(404)
+            if u.is_admin or u.id == current_user.id:
+                abort(400)
+            set_staff_perms(u, general)
+            audit("mod_generales", f"{u.email} · {','.join(general) or 'ninguna'}")
+            flash(f"Funciones generales de {u.name} guardadas." if general else f"{u.name} ya no tiene funciones generales.", "ok")
         elif act == "permisos":
             row = db.session.get(CampaignMod, request.form.get("mid", type=int) or 0) or abort(404)
             if not perms:
@@ -6331,8 +6409,10 @@ def admin_mods():
             for row in rows:
                 db.session.delete(row)
             u = db.session.get(User, uid)
+            if u and boss:
+                u.staff_perms = ""
             audit("mod_quitado", f"{u.email if u else uid} · todas las campañas")
-            flash("Ya no es mod de ninguna campaña.", "ok")
+            flash("Ya no es mod de nada." if boss else "Ya no es mod de ninguna campaña.", "ok")
         else:
             abort(400)
         db.session.commit()
@@ -6344,7 +6424,10 @@ def admin_mods():
         if not r.user or not r.campaign:
             continue
         mods.setdefault(r.user_id, {"user": r.user, "rows": []})["rows"].append(r)
+    for u in User.query.filter(User.staff_perms.isnot(None), User.staff_perms != "", User.is_admin.is_(False)).all():
+        mods.setdefault(u.id, {"user": u, "rows": []})                  # mods solo con funciones generales
     for uid, m in mods.items():
+        m["general"] = staff_keys(m["user"])
         acts = dict(db.session.query(AuditLog.action, db.func.count(AuditLog.id))
                     .filter(AuditLog.admin_id == uid, AuditLog.created_at >= week).group_by(AuditLog.action).all())
         m["activity"] = {
@@ -6364,7 +6447,19 @@ def admin_mods():
         seen[(nm or "").lower()] = seen.get((nm or "").lower(), 0) + 1
     pick = [(i, n if seen[(n or "").lower()] == 1 else f"{n} #{i}") for i, n in pick if n]
     return render_template("admin/mods.html", pick=pick, mods=sorted(mods.values(), key=lambda m: m["user"].name.lower()),
-                           camps=camps, perms=MOD_PERMS, defaults=MOD_DEFAULT, risky=MOD_RISKY)
+                           camps=camps, perms=MOD_PERMS, defaults=MOD_DEFAULT, risky=MOD_RISKY, staff_perms=STAFF_PERMS,
+                           boss=current_user.is_admin)
+
+
+def set_staff_perms(user, keys):
+    """Guarda las funciones generales de un mod y, si es la primera vez, le avisa de que ya tiene panel."""
+    keys = [k for k in STAFF_PERMS if k in set(keys)]
+    had = bool(staff_keys(user))
+    user.staff_perms = ",".join(keys)
+    if keys and not had:
+        names = ", ".join(STAFF_PERMS[k][0] for k in keys)
+        notify_user(user.id, "mod", "Ahora tienes acceso al panel del equipo",
+                    f"Puedes entrar desde tu menú → «Panel del equipo». Tienes: {names}.", staff_home_url(user))
 
 
 DIST_PLATFORMS = ("tiktok", "instagram", "youtube")
@@ -6946,7 +7041,7 @@ def clips_page(camp_id=None):
     per = 12
     total = len(rows)
     shown = rows[: page * per]
-    camps = Campaign.query.filter(Campaign.status != DIST_STATUS).order_by(Campaign.created_at.desc()).all() if not acting_as_mod() else []
+    camps = Campaign.query.filter(Campaign.status != DIST_STATUS).order_by(Campaign.created_at.desc()).all() if not acting_as_mod() or admin_can("admin_clips") else []
     camp = db.session.get(Campaign, cid) if cid else None
     return render_template("admin/clips.html", rows=shown, total=total, more=total > len(shown), page=page, tab=tab, f=f,
                            q=request.args.get("q", ""), camps=camps, cid=cid, camp=camp, counts=counts,

@@ -2131,6 +2131,52 @@ def test_mods_page_and_permissions():
     assert clip_page.status_code in (200, 404)
 
 
+def test_mod_general_functions():
+    """Funciones generales: un mod sin campañas abre solo las secciones marcadas, en todas las campañas; nunca el Panel técnico."""
+    cid = make_campaign(song="Neón")
+    admin = client_for("admin@test.com")
+    ana = client_for("ana@test.com", tiktok="ana")
+    post(ana, f"/campana/{cid}", url=tt("ana", 1))
+    mod = client_for("gen@test.com", tiktok="genmod")
+    post(mod, f"/campana/{cid}", url=tt("genmod", 2))                        # el mod también es clipper
+    post(admin, "/admin/mods", act="anadir", email="gen@test.com", staff=["mensajes"])
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="gen@test.com").one()
+        assert u.staff_perms == "mensajes" and not A.CampaignMod.query.count()
+        assert A.Notice.query.filter_by(user_id=u.id, kind="mod").count() == 1
+    assert "Panel del equipo" in mod.get("/campanas").get_data(as_text=True)
+    page = mod.get("/admin/mensajes").get_data(as_text=True)
+    assert "admin-shell" in page and ">Mod<" in page and "Mensajes" in page and "Retiros" not in page
+    for path in ("/admin", "/admin/retiros", "/admin/ajustes", "/admin/clips", f"/admin/campana/{cid}/revisar", "/admin/mods"):
+        assert mod.get(path).status_code == 403, path
+    assert "gen@test.com" in admin.get("/admin/mods").get_data(as_text=True)
+    post(admin, "/admin/mods", act="general", uid=str(u.id), staff=list(A.STAFF_PERMS))   # todas
+    for path in ("/admin", "/admin/campanas", "/admin/clips", "/admin/solicitudes-clippers", f"/admin/campana/{cid}",
+                 f"/admin/campana/{cid}/revisar", f"/admin/campana/{cid}/solicitudes", f"/admin/campana/{cid}/clippers",
+                 f"/admin/campana/{cid}/editar", f"/admin/campana/{cid}/canales", f"/admin/campana/{cid}/soporte",
+                 "/admin/retiros", "/admin/destacado", "/admin/distribucion", "/admin/solicitudes", "/admin/clippers",
+                 "/admin/buscar?q=zzz", "/admin/mensajes", "/admin/avisos", "/admin/formacion", "/admin/mods",
+                 "/admin/campana/nueva"):
+        assert mod.get(path).status_code == 200, path
+    for path in ("/admin/ajustes", "/admin/actividad", "/admin/creadores", "/admin/errores"):
+        assert mod.get(path).status_code == 403, path                         # Panel técnico: nunca
+    with A.app.app_context():
+        mine = A.Submission.query.filter_by(user_id=u.id).one().id
+        other = A.Submission.query.filter(A.Submission.user_id != u.id).one().id
+        A.Submission.query.update({"views": 50000}); A.db.session.commit()
+    post(mod, f"/admin/envio/{mine}/aprobar")
+    post(mod, f"/admin/envio/{other}/aprobar")
+    with A.app.app_context():
+        assert get(A.Submission, mine).status == "pendiente"                  # sus propios clips, nunca
+        assert get(A.Submission, other).status == "aprobado"
+    post(mod, "/admin/mods", act="general", uid=str(u.id), staff=[])      # un mod no toca funciones generales
+    post(mod, "/admin/mods", act="anadir", email="ana@test.com", staff=["retiros"])
+    with A.app.app_context():
+        assert A.User.query.filter_by(email="ana@test.com").one().staff_perms in ("", None)
+    post(admin, "/admin/mods", act="quitar_todo", uid=str(u.id))
+    assert mod.get("/admin/mensajes").status_code == 403
+
+
 def test_whop_daily_cap_waits_for_admin(monkeypatch):
     """Por encima del tope diario de pagos automáticos, el retiro espera a un admin."""
     c, admin = _clipper_with_balance(monkeypatch)

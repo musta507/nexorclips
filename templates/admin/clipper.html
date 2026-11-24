@@ -14,7 +14,7 @@
   </div>
   {% if not user.is_admin %}
   <div class="inline" style="flex-wrap:wrap">
-    <a class="btn accent" href="{{ url_for('admin_chat', uid=user.id) }}">{{ icon("chat") }} Chat{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>
+    {% if admin_can('admin_chat') %}<a class="btn accent" href="{{ url_for('admin_chat', uid=user.id) }}">{{ icon("chat") }} Chat{% if unread %} <span class="count">{{ unread }}</span>{% endif %}</a>{% endif %}
     {% if admin_can('admin_ban') %}
     <details class="cr-more danger-menu">
       <summary class="btn soft" aria-label="Más opciones">···</summary>
