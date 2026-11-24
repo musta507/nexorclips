@@ -3485,6 +3485,12 @@ body.bk-page{margin:0;background:var(--card);font-family:var(--font);color:var(-
 .au-msg{color:var(--ink-2)}
 .au-new{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:var(--soft);color:var(--muted);font-size:12px;font-weight:600;vertical-align:1px}
 .au-save{margin-top:16px}
+.lr-sub{display:block;font-size:12px;font-weight:400;margin-top:2px}
+.lr-k:has(.lr-sub){flex:1;min-width:0}
+.au-cols{display:flex;justify-content:flex-end;gap:16px;margin:16px 0 -8px;font-size:12px;font-weight:600;color:var(--muted)}
+.au-cols span{width:42px;display:flex;justify-content:center;white-space:nowrap;overflow:visible}
+.au-row .tg+.tg{margin-left:0}
+.au-warn{margin:8px 0 0;color:#b54708}
 
 /* =============================================================== Panel técnico → Salud (24 nov) */
 .sl{display:flex;flex-direction:column;gap:16px}

@@ -1470,6 +1470,16 @@ document.addEventListener("change", function (e) {
   if (pv) pv.style.backgroundImage = "url('" + URL.createObjectURL(inp.files[0]) + "')";
 });
 
+// Ajustes → «Avisos por correo»
+document.addEventListener("change", function (e) {
+  var t = e.target.closest && e.target.closest("[data-mail-toggle]");
+  if (!t) return;
+  var b = new FormData(); b.append("_csrf", t.getAttribute("data-csrf") || ""); b.append("on", t.checked ? "1" : "0");
+  fetch(t.getAttribute("data-url"), { method: "POST", body: b, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
+    .then(function (r) { if (!r.ok) throw 0; toast(t.checked ? "Te llegarán avisos por correo" : "Ya no te llegarán avisos por correo", "ok"); })
+    .catch(function () { t.checked = !t.checked; toast("No se pudo guardar. Inténtalo otra vez.", "error"); });
+});
+
 // Avisos → «Automáticos»: cada casilla se guarda al momento
 document.addEventListener("change", function (e) {
   var f = e.target.closest && e.target.closest("form[data-auto-notices]");
@@ -1478,9 +1488,10 @@ document.addEventListener("change", function (e) {
   fetch(f.action, { method: "POST", body: new FormData(f), credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
     .then(function (r) {
       if (!r.ok) throw 0;
-      var n = f.querySelectorAll("input[type=checkbox]:checked").length, b = document.querySelector('[data-tab="automaticos"] b');
+      var n = f.querySelectorAll("input[type=checkbox]:checked:not([name^=mail_])").length, b = document.querySelector('[data-tab="automaticos"] b');
       if (b) b.textContent = n;
-      toast(e.target.checked ? "Aviso encendido" : "Aviso apagado", "ok");
+      var via = /^mail_/.test(e.target.name) ? " por correo" : "";
+      toast((e.target.checked ? "Aviso encendido" : "Aviso apagado") + via, "ok");
     })
     .catch(function () { if (save) save.hidden = false; toast("No se pudo guardar. Pulsa «Guardar».", "error"); });
 });

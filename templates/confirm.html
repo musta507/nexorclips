@@ -1,0 +1,32 @@
+{% from "_icons.html" import icon, logo with context %}<!doctype html>
+<html lang="es">
+<head>
+{% include "_head.html" %}
+  <title>{{ "Confirma tu correo" if step == "pending" else "Avisos por correo" }} · {{ APP_NAME }}</title>
+</head>
+<body class="auth-bg">
+  <main class="auth">
+    {{ logo() }}
+    <div class="auth-card">
+      {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}">{{ m }}</div>{% endfor %}{% endwith %}
+      {% if step == "pending" %}
+      <div>
+        <h1>Confirma tu correo</h1>
+        <p class="muted" style="margin-top:6px">Te hemos enviado un enlace a <b style="color:var(--ink)">{{ current_user.email }}</b>. Ábrelo para empezar a usar {{ APP_NAME }}. Si no lo ves, mira en spam o promociones.</p>
+      </div>
+      <form method="post" action="{{ url_for('confirm_pending') }}" class="form-stack">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn soft block">Reenviar el enlace</button>
+      </form>
+      <p class="small muted" style="text-align:center">¿Te equivocaste de correo? <a href="{{ url_for('logout') }}" data-turbo="false" style="text-decoration:underline;color:var(--ink)">Sal y regístrate otra vez</a></p>
+      {% else %}
+      <div>
+        <h1>Listo, no te mandaremos más avisos por correo</h1>
+        <p class="muted" style="margin-top:6px">Seguirás viendo los avisos en la campanita de la web. Los correos de tu cuenta (como cambiar la contraseña) sí te llegarán. Puedes volver a activarlos en Ajustes.</p>
+      </div>
+      <p class="small muted" style="text-align:center"><a href="{{ url_for('index') }}" style="text-decoration:underline;color:var(--ink)">Ir a {{ APP_NAME }}</a></p>
+      {% endif %}
+    </div>
+  </main>
+</body>
+</html>

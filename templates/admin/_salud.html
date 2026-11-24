@@ -148,6 +148,11 @@
         <li><span class="sl-dot {{ x.state }}"></span><span><b>{{ x.name }}</b><small>{{ x.text }}</small></span><span class="sl-chip {{ x.state }}">{{ ST[x.state] }}</span></li>
         {% endfor %}
       </ul>
+      {% if H.mail.last %}
+      <p class="sl-ttl" style="margin-top:14px">Últimos correos</p>
+      <table class="sl-tbl"><tbody>{% for m in H.mail.last %}<tr><td>{{ m.subject }}<br><small class="muted">{{ m.to }}</small></td>
+        <td class="num"><span class="sl-chip {{ {'ok': 'ok', 'error': 'bad', 'tope': 'warn'}.get(m.status, 'off') }}" title="{{ m.error }}">{{ {'ok': 'Enviado', 'error': 'Falló', 'tope': 'Tope', 'enviando': 'Enviando'}.get(m.status, m.status) }}</span><br><small class="muted">{{ m.created_at|ago }}</small></td></tr>{% endfor %}</tbody></table>
+      {% endif %}
     </section>
   </div>
 

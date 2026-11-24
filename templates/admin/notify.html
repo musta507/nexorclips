@@ -13,7 +13,10 @@
 <form method="post" action="{{ url_for('admin_auto_notices') }}" class="card au" data-auto-notices data-turbo="false">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <div class="au-h"><h3>Mensajes que manda la web sola</h3>
-    <p class="small muted">Llegan a la campanita del clipper. Marca los que quieras: se guarda al momento. Los mensajes que mandas tú y las respuestas de soporte no dependen de esto.</p></div>
+    <p class="small muted">Para cada uno eliges si llega a la campanita, por correo o por los dos. Se guarda al momento. Los mensajes que mandas tú y las respuestas de soporte no dependen de esto.</p>
+    {% if not mail_ready %}<p class="small au-warn">El correo aún no está conectado: las casillas de «Correo» se guardan, pero no se enviará nada hasta poner Resend en Railway.</p>
+    {% else %}<p class="small muted">Correos enviados hoy: {{ mail_day }} de {{ MAIL_DAY_MAX }} (plan gratis de Resend). Al acercarse al tope, los avisos dejan de ir por correo y siguen llegando a la campanita.</p>{% endif %}</div>
+  <div class="au-cols" aria-hidden="true"><span>Campanita</span><span>Correo</span></div>
   {% for grp in ["Clips", "Campañas", "Dinero", "Cuenta", "Actividad"] %}
   <p class="au-g">{{ grp }}</p>
   <div class="au-list">
@@ -22,7 +25,8 @@
       <span class="au-t"><b>{{ name }}{% if not default %} <span class="au-new">Nuevo</span>{% endif %}</b>
         <small class="au-msg">{{ text }}</small>
         <small class="muted">{{ when }}</small></span>
-      <input type="checkbox" class="tg tg-ink" id="au-{{ key }}" name="{{ key }}"{% if auto_state[key] %} checked{% endif %} aria-label="{{ name }}">
+      <input type="checkbox" class="tg tg-ink" id="au-{{ key }}" name="{{ key }}"{% if auto_state[key] %} checked{% endif %} aria-label="{{ name }}: campanita">
+      <input type="checkbox" class="tg tg-ink" name="mail_{{ key }}"{% if mail_state[key] %} checked{% endif %} aria-label="{{ name }}: correo">
     </label>
     {% endfor %}
   </div>

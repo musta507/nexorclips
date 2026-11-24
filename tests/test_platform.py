@@ -3464,7 +3464,7 @@ def test_password_recovery_by_email(monkeypatch):
     """Con el correo configurado: se pide el enlace, llega por correo, vale una sola vez y no delata si el correo existe."""
     sent = []
     monkeypatch.setattr(A, "SMTP_HOST", "smtp.test"); monkeypatch.setattr(A, "MAIL_FROM", "hola@test.com")
-    monkeypatch.setattr(A, "send_mail", lambda to, subject, body: sent.append((to, body)) or True)
+    monkeypatch.setattr(A, "send_mail", lambda to, subject, body, **kw: sent.append((to, body)) or True)
     c = A.app.test_client()
     from werkzeug.security import generate_password_hash
     with A.app.app_context():
@@ -3731,7 +3731,9 @@ def test_mail_by_resend(monkeypatch):
     sent = []
     monkeypatch.setattr(A.requests, "post", lambda url, **k: sent.append((url, k["json"])) or type("R", (), {"status_code": 200, "text": ""})())
     monkeypatch.setattr(A.threading, "Thread", lambda target, daemon=True: type("T", (), {"start": lambda self: target()})())
-    assert A.mail_ready() and A.send_mail("ana@x.com", "Hola", "Texto")
+    with A.app.app_context():
+        assert A.mail_ready() and A.send_mail("ana@x.com", "Hola", "Texto")
+        assert A.EmailLog.query.one().status == "ok"
     assert sent[0][0] == "https://api.resend.com/emails" and sent[0][1]["to"] == ["ana@x.com"]
 
 
@@ -3941,3 +3943,67 @@ def test_near_minimum_notice_once():
         assert A.near_min_notice(sub) is True
         A.db.session.commit()
         assert A.near_min_notice(sub) is False                  # solo una vez por clip
+
+
+
+def _fake_resend(monkeypatch):
+    monkeypatch.setattr(A, "RESEND_API_KEY", "re_x")
+    monkeypatch.setattr(A, "MAIL_FROM", "avisos@clipprofit.es")
+    sent = []
+    monkeypatch.setattr(A.requests, "post", lambda url, **k: sent.append(k["json"]) or type("R", (), {"status_code": 200, "text": ""})())
+    return sent
+
+
+def test_register_with_email_must_confirm(monkeypatch):
+    """Registro con correo y contraseña: llega un enlace y hasta pulsarlo no se puede usar la web."""
+    sent = _fake_resend(monkeypatch)
+    monkeypatch.setattr(A, "PASSWORD_LOGIN", True)
+    monkeypatch.setattr(A, "_login_fails", {})
+    c = A.app.test_client()
+    with c.session_transaction() as se:
+        se["_csrf"] = "t"
+    r = c.post("/registro", data={"_csrf": "t", "name": "Leo Ruiz", "email": "leo@test.com", "password": "una-clave-larga"})
+    assert r.headers["Location"].endswith("/confirmar-correo")
+    assert len(sent) == 1 and sent[0]["to"] == ["leo@test.com"] and "Confirmar mi correo" in sent[0]["html"]
+    assert c.get("/campanas").headers["Location"].endswith("/confirmar-correo")          # sin confirmar, no entra
+    assert "Confirma tu correo" in c.get("/confirmar-correo").get_data(as_text=True)
+    link = re.search(r"https?://\S+/confirmar/\S+", sent[0]["text"]).group(0)
+    r = c.get("/" + link.split("/", 3)[3])
+    assert "/bienvenida" in r.headers["Location"]
+    with A.app.app_context():
+        assert A.User.query.filter_by(email="leo@test.com").one().email_verified_at
+    assert "/confirmar-correo" not in (c.get("/campanas").headers.get("Location") or "")
+
+
+def test_notice_by_email_and_unsubscribe(monkeypatch):
+    """Un aviso con la casilla «Correo» llega también por correo, con enlace de baja que funciona con un clic."""
+    sent = _fake_resend(monkeypatch)
+    client_for("ana@test.com")
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="ana@test.com").one()
+        u.email_verified_at = A.datetime.utcnow(); A.db.session.commit()
+        assert A.mail_on("retiro") and not A.mail_on("campana_nueva")       # por defecto: solo lo importante
+        A.notify_user(u.id, "retiro", "Retiro enviado", "10,00 $ ya están en tu Whop.", "/ganancias")
+        A.notify_user(u.id, "campana_nueva", "Nueva campaña", "Hola", "/campanas")
+        A.db.session.commit()
+        assert len(sent) == 1 and sent[0]["subject"] == "Retiro enviado" and "List-Unsubscribe" in sent[0]["headers"]
+        unsub = sent[0]["headers"]["List-Unsubscribe"].strip("<>")
+    c = A.app.test_client()
+    assert "no te mandaremos más avisos" in c.get("/" + unsub.split("/", 3)[3]).get_data(as_text=True)
+    with A.app.app_context():
+        u = A.User.query.filter_by(email="ana@test.com").one()
+        assert u.email_off
+        A.notify_user(u.id, "retiro", "Retiro enviado", "Otro", "/ganancias")
+        assert len(sent) == 1                                                 # dado de baja: ya no le llegan
+
+
+def test_mail_daily_cap_keeps_room_for_essentials(monkeypatch):
+    sent = _fake_resend(monkeypatch)
+    monkeypatch.setattr(A, "MAIL_DAY_MAX", 3)
+    monkeypatch.setattr(A, "MAIL_RESERVE", 1)
+    with A.app.app_context():
+        assert A.send_mail("a@x.com", "1", "x", kind="retiro") and A.send_mail("b@x.com", "2", "x", kind="retiro")
+        assert not A.send_mail("c@x.com", "3", "x", kind="retiro")          # el último hueco es para los imprescindibles
+        assert A.send_mail("d@x.com", "4", "x", kind="recuperar")
+        assert not A.send_mail("e@x.com", "5", "x", kind="recuperar")       # tope del día
+        assert A.EmailLog.query.filter_by(status="tope").count() == 2 and len(sent) == 3

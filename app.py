@@ -227,6 +227,8 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     admin_role = db.Column(db.String(20), default="")          # owner · reviewer · support (sale de las variables de Railway)
     admin_seen_at = db.Column(db.DateTime, nullable=True)       # última vez que abrió el panel (Panel técnico → Salud)
+    email_verified_at = db.Column(db.DateTime, nullable=True)   # confirmó su correo (Google ya lo confirma)
+    email_off = db.Column(db.Boolean, default=False)           # no quiere avisos por correo (los de su cuenta sí le llegan)
     admin_seen_ua = db.Column(db.String(200), default="")      # con qué dispositivo
     is_banned = db.Column(db.Boolean, default=False)
     ban_reason = db.Column(db.String(255), default="")
@@ -758,6 +760,18 @@ def campaign_accounts(user_id, campaign_id, status=None, platform=None):
     if has_request_context() and request.method == "GET":      # al pintar listas se pide lo mismo por cada clip: una vez basta
         return list(_per_request(("camp_accs", user_id, campaign_id, status, platform), load))
     return load()
+
+
+class EmailLog(db.Model):
+    """Cada correo que manda la web (Panel técnico → Salud): para contar el tope de Resend y ver los que fallan."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=True, index=True)
+    to = db.Column(db.String(255), default="")
+    kind = db.Column(db.String(30), default="", index=True)   # confirmar · recuperar · y las claves de los avisos
+    subject = db.Column(db.String(200), default="")
+    status = db.Column(db.String(12), default="enviando", index=True)   # enviando · ok · error · tope
+    error = db.Column(db.String(300), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 
 class StatHour(db.Model):
@@ -3274,7 +3288,7 @@ def csrf_token():
     return session["_csrf"]
 
 
-CSRF_EXEMPT = {"meta_data_deletion", "landing_lead", "book_call", "browser_error"}     # Meta (firmada) y el formulario de la landing de clipprofit.es (otra web)
+CSRF_EXEMPT = {"meta_data_deletion", "landing_lead", "book_call", "browser_error", "mail_unsubscribe"}     # Meta (firmada) y el formulario de la landing de clipprofit.es (otra web)
 
 
 @app.before_request
@@ -3317,6 +3331,10 @@ def before():
         if not current_user.last_seen_at or (now - current_user.last_seen_at).total_seconds() > SEEN_EVERY:
             current_user.last_seen_at = now
             db.session.commit()
+        if needs_confirm(current_user) and request.endpoint not in CONFIRM_FREE:
+            if request.method == "GET" and not request.path.startswith("/api/"):
+                return redirect(url_for("confirm_pending"))
+            abort(403)
         if current_user.is_banned and request.endpoint not in ("logout", "static", "terms", "privacy", "health",
                                                                "support", "support_poll", "notices"):
             return render_template("banned.html"), 403
@@ -3329,6 +3347,7 @@ def before():
 
 
 ONBOARDING_FREE = {"onboarding", "logout", "static", "terms", "privacy", "legal_notice", "cookies_page", "health", "avatar",
+                   "confirm_pending", "confirm_email", "mail_unsubscribe", "mail_prefs",
                    "browser_error", "notices", "google_callback", "login_google", "book_call", "login", None}
 
 
@@ -3930,6 +3949,8 @@ def sign_in(email, name, avatar="", sub=None, password_user=None):
     if sub and not user.google_sub and user.password_hash:
         user.password_hash = ""      # Google confirma que el correo es suyo: la contraseña puesta por otro deja de valer
     user.google_sub = sub or user.google_sub
+    if sub and not user.email_verified_at:
+        user.email_verified_at = datetime.utcnow()           # Google ya comprobó que el correo es suyo
     if not user.avatar_ver:                  # si subió su propia foto, no la cambiamos por la de Google
         user.avatar_url = (avatar or user.avatar_url or "")[:500]
     if not user.accepted_terms_at:
@@ -3988,37 +4009,141 @@ def mail_ready():
     return bool((RESEND_API_KEY or SMTP_HOST) and MAIL_FROM)
 
 
-def send_mail(to, subject, body):
-    """Envía un correo de texto sin hacer esperar a la página (va en un hilo aparte). Si falla, queda en el registro."""
-    if not mail_ready():
+# Correos (24 nov, Mustapha): Resend, plan gratis = 100 al día y 3.000 al mes. Los avisos dejan sitio a los
+# imprescindibles (confirmar el correo, recuperar la contraseña): MAIL_RESERVE al día quedan solo para ellos.
+MAIL_DAY_MAX = int(os.environ.get("MAIL_DAY_MAX", "100"))
+MAIL_MONTH_MAX = int(os.environ.get("MAIL_MONTH_MAX", "3000"))
+MAIL_RESERVE = int(os.environ.get("MAIL_RESERVE", "15"))
+MAIL_ESSENTIAL = {"confirmar", "recuperar"}
+
+
+def mail_counts(now=None):
+    """Correos enviados (o enviándose) hoy y este mes, en hora UTC como los cuenta Resend."""
+    now = now or datetime.utcnow()
+    day0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    month0 = day0.replace(day=1)
+    q = EmailLog.query.filter(EmailLog.status.in_(("ok", "enviando")))
+    return q.filter(EmailLog.created_at >= day0).count(), q.filter(EmailLog.created_at >= month0).count()
+
+
+def mail_room(kind):
+    """¿Cabe otro correo de este tipo hoy y este mes?"""
+    day, month = mail_counts()
+    if kind in MAIL_ESSENTIAL:
+        return day < MAIL_DAY_MAX and month < MAIL_MONTH_MAX
+    return day < MAIL_DAY_MAX - MAIL_RESERVE and month < MAIL_MONTH_MAX - MAIL_RESERVE * 4
+
+
+def mail_html(title, paragraphs, button=None, unsub=""):
+    """Correo con el aspecto de la web (logo, botón negro, letra limpia). Estilos en línea: los programas de correo no leen CSS."""
+    from markupsafe import escape
+    ps = "".join(f'<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#3b3b40">{escape(p_)}</p>' for p_ in paragraphs)
+    btn = (f'<p style="margin:22px 0 6px"><a href="{escape(button[1])}" style="display:inline-block;background:#0e0e0e;color:#fff;'
+           f'text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:999px">{escape(button[0])}</a></p>') if button else ""
+    foot = (f'<p style="margin:18px 0 0;font-size:12px;color:#686971">¿No quieres estos avisos? '
+            f'<a href="{escape(unsub)}" style="color:#686971">Dejar de recibirlos por correo</a>.</p>') if unsub else ""
+    return (f'<!doctype html><html lang="es"><body style="margin:0;background:#f6f7f9;font-family:Inter,-apple-system,Segoe UI,Helvetica,Arial,sans-serif">'
+            f'<div style="max-width:520px;margin:0 auto;padding:28px 16px">'
+            f'<p style="margin:0 0 18px;font-size:17px;font-weight:700;color:#0e0e0e">{escape(APP_NAME)}</p>'
+            f'<div style="background:#fff;border:1px solid #e9eaee;border-radius:20px;padding:26px 24px">'
+            f'<h1 style="margin:0 0 14px;font-size:22px;line-height:1.25;color:#0e0e0e">{escape(title)}</h1>{ps}{btn}</div>'
+            f'<p style="margin:16px 4px 0;font-size:12px;color:#686971">{escape(APP_NAME)} · app.clipprofit.es</p>{foot}</div></body></html>')
+
+
+def send_mail(to, subject, body, html=None, kind="", user_id=None, unsub=""):
+    """Envía un correo sin hacer esperar a la página (en un hilo aparte) y lo apunta en EmailLog.
+    Si no cabe en el tope del día o del mes, no se envía y queda apuntado como «tope». Devuelve True si se mandó."""
+    if not mail_ready() or not to:
         return False
+    t = EmailLog.__table__
+    if not mail_room(kind):
+        with db.engine.begin() as conn:
+            conn.execute(t.insert().values(user_id=user_id, to=to[:255], kind=kind[:30], subject=subject[:200], status="tope",
+                                           created_at=datetime.utcnow()))
+        return False
+    with db.engine.begin() as conn:
+        log_id = conn.execute(t.insert().values(user_id=user_id, to=to[:255], kind=kind[:30], subject=subject[:200],
+                                                status="enviando", created_at=datetime.utcnow())).inserted_primary_key[0]
+        if secrets.randbelow(40) == 0:                       # de vez en cuando, fuera los de hace más de 60 días
+            conn.execute(t.delete().where(t.c.created_at < datetime.utcnow() - timedelta(days=60)))
+
+    def done(status, error=""):
+        try:
+            with app.app_context(), db.engine.begin() as conn:
+                conn.execute(t.update().where(t.c.id == log_id).values(status=status, error=str(error)[:300]))
+        except Exception:  # noqa: BLE001
+            log.warning("No se pudo apuntar el correo %s", log_id, exc_info=True)
 
     def run():
         import smtplib
         from email.message import EmailMessage
         if RESEND_API_KEY:
+            payload = {"from": f"{APP_NAME} <{MAIL_FROM}>", "to": [to], "subject": subject, "text": body}
+            if html:
+                payload["html"] = html
+            if unsub:
+                payload["headers"] = {"List-Unsubscribe": f"<{unsub}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
             try:
                 r = requests.post("https://api.resend.com/emails", timeout=15,
-                                  headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
-                                  json={"from": f"{APP_NAME} <{MAIL_FROM}>", "to": [to], "subject": subject, "text": body})
+                                  headers={"Authorization": f"Bearer {RESEND_API_KEY}"}, json=payload)
                 if r.status_code >= 300:
                     log.error("Resend no envió el correo (%s): %s", r.status_code, r.text[:300])
-            except requests.RequestException:
+                    done("error", f"Resend {r.status_code}: {r.text[:250]}")
+                else:
+                    done("ok")
+            except requests.RequestException as e:
                 log.exception("No se pudo enviar el correo por Resend")
+                done("error", e)
             return
         msg = EmailMessage()
         msg["From"], msg["To"], msg["Subject"] = f"{APP_NAME} <{MAIL_FROM}>", to, subject
         msg.set_content(body)
+        if html:
+            msg.add_alternative(html, subtype="html")
         try:
             with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
                 smtp.starttls()
                 if SMTP_USER:
                     smtp.login(SMTP_USER, SMTP_PASS)
                 smtp.send_message(msg)
-        except Exception:  # noqa: BLE001
+            done("ok")
+        except Exception as e:  # noqa: BLE001
             log.exception("No se pudo enviar el correo")
-    threading.Thread(target=run, daemon=True).start()
+            done("error", e)
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        run()                                                # en las pruebas, al momento
+    else:
+        threading.Thread(target=run, daemon=True).start()
     return True
+
+
+def _mail_serializer(salt):
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(app.secret_key, salt=salt)
+
+
+def public_url(path):
+    """Dirección completa para un correo: BASE_URL, la de la visita o, si no hay ninguna (tarea de la noche), la de siempre."""
+    return (BASE_URL or (request.host_url.rstrip("/") if has_request_context() else "") or "https://app.clipprofit.es") + path
+
+
+def unsub_url(user):
+    return public_url("/baja/" + _mail_serializer("baja-correos").dumps(user.id))     # sin url_for: también desde las tareas de la noche
+
+
+def mail_ok_for(user):
+    """¿Se le pueden mandar avisos por correo? Correo confirmado (o de Google), no lo ha apagado y no está bloqueado."""
+    return bool(user and user.email and not user.email_off and not user.is_banned and not is_demo(user)
+                and (user.email_verified_at or user.google_sub or not user.password_hash))
+
+
+def send_confirm_mail(user):
+    link = public_url("/confirmar/" + _mail_serializer("confirmar-correo").dumps(user.id))
+    first = (user.name or "").split()[0] if user.name else ""
+    lines = [f"Hola{(', ' + first) if first else ''}:", "Pulsa el botón para confirmar que este correo es tuyo y empezar a usar "
+             f"{APP_NAME}. El enlace vale 2 días.", "Si no te has registrado tú, no hagas nada."]
+    return send_mail(user.email, f"Confirma tu correo · {APP_NAME}", "\n\n".join(lines) + f"\n\n{link}",
+                     html=mail_html("Confirma tu correo", lines, ("Confirmar mi correo", link)), kind="confirmar", user_id=user.id)
 
 
 def _reset_serializer():
@@ -4057,9 +4182,10 @@ def recover():
         user = User.query.filter_by(email=email).first() if email else None
         if user and user.password_hash and not user.is_banned:
             link = (BASE_URL or request.host_url.rstrip("/")) + url_for("recover_set", token=reset_token(user))
-            send_mail(user.email, f"Cambia tu contraseña de {APP_NAME}",
-                      f"Hola, {user.name}:\n\nPara poner una contraseña nueva, abre este enlace (vale {RESET_HOURS} hora):\n\n{link}\n\n"
-                      "Si no lo has pedido tú, no hagas nada: tu contraseña sigue siendo la misma.")
+            lines = [f"Hola, {user.name}:", f"Para poner una contraseña nueva, pulsa el botón. El enlace vale {RESET_HOURS} hora.",
+                     "Si no lo has pedido tú, no hagas nada: tu contraseña sigue siendo la misma."]
+            send_mail(user.email, f"Cambia tu contraseña de {APP_NAME}", "\n\n".join(lines) + f"\n\n{link}",
+                      html=mail_html("Cambia tu contraseña", lines, ("Poner contraseña nueva", link)), kind="recuperar", user_id=user.id)
         # Siempre el mismo mensaje: no se dice si el correo existe o no
         flash("Si ese correo tiene una cuenta con contraseña, te hemos enviado un enlace para cambiarla. Mira también en spam.", "ok")
         return redirect(url_for("login"))
@@ -4151,8 +4277,90 @@ def register():
     session.pop("form_name", None)
     log.info("Nuevo usuario con correo: %s", email)
     sign_in(email, name, password_user=user)
+    if mail_ready():                                   # hay que confirmar el correo antes de usar la web
+        send_confirm_mail(user)
+        return redirect(url_for("confirm_pending"))
     flash(f"¡Bienvenido, {name}! Completa tu perfil para empezar.", "ok")
     return redirect(url_for("onboarding"))
+
+
+CONFIRM_FREE = {"confirm_pending", "confirm_email", "mail_unsubscribe", "logout", "static", "terms", "privacy", "legal_notice",
+                "cookies_page", "health", "browser_error", "notices", None}
+
+
+def needs_confirm(user):
+    """Cuenta con contraseña y correo sin confirmar (solo si el correo está conectado: si no, no se podría confirmar)."""
+    return bool(user.password_hash and not user.email_verified_at and not user.google_sub and not user.is_admin and mail_ready())
+
+
+@app.route("/confirmar-correo", methods=["GET", "POST"])
+@login_required
+def confirm_pending():
+    """Pantalla de espera: «te hemos enviado un enlace». Botón para reenviarlo (como mucho 3 por hora)."""
+    if not needs_confirm(current_user):
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        key = f"conf:{current_user.id}"
+        tries = [t_ for t_ in _login_fails.get(key, []) if time.time() - t_ < 3600]
+        if len(tries) >= 3:
+            flash("Ya te hemos enviado varios enlaces. Espera un rato y mira también en spam.", "error")
+        else:
+            _login_fails[key] = tries + [time.time()]
+            send_confirm_mail(current_user)
+            flash("Te hemos enviado otro enlace. Mira también en spam.", "ok")
+        return redirect(url_for("confirm_pending"))
+    return render_template("confirm.html", step="pending")
+
+
+@app.route("/confirmar/<token>")
+def confirm_email(token):
+    from itsdangerous import BadData
+    try:
+        uid = _mail_serializer("confirmar-correo").loads(token, max_age=2 * 86400)
+    except BadData:
+        uid = None
+    user = db.session.get(User, uid) if uid else None
+    if not user:
+        flash("El enlace ha caducado o no es válido. Entra y pide otro.", "error")
+        return redirect(url_for("login"))
+    if not user.email_verified_at:
+        user.email_verified_at = datetime.utcnow()
+        audit("correo_confirmado", user.email)
+        db.session.commit()
+    if current_user.is_authenticated and current_user.id == user.id:
+        flash("Correo confirmado. ¡Ya puedes empezar!", "ok")
+        return redirect(url_for("onboarding") if not user.onboarded_at else url_for("index"))
+    flash("Correo confirmado. Entra con tu correo y contraseña.", "ok")
+    return redirect(url_for("login"))
+
+
+@app.route("/baja/<token>", methods=["GET", "POST"])
+def mail_unsubscribe(token):
+    """Enlace de cada aviso por correo: deja de recibirlos con un clic (sin entrar). Los correos de su cuenta siguen."""
+    from itsdangerous import BadData
+    try:
+        uid = _mail_serializer("baja-correos").loads(token)
+    except BadData:
+        abort(404)
+    user = db.session.get(User, uid) or abort(404)
+    if not user.email_off:
+        user.email_off = True
+        audit("baja_correos", user.email)
+        db.session.commit()
+    if request.method == "POST":                     # «un clic» de Gmail y Outlook (List-Unsubscribe-Post)
+        return ("", 204)
+    return render_template("confirm.html", step="baja")
+
+
+@app.route("/cuenta/correos", methods=["POST"])
+@login_required
+def mail_prefs():
+    """Ajustes → «Avisos por correo»: encender o apagar."""
+    current_user.email_off = request.form.get("on") != "1"
+    db.session.commit()
+    if request.headers.get("X-Requested-With") == "fetch":
+        return ("", 204)
+    return redirect(url_for("account", _anchor="cuenta"))
 
 
 @app.route("/login/google")
@@ -7027,6 +7235,11 @@ def health_data():
                   "pts": pts, "regs_30": sum(series), "regs_max": max(series)}
 
     # --- servicios
+    mail_day, mail_month = mail_counts() if mail_ready() else (0, 0)
+    mail_fail = EmailLog.query.filter(EmailLog.status == "error", EmailLog.created_at >= day_ago).count()
+    mail_cap = EmailLog.query.filter(EmailLog.status == "tope", EmailLog.created_at >= day_ago).count()
+    D["mail"] = {"ready": mail_ready(), "day": mail_day, "month": mail_month,
+                 "last": EmailLog.query.order_by(EmailLog.id.desc()).limit(8).all()}
     yt_ok = viewcounter.ytdlp_available()
     apis_ok = [official.LABELS[p] for p in ("tiktok", "instagram", "youtube", "facebook") if official.configured(p)]
     svc = [
@@ -7048,6 +7261,12 @@ def health_data():
          f"Hoy: {yst.get('ok', 0)} bien, {yst.get('fail', 0)} mal" if yt_ok else "No está instalado en el servidor"),
         ("Bunny (vídeos)", "ok" if bunny_ready() else "off",
          "Puesto · copias de vídeo y formación" if bunny_ready() else "Sin clave: no se copian los vídeos de verificación"),
+        ("Correo (Resend)", (("bad" if mail_fail else "warn" if mail_day >= MAIL_DAY_MAX - MAIL_RESERVE else "ok") if mail_ready()
+                             else "bad" if PASSWORD_LOGIN else "off"),
+         (f"Hoy {mail_day} de {MAIL_DAY_MAX} · este mes {mail_month} de {MAIL_MONTH_MAX}"
+          + (f" · {mail_fail} fallidos en 24 h" if mail_fail else "") + (f" · {mail_cap} sin enviar por el tope" if mail_cap else ""))
+         if mail_ready() else ("Falta: nadie puede confirmar su correo ni recuperar la contraseña" if PASSWORD_LOGIN
+                               else "Sin poner (solo se entra con Google)")),
         ("Sentry (avisos de errores)", "ok" if SENTRY_DSN else "off",
          "Puesto · los fallos también llegan a Sentry" if SENTRY_DSN else "Sin poner: los fallos solo se ven aquí"),
         ("APIs oficiales de redes", "ok" if len(apis_ok) == 4 else "warn" if apis_ok else "off",
@@ -7120,6 +7339,9 @@ def health_data():
         ("ok" if D["db"]["backups_ok"] else "off", "Copias de seguridad diarias (Railway)",
          f"Confirmado el {D['db']['backups_ok']}" if D["db"]["backups_ok"] else
          "La web no puede verlo: Railway → Postgres → Backups → Daily", "" if D["db"]["backups_ok"] else "backup", ""),
+        ("ok" if mail_ready() else ("bad" if PASSWORD_LOGIN else "warn"), "Correo conectado (Resend)",
+         "Puesto: confirmar el correo, recuperar contraseña y avisos" if mail_ready() else
+         "Falta RESEND_API_KEY y MAIL_FROM en Railway, y verificar clipprofit.es en Resend", "", ""),
         ("ok" if SENTRY_DSN else "warn", "Aviso de errores por correo (Sentry)",
          "Puesto" if SENTRY_DSN else "Opcional: los fallos ya se apuntan aquí, pero no te llega aviso", "", ""),
         ("ok" if bunny_ready() else "warn", "Vídeos de verificación (Bunny)",
@@ -9616,12 +9838,47 @@ def auto_on(event):
     return event not in AUTO_KEYS or auto_notices().get(event, True)
 
 
+# Qué avisos van también por correo (casilla «Correo»). Con el plan gratis de Resend (100 al día) solo lo importante.
+AUTO_MAIL_DEFAULT = {"estadisticas": True, "retiro": True, "campana_fin": True}
+
+
+def auto_mail():
+    try:
+        saved = json.loads(get_setting("auto_mail", "") or "{}")
+    except ValueError:
+        saved = {}
+    return {k: bool(saved.get(k, AUTO_MAIL_DEFAULT.get(k, False))) for k in AUTO_KEYS}
+
+
+def mail_on(event):
+    return event in AUTO_KEYS and auto_mail().get(event, False)
+
+
+def send_notice_mail(user, event, title, body, path=""):
+    """El mismo aviso de la campanita, por correo, con botón a la web y enlace para darse de baja."""
+    first = (user.name or "").split()[0] if user.name else ""
+    lines = [f"Hola{(', ' + first) if first else ''}:", body]
+    link = public_url(path or "/")
+    unsub = unsub_url(user)
+    return send_mail(user.email, title, "\n\n".join(lines) + f"\n\n{link}\n\nDejar de recibir avisos por correo: {unsub}",
+                     html=mail_html(title, lines, ("Abrir " + APP_NAME, link), unsub=unsub), kind=event, user_id=user.id, unsub=unsub)
+
+
 def notify_user(user_id, event, title, body, path="", bell=True, camp_id=None):
     """Aviso personal a un clipper: siempre en su campanita y, si lo tiene activado, en su móvil."""
-    if not auto_on(event):                          # apagado en admin → Avisos → «Automáticos»
+    bell_ok = auto_on(event)                       # casillas de admin → Avisos → «Automáticos»
+    mail_ok = mail_on(event) and mail_ready()
+    if not bell_ok and not mail_ok:
         return
     u = db.session.get(User, user_id)
     if not u or is_demo(u):
+        return
+    if mail_ok and mail_ok_for(u):
+        try:
+            send_notice_mail(u, event, title, body, path)
+        except Exception:  # noqa: BLE001
+            log.exception("No se pudo preparar el aviso por correo")
+    if not bell_ok:
         return
     if bell:                                       # los mensajes del chat ya salen en la campanita por su cuenta
         if camp_id is None:
@@ -10473,7 +10730,8 @@ def admin_notify():
         return redirect(url_for("admin_notify"))
     return render_template("admin/notify.html", camps=camps, push_ready=push_ready(),
                            devices=PushSub.query.count(), people=notify_people(),
-                           auto=AUTO_NOTICES, auto_state=auto_notices())
+                           auto=AUTO_NOTICES, auto_state=auto_notices(), mail_state=auto_mail(), mail_ready=mail_ready(),
+                           mail_day=mail_counts()[0] if mail_ready() else 0, MAIL_DAY_MAX=MAIL_DAY_MAX)
 
 
 @app.route("/admin/avisos/automaticos", methods=["POST"])
@@ -10483,8 +10741,11 @@ def admin_auto_notices():
     if not admin_can("admin_notify"):
         abort(403)
     state = {k: bool(request.form.get(k)) for k in AUTO_KEYS}
+    mail = {k: bool(request.form.get("mail_" + k)) for k in AUTO_KEYS}
     set_setting("auto_notices", json.dumps(state))
-    audit("avisos_automaticos", ", ".join(k for k, v in state.items() if v) or "ninguno")
+    set_setting("auto_mail", json.dumps(mail))
+    audit("avisos_automaticos", "campanita: " + (", ".join(k for k, v in state.items() if v) or "ninguno")
+          + " · correo: " + (", ".join(k for k, v in mail.items() if v) or "ninguno"))
     db.session.commit()
     if request.headers.get("X-Requested-With") == "fetch":
         return ("", 204)

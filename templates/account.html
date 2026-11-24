@@ -109,6 +109,7 @@
       <h2 class="lst-h">Cuenta</h2>
       <div class="card lst">
         <div class="lr"><span class="lr-k">Correo</span><span class="lr-v">{{ current_user.email }}</span></div>
+        <label class="lr" for="mail-on"><span class="lr-k">Avisos por correo<small class="lr-sub muted">Los importantes, como «retiro enviado». Los de tu cuenta te llegan siempre.</small></span><input type="checkbox" class="tg tg-ink" id="mail-on" data-mail-toggle data-url="{{ url_for('mail_prefs') }}" data-csrf="{{ csrf_token() }}"{% if not current_user.email_off %} checked{% endif %}></label>
         <div class="lr"><span class="lr-k">Miembro desde</span><span class="lr-v">{{ current_user.created_at|date }}</span></div>
         {% if DARK_MODE %}<label class="lr" for="theme-dark"><span class="lr-k">Modo oscuro</span><input type="checkbox" class="tg tg-ink" id="theme-dark" data-theme-toggle data-url="{{ url_for('set_theme') }}" data-csrf="{{ csrf_token() }}"{% if current_user.theme == "dark" %} checked{% endif %}></label>{% endif %}
         <a class="lr lr-go" href="{{ url_for('terms') }}"><span class="lr-k">Términos</span></a>
