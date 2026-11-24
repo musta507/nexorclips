@@ -3700,14 +3700,9 @@ def test_landing_wall_shows_only_saved_covers_of_approved_clips():
 
 
 def test_landing_images_section_removed():
-    """Mustapha quitó «Imágenes de la portada» del panel: ni sale ni la portada usa esas imágenes."""
+    """Mustapha quitó «Imágenes de la portada» del panel (las ya elegidas siguen saliendo: test_landing_keeps_chosen_images)."""
     admin = client_for("admin@test.com")
     assert "Imágenes de la portada" not in admin.get("/admin/destacado").get_data(as_text=True)
-    with A.app.app_context():
-        A.db.session.add(A.LandingTile(url="https://www.tiktok.com/@ana/video/1", status="ok", views=5)); A.db.session.commit()
-        tid = A.LandingTile.query.one().id
-    A.cache_clear() if hasattr(A, "cache_clear") else None
-    assert f"/portada-inicio/{tid}" not in A.app.test_client().get("/").get_data(as_text=True)
 
 
 def test_landing_lead_from_clipprofit_es():
@@ -4201,3 +4196,16 @@ def test_mail_daily_cap_keeps_room_for_essentials(monkeypatch):
         assert A.send_mail("d@x.com", "4", "x", kind="recuperar")
         assert not A.send_mail("e@x.com", "5", "x", kind="recuperar")       # tope del día
         assert A.EmailLog.query.filter_by(status="tope").count() == 2 and len(sent) == 3
+
+
+def test_landing_keeps_chosen_images():
+    """Las imágenes de la portada elegidas a mano siguen saliendo aunque ya no esté el apartado para pegarlas."""
+    with A.app.app_context():
+        A.db.session.add(A.LandingTile(url="https://www.tiktok.com/@a/video/1", status="ok", views=1200,
+                                       thumb_data=b"\xff\xd8jpg"))
+        A.db.session.commit()
+        tid = A.LandingTile.query.one().id
+        A._ttl.clear() if hasattr(A, "_ttl") else None
+    html = A.app.test_client().get("/").get_data(as_text=True)
+    assert f"/portada-inicio/{tid}" in html
+    assert A.app.test_client().get(f"/portada-inicio/{tid}").status_code == 200
