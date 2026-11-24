@@ -4,7 +4,7 @@
 {% block content %}
 {% include "admin/_camp_nav.html" %}
 
-{% if camp.status == 'finalizada' %}<div class="flash ok">Campaña completada{% if camp.ended_at %} el {{ camp.ended_at|date }}{% endif %}. Ya no acepta clips ni se actualizan sus vistas, y los clippers ya pueden retirar lo que ganaron. Para reabrirla, sube el presupuesto y ponla en «Activa».</div>{% endif %}
+{% if camp.status == 'finalizada' %}<div class="flash ok">Campaña completada{% if camp.ended_at %} el {{ camp.ended_at|date }}{% endif %}. Ya no acepta clips ni se actualizan sus vistas.{% if admin_can("admin_campaign_pay") %} <a class="link" href="{{ url_for('admin_campaign_pay', cid=camp.id) }}">Revisar y pagar a los clippers</a>.{% endif %} Para reabrirla, sube el presupuesto y ponla en «Activa».</div>{% endif %}
 
 {% if can.estadisticas %}
 <div class="card tight camp-budget" id="presupuesto">

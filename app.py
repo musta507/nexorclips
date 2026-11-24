@@ -97,6 +97,9 @@ CURRENCY = os.environ.get("CURRENCY", "$")
 CURRENCY_CODE = os.environ.get("CURRENCY_CODE", "USD")
 REFRESH_DAYS = int(os.environ.get("REFRESH_DAYS", "0"))        # 0 = se cuentan hasta que acaba la campaña
 MIN_WITHDRAW = float(os.environ.get("MIN_WITHDRAW", "1"))           # Whop no envía pagos de menos de 1 $
+# Pagos (24 nov, Mustapha, opción A): el clipper ya no pide retiros; al terminar cada campaña el equipo la revisa y paga a
+# todos de una vez (Pagos de la campaña). CLIPPER_WITHDRAW=1 en Railway vuelve a enseñar «Retirar».
+CLIPPER_WITHDRAW = os.environ.get("CLIPPER_WITHDRAW", "").strip() == "1"
 MAX_CLIPS_DAY = int(os.environ.get("MAX_CLIPS_DAY", "0"))      # 0 = sin límite de clips al día
 PAYOUT_DAYS = int(os.environ.get("PAYOUT_DAYS", "7"))          # plazo de pago que se promete al clipper
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").split(",") if e.strip()}          # dueños: todo
@@ -604,6 +607,7 @@ class Payout(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     creator_id = db.Column(db.Integer, db.ForeignKey("creator.id"), nullable=True, index=True)  # de qué Whop sale (vacío = principal)
+    campaign_id = db.Column(db.Integer, db.ForeignKey("campaign.id"), nullable=True, index=True)  # pago de campaña (vacío = retiro)
     amount = db.Column(Money, nullable=False)
     method = db.Column(db.String(60), default="")
     details = db.Column(db.String(255), default="")
@@ -1041,7 +1045,8 @@ STAFF_PERMS = {
                   "admin_campaign_close", "admin_campaign_channels", "admin_campaign_content", "admin_campaign_csv",
                   "admin_campaign_clippers", "admin_campaign_support", "admin_invites"}, tuple(MOD_PERMS),
                  "toca presupuestos y tarifas"),
-    "retiros": ("Retiros", "Ver y enviar los retiros de los clippers", {"admin_payouts", "admin_payouts_csv"}, (), "mueve dinero"),
+    "retiros": ("Pagos y retiros", "Revisar y pagar las campañas terminadas", {"admin_payouts", "admin_payouts_csv",
+                                                                             "admin_campaign_pay"}, (), "mueve dinero"),
     "destacado": ("Campaña destacada", "Elegir qué campaña sale destacada", {"admin_featured"}, (), ""),
     "distribucion": ("Distribución", "Los planes de distribución", {"admin_dists", "admin_dist"}, (), ""),
     "interesados": ("Creadores interesados", "Las reservas de llamada que llegan de la portada",
@@ -1692,11 +1697,17 @@ def close_campaign(camp, sender_id=None):
         if s.status == "aprobado" and (s.earned or 0) > 0:
             totals[s.user_id] = totals.get(s.user_id, 0) + s.earned
     for uid, amount in totals.items():
-        notify_user(uid, "campana_fin", f"{camp.song} ha terminado", f"Ya puedes retirar {money(amount)}. Ve a Ganancias y pulsa «Retirar».",
-                    "/ganancias", camp_id=camp.id)
+        if CLIPPER_WITHDRAW:
+            fin = (f"Ya puedes retirar {money(amount)}. Ve a Ganancias y pulsa «Retirar».",
+                   f"La campaña «{camp.song}» ha terminado. Ya puedes retirar lo que ganaste en ella: "
+                   f"{money(amount)}. Ve a Ganancias y pulsa «Retirar».")
+        else:
+            fin = (f"Has ganado {money(amount)}. Revisamos la campaña y te lo enviamos a tu Whop.",
+                   f"La campaña «{camp.song}» ha terminado. Has ganado {money(amount)}: revisamos los clips y te lo "
+                   "enviamos a tu Whop en los próximos días. Si aún no lo tienes conectado, conéctalo en Ajustes → Cobros.")
+        notify_user(uid, "campana_fin", f"{camp.song} ha terminado", fin[0], "/ganancias", camp_id=camp.id)
         db.session.add(Message(user_id=uid, from_admin=True, sender_id=sender_id, read_by_admin=True, read_by_user=False,
-                               body=f"La campaña «{camp.song}» ha terminado. Ya puedes retirar lo que ganaste en ella: "
-                                    f"{money(amount)}. Ve a Ganancias y pulsa «Retirar»."))
+                               body=fin[1]))
 
 
 def accrue(sub, allow_decrease=False):
@@ -3746,7 +3757,8 @@ def staff_can(endpoint, cid):
     """Para las plantillas: ¿puede el usuario entrar en esta pantalla de la campaña?"""
     if getattr(current_user, "is_admin", False):
         return admin_can(endpoint)
-    return endpoint in MOD_ENDPOINTS and mod_can(current_user, cid, ENDPOINT_PERM.get(endpoint, ""))
+    return ((endpoint in MOD_ENDPOINTS and mod_can(current_user, cid, ENDPOINT_PERM.get(endpoint, "")))
+            or admin_can(endpoint))                       # mod con funciones generales
 
 
 def acting_as_mod():
@@ -3846,7 +3858,7 @@ def static_url(filename):
 
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": csrf_token, "DARK_MODE": DARK_MODE, "REQUIRE_CREATOR": REQUIRE_CREATOR, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "storage_ready": storage_ready, "BACKUP_AT": BACKUP_AT, "staff_keys": staff_keys, "staff_home_url": staff_home_url, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
+    return {"csrf_token": csrf_token, "DARK_MODE": DARK_MODE, "REQUIRE_CREATOR": REQUIRE_CREATOR, "admin_can": admin_can, "legal_info": legal_info, "LEGAL_FIELDS": LEGAL_FIELDS, "site_verify": site_verify, "camp_admin_url": camp_admin_url, "is_tech": is_tech, "CLIPPER_WITHDRAW": CLIPPER_WITHDRAW, "storage_ready": storage_ready, "BACKUP_AT": BACKUP_AT, "staff_keys": staff_keys, "staff_home_url": staff_home_url, "bell_data": bell_data, "wallet_ready": wallet_ready, "ADMIN_ROLES": ADMIN_ROLES, "static_url": static_url, "APP_NAME": APP_NAME, "CUR": CURRENCY, "CUR_CODE": CURRENCY_CODE,
             "PLATFORMS": PLATFORMS, "cover_src": cover_src, "chan_icon": chan_icon, "cover_meta": cover_meta, "min_pay": min_pay, "MIN_WITHDRAW": MIN_WITHDRAW,
             "PAYOUT_METHODS": PAYOUT_METHODS, "PAYOUT_AVAILABLE": PAYOUT_AVAILABLE, "USDT_METHOD": USDT_METHOD, "WHOP_METHOD": WHOP_METHOD, "WHOP_CLIENT_ID": WHOP_CLIENT_ID, "WHOP_AUTO_MAX": WHOP_AUTO_MAX, "whop_enabled": whop_enabled, "account_verified": account_verified, "profile_url": profile_url, "CATEGORIES": CATEGORIES, "CATEGORY_ONE": CATEGORY_ONE,
             "LOGO_MAIN": LOGO_MAIN, "LOGO_SUB": LOGO_SUB, "SUPPORT_EMAIL": SUPPORT_EMAIL,
@@ -5610,6 +5622,9 @@ _withdraw_lock = threading.Lock()
 @app.route("/ganancias/retirar", methods=["POST"])
 @login_required
 def withdraw():
+    if not CLIPPER_WITHDRAW:
+        flash("Ya no hace falta pedir retiros: cuando termina cada campaña, te enviamos lo ganado a tu Whop.", "info")
+        return redirect(url_for("earnings"))
     if not current_user.payout_ready:
         flash("Primero conecta tu usuario de Whop en «Mi cuenta».", "error")
         return redirect(url_for("account", _anchor="cobro"))
@@ -7066,7 +7081,28 @@ def admin_payouts():
               .order_by(Payout.created_at.desc()).limit(10).all())
     history = (Payout.query.filter(Payout.status == "pagado").options(joinedload(Payout.user))
                .order_by(Payout.paid_at.desc()).limit(100).all())
-    return render_template("admin/payouts.html", open_requests=open_requests, failed=failed, history=history)
+    return render_template("admin/payouts.html", open_requests=open_requests, failed=failed, history=history,
+                           to_pay=campaigns_to_pay())
+
+
+def campaigns_to_pay():
+    """Campañas terminadas a las que aún les queda dinero por pagar: [(campaña, por pagar, clippers)]. Dos consultas."""
+    earned = dict(((cid_, uid_), float(v)) for cid_, uid_, v in db.session.query(
+        Submission.campaign_id, Submission.user_id, db.func.sum(Submission.earned)).join(Campaign)
+        .filter(Campaign.status == "finalizada", Submission.status == "aprobado", Submission.earned > 0)
+        .group_by(Submission.campaign_id, Submission.user_id))
+    sent = dict(((cid_, uid_), float(v)) for cid_, uid_, v in db.session.query(
+        Payout.campaign_id, Payout.user_id, db.func.sum(Payout.amount))
+        .filter(Payout.campaign_id.isnot(None), Payout.status.in_(PAYOUT_OPEN + ("pagado",)))
+        .group_by(Payout.campaign_id, Payout.user_id))
+    per = {}
+    for (cid_, uid_), v in earned.items():
+        left = cents(v - sent.get((cid_, uid_), 0))
+        if left >= CENT:
+            tot, n = per.get(cid_, (0.0, 0))
+            per[cid_] = (cents(tot + left), n + 1)
+    camps = {c.id: c for c in Campaign.query.filter(Campaign.id.in_(list(per))).all()} if per else {}
+    return sorted([(camps[k], v[0], v[1]) for k, v in per.items() if k in camps], key=lambda x: x[0].ended_at or datetime.min)
 
 
 def search_info():
@@ -9498,6 +9534,169 @@ def release_stuck_payouts(query=None):
         db.session.commit()
 
 
+# ---------------------------------------------------------------- pagar una campaña de una vez
+PAY_RED_FLAGS = ("subida_rapida", "pocos_likes", "cuenta_de_otro")
+
+
+def campaign_pay_rows(camp):
+    """Lo que se debe a cada clipper de esta campaña y las comprobaciones antes de pagarle.
+    Cada fila: user, clips, views, earned (ganado aquí), paid (ya enviado o enviándose), owed (lo que falta), checks
+    [(nivel, texto)], level (red · orange · ok), can_pay y last_error (si el último pago falló)."""
+    subs = (Submission.query.filter(Submission.campaign_id == camp.id, Submission.status == "aprobado")
+            .options(joinedload(Submission.user)).all())
+    by_user = {}
+    for s_ in subs:
+        by_user.setdefault(s_.user_id, []).append(s_)
+    if not by_user:
+        return []
+    payouts = Payout.query.filter(Payout.campaign_id == camp.id).order_by(Payout.created_at).all()
+    sent, last_fail = {}, {}
+    for p_ in payouts:
+        if p_.status in PAYOUT_OPEN + ("pagado",):
+            sent[p_.user_id] = sent.get(p_.user_id, 0) + p_.amount
+        elif p_.status == "rechazado":
+            last_fail[p_.user_id] = p_
+        if p_.status == "pagado":
+            last_fail.pop(p_.user_id, None)
+    peaks = dict(db.session.query(ViewSnapshot.submission_id, db.func.max(ViewSnapshot.views))
+                 .filter(ViewSnapshot.submission_id.in_([s_.id for s_ in subs])).group_by(ViewSnapshot.submission_id).all())
+    whops = {}
+    for uid_, wid in db.session.query(User.id, User.whop_user_id).filter(User.whop_user_id.isnot(None), User.whop_user_id != ""):
+        whops.setdefault(wid, []).append(uid_)
+    key = camp.creator_id if creators_on() else None
+    rows = []
+    for uid, us in by_user.items():
+        u = us[0].user
+        earned = cents(sum(x.earned or 0 for x in us))
+        paid = cents(sent.get(uid, 0))
+        owed = cents(earned - paid)
+        if owed >= CENT:                                   # nunca más de lo que tiene libre en el Whop de este creador
+            owed = min(owed, cents(user_money(u)["by_creator"].get(key, 0)))
+        checks = []
+        bad = [x for x in us if set(x.flag_list) & set(PAY_RED_FLAGS)]
+        if bad:
+            names = sorted({FLAG_LABELS.get(f, f) for x in bad for f in x.flag_list if f in PAY_RED_FLAGS})
+            checks.append(("red", f"{len(bad)} {'clip' if len(bad) == 1 else 'clips'} con alerta: {', '.join(names).lower()}"))
+        over = [x for x in us if (x.earned or 0) > raw_earning(x, camp) + CENT]
+        if over:
+            checks.append(("red", f"Cobra más de lo que dan sus vistas en {len(over)} {'clip' if len(over) == 1 else 'clips'}"))
+        others = [i for i in whops.get(u.whop_user_id, []) if i != uid] if u.whop_user_id else []
+        if others:
+            names = ", ".join(n for (n,) in db.session.query(User.name).filter(User.id.in_(others)).limit(3))
+            checks.append(("red", f"Su Whop también lo usa: {names}"))
+        if u.is_banned:
+            checks.append(("red", "Está bloqueado"))
+        drop = [x for x in us if peaks.get(x.id) and (x.views or 0) < peaks[x.id] * 0.7 and peaks[x.id] - (x.views or 0) >= 1000]
+        if drop:
+            checks.append(("orange", f"Las vistas bajaron en {len(drop)} {'clip' if len(drop) == 1 else 'clips'} "
+                                     "(¿vídeo borrado o puesto en privado?)"))
+        first = min(x.created_at for x in us)
+        if u.created_at and first and (first - u.created_at) < timedelta(days=2):
+            checks.append(("orange", "Cuenta nueva: se registró justo antes de enviar clips"))
+        rows.append({"user": u, "clips": len(us), "views": sum(x.views or 0 for x in us), "earned": earned, "paid": paid,
+                     "owed": max(owed, 0.0), "checks": checks, "last_error": last_fail.get(uid)})
+    owed_list = sorted(r["owed"] for r in rows if r["owed"] >= CENT)
+    median = owed_list[len(owed_list) // 2] if owed_list else 0
+    for r in rows:
+        if len(owed_list) >= 5 and r["owed"] >= 50 and r["owed"] > median * 5:
+            r["checks"].append(("orange", f"Gana mucho más que la media de la campaña ({money(median)})"))
+        if r["owed"] >= CENT and not r["user"].whop_user_id:
+            r["checks"].append(("grey", "Sin Whop conectado: su dinero queda guardado"))
+        lv = [c[0] for c in r["checks"]]
+        r["level"] = "red" if "red" in lv else "orange" if "orange" in lv else "ok"
+        r["can_pay"] = (r["owed"] >= MIN_WITHDRAW and bool(r["user"].whop_user_id) and not r["user"].is_banned)
+    order = {"red": 0, "orange": 1, "ok": 2}
+    return sorted(rows, key=lambda r: (r["owed"] < CENT, order[r["level"]], -r["owed"]))
+
+
+def run_campaign_payouts(ids):
+    """Envía por Whop, de uno en uno, los pagos que se acaban de poner en cola. Seguro de repetir (idempotencia)."""
+    for pid in ids:
+        p_ = db.session.get(Payout, pid)
+        if not p_ or p_.status != "solicitado":
+            continue
+        try:
+            whop_pay(p_)
+        except Exception as e:  # noqa: BLE001
+            log.exception("Fallo pagando el pago #%s", pid)
+            p_.status, p_.note, p_.error = "rechazado", WHOP_FAIL_NOTE, str(e)[:400]
+        db.session.commit()
+
+
+@app.route("/admin/campana/<int:cid>/pagar", methods=["GET", "POST"])
+@admin_required
+def admin_campaign_pay(cid):
+    """Pagos de la campaña (24 nov, Mustapha): al terminar, revisar a cada clipper y pagar a todos con un clic."""
+    camp = db.session.get(Campaign, cid) or abort(404)
+    if request.method == "POST":
+        act = request.form.get("act", "")
+        if act == "seguir":                               # pagos que se quedaron en cola (p. ej. la web se reinició)
+            queued = [p_.id for p_ in Payout.query.filter_by(campaign_id=cid, status="solicitado").all()]
+            _start_payouts(queued)
+            flash("Reanudando los pagos en cola.", "ok")
+            return redirect(url_for("admin_campaign_pay", cid=cid))
+        if camp.status != "finalizada":
+            flash("Solo se paga una campaña terminada. Termínala primero (Ajustes → Finalizar).", "error")
+            return redirect(url_for("admin_campaign_pay", cid=cid))
+        chosen = {int(x) for x in request.form.getlist("uids") if x.isdigit()}
+        with _withdraw_lock:
+            lock_row(Campaign, cid)                       # dos clics a la vez: el segundo ya ve los pagos del primero
+            rows = [r for r in campaign_pay_rows(camp) if r["user"].id in chosen and r["can_pay"]]
+            total = cents(sum(r["owed"] for r in rows))
+            if not rows:
+                flash("No hay nada que pagar a los clippers marcados.", "error")
+                return redirect(url_for("admin_campaign_pay", cid=cid))
+            if not wallet_ready(camp.creator_id):
+                flash("El Whop que paga esta campaña no está conectado. Conéctalo antes de pagar.", "error")
+                return redirect(url_for("admin_campaign_pay", cid=cid))
+            bal, _ = whop_balance(camp.creator_id)
+            if bal is not None and bal + CENT < total:
+                flash(f"El Whop que paga esta campaña tiene {money(bal)} y hacen falta {money(total)}. "
+                      f"Faltan {money(cents(total - bal))}: no se ha pagado a nadie.", "error")
+                return redirect(url_for("admin_campaign_pay", cid=cid))
+            ids = []
+            for r in rows:
+                u = r["user"]
+                p_ = Payout(user_id=u.id, creator_id=camp.creator_id if creators_on() else None, campaign_id=cid,
+                            amount=r["owed"], method=WHOP_METHOD, status="solicitado", note="En cola para enviar",
+                            details=f"@{u.whop_username} ({u.whop_user_id})")
+                db.session.add(p_)
+                db.session.flush()
+                ids.append(p_.id)
+            audit("campana_pagada", f"«{camp.song}» · {len(ids)} clippers · {money(total)}")
+            db.session.commit()
+        _start_payouts(ids)
+        flash(f"Pagando {money(total)} a {len(ids)} {'clipper' if len(ids) == 1 else 'clippers'}. "
+              "Esta página se actualiza sola hasta que terminen.", "ok")
+        return redirect(url_for("admin_campaign_pay", cid=cid))
+    whop_sync(Payout.query.filter_by(campaign_id=cid, status="procesando").all())
+    rows = campaign_pay_rows(camp)
+    queued = Payout.query.filter_by(campaign_id=cid, status="solicitado").count()
+    done = (Payout.query.filter(Payout.campaign_id == cid, Payout.status.in_(("pagado", "procesando")))
+            .options(joinedload(Payout.user)).order_by(Payout.created_at.desc()).limit(200).all())
+    bal = None
+    if camp.status == "finalizada" and wallet_ready(camp.creator_id):
+        bal, _ = whop_balance(camp.creator_id)
+    return render_template("admin/camp_pay.html", camp=camp, rows=rows, queued=queued, done=done, bal=bal,
+                           pend=pending_by_campaign().get(cid, {}), sec="pagos",
+                           owed=cents(sum(r["owed"] for r in rows)),
+                           ready=cents(sum(r["owed"] for r in rows if r["can_pay"] and r["level"] != "red")),
+                           paid=cents(sum(r["paid"] for r in rows)))
+
+
+def _start_payouts(ids):
+    if not ids:
+        return
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        run_campaign_payouts(ids)
+        return
+
+    def go():
+        with app.app_context():
+            run_campaign_payouts(ids)
+    threading.Thread(target=go, daemon=True, name="pagos-campana").start()
+
+
 def _whop_apply(payout, ok, code, data):
     """Actualiza el retiro según la respuesta de Whop. Devuelve 'pagado', 'procesando' o 'fallido'."""
     data = data if isinstance(data, dict) else {}
@@ -9507,7 +9706,9 @@ def _whop_apply(payout, ok, code, data):
     if ok and status not in ("failed", "processing", "pending", "created"):
         payout.status, payout.paid_at = "pagado", datetime.utcnow()
         payout.note = f"Enviado a tu Whop · {payout.ext_id}"[:255]
-        notify_user(payout.user_id, "retiro", "Retiro enviado", f"{money(payout.amount)} ya están en tu Whop.", "/ganancias?tab=retiros")
+        camp_ = db.session.get(Campaign, payout.campaign_id) if payout.campaign_id else None
+        notify_user(payout.user_id, "retiro", f"Pago de «{camp_.song}» enviado" if camp_ else "Retiro enviado",
+                    f"{money(payout.amount)} ya están en tu Whop.", "/ganancias?tab=retiros")
         return "pagado"
     if ok and status != "failed":
         payout.status, payout.note = "procesando", "Enviando a tu cuenta de Whop"

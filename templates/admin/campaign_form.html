@@ -12,7 +12,7 @@
     {% if can.estado and camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="plazas"><button class="btn soft sm">{{ "Abrir plazas" if camp.full else "Marcar plazas completas" }}</button></form>{% endif %}
     {% if not acting_as_mod() %}<form method="post" action="{{ url_for('admin_campaign_duplicate', cid=camp.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn soft sm">Duplicar</button></form>{% endif %}
     {% if can.csv %}<a class="btn soft sm" href="{{ url_for('admin_campaign_csv', cid=camp.id) }}" data-turbo="false">Descargar CSV</a>{% endif %}
-    {% if can.estado and camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_close', cid=camp.id) }}" data-confirm="¿Cerrar «{{ camp.song }}»? Dejará de aceptar clips y los clippers podrán retirar lo que ganaron."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn red sm">Cerrar campaña</button></form>{% endif %}
+    {% if can.estado and camp.status != 'finalizada' %}<form method="post" action="{{ url_for('admin_campaign_close', cid=camp.id) }}" data-confirm="¿Cerrar «{{ camp.song }}»? Dejará de aceptar clips y luego podrás pagar a los clippers desde «Pagos»."><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn red sm">Cerrar campaña</button></form>{% endif %}
   </div>
 </div>
 {% endif %}

@@ -92,7 +92,7 @@
           {% if stg == 'contando' and mv %}<span class="mc-av wait">⏳ Faltan {{ [mv - (s.views or 0), 0]|max|num }}</span>
           {% elif stg == 'estadisticas' %}<a class="mc-av warn" href="{{ url_for('my_clips', tab='estadisticas') }}#st{{ s.id }}">● Sube la verificación</a>
           {% elif stg == 'revisar' %}<span class="mc-av muted">● En revisión</span>
-          {% elif s.status == 'aprobado' %}<span class="mc-av ok">● {{ "Cobrando" if s.campaign.status != 'finalizada' else "Listo para retirar" }}</span>
+          {% elif s.status == 'aprobado' %}<span class="mc-av ok">● {{ "Cobrando" if s.campaign.status != 'finalizada' else "Listo para retirar" if CLIPPER_WITHDRAW else "Por cobrar" }}</span>
           {% elif s.status == 'rechazado' %}{% if more %}<button type="button" class="mc-av bad mc-av-link" data-row-toggle="mr{{ s.id }}" aria-controls="mr{{ s.id }}" aria-expanded="false">● Ver el motivo</button>{% else %}<span class="mc-av bad">● Rechazado</span>{% endif %}
           {% else %}<span class="muted">—</span>{% endif %}
         </td>

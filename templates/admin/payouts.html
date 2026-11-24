@@ -3,9 +3,32 @@
 {% import "admin/_ui.html" as ui %}
 {% block title %}Retiros · Admin{% endblock %}
 {% block content %}
-{% call ui.head("Retiros", "Los retiros se pagan solos por Whop en cuanto el clipper pulsa «Retirar». Si Whop no puede pagar, el retiro se cancela solo y el dinero vuelve a su saldo.") %}
+{% call ui.head("Retiros", "Cuando termina una campaña, revísala y paga a todos sus clippers de una vez desde «Pagos» de la campaña.") %}
   <a class="btn soft" href="{{ url_for('admin_payouts_csv') }}" data-turbo="false">Descargar todos (CSV)</a>
 {% endcall %}
+<section>
+  <div class="section-head"><h2>Campañas por pagar ({{ to_pay|length }})</h2></div>
+  <div class="table-card">
+  {% if to_pay %}
+    <div class="table-scroll"><table class="rt">
+      <thead><tr><th>Campaña</th><th>Terminó</th><th class="r">Clippers</th><th class="r">Por pagar</th><th></th></tr></thead>
+      <tbody>
+      {% for c, amount, n in to_pay %}
+      <tr>
+        <td data-label="Campaña"><b>{{ c.song }}</b><div class="small muted">{{ c.artist }}</div></td>
+        <td data-label="Terminó">{{ c.ended_at|ago if c.ended_at else "—" }}</td>
+        <td data-label="Clippers" class="r tnum">{{ n }}</td>
+        <td data-label="Por pagar" class="r tnum"><b class="m-earn">{{ amount|money }}</b></td>
+        <td data-label=""><a class="btn sm" href="{{ url_for('admin_campaign_pay', cid=c.id) }}">Revisar y pagar</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% else %}
+    <div class="empty"><h3>Nada por pagar</h3><p class="muted">Cuando termine una campaña con dinero ganado, saldrá aquí.</p></div>
+  {% endif %}
+  </div>
+</section>
 <section>
   <div class="section-head">
     <h2>Retiros en curso ({{ open_requests|length }})</h2>

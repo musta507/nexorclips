@@ -3748,3 +3748,37 @@ html[data-theme=dark] .k-sent{--k-soft:rgba(139,108,240,.18)}
 html[data-theme=dark] .k-users{--k-soft:rgba(20,184,166,.16)}
 html[data-theme=dark] .btn.cr-no{color:var(--on-ink)}
 html[data-theme=dark] .hm-step-list .done{background:rgba(47,213,133,.08)}
+
+/* Pagos de la campaña (24 nov): revisar y pagar a todos de una vez */
+.cpay-sum{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.cpay-figs{display:flex;flex-wrap:wrap;gap:12px 36px}
+.cpay-figs>div{display:flex;flex-direction:column;gap:2px}
+.cpay-figs b{font-size:22px;font-weight:600}
+.cpay-red{color:var(--red-ink)}
+.cpay-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 10px}
+.cpay-legend span{display:inline-flex;align-items:center;gap:6px}
+.cpay-dot{width:8px;height:8px;border-radius:999px;display:inline-block;background:var(--money-ink)}
+.cpay-dot.orange{background:#b54708}.cpay-dot.red{background:var(--red-ink)}
+.cpay-ck{width:36px}
+.cpay-ck input{width:18px;height:18px;accent-color:var(--ink)}
+.cpay-row.red td:first-child{box-shadow:inset 3px 0 0 var(--red-ink)}
+.cpay-row.orange td:first-child{box-shadow:inset 3px 0 0 #b54708}
+.cpay-row.cpay-done{opacity:.6}
+.cpay-chk{font-size:12px;line-height:1.4;padding:2px 0 2px 14px;position:relative;color:var(--ink-2)}
+.cpay-chk::before{content:"";position:absolute;left:0;top:7px;width:7px;height:7px;border-radius:999px;background:var(--muted)}
+.cpay-chk.ok::before{background:var(--money-ink)}.cpay-chk.orange{color:#b54708}.cpay-chk.orange::before{background:#b54708}
+.cpay-chk.red{color:var(--red-ink)}.cpay-chk.red::before{background:var(--red-ink)}
+.cpay-bar{position:sticky;bottom:12px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin-top:12px;padding:12px 14px;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--sh-2)}
+.cpay-hist{margin-top:14px}
+.cpay-hist summary{cursor:pointer}
+.cpay-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column}
+.cpay-list li{display:grid;grid-template-columns:1fr auto auto auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+@media (max-width:900px){.cpay-bar{bottom:76px}}
+@media (max-width:640px){.cpay-row.red td:first-child,.cpay-row.orange td:first-child{box-shadow:none}
+  table.rt tr.cpay-row.red{box-shadow:inset 3px 0 0 var(--red-ink)}table.rt tr.cpay-row.orange{box-shadow:inset 3px 0 0 #b54708}}
+@media (min-width:641px){
+  @container tbl (max-width:900px){#cpay-table :is(th,td):nth-child(6){display:none}}
+  @container tbl (max-width:780px){#cpay-table :is(th,td):nth-child(3){display:none}}
+  @container tbl (max-width:680px){#cpay-table :is(th,td):nth-child(4){display:none}}
+}

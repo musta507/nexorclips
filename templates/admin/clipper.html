@@ -46,7 +46,7 @@
 <div class="kpis">
   <div class="kpi"><span>Ganado en total</span><b class="tnum">{{ m.earned|earn }}</b></div>
   <div class="kpi"><span>En campañas abiertas</span><b class="tnum">{{ m.live|money }}</b></div>
-  <div class="kpi"><span>Disponible para retirar</span><b class="tnum">{{ m.available|money }}</b></div>
+  <div class="kpi"><span>{{ "Disponible para retirar" if CLIPPER_WITHDRAW else "Por cobrar" }}</span><b class="tnum">{{ m.available|money }}</b></div>
   <div class="kpi"><span>Pagado</span><b class="tnum">{{ m.paid|money }}</b></div>
   <div class="kpi"><span>Vistas aprobadas</span><b class="tnum">{{ views|short }}</b></div>
   <div class="kpi"><span>Clips enviados</span><b class="tnum">{{ subs|length }}</b></div>

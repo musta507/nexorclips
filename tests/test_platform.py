@@ -11,7 +11,7 @@ DB = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ.setdefault("SEARCH_ENGINE", "apify")
 os.environ.update(DATABASE_URL=os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{DB}", ADMIN_EMAIL="admin@test.com", APIFY_TOKEN="test",
                   CRON_SECRET="cron-key", DEV_LOGIN="1", GOOGLE_CLIENT_ID="cid", GOOGLE_CLIENT_SECRET="sec",
-                  SUPPORT_EMAIL="soporte@test.com")
+                  SUPPORT_EMAIL="soporte@test.com", CLIPPER_WITHDRAW="1")      # los retiros de antes; los pagos por campaña, en su prueba
 os.environ.pop("RAILWAY_ENVIRONMENT", None)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -715,6 +715,67 @@ def _clipper_with_balance(monkeypatch, email="w@test.com", views=450_000):
         A.refresh_views()
     post(admin, f"/admin/campana/{cid}/cerrar")       # lo ganado se puede retirar al cerrar la campaña
     return c, admin
+
+
+def test_pay_whole_campaign_with_checks(monkeypatch):
+    """Pagos de la campaña: al terminar se paga a todos con un clic; los que tienen alertas vienen sin marcar,
+    nunca se paga dos veces y si al Whop no le llega el saldo no se paga a nadie."""
+    import re
+    monkeypatch.setattr(A, "CLIPPER_WITHDRAW", False)
+    cid = make_campaign(rate=100, budget=1000)
+    admin = client_for("admin@test.com")
+    a, b, n = client_for("pa@test.com", tiktok="paa"), client_for("pb@test.com", tiktok="pbb"), client_for("pn@test.com", tiktok="pnn")
+    for c_, h, i in ((a, "paa", 11), (b, "pbb", 12), (n, "pnn", 13)):
+        post(c_, f"/campana/{cid}", url=tt(h, i))
+    approve_all(admin)
+    set_views(monkeypatch, {str(7300000000000000011): 100_000, str(7300000000000000012): 50_000, str(7300000000000000013): 20_000})
+    with A.app.app_context():
+        A.refresh_views()
+    calls = _whop_fake(monkeypatch)
+    post(a, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="ana")
+    post(b, "/cuenta", section="cobro", payout_method=A.WHOP_METHOD, whop_username="bea")
+    monkeypatch.setattr(A, "whop_balance", lambda cr: (1000.0, ""))
+    with A.app.app_context():
+        ids = {e: A.User.query.filter_by(email=e).one().id for e in ("pa@test.com", "pb@test.com", "pn@test.com")}
+        sb = A.Submission.query.filter_by(user_id=ids["pb@test.com"]).one()
+        sb.add_flag("subida_rapida")
+        for u_ in A.User.query.filter(A.User.id.in_(list(ids.values()))):
+            u_.created_at = A.datetime.utcnow() - A.timedelta(days=30)                  # no son cuentas nuevas
+        A.db.session.commit()
+    page = admin.get(f"/admin/campana/{cid}/pagar").get_data(as_text=True)
+    assert "sigue abierta" in page and 'name="uids"' not in page                     # abierta: se ve, pero no se paga
+    assert "Ya no hace falta pedir retiros" in post(a, "/ganancias/retirar").get_data(as_text=True)
+    assert "Por cobrar" in a.get("/ganancias").get_data(as_text=True)
+    post(admin, f"/admin/campana/{cid}/cerrar")
+    with A.app.app_context():
+        rows = {r["user"].email: r for r in A.campaign_pay_rows(A.db.session.get(A.Campaign, cid))}
+        assert rows["pa@test.com"]["level"] == "ok" and rows["pa@test.com"]["owed"] == 10.0 and rows["pa@test.com"]["can_pay"]
+        assert rows["pb@test.com"]["level"] == "red"                                    # alerta de bots
+        assert not rows["pn@test.com"]["can_pay"]                                       # sin Whop: se guarda
+        assert any("Sin Whop" in t for _, t in rows["pn@test.com"]["checks"])
+        assert "Ya puedes retirar" not in A.Message.query.filter_by(user_id=ids["pa@test.com"]).all()[-1].body
+    page = admin.get(f"/admin/campana/{cid}/pagar").get_data(as_text=True)
+    assert re.search(rf'value="{ids["pa@test.com"]}" data-amount="10.0" checked', page)
+    assert re.search(rf'value="{ids["pb@test.com"]}" data-amount="5.0" aria', page)    # en rojo: sin marcar
+    assert "Revisar y pagar" in admin.get("/admin/retiros").get_data(as_text=True)
+    monkeypatch.setattr(A, "whop_balance", lambda cr: (1.0, ""))
+    r = post(admin, f"/admin/campana/{cid}/pagar", act="pagar", uids=[str(ids["pa@test.com"])])
+    assert "no se ha pagado a nadie" in r.get_data(as_text=True)
+    monkeypatch.setattr(A, "whop_balance", lambda cr: (1000.0, ""))
+    post(admin, f"/admin/campana/{cid}/pagar", act="pagar", uids=[str(i) for i in ids.values()])
+    with A.app.app_context():
+        ps = A.Payout.query.filter_by(campaign_id=cid).all()
+        assert sorted((p.user_id, p.amount, p.status) for p in ps) == sorted(
+            [(ids["pa@test.com"], 10.0, "pagado"), (ids["pb@test.com"], 5.0, "pagado")])  # el de sin Whop no
+    xfers = [c_ for c_ in calls if c_[0] == "POST" and "/transfers" in c_[1]]
+    assert sorted(x[2]["destination_id"] for x in xfers) == ["user_ana", "user_bea"]
+    r = post(admin, f"/admin/campana/{cid}/pagar", act="pagar", uids=[str(i) for i in ids.values()])
+    assert "No hay nada que pagar" in r.get_data(as_text=True)                       # nunca dos veces
+    with A.app.app_context():
+        assert A.Payout.query.filter_by(campaign_id=cid).count() == 2
+        assert A.Notice.query.filter(A.Notice.user_id == ids["pa@test.com"], A.Notice.title.like("Pago de%")).count() == 1
+        assert A.user_money(A.db.session.get(A.User, ids["pa@test.com"]))["available"] == 0
+    assert client_for("pz@test.com").get(f"/admin/campana/{cid}/pagar").status_code == 403
 
 
 def test_whop_connect_and_instant_withdraw(monkeypatch):

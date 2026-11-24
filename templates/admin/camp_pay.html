@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon, av %}
+{% block title %}Pagos · {{ camp.song }}{% endblock %}
+{% block content %}
+{% if queued %}<meta http-equiv="refresh" content="4">{% endif %}
+{% include "admin/_camp_nav.html" %}
+
+<div class="card tight cpay-sum">
+  <div class="cpay-figs">
+    <div><span class="small muted">Por pagar</span><b class="tnum m-earn">{{ owed|money }}</b></div>
+    <div><span class="small muted">Ya pagado</span><b class="tnum">{{ paid|money }}</b></div>
+    {% if bal is not none %}<div><span class="small muted">Saldo del Whop que paga</span><b class="tnum{% if bal + 0.01 < ready %} cpay-red{% endif %}">{{ bal|money }}</b></div>{% endif %}
+  </div>
+  {% if camp.status != "finalizada" %}
+  <p class="small muted">La campaña sigue abierta. Aquí ya puedes ver cuánto le toca a cada uno y sus comprobaciones; el botón de pagar sale cuando la campaña termine.</p>
+  {% elif queued %}
+  <p class="small"><span class="status procesando">Pagando…</span> Quedan {{ queued }} {{ "pago" if queued == 1 else "pagos" }} en cola. Esta página se actualiza sola.</p>
+  <form method="post" data-turbo="false"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="seguir"><button class="link small">¿Se ha parado? Seguir pagando</button></form>
+  {% elif not wallet_ready(camp.creator_id) %}
+  <p class="small cpay-red">El Whop que paga esta campaña no está conectado: conéctalo antes de pagar.</p>
+  {% elif bal is not none and bal + 0.01 < ready %}
+  <p class="small cpay-red">Al Whop le faltan {{ (ready - bal)|money }} para pagar lo marcado. Mete saldo o desmarca a alguien.</p>
+  {% endif %}
+</div>
+
+{% set payable = rows|selectattr("can_pay")|list %}
+{% if rows %}
+<form method="post" data-turbo="false" id="pay-form" data-pay-form
+      data-confirm="¿Enviar los pagos marcados a sus Whop? El dinero sale del Whop que paga esta campaña y no se puede deshacer.">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="act" value="pagar">
+  <div class="cpay-legend small muted">
+    <span><i class="cpay-dot ok"></i>Todo en orden</span><span><i class="cpay-dot orange"></i>Revísalo</span><span><i class="cpay-dot red"></i>Alerta: viene sin marcar</span>
+  </div>
+  <div class="table-card">
+    <div class="table-scroll"><table class="rt" id="cpay-table">
+      <thead><tr><th class="cpay-ck">{% if payable and camp.status == "finalizada" and not queued %}<input type="checkbox" data-check-all aria-label="Marcar todos">{% endif %}</th><th>Clipper</th><th class="r">Clips</th><th class="r">Vistas</th><th class="r">Ganado</th><th class="r">Ya pagado</th><th class="r">Por pagar</th><th>Comprobaciones</th></tr></thead>
+      <tbody>
+      {% for r in rows %}{% set u = r.user %}
+      <tr class="cpay-row {{ r.level }}{% if r.owed < 0.01 %} cpay-done{% endif %}">
+        <td class="cpay-ck" data-label="">{% if r.can_pay and camp.status == "finalizada" and not queued %}<input type="checkbox" name="uids" value="{{ u.id }}" data-amount="{{ r.owed }}"{% if r.level != "red" %} checked{% endif %} aria-label="Pagar a {{ u.name }}">{% endif %}</td>
+        <td data-label="Clipper"><div class="who-cell">{{ av(u) }}<div><a class="link" href="{{ url_for('admin_clipper', uid=u.id) if admin_can('admin_clipper') else '#' }}"><b>{{ u.name }}</b></a><div class="small muted">{% if u.whop_username %}<span class="whop-ico" aria-hidden="true"></span> @{{ u.whop_username }}{% else %}Sin Whop{% endif %}</div></div></div></td>
+        <td data-label="Clips" class="r tnum">{{ r.clips }}</td>
+        <td data-label="Vistas" class="r tnum">{{ r.views|short }}</td>
+        <td data-label="Ganado" class="r tnum">{{ r.earned|money }}</td>
+        <td data-label="Ya pagado" class="r tnum">{{ r.paid|money if r.paid else "—" }}</td>
+        <td data-label="Por pagar" class="r tnum"><b class="m-earn">{{ r.owed|money if r.owed >= 0.01 else "Pagado" }}</b></td>
+        <td data-label="Comprobaciones">
+          {% for lv, txt in r.checks %}<div class="cpay-chk {{ lv }}">{{ txt }}</div>{% else %}{% if r.owed >= 0.01 %}<div class="cpay-chk ok">Sin nada raro</div>{% endif %}{% endfor %}
+          {% if r.last_error %}<div class="cpay-chk red">El último pago falló{% if is_tech() and r.last_error.error %}: {{ r.last_error.error|truncate(90) }}{% endif %}. Puedes volver a pagarle.</div>{% endif %}
+          {% if r.checks and admin_can('admin_campaign_review') %}<a class="link small" href="{{ url_for('admin_campaign_review', cid=camp.id, tab='aprobados', q=u.name) }}">Ver sus clips</a>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  {% if payable and camp.status == "finalizada" and not queued %}
+  <div class="cpay-bar">
+    <span class="small muted">El dinero va del Whop que paga la campaña directo al de cada clipper. A nadie se le paga dos veces.</span>
+    <button class="btn accent" data-pay-btn>Pagar <span data-pay-total>…</span></button>
+  </div>
+  {% endif %}
+</form>
+{% else %}
+<div class="table-card"><div class="empty"><h3>Nadie ha ganado dinero en esta campaña</h3><p class="muted">Cuando haya clips aprobados con ganancias, saldrán aquí.</p></div></div>
+{% endif %}
+
+{% if done %}
+<details class="card tight cpay-hist">
+  <summary><b>Pagos enviados ({{ done|length }})</b></summary>
+  <ul class="cpay-list">{% for p in done %}<li><span>{{ p.user.name }}</span><span class="small muted">{{ (p.paid_at or p.created_at)|ago }}</span><span class="status {{ p.status }}">{{ "Enviando" if p.status == "procesando" else "Pagado" }}</span><b class="tnum">{{ p.amount|money }}</b></li>{% endfor %}</ul>
+</details>
+{% endif %}
+</turbo-frame>
+{% endblock %}

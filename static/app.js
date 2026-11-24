@@ -2321,3 +2321,35 @@ document.addEventListener("close", function (e) {           // al cerrar, la pr�
   document.addEventListener("turbo:before-visit", function () { set(false); });
   document.addEventListener("turbo:before-cache", function () { set(false); });
 })();
+
+// Pagos de la campaña: «marcar todos» y el total del botón «Pagar …» según las casillas marcadas
+(function () {
+  function money(v) {
+    return v.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " $";
+  }
+  function pintar(form) {
+    var boxes = form.querySelectorAll('input[name="uids"]'), n = 0, total = 0;
+    boxes.forEach(function (b) { if (b.checked) { n++; total += parseFloat(b.getAttribute("data-amount")) || 0; } });
+    var out = form.querySelector("[data-pay-total]"), btn = form.querySelector("[data-pay-btn]");
+    if (out) out.textContent = money(total) + " a " + n + (n === 1 ? " clipper" : " clippers");
+    if (btn) btn.disabled = n === 0;
+    var all = form.querySelector("[data-check-all]");
+    if (all) all.checked = n > 0 && n === boxes.length;
+  }
+  function init() {
+    document.querySelectorAll("[data-pay-form]").forEach(function (form) {
+      if (form._payReady) return;
+      form._payReady = true;
+      form.addEventListener("change", function (e) {
+        if (e.target.matches("[data-check-all]")) {
+          form.querySelectorAll('input[name="uids"]').forEach(function (b) { b.checked = e.target.checked; });
+        }
+        pintar(form);
+      });
+      pintar(form);
+    });
+  }
+  document.addEventListener("turbo:load", init);
+  document.addEventListener("turbo:frame-load", init);
+  if (document.readyState !== "loading") init(); else document.addEventListener("DOMContentLoaded", init);
+})();

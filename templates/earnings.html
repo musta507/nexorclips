@@ -5,31 +5,36 @@
 <h1 class="sr-only">Ganancias</h1>
 <div class="stats four">
   <div class="card stat hero">
-    <span class="l">Balance disponible</span>
+    <span class="l">{{ "Balance disponible" if CLIPPER_WITHDRAW else "Por cobrar" }}</span>
     <div class="row">
       <span class="v">{{ m.available|money }}</span>
       {% if not current_user.payout_ready %}
         <a class="btn sm" href="{{ url_for('account') }}#cobro"><span class="whop-ico" aria-hidden="true"></span>Conectar Whop</a>
       {% elif m.open_payout %}
-        <span class="status solicitado">Retiro en curso</span>
+        <span class="status solicitado">{{ "Retiro en curso" if CLIPPER_WITHDRAW else "Enviando" }}</span>
+      {% elif not CLIPPER_WITHDRAW %}
       {% else %}
         <button type="button" class="btn sm" data-open="wd-dialog" {% if m.available < 0.01 %}disabled{% endif %}>Retirar</button>
       {% endif %}
     </div>
     {% if m.open_payout %}
     <p class="small muted">{% if m.open_payout.status == "procesando" %}Enviando {{ m.open_payout.amount|money }} a tu cuenta de Whop. Llegará en unos minutos.{% elif m.open_payout.method == WHOP_METHOD %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo revisamos y te llega a tu Whop.{% else %}Retiro de {{ m.open_payout.amount|money }} solicitado {{ m.open_payout.created_at|ago }}. Lo pagamos en un plazo de {{ PAYOUT_DAYS }} días hábiles.{% endif %}</p>
-    {% elif MIN_WITHDRAW and m.available < MIN_WITHDRAW and m.available > 0 %}
+    {% elif CLIPPER_WITHDRAW and MIN_WITHDRAW and m.available < MIN_WITHDRAW and m.available > 0 %}
     <div class="withdraw-goal">
       <div class="budget-row tnum"><span>Te faltan <b>{{ (MIN_WITHDRAW - m.available)|money }}</b> para poder retirar</span><span>Mín. {{ MIN_WITHDRAW|money(0) }}</span></div>
       <div class="budget-bar"><span style="width:{{ (m.available / MIN_WITHDRAW * 100)|round|int }}%"></span></div>
     </div>
     {% endif %}
+    {% if not CLIPPER_WITHDRAW %}
+    <span class="small muted">{% if current_user.payout_ready %}Cuando termina cada campaña la revisamos y te lo enviamos a tu Whop <b>@{{ current_user.whop_username }}</b> · <a href="{{ url_for('account') }}#cobro" style="text-decoration:underline">cambiar</a>{% else %}Conecta tu Whop para que te lleguen los pagos{% endif %}</span>
+    {% else %}
     <span class="small muted">{% if current_user.payout_ready %}Cobras por {{ current_user.payout_label }}{% if current_user.payout_method == WHOP_METHOD %} (al instante){% endif %} · <a href="{{ url_for('account') }}#cobro" style="text-decoration:underline">cambiar</a>{% if MIN_WITHDRAW %} · Retiro mínimo {{ MIN_WITHDRAW|money(0) }}{% endif %}{% else %}Conecta tu Whop para retirar{% endif %}</span>
+    {% endif %}
   </div>
   <div class="card stat">
     <span class="l">En campañas abiertas</span>
     <span class="v">{{ m.live|money }}</span>
-    <span class="small muted">Ya ganado. Podrás retirarlo cuando termine cada campaña</span>
+    <span class="small muted">Ya ganado. {{ "Podrás retirarlo" if CLIPPER_WITHDRAW else "Te lo enviamos" }} cuando termine cada campaña</span>
   </div>
   <a class="card stat stat-link" href="{{ url_for('my_clips', tab='revisar') }}">
     <span class="l">En revisión</span>
@@ -86,12 +91,12 @@
       </tbody>
     </table></div>
     {% else %}
-    <div class="empty"><h3>Todavía no has hecho retiros</h3><p class="muted">Cuando tengas saldo disponible, pulsa «Retirar».</p></div>
+    <div class="empty"><h3>Todavía no has hecho retiros</h3><p class="muted">{{ "Cuando tengas saldo disponible, pulsa «Retirar»." if CLIPPER_WITHDRAW else "Cuando termine una campaña en la que hayas ganado, el pago saldrá aquí." }}</p></div>
     {% endif %}
   {% endif %}
   </div>
 </div>
-{% if current_user.payout_ready and not m.open_payout and m.available >= 0.01 %}
+{% if CLIPPER_WITHDRAW and current_user.payout_ready and not m.open_payout and m.available >= 0.01 %}
 <dialog class="wd-dialog" id="wd-dialog" aria-labelledby="wd-title">
   <form method="post" action="{{ url_for('withdraw') }}" class="form-stack">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
