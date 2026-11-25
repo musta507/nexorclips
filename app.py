@@ -8857,6 +8857,33 @@ def admin_campaign_state(cid):
             return redirect(url_for("admin_campaign", cid=cid))
         camp.status = "activa"
         flash("Campaña activa otra vez.", "ok")
+    elif accion == "reabrir" and camp.status == "finalizada":
+        # Seguir una campaña terminada (25 nov, Mustapha), esté pagada o no: lo ya ganado se queda tal cual y lo que
+        # falte por pagar se paga cuando vuelva a terminar (Pagos solo resta lo ya enviado).
+        if not perm_ok(cid, "dinero") and parse_float(request.form.get("amount"), 0):
+            abort(403)
+        if REQUIRE_CREATOR and not camp.creator_id:
+            flash(NO_CREATOR_MSG, "error")
+            return redirect(url_for("admin_campaign", cid=cid))
+        extra = parse_float(request.form.get("amount"), 0) or 0
+        if extra > 0:
+            camp.budget = cents((camp.budget or 0) + extra)
+        if camp.exhausted:
+            flash(f"No le queda presupuesto ({money(camp.spent)} de {money(camp.budget)} repartidos). "
+                  "Escribe cuánto añadir para reabrirla.", "error")
+            return redirect(url_for("admin_campaign", cid=cid))
+        camp.status, camp.ended_at, camp.low_alert_sent = "activa", None, False
+        n = 0
+        if request.form.get("avisar"):
+            uids = {m.user_id for m in CampaignMember.query.filter_by(campaign_id=cid, status="aceptada")}
+            for uid in uids:
+                notify_user(uid, "mensaje", f"{camp.song} vuelve a estar abierta",
+                            "Puedes seguir publicando. Lo que ya ganaste sigue guardado y se paga cuando termine.",
+                            f"/campana/{cid}", camp_id=cid)
+            n = len(uids)
+        flash("Campaña abierta otra vez: vuelve a aceptar clips y se leen sus vistas cada noche."
+              + (f" Añadidos {money(extra)} de presupuesto." if extra > 0 else "")
+              + (f" Avisados {n} {'clipper' if n == 1 else 'clippers'}." if n else ""), "ok")
     elif accion == "plazas":
         camp.full = not camp.full
         if not camp.full:
@@ -8878,7 +8905,8 @@ def admin_campaign_state(cid):
         flash(f"Añadidos {money(extra)}. Presupuesto total: {money(camp.budget)}.", "ok")
     else:
         abort(400)
-    audit("campaña_" + accion, f"#{camp.id} {camp.song}" + (f" · +{request.form.get('amount')}" if accion == "presupuesto" else ""))
+    audit("campaña_" + accion, f"#{camp.id} {camp.song}"
+          + (f" · +{request.form.get('amount')}" if accion in ("presupuesto", "reabrir") and request.form.get("amount") else ""))
     db.session.commit()
     return redirect(url_for("admin_campaign", cid=cid))
 

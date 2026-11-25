@@ -3790,3 +3790,9 @@ html[data-theme=dark] .hm-step-list .done{background:rgba(47,213,133,.08)}
 .rep-bar{height:4px;width:100%;max-width:150px;margin-top:7px;border-radius:999px;background:var(--soft-2);overflow:hidden}
 .rep-bar span{display:block;height:100%;border-radius:999px;background:var(--money)}
 @media (max-width:640px){table.rt td.camp-rep .rep-bar{margin-left:auto;max-width:120px}}
+
+/* Reabrir una campaña terminada (25 nov) */
+.camp-reopen{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;margin:12px 0}
+.camp-reopen-txt{display:flex;flex-direction:column;gap:2px;max-width:520px}
+.camp-reopen-act{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.camp-reopen-act input[name=amount]{width:130px}

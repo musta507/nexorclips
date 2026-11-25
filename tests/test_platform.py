@@ -4388,3 +4388,34 @@ def test_audit_images_only_from_internet():
         assert not A.public_host(bad), bad
         assert A.fetch_image(bad) is None
     assert A.public_host("https://p16-sign.tiktokcdn.com/obj/x.jpeg") and A.public_host("https://8.8.8.8/x.jpg")
+
+
+def test_reopen_finished_campaign_without_paying(monkeypatch):
+    """Reabrir una campaña terminada aunque no se haya pagado: lo ganado sigue, lo ya pagado no se repite."""
+    monkeypatch.setattr(A, "CLIPPER_WITHDRAW", False)
+    cid = make_campaign(rate=100, budget=10)
+    admin = client_for("admin@test.com")
+    c = client_for("ro@test.com", tiktok="roo")
+    post(c, f"/campana/{cid}", url=tt("roo", 31))
+    approve_all(admin)
+    set_views(monkeypatch, {str(7300000000000000031): 100_000})        # 10 $: agota el presupuesto y se cierra sola
+    with A.app.app_context():
+        A.refresh_views()
+        camp = A.db.session.get(A.Campaign, cid)
+        assert camp.status == "finalizada" and camp.exhausted
+    page = admin.get(f"/admin/campana/{cid}").get_data(as_text=True)
+    assert "Reabrir campaña" in page and "añade presupuesto" in page
+    r = post(admin, f"/admin/campana/{cid}/estado", accion="reabrir", avisar="1")
+    assert "No le queda presupuesto" in r.get_data(as_text=True)
+    post(admin, f"/admin/campana/{cid}/estado", accion="reabrir", amount="20", avisar="1")
+    with A.app.app_context():
+        camp = A.db.session.get(A.Campaign, cid)
+        assert camp.status == "activa" and camp.ended_at is None and camp.budget == 30
+        u = A.User.query.filter_by(email="ro@test.com").one()
+        assert A.Submission.query.filter_by(user_id=u.id).one().earned == 10          # lo ganado sigue
+        assert A.Notice.query.filter(A.Notice.user_id == u.id, A.Notice.title.like("%vuelve a estar abierta")).count() == 1
+        assert A.user_money(u)["available"] == 0                                    # se pagará al volver a terminar
+    post(admin, f"/admin/campana/{cid}/cerrar")
+    with A.app.app_context():
+        rows = A.campaign_pay_rows(A.db.session.get(A.Campaign, cid))
+        assert rows[0]["owed"] == 10

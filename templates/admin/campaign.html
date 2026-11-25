@@ -4,7 +4,19 @@
 {% block content %}
 {% include "admin/_camp_nav.html" %}
 
-{% if camp.status == 'finalizada' %}<div class="flash ok">Campaña completada{% if camp.ended_at %} el {{ camp.ended_at|date }}{% endif %}. Ya no acepta clips ni se actualizan sus vistas.{% if admin_can("admin_campaign_pay") %} <a class="link" href="{{ url_for('admin_campaign_pay', cid=camp.id) }}">Revisar y pagar a los clippers</a>.{% endif %} Para reabrirla, sube el presupuesto y ponla en «Activa».</div>{% endif %}
+{% if camp.status == 'finalizada' %}<div class="flash ok">Campaña completada{% if camp.ended_at %} el {{ camp.ended_at|date }}{% endif %}. Ya no acepta clips ni se actualizan sus vistas.{% if admin_can("admin_campaign_pay") %} <a class="link" href="{{ url_for('admin_campaign_pay', cid=camp.id) }}">Revisar y pagar a los clippers</a>.{% endif %}</div>
+{% if can.estado %}
+<form class="card tight camp-reopen" method="post" action="{{ url_for('admin_campaign_state', cid=camp.id) }}" data-confirm="¿Abrir la campaña otra vez? Volverá a aceptar clips.">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="reabrir">
+  <div class="camp-reopen-txt"><b>Seguir con la campaña</b><span class="small muted">Vuelve a aceptar clips. Lo ganado y lo ya pagado se quedan como están; lo que falte se paga cuando vuelva a terminar.{% if camp.exhausted %} Le queda 0 $: añade presupuesto.{% else %} Le quedan {{ camp.remaining|money }}.{% endif %}</span></div>
+  <div class="camp-reopen-act">
+    {% if can.dinero %}<input name="amount" inputmode="decimal" placeholder="{{ 'Añadir $' if camp.exhausted else '+ $ (opcional)' }}" aria-label="Presupuesto a añadir"{% if camp.exhausted %} required{% endif %}>{% endif %}
+    <label class="check small"><input type="checkbox" name="avisar" value="1" checked> Avisar a sus clippers</label>
+    <button class="btn sm">Reabrir campaña</button>
+  </div>
+</form>
+{% endif %}
+{% endif %}
 
 {% if can.estadisticas %}
 <div class="card tight camp-budget" id="presupuesto">
