@@ -3945,6 +3945,34 @@ def test_book_call_tracks_plan_and_button():
     assert "Reservas por plan" in page and "Plan: <b>Pro</b>" in page
 
 
+def test_book_call_shows_creator_time_and_country():
+    from urllib.parse import unquote
+    c = A.app.test_client()
+    with A.app.app_context():
+        slots = A.book_slots()
+    c.post("/reservar", data={"at": slots[0].strftime("%Y-%m-%dT%H:%M"), "name": "Ana", "phone": "+52 55 1234 5678",
+                              "email": "ana@x.com", "tz": "America/Mexico_City"})
+    c.post("/reservar", data={"at": slots[1].strftime("%Y-%m-%dT%H:%M"), "name": "Bea", "phone": "+34600000003",
+                              "email": "bea@x.com", "tz": "Hacker/../../etc"})          # zona inventada: no se guarda
+    with A.app.app_context():
+        ana = A.CampaignLead.query.filter_by(name="Ana").one()
+        bea = A.CampaignLead.query.filter_by(name="Bea").one()
+        assert (ana.tz, bea.tz) == ("America/Mexico_City", "")
+        w = A.lead_times(ana)
+        mx = w["theirs"].strftime("%H:%M")
+        assert w["place"] == "México" and w["theirs"].utcoffset() != w["spain"].utcoffset()
+        assert A.clean_tz("Europe/Narnia") == "" and A.clean_tz("Europe/Paris") == "Europe/Paris"
+        assert A.lead_times(type("L", (), {"meet_at": slots[0], "tz": "Europe/Paris"})())["same"]
+        ana_id, bea_id = ana.id, bea.id
+    admin = client_for("admin@test.com")
+    page = admin.get("/admin/solicitudes").get_data(as_text=True)
+    assert "Llamada (hora de España)" in page and f"{mx} hora de México" in page
+    text = unquote(admin.get(f"/admin/solicitudes/{ana_id}/whatsapp").headers["Location"])
+    assert f"a las {mx} (tu hora)" in text
+    text = unquote(admin.get(f"/admin/solicitudes/{bea_id}/whatsapp").headers["Location"])
+    assert "(hora de España)" in text
+
+
 def test_connect_whop_with_button(monkeypatch):
     monkeypatch.setattr(A, "WHOP_CLIENT_ID", "app_x")
     monkeypatch.setattr(A, "BASE_URL", "https://app.clipprofit.es")

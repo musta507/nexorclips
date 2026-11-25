@@ -831,6 +831,7 @@ class CampaignLead(db.Model):
     meet_at = db.Column(db.DateTime, nullable=True, index=True)  # hora de la llamada reservada (UTC)
     plan = db.Column(db.String(80), default="", index=True)    # plan de la landing desde el que reservó
     button = db.Column(db.String(80), default="", index=True)  # botón de la landing que pulsó
+    tz = db.Column(db.String(64), default="")                  # zona horaria del navegador del creador (p. ej. America/Mexico_City)
     ip = db.Column(db.String(64), default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
@@ -12019,7 +12020,7 @@ def book_call():
             phone = ("+" if form["phone"].startswith("+") or len(digits) > 9 else "") + digits
             link = form["link"] or (form["brand"] if "." in form["brand"] else "")
             message = "\n".join(filter(None, [form["message"]] + [f"{k}: {v}" for k, v in form["extra"]]))
-            db.session.add(CampaignLead(name=form["name"][:120], email=form["email"][:255].lower(),
+            db.session.add(CampaignLead(tz=clean_tz(request.form.get("tz")), name=form["name"][:120], email=form["email"][:255].lower(),
                                         brand=(form["brand"] or form["name"])[:200], category="streamer",
                                         budget=form["budget"][:40], link=link[:500], message=message[:3000],
                                         phone=phone[:30], meet_at=at, ip=ip, plan=form["plan"][:80], button=form["boton"][:80]))
@@ -12085,7 +12086,7 @@ def admin_leads():
     by_button = Counter(l.button or "Sin indicar" for l in leads if l.meet_at).most_common()
     return render_template("admin/leads.html", leads=leads, statuses=LEAD_STATUSES, cfg=book_cfg(), weekdays=WEEKDAYS,
                            by_plan=by_plan, by_button=by_button,
-                           madrid=lambda d: d.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ)))
+                           madrid=lambda d: d.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(APP_TZ)), lead_times=lead_times)
 
 
 _js_errs = {}
@@ -12141,9 +12142,73 @@ def admin_lead_whatsapp(lid):
     if lead.status == "nueva":
         lead.status = "contactada"
         db.session.commit()
-    text = f"Hola {lead.name}, soy de {APP_NAME}. Te paso el enlace de nuestra llamada: "
+    when = lead_times(lead)
+    if when:                                         # con la hora en SU zona (25 nov, Mustapha)
+        d = when["theirs"] or when["spain"]
+        text = (f"Hola {lead.name}, soy de {APP_NAME}. Te paso el enlace de nuestra llamada del {WEEKDAYS_ES[d.weekday()]} "
+                f"{d.day}/{d.month} a las {d.strftime('%H:%M')}{' (tu hora)' if when['theirs'] else ' (hora de España)'}: ")
+    else:
+        text = f"Hola {lead.name}, soy de {APP_NAME}. Te paso el enlace de nuestra llamada: "
     digits = re.sub(r"\D", "", lead.phone or "")
     return redirect(f"https://wa.me/{digits}?text={quote(text)}")
+
+
+# País de la zona horaria del navegador (25 nov, Mustapha: «¿la web detecta de qué país es?»). La zona sale del
+# dispositivo del creador, no de su IP: es la que tiene configurada su móvil u ordenador.
+TZ_COUNTRY = {
+    "Europe/Madrid": "España", "Atlantic/Canary": "España (Canarias)", "Africa/Ceuta": "España",
+    "America/Mexico_City": "México", "America/Monterrey": "México", "America/Merida": "México", "America/Cancun": "México",
+    "America/Tijuana": "México", "America/Chihuahua": "México", "America/Hermosillo": "México", "America/Mazatlan": "México",
+    "America/Matamoros": "México", "America/Bahia_Banderas": "México", "America/Ciudad_Juarez": "México",
+    "America/Bogota": "Colombia", "America/Lima": "Perú", "America/Santiago": "Chile", "America/Punta_Arenas": "Chile",
+    "America/Caracas": "Venezuela", "America/Guayaquil": "Ecuador", "America/La_Paz": "Bolivia", "America/Asuncion": "Paraguay",
+    "America/Montevideo": "Uruguay", "America/Guatemala": "Guatemala", "America/El_Salvador": "El Salvador",
+    "America/Tegucigalpa": "Honduras", "America/Managua": "Nicaragua", "America/Costa_Rica": "Costa Rica",
+    "America/Panama": "Panamá", "America/Havana": "Cuba", "America/Santo_Domingo": "República Dominicana",
+    "America/Puerto_Rico": "Puerto Rico", "Europe/Lisbon": "Portugal", "Europe/London": "Reino Unido", "Europe/Paris": "Francia",
+    "Europe/Berlin": "Alemania", "Europe/Rome": "Italia", "Europe/Brussels": "Bélgica", "Europe/Amsterdam": "Países Bajos",
+    "Europe/Zurich": "Suiza", "Europe/Andorra": "Andorra", "Africa/Casablanca": "Marruecos", "America/Sao_Paulo": "Brasil",
+    "America/New_York": "Estados Unidos (Este)", "America/Chicago": "Estados Unidos (Centro)",
+    "America/Denver": "Estados Unidos (Montaña)", "America/Phoenix": "Estados Unidos (Arizona)",
+    "America/Los_Angeles": "Estados Unidos (Pacífico)", "America/Toronto": "Canadá", "America/Vancouver": "Canadá",
+}
+WEEKDAYS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+def clean_tz(raw):
+    """Zona horaria que manda el navegador, solo si existe de verdad (si no, vacía)."""
+    raw = (raw or "").strip()[:64]
+    if not raw or not re.fullmatch(r"[A-Za-z_]+(?:/[A-Za-z0-9_+-]+){0,2}", raw):
+        return ""
+    try:
+        ZoneInfo(raw)
+    except Exception:  # noqa: BLE001
+        return ""
+    return raw
+
+
+def tz_place(tz):
+    """«México», «Argentina»… o la ciudad de la zona si no está en la lista («Kiev»)."""
+    if not tz:
+        return ""
+    if tz.startswith("America/Argentina/") or tz == "America/Buenos_Aires":
+        return "Argentina"
+    return TZ_COUNTRY.get(tz) or tz.rsplit("/", 1)[-1].replace("_", " ")
+
+
+def lead_times(lead):
+    """La hora de la llamada en España y, si el creador es de otra zona, en la suya: {spain, theirs, place, same}."""
+    if not lead.meet_at:
+        return None
+    at = lead.meet_at.replace(tzinfo=timezone.utc)
+    spain = at.astimezone(ZoneInfo(APP_TZ))
+    theirs, place = None, tz_place(lead.tz)
+    if lead.tz and lead.tz not in ("Europe/Madrid", "Africa/Ceuta"):
+        t = at.astimezone(ZoneInfo(lead.tz))
+        if t.utcoffset() != spain.utcoffset():
+            theirs = t
+    return {"spain": spain, "theirs": theirs, "place": place,
+            "same": bool(lead.tz) and theirs is None and lead.tz not in ("Europe/Madrid", "Africa/Ceuta")}
 
 
 @app.route("/admin/solicitudes/horario", methods=["POST"])

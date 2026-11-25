@@ -26,6 +26,7 @@
   <form method="post" class="bk-body" novalidate>
     <div class="hp" aria-hidden="true"><label for="website">No rellenes este campo</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
     <input type="hidden" name="at" value="{{ form.at or '' }}" data-at>
+    <input type="hidden" name="tz" value="" data-tz-in>
     <div class="bk-step" data-step="1"{% if error and form.at %} hidden{% endif %}>
       <div class="bk-cal">
         <div class="bk-month"><button type="button" class="bk-nav" data-mv="-1" aria-label="Mes anterior">‹</button><b data-mlabel></b><button type="button" class="bk-nav" data-mv="1" aria-label="Mes siguiente">›</button></div>

@@ -54,6 +54,7 @@ window.addEventListener("error", function (e) {
   var mlabel = root.querySelector("[data-mlabel]"), dlabel = root.querySelector("[data-dlabel]");
   var step1 = root.querySelector('[data-step="1"]'), step2 = root.querySelector('[data-step="2"]'), sel = root.querySelector("[data-sel]");
   var tz = root.querySelector("[data-tz]"); if (tz && zone) tz.textContent = "Horas en tu zona horaria (" + zone.replace(/_/g, " ") + ")";
+  var tzIn = root.querySelector("[data-tz-in]"); if (tzIn) tzIn.value = zone;      // para que el equipo sepa su hora y su país
   var view = first ? new Date(first.getFullYear(), first.getMonth(), 1) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   var chosenDay = first ? key(first) : null;
 
