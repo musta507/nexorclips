@@ -4394,8 +4394,9 @@ def test_tech_deletes_own_real_clipper_data(monkeypatch):
         ])
         A.db.session.commit()
     page = admin.get("/admin/ajustes").get_data(as_text=True)
-    assert "Mis datos reales como clipper" in page and "Tienes un cobro en marcha" in page
-    assert "1 clip, 1 cuenta de red social, 1 campaña, 1 cobro, 1 mensaje de soporte y 1 aviso (" in page and "ganados con tus clips" in page
+    assert "Datos reales como clipper de los administradores" in page and "Tiene un cobro en marcha" in page
+    assert "De verdad: 1 clip, 1 cuenta de red social, 1 campaña, 1 cobro, 1 mensaje de soporte y 1 aviso (" in page
+    assert "Demo: 1 clips" in page
     r = post(admin, "/admin/ajustes/borrar-mis-datos", confirm="ELIMINAR")
     assert "cobro en marcha" in r.get_data(as_text=True)                       # un pago a medias: no se toca nada
     with A.app.app_context():
@@ -4407,7 +4408,7 @@ def test_tech_deletes_own_real_clipper_data(monkeypatch):
     with A.app.app_context():
         assert A.Submission.query.filter_by(video_key="tiktok:mio1").count() == 1
     r = post(admin, "/admin/ajustes/borrar-mis-datos", confirm="ELIMINAR")
-    assert "tus datos reales como clipper se han borrado" in r.get_data(as_text=True)
+    assert "se han borrado tus datos reales como clipper" in r.get_data(as_text=True)
     with A.app.app_context():
         me = A.User.query.filter_by(email="admin@test.com").one()
         assert me.is_admin                                                     # la cuenta sigue
@@ -4421,7 +4422,24 @@ def test_tech_deletes_own_real_clipper_data(monkeypatch):
         assert A.Message.query.filter_by(user_id=me.id).count() == 0
         assert A.Message.query.filter_by(body="respuesta del equipo").count() == 1          # lo que escribió como equipo
         assert A.Notice.query.filter_by(user_id=me.id).count() == 0 and A.Payout.query.filter_by(user_id=me.id).count() == 0
-    assert "tu cuenta está limpia" in admin.get("/admin/ajustes").get_data(as_text=True)
+    assert "Nada real: limpia." in admin.get("/admin/ajustes").get_data(as_text=True)
+    # otra cuenta de admin que antes fue clipper (26 nov: «NO SE ELIMINÓ NADA» porque los clips eran de esa cuenta)
+    monkeypatch.setattr(A, "ADMIN_EMAILS", A.ADMIN_EMAILS | {"clips@test.com"})
+    client_for("clips@test.com")
+    with A.app.app_context():
+        cl = A.User.query.filter_by(email="clips@test.com").one()
+        A.db.session.add(A.Submission(user_id=cl.id, campaign_id=cid, url="https://tiktok.com/@cl/video/4", platform="tiktok",
+                                      video_key="tiktok:cl4", status="aprobado", views=100))
+        A.db.session.commit()
+        cl_id, ot_id = cl.id, A.User.query.filter_by(email="otro@test.com").one().id
+    assert "Borrar sus datos reales" in admin.get("/admin/ajustes").get_data(as_text=True)
+    r = post(admin, "/admin/ajustes/borrar-mis-datos", confirm="ELIMINAR", uid=ot_id)       # a un clipper normal, no
+    assert "solo vale para cuentas de administrador" in r.get_data(as_text=True)
+    r = post(admin, "/admin/ajustes/borrar-mis-datos", confirm="ELIMINAR", uid=cl_id)
+    assert "los datos reales de" in r.get_data(as_text=True)
+    with A.app.app_context():
+        assert A.Submission.query.filter_by(video_key="tiktok:cl4").count() == 0
+        assert A.db.session.get(A.User, cl_id).is_admin
     monkeypatch.setattr(A, "ADMIN_EMAILS", A.ADMIN_EMAILS | {"felipe@test.com"})
     felipe = client_for("felipe@test.com")                                     # admin, pero no el técnico
     assert felipe.get("/admin/ajustes").status_code == 403
@@ -4429,6 +4447,12 @@ def test_tech_deletes_own_real_clipper_data(monkeypatch):
     home = felipe.get("/admin").get_data(as_text=True)
     assert "Actividad reciente" in home and "/admin/actividad" not in home    # su «Ver todo» le daría error: no sale
     assert "/admin/actividad" in admin.get("/admin").get_data(as_text=True)
+    # los clips del plan de distribución son del cliente: no salen en «Mis clips» del admin ni cuentan en Clippers
+    with A.app.app_context():
+        me_id = A.User.query.filter_by(email="admin@test.com").one().id
+    page = admin.get("/mis-clips").get_data(as_text=True)
+    assert "@cliente/video/3" not in page and "@demo/video/2" in page
+    assert "@cliente/video/3" not in admin.get(f"/admin/clipper/{me_id}").get_data(as_text=True)
 
 
 def test_audit_signup_and_recover_caps(monkeypatch):

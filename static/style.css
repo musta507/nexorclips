@@ -475,6 +475,11 @@ tr.row-flag td{background:#f5f7ff}
 .lead-top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .lead-budget{display:flex;flex-direction:column;align-items:flex-end}
 .lead-budget b{font:700 18px var(--display)}
+/* Panel técnico → Datos: datos reales como clipper de cada admin */
+.md-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.md-row{display:flex;flex-direction:column;gap:10px;padding:14px 0;border-top:1px solid var(--line)}
+.md-row:first-child{border-top:0;padding-top:4px}
+.md-who p{margin:4px 0 0}
 .wipe summary{cursor:pointer;list-style:none}
 .wipe summary::-webkit-details-marker{display:none}
 details.answers{margin-top:8px;font-size:13px}
@@ -615,7 +620,7 @@ details.answers[open] summary::before{content:"▾ "}
   table.rt tr.row-flag td{background:transparent}
 }
 /* entrada suave del contenido al cambiar de página */
-#contenido.entra{animation:entra .2s cubic-bezier(.2,.7,.2,1) both}
+#contenido.entra{animation:entra .2s cubic-bezier(.2,.7,.2,1) backwards}   /* «backwards», no «both»: al acabar no deja un «transform» puesto, que movía los menús «···» lejos de su botón (26 nov) */
 @keyframes entra{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){
   *{transition:none!important}

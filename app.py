@@ -1932,6 +1932,12 @@ def clipper_analytics(subs, days=30):
             "series": {"labels": [d.isoformat() for d in dates], "cumulative": cum, "daily": daily}}
 
 
+def own_subs(user):
+    """Clips del usuario como clipper, sin los de los planes de distribución: esas cuentas son del cliente y se guardan a
+    nombre del admin que las añade (26 nov: los clips de un plan salían en «Mis clips» del admin como si fueran suyos)."""
+    return [s for s in user.submissions if s.campaign.status != DIST_STATUS]
+
+
 def user_money(user):
     """Disponible = ganado en clips aprobados de campañas ya cerradas − retirado.
     En curso = ganado en campañas que siguen abiertas (se libera al cerrarse). Pendiente = clips en revisión."""
@@ -4754,7 +4760,7 @@ def beginner_course():
 
 def home_data(u):
     """Todo lo del Inicio: resumen, banner de formación, paso a paso, clips y ranking de la semana."""
-    subs = list(u.submissions)
+    subs = own_subs(u)
     stage = {}
     for s_ in subs:
         k = clip_stage(s_)
@@ -5313,7 +5319,7 @@ def my_clips():
             ok, msg = submit_clip(camp, request.form.get("url", ""))
             flash(msg, "ok" if ok else "error")
         return redirect(url_for("my_clips", c=request.form.get("campaign_id", "")))
-    allsubs = sorted(current_user.submissions, key=lambda s: s.created_at, reverse=True)
+    allsubs = sorted(own_subs(current_user), key=lambda s: s.created_at, reverse=True)
     tab = request.args.get("tab", "todos")
     tab = tab if tab in CLIP_TABS else "todos"
     fc = request.args.get("campana", type=int)
@@ -7601,7 +7607,9 @@ def admin_settings(app_test=None):
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
                            my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count(),
-                           tu=test_users_summary(), mine=my_real_summary(current_user),
+                           tu=test_users_summary(),
+                           admins_data=[(u, my_real_summary(u), Submission.query.filter_by(user_id=u.id, my_demo=True).count())
+                                        for u in User.query.filter_by(is_admin=True).order_by(User.name).limit(30)],
                            notes=TechNote.query.order_by(TechNote.done, TechNote.created_at.desc()).limit(300).all(),
                            H=health_data())
 
@@ -8285,22 +8293,30 @@ def test_users_summary(limit=50):
 @app.route("/admin/ajustes/borrar-mis-datos", methods=["POST"])
 @admin_required
 def admin_delete_my_data():
-    """Solo el técnico, y solo sus propios datos reales como clipper (no hace falta ALLOW_WIPE: no toca a nadie más)."""
+    """Solo el técnico. Borra lo real como clipper de una cuenta de ADMIN (la suya u otra suya que antes fue clipper,
+    26 nov: «NO SE ELIMINÓ NADA» porque los clips eran de otra cuenta de admin). A un clipper normal se le borra la
+    cuenta entera desde su ficha. No hace falta ALLOW_WIPE: no toca a ningún clipper."""
     if not is_tech():
         abort(403)
+    target = db.session.get(User, request.form.get("uid", type=int) or current_user.id)
+    if not target or not target.is_admin:
+        flash("Eso solo vale para cuentas de administrador.", "error")
+        return redirect(url_for("admin_settings", _anchor="datos"))
     if (request.form.get("confirm") or "").strip().upper() != "ELIMINAR":
-        flash("Para borrar tus datos, escribe ELIMINAR en la casilla.", "error")
+        flash("Para borrar los datos, escribe ELIMINAR en la casilla.", "error")
         return redirect(url_for("admin_settings", _anchor="datos"))
     try:
-        info = delete_my_real_data(current_user)
+        info = delete_my_real_data(target)
     except ValueError as e:
         db.session.rollback()
         flash(str(e), "error")
         return redirect(url_for("admin_settings", _anchor="datos"))
-    audit("mis_datos_borrados", f"{info['subs']} clips · {info['accounts']} cuentas · {info['members']} campañas · "
+    audit("mis_datos_borrados", f"{target.email} · {info['subs']} clips · {info['accounts']} cuentas · {info['members']} campañas · "
                                 f"{info['payouts']} cobros · {info['messages'] + info['camp_messages']} mensajes")
     db.session.commit()
-    flash("Listo: tus datos reales como clipper se han borrado. Tu cuenta de admin, tu perfil, tu Whop y la demo siguen igual.", "ok")
+    who = "tus datos reales" if target.id == current_user.id else f"los datos reales de {target.name}"
+    flash(f"Listo: se han borrado {who} como clipper ({info['text'] or 'nada'}). La cuenta de admin, el perfil, el Whop y la demo "
+          "siguen igual.", "ok")
     return redirect(url_for("admin_settings", _anchor="datos"))
 
 
@@ -9542,7 +9558,7 @@ def admin_campaign_close(cid):
 def admin_clipper(uid):
     user = db.session.get(User, uid) or abort(404)
     m = user_money(user)
-    subs = sorted(user.submissions, key=lambda s: s.created_at, reverse=True)
+    subs = sorted(own_subs(user), key=lambda s: s.created_at, reverse=True)
     accounts = CampaignAccount.query.filter_by(user_id=uid).order_by(CampaignAccount.created_at).all()
     per_camp = {}
     for mb in CampaignMember.query.filter_by(user_id=uid).order_by(CampaignMember.created_at).all():
@@ -10312,6 +10328,7 @@ def admin_clippers():
     agg = (db.session.query(Submission.user_id.label("uid"),
                             db.func.coalesce(db.func.sum(db.case((Submission.status == "aprobado", Submission.earned), else_=0)), 0).label("e"),
                             db.func.count(Submission.id).label("n"))
+           .filter(Submission.campaign_id.notin_(db.select(Campaign.id).where(Campaign.status == DIST_STATUS)))   # el plan es del cliente
            .group_by(Submission.user_id).subquery())
     base = db.session.query(User, db.func.coalesce(agg.c.n, 0)).outerjoin(agg, agg.c.uid == User.id)
     if q:

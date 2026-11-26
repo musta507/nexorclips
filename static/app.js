@@ -91,11 +91,14 @@ document.addEventListener("toggle", function (e) {
   if (!list) return;
   if (!d.open) { list.removeAttribute("style"); return; }
   var r = d.querySelector("summary").getBoundingClientRect();
-  list.style.position = "fixed";
-  list.style.right = Math.max(window.innerWidth - r.right, 8) + "px";
-  var h = list.offsetHeight;
-  if (r.bottom + 6 + h > window.innerHeight - 8 && r.top - 6 - h > 8) list.style.top = (r.top - 6 - h) + "px";
-  else list.style.top = (r.bottom + 6) + "px";
+  // Si algo de encima tiene «transform», «fixed» cuenta desde ahí y no desde la ventana: se mide dónde cae el 0,0 y se corrige
+  list.style.animation = "none";
+  list.style.position = "fixed"; list.style.right = "auto"; list.style.left = "0px"; list.style.top = "0px";
+  var o = list.getBoundingClientRect(), w = list.offsetWidth, h = list.offsetHeight;
+  var x = Math.max(Math.min(r.right, window.innerWidth - 8) - w, 8);
+  var y = (r.bottom + 6 + h > window.innerHeight - 8 && r.top - 6 - h > 8) ? r.top - 6 - h : r.bottom + 6;
+  list.style.left = (x - o.left) + "px"; list.style.top = (y - o.top) + "px";
+  void list.offsetWidth; list.style.animation = "";
 }, true);
 window.addEventListener("scroll", function () {
   document.querySelectorAll("details.rowmenu[open]").forEach(function (d) { d.removeAttribute("open"); });
