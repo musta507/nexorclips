@@ -4455,6 +4455,45 @@ def test_tech_deletes_own_real_clipper_data(monkeypatch):
     assert "@cliente/video/3" not in admin.get(f"/admin/clipper/{me_id}").get_data(as_text=True)
 
 
+def test_tech_clears_one_admin_profile_accounts_and_demo(monkeypatch):
+    """La cuenta que sale en Clippers (la del perfil) también se borra, y la demo se le puede quitar a un solo admin
+    sin que la vuelva a recibir (26 nov, Mustapha: «quiero eliminar todo eso, también esa cuenta que se ve ahí»)."""
+    make_campaign(budget=5000)
+    monkeypatch.setattr(A, "TECH_EMAILS", {"admin@test.com"})
+    monkeypatch.setattr(A, "ADMIN_EMAILS", A.ADMIN_EMAILS | {"clips@test.com", "jefe@test.com"})
+    admin, jefe = client_for("admin@test.com"), client_for("jefe@test.com")
+    client_for("clips@test.com")
+    post(admin, "/admin/ajustes/mi-demo", accion="cargar")
+    with A.app.app_context():
+        cl = A.User.query.filter_by(email="clips@test.com").one()
+        cl.tiktok_handles = "wcol_clipss"
+        A.db.session.commit()
+        cl_id = cl.id
+        assert A.Submission.query.filter_by(user_id=cl_id, my_demo=True).count()
+    page = admin.get("/admin/ajustes").get_data(as_text=True)
+    assert "De verdad: 1 cuenta en el perfil." in page and "Quitarle la demo" in page
+    assert "wcol_clipss" in admin.get("/admin/clippers").get_data(as_text=True)
+    post(admin, "/admin/ajustes/borrar-mis-datos", confirm="ELIMINAR", uid=cl_id)
+    post(admin, "/admin/ajustes/mi-demo", accion="quitar_uno", uid=cl_id)
+    with A.app.app_context():
+        cl = A.db.session.get(A.User, cl_id)
+        assert cl.tiktok_handles == "" and cl.is_admin
+        assert A.Submission.query.filter_by(user_id=cl_id).count() == 0                      # ni real ni demo
+        assert A.Submission.query.filter_by(user_id=A.User.query.filter_by(email="jefe@test.com").one().id, my_demo=True).count()
+        A.give_my_demo(cl)                                                                    # al volver a entrar: no se la da
+        assert A.Submission.query.filter_by(user_id=cl_id).count() == 0
+    assert "wcol_clipss" not in admin.get("/admin/clippers").get_data(as_text=True)
+    post(admin, "/admin/ajustes/mi-demo", accion="cargar")                                   # «a todos»: sigue sin ella
+    with A.app.app_context():
+        assert A.Submission.query.filter_by(user_id=cl_id).count() == 0
+    page = admin.get("/admin/ajustes").get_data(as_text=True)
+    assert "Sin demo (se la quitaste)." in page and "Volver a ponerle la demo" in page
+    post(admin, "/admin/ajustes/mi-demo", accion="poner_uno", uid=cl_id)
+    with A.app.app_context():
+        assert A.Submission.query.filter_by(user_id=cl_id, my_demo=True).count()
+    assert post(jefe, "/admin/ajustes/mi-demo", accion="quitar_uno", uid=cl_id).status_code == 403    # solo el técnico
+
+
 def test_audit_signup_and_recover_caps(monkeypatch):
     """Robots registrándose sin parar gastarían los 100 correos del día; y nadie puede llenar el correo de otro
     pidiendo «He olvidado mi contraseña» sin parar."""

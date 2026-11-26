@@ -223,13 +223,13 @@
 <div class="card tight form-stack" id="mis-datos">
   <div>
     <h3>Datos reales como clipper de los administradores</h3>
-    <p class="small muted">Para dejar limpia una cuenta de admin (la tuya o una que antes fue clipper). Se borran sus clips, cuentas de redes, campañas, cobros, mensajes de soporte y avisos de verdad. Se quedan la cuenta de admin, el perfil, el Whop, la demo, los planes de distribución y todo lo hecho como equipo. Lo ganado vuelve al presupuesto de cada campaña, salvo lo que ya se cobró de verdad. <b>No se puede deshacer.</b></p>
+    <p class="small muted">Para dejar limpia una cuenta de admin (la tuya o una que antes fue clipper). Se borran sus clips, cuentas de redes (también las de su perfil), campañas, cobros, mensajes de soporte y avisos de verdad. Se quedan la cuenta de admin (nombre, foto, Whop), los planes de distribución y todo lo hecho como equipo. La demo va aparte, con su propio botón. Lo ganado vuelve al presupuesto de cada campaña, salvo lo que ya se cobró de verdad. <b>No se puede deshacer.</b></p>
   </div>
   <ul class="md-list">
     {% for u, m, demo_n in admins_data %}
     <li class="md-row">
       <div class="md-who"><b>{{ u.name }}{% if u.id == current_user.id %} (tú){% endif %}</b> <span class="small muted selectable">{{ u.email }}</span>
-        <p class="small muted">{% if m.total %}De verdad: {{ m.text }}{% if m.earned %} ({{ m.earned|money }} ganados){% endif %}.{% else %}Nada real: limpia.{% endif %}{% if demo_n %} Demo: {{ demo_n }} clips (no se tocan aquí; se quitan con «Quitar la demo a todos»).{% endif %}</p>
+        <p class="small muted">{% if m.total %}De verdad: {{ m.text }}{% if m.earned %} ({{ m.earned|money }} ganados){% endif %}.{% else %}Nada real: limpia.{% endif %}{% if demo_n %} Demo: {{ demo_n }} clips con su dinero inventado.{% elif u.id in demo_skip %} Sin demo (se la quitaste).{% endif %}</p>
         {% if m.busy %}<p class="small cpay-red">Tiene un cobro en marcha: espera a que termine para poder borrar.</p>{% endif %}
       </div>
       {% if m.total %}
@@ -237,6 +237,13 @@
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="uid" value="{{ u.id }}">
         <input name="confirm" placeholder="Escribe ELIMINAR" autocomplete="off" aria-label="Escribe ELIMINAR para borrar los datos de {{ u.name }}" required>
         <button class="btn red"{% if m.busy %} disabled{% endif %}>Borrar {{ "mis" if u.id == current_user.id else "sus" }} datos reales</button>
+      </form>
+      {% endif %}
+      {% if demo_n or (u.id in demo_skip and my_demo_on) %}
+      <form method="post" action="{{ url_for('admin_my_demo') }}"{% if demo_n %} data-confirm="¿Quitarle la demo a {{ u.name }}? Solo a esta cuenta; no la volverá a recibir."{% endif %}>
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="uid" value="{{ u.id }}">
+        <input type="hidden" name="accion" value="{{ 'quitar_uno' if demo_n else 'poner_uno' }}">
+        <button class="btn soft sm">{{ ("Quitarme la demo" if u.id == current_user.id else "Quitarle la demo") if demo_n else "Volver a ponerle la demo" }}</button>
       </form>
       {% endif %}
     </li>

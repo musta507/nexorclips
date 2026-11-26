@@ -7610,6 +7610,7 @@ def admin_settings(app_test=None):
                            tu=test_users_summary(),
                            admins_data=[(u, my_real_summary(u), Submission.query.filter_by(user_id=u.id, my_demo=True).count())
                                         for u in User.query.filter_by(is_admin=True).order_by(User.name).limit(30)],
+                           demo_skip=my_demo_skip(), my_demo_on=get_setting("my_demo_all") == "1",
                            notes=TechNote.query.order_by(TechNote.done, TechNote.created_at.desc()).limit(300).all(),
                            H=health_data())
 
@@ -8227,12 +8228,13 @@ def my_real_data(user):
 def my_real_summary(user):
     q = my_real_data(user)
     n = {k: v.count() for k, v in q.items()}
+    n["handles"] = sum(len(user.handles(p_)) for p_ in PLATFORMS if hasattr(user, f"{p_}_handles"))   # las que salen en Clippers
     paid = q["payouts"].filter(Payout.status == "pagado")
     words = [(n["subs"], "clip", "clips"), (n["accounts"], "cuenta de red social", "cuentas de redes sociales"),
              (n["members"] + n["waitlist"], "campaña", "campañas"), (n["payouts"], "cobro", "cobros"),
              (n["messages"] + n["camp_messages"], "mensaje de soporte", "mensajes de soporte"), (n["notices"], "aviso", "avisos"),
              (n["tokens"], "red conectada", "redes conectadas"), (n["lessons"], "lección vista", "lecciones vistas"),
-             (n["ignored"], "clip ignorado", "clips ignorados")]
+             (n["ignored"], "clip ignorado", "clips ignorados"), (n["handles"], "cuenta en el perfil", "cuentas en el perfil")]
     parts = [f"{k} {one if k == 1 else many}" for k, one, many in words if k]
     text = (", ".join(parts[:-1]) + " y " + parts[-1]) if len(parts) > 1 else "".join(parts)
     return {**n, "text": text,
@@ -8270,6 +8272,9 @@ def delete_my_real_data(user):
     for key in ("accounts", "waitlist", "payouts", "messages", "camp_messages", "notices", "lessons", "ignored", "tokens"):
         for row in q[key].all():
             db.session.delete(row)
+    for p_ in PLATFORMS:                       # las cuentas guardadas en su perfil (las de la lista de Clippers)
+        if hasattr(user, f"{p_}_handles"):
+            setattr(user, f"{p_}_handles", "")
     return info
 
 
@@ -8345,9 +8350,14 @@ def has_my_demo(user):
     return bool(Submission.query.filter_by(user_id=user.id, my_demo=True).first())
 
 
+def my_demo_skip():
+    """Admins a los que el técnico les quitó la demo uno a uno (26 nov): no la vuelven a recibir."""
+    return {int(x) for x in (get_setting("my_demo_skip", "") or "").split(",") if x.strip().isdigit()}
+
+
 def give_my_demo(user):
     """Si la demo de los administradores está puesta, el admin que entra por primera vez también la recibe."""
-    if user.is_admin and get_setting("my_demo_all") == "1" and not has_my_demo(user):
+    if user.is_admin and get_setting("my_demo_all") == "1" and not has_my_demo(user) and user.id not in my_demo_skip():
         try:
             load_my_demo(user)
         except Exception:  # noqa: BLE001
@@ -8360,14 +8370,33 @@ def give_my_demo(user):
 def admin_my_demo():
     """Demo como clipper para TODOS los administradores a la vez, con los mismos datos (Mustapha, 24 nov)."""
     admins = User.query.filter_by(is_admin=True).order_by(User.id).all()
-    if request.form.get("accion") == "quitar":
+    accion, skip = request.form.get("accion"), my_demo_skip()
+    if accion in ("quitar_uno", "poner_uno"):          # a un admin concreto (26 nov, Mustapha)
+        target = db.session.get(User, request.form.get("uid", type=int) or 0)
+        if not target or not target.is_admin:
+            abort(404)
+        if accion == "quitar_uno":
+            n = remove_my_demo(target)
+            skip.add(target.id)
+            msg = f"Demo quitada a {target.name} ({n} clips). No la volverá a recibir."
+        else:
+            skip.discard(target.id)
+            if get_setting("my_demo_all") == "1" and not has_my_demo(target):
+                load_my_demo(target)
+            msg = f"{target.name} vuelve a tener la demo."
+        set_setting("my_demo_skip", ",".join(str(i) for i in sorted(skip)))
+        audit("mi_demo_" + ("quitada" if accion == "quitar_uno" else "cargada"), f"{target.email}")
+        db.session.commit()
+        flash(msg, "ok")
+        return redirect(url_for("admin_settings", _anchor="datos"))
+    if accion == "quitar":
         n = sum(remove_my_demo(u) for u in admins)
         set_setting("my_demo_all", "")
         audit("mi_demo_quitada", f"{n} clips · {len(admins)} admins")
         db.session.commit()
         flash(f"Demo como clipper quitada a todos los administradores ({n} clips). La demo de la plataforma y lo real siguen igual.", "ok")
     else:
-        todo = [u for u in admins if not has_my_demo(u)]
+        todo = [u for u in admins if not has_my_demo(u) and u.id not in skip]
         msg = ""
         for u in todo:
             msg = load_my_demo(u)
