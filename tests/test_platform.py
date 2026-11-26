@@ -4363,6 +4363,74 @@ def test_audit_delete_real_users_needs_allow_wipe(monkeypatch):
     assert "Borrar los 1 usuarios" in admin.get("/admin/ajustes").get_data(as_text=True)
 
 
+def test_tech_deletes_own_real_clipper_data(monkeypatch):
+    """Panel técnico → Datos → «Mis datos reales como clipper» (26 nov, Mustapha): borra lo real del técnico como clipper
+    y deja su cuenta, la demo, los planes de distribución y lo que hizo como equipo."""
+    monkeypatch.setattr(A, "TECH_EMAILS", {"admin@test.com"})
+    cid = make_campaign(budget=1000)
+    admin = client_for("admin@test.com")
+    other = client_for("otro@test.com")
+    with A.app.app_context():
+        me = A.User.query.filter_by(email="admin@test.com").one()
+        ot = A.User.query.filter_by(email="otro@test.com").one()
+        camp = A.db.session.get(A.Campaign, cid)
+        camp.spent = 30
+        plan = A.Campaign(song="Plan cliente", artist="Cliente", status=A.DIST_STATUS, budget=0, rate=0)
+        A.db.session.add(plan); A.db.session.flush()
+        A.db.session.add_all([
+            A.CampaignMember(user_id=me.id, campaign_id=cid, status="aceptada"),
+            A.CampaignAccount(user_id=me.id, campaign_id=cid, platform="tiktok", handle="mio", status="aceptada"),
+            A.Submission(user_id=me.id, campaign_id=cid, url="https://tiktok.com/@mio/video/1", platform="tiktok",
+                         video_key="tiktok:mio1", status="aprobado", views=30_000, earned=30),
+            A.Submission(user_id=me.id, campaign_id=cid, url="https://tiktok.com/@demo/video/2", platform="tiktok",
+                         video_key="tiktok:demo2", status="aprobado", views=10, my_demo=True),
+            A.CampaignAccount(user_id=me.id, campaign_id=plan.id, platform="tiktok", handle="cliente", status="aceptada"),
+            A.Submission(user_id=me.id, campaign_id=plan.id, url="https://tiktok.com/@cliente/video/3", platform="tiktok",
+                         video_key="tiktok:cli3", status="aprobado", views=500),
+            A.Message(user_id=me.id, body="hola soporte"),
+            A.Message(user_id=ot.id, sender_id=me.id, from_admin=True, body="respuesta del equipo"),
+            A.Notice(user_id=me.id, kind="clip", title="Clip aprobado", body="x", url="/"),
+            A.Payout(user_id=me.id, amount=5, method=A.WHOP_METHOD, status="procesando"),
+        ])
+        A.db.session.commit()
+    page = admin.get("/admin/ajustes").get_data(as_text=True)
+    assert "Mis datos reales como clipper" in page and "Tienes un cobro en marcha" in page
+    assert "1 clip, 1 cuenta de red social, 1 campaña, 1 cobro, 1 mensaje de soporte y 1 aviso (" in page and "ganados con tus clips" in page
+    r = post(admin, "/admin/ajustes/borrar-mis-datos", confirm="ELIMINAR")
+    assert "cobro en marcha" in r.get_data(as_text=True)                       # un pago a medias: no se toca nada
+    with A.app.app_context():
+        assert A.Submission.query.filter_by(video_key="tiktok:mio1").count() == 1
+        A.Payout.query.filter_by(status="procesando").one().status = "rechazado"
+        A.db.session.commit()
+    assert post(other, "/admin/ajustes/borrar-mis-datos", confirm="ELIMINAR").status_code in (302, 403, 404)
+    post(admin, "/admin/ajustes/borrar-mis-datos", confirm="NO")               # sin ELIMINAR no borra
+    with A.app.app_context():
+        assert A.Submission.query.filter_by(video_key="tiktok:mio1").count() == 1
+    r = post(admin, "/admin/ajustes/borrar-mis-datos", confirm="ELIMINAR")
+    assert "tus datos reales como clipper se han borrado" in r.get_data(as_text=True)
+    with A.app.app_context():
+        me = A.User.query.filter_by(email="admin@test.com").one()
+        assert me.is_admin                                                     # la cuenta sigue
+        assert A.Submission.query.filter_by(video_key="tiktok:mio1").count() == 0
+        assert A.db.session.get(A.Campaign, cid).spent == 0                    # lo ganado vuelve al presupuesto
+        assert A.Submission.query.filter_by(video_key="tiktok:demo2").count() == 1            # la demo se queda
+        assert A.CampaignMember.query.filter_by(user_id=me.id, campaign_id=cid).one().my_demo  # y su campaña pasa a la demo
+        assert A.Submission.query.filter_by(video_key="tiktok:cli3").count() == 1             # el plan del cliente, intacto
+        assert A.CampaignAccount.query.filter_by(handle="cliente").count() == 1
+        assert A.CampaignAccount.query.filter_by(handle="mio").count() == 0
+        assert A.Message.query.filter_by(user_id=me.id).count() == 0
+        assert A.Message.query.filter_by(body="respuesta del equipo").count() == 1          # lo que escribió como equipo
+        assert A.Notice.query.filter_by(user_id=me.id).count() == 0 and A.Payout.query.filter_by(user_id=me.id).count() == 0
+    assert "tu cuenta está limpia" in admin.get("/admin/ajustes").get_data(as_text=True)
+    monkeypatch.setattr(A, "ADMIN_EMAILS", A.ADMIN_EMAILS | {"felipe@test.com"})
+    felipe = client_for("felipe@test.com")                                     # admin, pero no el técnico
+    assert felipe.get("/admin/ajustes").status_code == 403
+    assert post(felipe, "/admin/ajustes/borrar-mis-datos", confirm="ELIMINAR").status_code == 403
+    home = felipe.get("/admin").get_data(as_text=True)
+    assert "Actividad reciente" in home and "/admin/actividad" not in home    # su «Ver todo» le daría error: no sale
+    assert "/admin/actividad" in admin.get("/admin").get_data(as_text=True)
+
+
 def test_audit_signup_and_recover_caps(monkeypatch):
     """Robots registrándose sin parar gastarían los 100 correos del día; y nadie puede llenar el correo de otro
     pidiendo «He olvidado mi contraseña» sin parar."""

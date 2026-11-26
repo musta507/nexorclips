@@ -3705,7 +3705,7 @@ ROLE_ENDPOINTS = {
 }
 
 
-TECH_ENDPOINTS = {"admin_settings", "admin_backups_ok", "admin_backup_now", "admin_delete_test_users", "admin_errors", "admin_notes", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
+TECH_ENDPOINTS = {"admin_settings", "admin_backups_ok", "admin_backup_now", "admin_delete_test_users", "admin_delete_my_data", "admin_errors", "admin_notes", "admin_probe", "admin_refresh", "admin_whop_app_test", "admin_vapid_keys", "admin_backup",
                   "admin_demo", "admin_my_demo", "admin_wipe", "admin_activity", "admin_activity_delete", "admin_creators", "admin_creator_form"}
 
 
@@ -7601,7 +7601,7 @@ def admin_settings(app_test=None):
                            has_token=bool(viewcounter.APIFY_TOKEN), has_app_key=bool(WHOP_APP_API_KEY), app_test=app_test,
                            demo_n=User.query.filter(User.email.like(f"%{DEMO_DOMAIN}")).count(),
                            my_demo_n=Submission.query.filter_by(user_id=current_user.id, my_demo=True).count(),
-                           tu=test_users_summary(),
+                           tu=test_users_summary(), mine=my_real_summary(current_user),
                            notes=TechNote.query.order_by(TechNote.done, TechNote.created_at.desc()).limit(300).all(),
                            H=health_data())
 
@@ -8188,6 +8188,83 @@ def remove_my_demo(user):
     return len(ids)
 
 
+def _not_demo(col):
+    return db.func.coalesce(col, False) == False  # noqa: E712  (las filas antiguas pueden tener la marca vacía)
+
+
+def my_real_data(user):
+    """Lo REAL del admin como clipper (26 nov, Mustapha: «borrar toda mi información real»): consultas por tabla.
+    Fuera quedan la demo (`my_demo`), los planes de distribución (sus cuentas y clips se guardan a nombre del admin que
+    los añade, pero son del cliente) y todo lo que hizo como equipo (mensajes a clippers, revisiones, publicaciones)."""
+    dist = db.select(Campaign.id).where(Campaign.status == DIST_STATUS)
+    dist_accs = db.select(CampaignAccount.handle).where(CampaignAccount.campaign_id.in_(dist), CampaignAccount.handle.isnot(None))
+    return {
+        "subs": Submission.query.filter(Submission.user_id == user.id, _not_demo(Submission.my_demo),
+                                        Submission.campaign_id.notin_(dist)),
+        "accounts": CampaignAccount.query.filter(CampaignAccount.user_id == user.id, _not_demo(CampaignAccount.my_demo),
+                                                 CampaignAccount.campaign_id.notin_(dist)),
+        "members": CampaignMember.query.filter(CampaignMember.user_id == user.id, _not_demo(CampaignMember.my_demo),
+                                               CampaignMember.campaign_id.notin_(dist)),
+        "waitlist": CampaignWaitlist.query.filter_by(user_id=user.id),
+        "payouts": Payout.query.filter_by(user_id=user.id),
+        "messages": Message.query.filter_by(user_id=user.id),
+        "camp_messages": CampMessage.query.filter_by(user_id=user.id),
+        "notices": Notice.query.filter(Notice.user_id == user.id, _not_demo(Notice.my_demo)),
+        "lessons": LessonProgress.query.filter_by(user_id=user.id),
+        "ignored": IgnoredClip.query.filter_by(user_id=user.id),
+        "tokens": ApiToken.query.filter(ApiToken.user_id == user.id, ApiToken.handle.notin_(dist_accs)),
+    }
+
+
+def my_real_summary(user):
+    q = my_real_data(user)
+    n = {k: v.count() for k, v in q.items()}
+    paid = q["payouts"].filter(Payout.status == "pagado")
+    words = [(n["subs"], "clip", "clips"), (n["accounts"], "cuenta de red social", "cuentas de redes sociales"),
+             (n["members"] + n["waitlist"], "campaña", "campañas"), (n["payouts"], "cobro", "cobros"),
+             (n["messages"] + n["camp_messages"], "mensaje de soporte", "mensajes de soporte"), (n["notices"], "aviso", "avisos"),
+             (n["tokens"], "red conectada", "redes conectadas"), (n["lessons"], "lección vista", "lecciones vistas"),
+             (n["ignored"], "clip ignorado", "clips ignorados")]
+    parts = [f"{k} {one if k == 1 else many}" for k, one, many in words if k]
+    text = (", ".join(parts[:-1]) + " y " + parts[-1]) if len(parts) > 1 else "".join(parts)
+    return {**n, "text": text,
+            "earned": cents(q["subs"].with_entities(db.func.coalesce(db.func.sum(Submission.earned), 0)).scalar() or 0),
+            "paid": cents(paid.with_entities(db.func.coalesce(db.func.sum(Payout.amount), 0)).scalar() or 0),
+            "busy": q["payouts"].filter(Payout.status.in_(("solicitado", "procesando"))).count(),
+            "total": sum(n.values())}
+
+
+def delete_my_real_data(user):
+    """Borra lo real del admin como clipper y deja su cuenta, su perfil, su Whop y la demo. Devuelve el resumen de antes.
+    Lo que ganaron sus clips vuelve al presupuesto de cada campaña, salvo si ya cobró algo de verdad: entonces se queda
+    como gastado (si volviera, el creador lo pagaría dos veces)."""
+    info = my_real_summary(user)
+    if info["busy"]:
+        raise ValueError("Tienes un cobro en marcha. Espera a que termine (pagado o rechazado) y vuelve a probar.")
+    q = my_real_data(user)
+    subs = q["subs"].all()
+    if not info["paid"]:
+        for s_ in subs:
+            if s_.earned and s_.campaign:
+                camp = lock_row(Campaign, s_.campaign_id)
+                camp.spent = max(0.0, cents((camp.spent or 0) - s_.earned))
+    ids = [s_.id for s_ in subs]
+    if ids:
+        ViewSnapshot.query.filter(ViewSnapshot.submission_id.in_(ids)).delete(synchronize_session=False)
+        AudienceStat.query.filter(AudienceStat.submission_id.in_(ids)).delete(synchronize_session=False)
+        Submission.query.filter(Submission.id.in_(ids)).delete(synchronize_session=False)
+    for m in q["members"].all():           # si la demo usa esa campaña, la entrada pasa a ser de la demo (se quita con ella)
+        if (Submission.query.filter_by(user_id=user.id, campaign_id=m.campaign_id, my_demo=True).first()
+                or CampaignAccount.query.filter_by(user_id=user.id, campaign_id=m.campaign_id, my_demo=True).first()):
+            m.my_demo = True
+        else:
+            db.session.delete(m)
+    for key in ("accounts", "waitlist", "payouts", "messages", "camp_messages", "notices", "lessons", "ignored", "tokens"):
+        for row in q[key].all():
+            db.session.delete(row)
+    return info
+
+
 def test_users():
     """Usuarios reales (no de demostración) que no son administradores: los que se han registrado para probar la web."""
     return (User.query.filter(User.is_admin.is_(False), ~User.email.like(f"%{DEMO_DOMAIN}"))
@@ -8203,6 +8280,28 @@ def test_users_summary(limit=50):
     rows = (q.outerjoin(n_clips, n_clips.c.user_id == User.id).add_columns(db.func.coalesce(n_clips.c.n, 0))
             .order_by(User.created_at.desc()).limit(limit).all())
     return {"n": q.count(), "rows": [(u, n) for u, n in rows if not role_for(u.email)]}
+
+
+@app.route("/admin/ajustes/borrar-mis-datos", methods=["POST"])
+@admin_required
+def admin_delete_my_data():
+    """Solo el técnico, y solo sus propios datos reales como clipper (no hace falta ALLOW_WIPE: no toca a nadie más)."""
+    if not is_tech():
+        abort(403)
+    if (request.form.get("confirm") or "").strip().upper() != "ELIMINAR":
+        flash("Para borrar tus datos, escribe ELIMINAR en la casilla.", "error")
+        return redirect(url_for("admin_settings", _anchor="datos"))
+    try:
+        info = delete_my_real_data(current_user)
+    except ValueError as e:
+        db.session.rollback()
+        flash(str(e), "error")
+        return redirect(url_for("admin_settings", _anchor="datos"))
+    audit("mis_datos_borrados", f"{info['subs']} clips · {info['accounts']} cuentas · {info['members']} campañas · "
+                                f"{info['payouts']} cobros · {info['messages'] + info['camp_messages']} mensajes")
+    db.session.commit()
+    flash("Listo: tus datos reales como clipper se han borrado. Tu cuenta de admin, tu perfil, tu Whop y la demo siguen igual.", "ok")
+    return redirect(url_for("admin_settings", _anchor="datos"))
 
 
 @app.route("/admin/ajustes/borrar-usuarios", methods=["POST"])

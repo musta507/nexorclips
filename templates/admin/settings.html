@@ -220,6 +220,27 @@
   </form>
 </div>
 
+<div class="card tight form-stack" id="mis-datos">
+  <div>
+    <h3>Mis datos reales como clipper</h3>
+    {% if mine.total %}
+    <p class="small muted">Tienes de verdad, como clipper: {{ mine.text }}{% if mine.earned %} ({{ mine.earned|money }} ganados con tus clips){% endif %}.
+      Al borrarlo, {% if mine.paid %}lo ganado se queda como gastado en las campañas, porque ya cobraste {{ mine.paid|money }} de verdad (así nadie lo paga dos veces){% else %}lo que ganaron tus clips vuelve al presupuesto de cada campaña{% endif %}.
+      Se quedan tu cuenta de admin, tu perfil, tu Whop, la demo, los planes de distribución y todo lo que has hecho como equipo. <b>No se puede deshacer.</b></p>
+    {% else %}
+    <p class="small muted">No tienes nada real como clipper: tu cuenta está limpia. La demo y lo que haces como equipo no cuentan aquí.</p>
+    {% endif %}
+  </div>
+  {% if mine.total %}
+  {% if mine.busy %}<p class="small cpay-red">Tienes un cobro en marcha. Espera a que termine para poder borrar.</p>{% endif %}
+  <form method="post" action="{{ url_for('admin_delete_my_data') }}" class="tu-form" data-confirm="¿Borrar todos tus datos reales como clipper? No se puede deshacer.">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input name="confirm" placeholder="Escribe ELIMINAR" autocomplete="off" aria-label="Escribe ELIMINAR para confirmar" required>
+    <button class="btn red"{% if mine.busy %} disabled{% endif %}>Borrar mis datos reales</button>
+  </form>
+  {% endif %}
+</div>
+
 <div class="card tight form-stack">
   <div>
     <h3>Usuarios reales de prueba</h3>

@@ -16,7 +16,7 @@
   <nav class="seg" id="pn-ov-per" data-pill-nav data-turbo-permanent aria-label="Periodo">
     {% for k, label in periods.items() %}<a class="{{ 'on' if period == k }}" href="{{ url_for('admin_home', p=None if k == '30' else k) }}">{{ label }}</a>{% endfor %}
   </nav>
-  <a class="btn accent" href="{{ url_for('admin_campaign_form') }}">{{ icon("plus") }} Nueva campaña</a>
+  {% if admin_can('admin_campaign_form') %}<a class="btn accent" href="{{ url_for('admin_campaign_form') }}">{{ icon("plus") }} Nueva campaña</a>{% endif %}
 </div>
 
 <div class="v2-kpis">
@@ -88,7 +88,7 @@
 
   </section>
   <section class="v2-card v2-act">
-    <div class="v2-ch-head"><h3>Actividad reciente</h3><a class="btn soft sm" href="{{ url_for('admin_activity') }}">Ver todo</a></div>
+    <div class="v2-ch-head"><h3>Actividad reciente</h3>{% if admin_can('admin_activity') %}<a class="btn soft sm" href="{{ url_for('admin_activity') }}">Ver todo</a>{% endif %}</div>
     <ul>
       {% for when, ico, col, text in ev %}
       <li><span class="v2-aico c-{{ col }}">{{ icon(ico) }}</span><span><b>{{ text }}</b><small>{{ when|ago }}</small></span></li>
@@ -111,7 +111,7 @@
     {% else %}<p class="muted">No hay campañas activas.</p>{% endfor %}
   </section>
   <section class="v2-card v2-team">
-    <div class="v2-ch-head"><h3>Equipo</h3><a class="btn soft sm" href="{{ url_for('admin_mods') }}">Añadir mod</a></div>
+    <div class="v2-ch-head"><h3>Equipo</h3>{% if admin_can('admin_mods') %}<a class="btn soft sm" href="{{ url_for('admin_mods') }}">Añadir mod</a>{% endif %}</div>
     {% for m in mods %}
     <div class="v2-mem"><span class="v2-av">{% if m.u.avatar_url %}<img src="{{ m.u.avatar_url }}" alt="" referrerpolicy="no-referrer" loading="lazy">{% else %}{{ (m.u.name or m.u.email)[:1]|upper }}{% endif %}</span><span><b>{{ m.u.name }}</b><small>{{ "Administrador" if m.camps is none else ("Mod de " ~ m.camps ~ (" campaña" if m.camps == 1 else " campañas")) }}</small></span>{% set lv = m.u.last_seen_at|seen_level %}<span class="v2-seen s-{{ lv }}"><i></i>{{ "En línea" if lv == "on" else (m.u.last_seen_at|ago if m.u.last_seen_at else "Nunca") }}</span></div>
     {% else %}<p class="muted">Aún no hay mods.</p>{% endfor %}
